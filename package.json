@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js"
+    "dev": "tsc && node dist/index.js",
+    "web": "tsc && node dist/server.js",
+    "web:start": "node dist/server.js"
   },
   "repository": {
     "type": "git",
@@ -17,9 +19,13 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
     "@types/node": "^25.4.0",
     "dotenv": "^17.3.1",
+    "express": "^5.2.1",
     "googleapis": "^171.4.0",
+    "multer": "^2.1.1",
     "typescript": "^5.9.3"
   }
 }
