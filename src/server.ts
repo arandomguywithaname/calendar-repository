@@ -77,6 +77,6 @@ app.post("/api/create", async (req: Request, res: Response) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(Number(PORT), "0.0.0.0", () => {
   console.log(`Calendar Agent running at http://localhost:${PORT}`);
 });
