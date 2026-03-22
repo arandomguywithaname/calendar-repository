@@ -49,7 +49,8 @@ function resolveAttendees(
 export async function createCalendarEvent(
   event: CalendarEvent,
   contacts: ContactsMap,
-  calendarId: string = "primary"
+  calendarId: string = "primary",
+  organizerEmail?: string
 ): Promise<string> {
   const auth = getAuthClient();
   const calendar = google.calendar({ version: "v3", auth });
@@ -59,6 +60,7 @@ export async function createCalendarEvent(
 
   const eventBody: calendar_v3.Schema$Event = {
     summary: event.title,
+    organizer: organizerEmail ? { email: organizerEmail } : undefined,
     description: event.description || undefined,
     start: {
       dateTime: event.startDateTime,

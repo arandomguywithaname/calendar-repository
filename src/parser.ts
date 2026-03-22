@@ -48,10 +48,9 @@ function getMediaType(
 
 export async function parseInput(
   input: AgentInput,
-  currentDate: string,
-  apiKey?: string
+  currentDate: string
 ): Promise<CalendarEvent> {
-  const client = new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic();
 
   const contentBlocks: Anthropic.MessageCreateParams["messages"][0]["content"] =
     [];

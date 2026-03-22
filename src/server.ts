@@ -48,8 +48,7 @@ app.post("/api/parse", upload.single("image"), async (req: Request, res: Respons
       return;
     }
 
-    const apiKey = req.headers["x-api-key"] as string | undefined;
-    const event = await parseInput({ text, imagePath }, today, apiKey);
+    const event = await parseInput({ text, imagePath }, today);
 
     // Clean up temp file
     if (tempFile) fs.unlinkSync(tempFile);
@@ -63,14 +62,14 @@ app.post("/api/parse", upload.single("image"), async (req: Request, res: Respons
 /** POST /api/create — create the event in Google Calendar */
 app.post("/api/create", async (req: Request, res: Response) => {
   try {
-    const { event } = req.body;
+    const { event, email } = req.body;
     if (!event) {
       res.status(400).json({ error: "No event data provided." });
       return;
     }
 
     const contacts = loadContacts();
-    const link = await createCalendarEvent(event, contacts);
+    const link = await createCalendarEvent(event, contacts, "primary", email);
 
     res.json({ link });
   } catch (err: any) {

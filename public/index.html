@@ -252,11 +252,11 @@
     <h1>📅 Calendar Planning Agent</h1>
     <p class="subtitle">Describe your event in plain English and it'll be added to Google Calendar.</p>
 
-    <label for="apiKey">Anthropic API Key</label>
+    <label for="userEmail">Your email</label>
     <div class="api-key-row">
-      <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" oninput="saveApiKey()" />
+      <input type="text" id="userEmail" placeholder="you@example.com" autocomplete="email" oninput="saveEmail()" />
     </div>
-    <p class="key-hint">Your key is stored locally in your browser and never saved on the server.</p>
+    <p class="key-hint">Used to identify you as the event organizer.</p>
 
     <label for="eventText">Event description</label>
     <textarea id="eventText" placeholder='e.g. "Team standup every Monday at 9am with @alice and @bob, add a Google Meet link"'></textarea>
@@ -296,18 +296,18 @@
   <script>
     let parsedEvent = null;
 
-    // Load saved API key on page load
-    const savedKey = localStorage.getItem("anthropic_api_key");
-    if (savedKey) document.getElementById("apiKey").value = savedKey;
+    // Load saved email on page load
+    const savedEmail = localStorage.getItem("user_email");
+    if (savedEmail) document.getElementById("userEmail").value = savedEmail;
 
-    function saveApiKey() {
-      const key = document.getElementById("apiKey").value.trim();
-      if (key) localStorage.setItem("anthropic_api_key", key);
-      else localStorage.removeItem("anthropic_api_key");
+    function saveEmail() {
+      const email = document.getElementById("userEmail").value.trim();
+      if (email) localStorage.setItem("user_email", email);
+      else localStorage.removeItem("user_email");
     }
 
-    function getApiKey() {
-      return document.getElementById("apiKey").value.trim();
+    function getEmail() {
+      return document.getElementById("userEmail").value.trim();
     }
 
     document.getElementById("imageInput").addEventListener("change", function () {
@@ -401,10 +401,10 @@
       const text = document.getElementById("eventText").value.trim();
       const imageFile = document.getElementById("imageInput").files[0];
 
-      const apiKey = getApiKey();
-      if (!apiKey) {
-        showError("Please enter your Anthropic API key.");
-        document.getElementById("apiKey").focus();
+      const email = getEmail();
+      if (!email) {
+        showError("Please enter your email address.");
+        document.getElementById("userEmail").focus();
         return;
       }
 
@@ -422,11 +422,8 @@
         if (text) formData.append("text", text);
         if (imageFile) formData.append("image", imageFile);
 
-        const res = await fetch("/api/parse", {
-          method: "POST",
-          headers: { "x-api-key": apiKey },
-          body: formData
-        });
+        formData.append("email", email);
+        const res = await fetch("/api/parse", { method: "POST", body: formData });
         const data = await res.json();
 
         if (!res.ok) throw new Error(data.error || "Failed to parse.");
@@ -455,7 +452,7 @@
         const res = await fetch("/api/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: parsedEvent })
+          body: JSON.stringify({ event: parsedEvent, email: getEmail() })
         });
         const data = await res.json();
 
