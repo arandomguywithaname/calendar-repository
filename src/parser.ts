@@ -88,6 +88,7 @@ export async function parseInput(
     throw new Error("No text response from Claude API");
   }
 
-  const parsed: CalendarEvent = JSON.parse(textBlock.text);
+  const raw = textBlock.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  const parsed: CalendarEvent = JSON.parse(raw);
   return parsed;
 }
