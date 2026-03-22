@@ -62,6 +62,35 @@
 
     textarea:focus { border-color: #6366f1; }
 
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 15px;
+      transition: border-color 0.2s;
+      outline: none;
+      font-family: inherit;
+    }
+
+    input[type="password"]:focus, input[type="text"]:focus { border-color: #6366f1; }
+
+    .api-key-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .api-key-row input { flex: 1; margin: 0; }
+
+    .key-hint {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 4px;
+      margin-bottom: 20px;
+    }
+
     .file-input-wrapper {
       margin-top: 20px;
     }
@@ -223,6 +252,12 @@
     <h1>📅 Calendar Planning Agent</h1>
     <p class="subtitle">Describe your event in plain English and it'll be added to Google Calendar.</p>
 
+    <label for="apiKey">Anthropic API Key</label>
+    <div class="api-key-row">
+      <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" oninput="saveApiKey()" />
+    </div>
+    <p class="key-hint">Your key is stored locally in your browser and never saved on the server.</p>
+
     <label for="eventText">Event description</label>
     <textarea id="eventText" placeholder='e.g. "Team standup every Monday at 9am with @alice and @bob, add a Google Meet link"'></textarea>
 
@@ -260,6 +295,20 @@
 
   <script>
     let parsedEvent = null;
+
+    // Load saved API key on page load
+    const savedKey = localStorage.getItem("anthropic_api_key");
+    if (savedKey) document.getElementById("apiKey").value = savedKey;
+
+    function saveApiKey() {
+      const key = document.getElementById("apiKey").value.trim();
+      if (key) localStorage.setItem("anthropic_api_key", key);
+      else localStorage.removeItem("anthropic_api_key");
+    }
+
+    function getApiKey() {
+      return document.getElementById("apiKey").value.trim();
+    }
 
     document.getElementById("imageInput").addEventListener("change", function () {
       const file = this.files[0];
@@ -352,6 +401,13 @@
       const text = document.getElementById("eventText").value.trim();
       const imageFile = document.getElementById("imageInput").files[0];
 
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        showError("Please enter your Anthropic API key.");
+        document.getElementById("apiKey").focus();
+        return;
+      }
+
       if (!text && !imageFile) {
         showError("Please enter an event description or upload an image.");
         return;
@@ -366,7 +422,11 @@
         if (text) formData.append("text", text);
         if (imageFile) formData.append("image", imageFile);
 
-        const res = await fetch("/api/parse", { method: "POST", body: formData });
+        const res = await fetch("/api/parse", {
+          method: "POST",
+          headers: { "x-api-key": apiKey },
+          body: formData
+        });
         const data = await res.json();
 
         if (!res.ok) throw new Error(data.error || "Failed to parse.");

@@ -48,7 +48,8 @@ app.post("/api/parse", upload.single("image"), async (req: Request, res: Respons
       return;
     }
 
-    const event = await parseInput({ text, imagePath }, today);
+    const apiKey = req.headers["x-api-key"] as string | undefined;
+    const event = await parseInput({ text, imagePath }, today, apiKey);
 
     // Clean up temp file
     if (tempFile) fs.unlinkSync(tempFile);
