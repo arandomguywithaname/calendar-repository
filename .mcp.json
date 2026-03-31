@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "robloxstudio": {
-      "command": "npx",
-      "args": ["-y", "robloxstudio-mcp@latest"],
+      "command": "cmd.exe",
+      "args": ["/c", "%LOCALAPPDATA%\\Roblox\\mcp.bat"],
       "type": "stdio"
     }
   }
