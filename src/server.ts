@@ -6,6 +6,7 @@ import multer from "multer";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
 import { generateICS } from "./ics";
+import { sendInvites } from "./email";
 import { ContactsMap } from "./types";
 
 dotenv.config();
@@ -78,6 +79,24 @@ app.post("/api/download", async (req: Request, res: Response) => {
     res.send(icsContent);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to generate ICS file." });
+  }
+});
+
+/** POST /api/send-invites — email .ics invites to attendees */
+app.post("/api/send-invites", async (req: Request, res: Response) => {
+  try {
+    const { event } = req.body;
+    if (!event) {
+      res.status(400).json({ error: "No event data provided." });
+      return;
+    }
+
+    const contacts = loadContacts();
+    const result = await sendInvites(event, contacts);
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to send invites." });
   }
 });
 

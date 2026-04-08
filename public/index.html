@@ -251,7 +251,10 @@
         📥 Download .ics File
       </button>
       <p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:8px;">Works with Google Calendar, Apple Calendar, Outlook, and more</p>
-      <button class="btn btn-ghost" id="createBtn" onclick="createEvent()" style="margin-top:12px;">
+      <button class="btn btn-primary" id="inviteBtn" onclick="sendInvites()" style="margin-top:12px;background:#8b5cf6;">
+        ✉️ Email Invites to Attendees
+      </button>
+      <button class="btn btn-ghost" id="createBtn" onclick="createEvent()" style="margin-top:8px;">
         📆 Add to Google Calendar directly (requires credentials)
       </button>
       <button class="btn btn-ghost" onclick="reset()">
@@ -425,6 +428,49 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = "📥 Download .ics File";
+      }
+    }
+
+    async function sendInvites() {
+      if (!parsedEvent) return;
+      hideError();
+      document.getElementById("successBox").style.display = "none";
+
+      const attendees = parsedEvent.attendees || [];
+      if (attendees.length === 0) {
+        showError("No attendees found in the event. Add people with @mentions (e.g. @leo).");
+        return;
+      }
+
+      const btn = document.getElementById("inviteBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Sending...';
+
+      try {
+        const res = await fetch("/api/send-invites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event: parsedEvent })
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Failed to send invites.");
+
+        const box = document.getElementById("successBox");
+        let msg = "";
+        if (data.sent && data.sent.length > 0) {
+          msg += `Invites sent to: ${data.sent.join(", ")}`;
+        }
+        if (data.failed && data.failed.length > 0) {
+          msg += (msg ? "<br>" : "") + `Failed to send to: ${data.failed.join(", ")}`;
+        }
+        box.innerHTML = msg || "Done!";
+        box.style.display = "block";
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "✉️ Email Invites to Attendees";
       }
     }
 

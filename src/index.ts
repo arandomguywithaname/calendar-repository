@@ -5,6 +5,7 @@ import * as readline from "readline";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
 import { generateICS } from "./ics";
+import { sendInvites } from "./email";
 import { AgentInput, ContactsMap } from "./types";
 
 dotenv.config();
@@ -63,10 +64,11 @@ async function main() {
   // Step 2: Choose how to save
   console.log("\nHow would you like to save this event?");
   console.log("  1. Download as .ics file (works with any calendar app — no setup needed)");
-  console.log("  2. Create directly in Google Calendar (requires Google credentials)");
-  console.log("  3. Cancel");
+  console.log("  2. Email invites to attendees (requires EMAIL_USER/EMAIL_PASS in .env)");
+  console.log("  3. Create directly in Google Calendar (requires Google credentials)");
+  console.log("  4. Cancel");
 
-  const choice = await prompt("\nChoice (1/2/3): ");
+  const choice = await prompt("\nChoice (1/2/3/4): ");
   const contacts = loadContacts();
 
   if (choice === "1") {
@@ -78,6 +80,11 @@ async function main() {
     console.log(`\nEvent saved to: ${outputPath}`);
     console.log("Open this file to add the event to your calendar app.");
   } else if (choice === "2") {
+    // Email invites
+    const { sent, failed } = await sendInvites(event, contacts);
+    if (sent.length > 0) console.log(`\nInvites sent to: ${sent.join(", ")}`);
+    if (failed.length > 0) console.log(`Failed to send to: ${failed.join(", ")}`);
+  } else if (choice === "3") {
     // Create in Google Calendar
     await createCalendarEvent(event, contacts);
   } else {
