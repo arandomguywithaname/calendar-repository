@@ -5,6 +5,7 @@ import express, { Request, Response } from "express";
 import multer from "multer";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
+import { generateICS } from "./ics";
 import { ContactsMap } from "./types";
 
 dotenv.config();
@@ -59,7 +60,28 @@ app.post("/api/parse", upload.single("image"), async (req: Request, res: Respons
   }
 });
 
-/** POST /api/create — create the event in Google Calendar */
+/** POST /api/download — generate and download an .ics file (no Google credentials needed) */
+app.post("/api/download", async (req: Request, res: Response) => {
+  try {
+    const { event } = req.body;
+    if (!event) {
+      res.status(400).json({ error: "No event data provided." });
+      return;
+    }
+
+    const contacts = loadContacts();
+    const icsContent = generateICS(event, contacts);
+    const filename = `${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.ics`;
+
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(icsContent);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to generate ICS file." });
+  }
+});
+
+/** POST /api/create — create the event in Google Calendar (requires Google credentials) */
 app.post("/api/create", async (req: Request, res: Response) => {
   try {
     const { event } = req.body;

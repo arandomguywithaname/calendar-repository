@@ -4,6 +4,7 @@ import * as path from "path";
 import * as readline from "readline";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
+import { generateICS } from "./ics";
 import { AgentInput, ContactsMap } from "./types";
 
 dotenv.config();
@@ -59,16 +60,30 @@ async function main() {
   console.log("\nExtracted event details:");
   console.log(JSON.stringify(event, null, 2));
 
-  // Step 2: Confirm with the user
-  const confirm = await prompt("\nCreate this event in Google Calendar? (y/n): ");
-  if (confirm.toLowerCase() !== "y") {
+  // Step 2: Choose how to save
+  console.log("\nHow would you like to save this event?");
+  console.log("  1. Download as .ics file (works with any calendar app — no setup needed)");
+  console.log("  2. Create directly in Google Calendar (requires Google credentials)");
+  console.log("  3. Cancel");
+
+  const choice = await prompt("\nChoice (1/2/3): ");
+  const contacts = loadContacts();
+
+  if (choice === "1") {
+    // Save as .ics file
+    const icsContent = generateICS(event, contacts);
+    const filename = `${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.ics`;
+    const outputPath = path.resolve(process.cwd(), filename);
+    fs.writeFileSync(outputPath, icsContent, "utf-8");
+    console.log(`\nEvent saved to: ${outputPath}`);
+    console.log("Open this file to add the event to your calendar app.");
+  } else if (choice === "2") {
+    // Create in Google Calendar
+    await createCalendarEvent(event, contacts);
+  } else {
     console.log("Cancelled.");
     process.exit(0);
   }
-
-  // Step 3: Create event in Google Calendar
-  const contacts = loadContacts();
-  await createCalendarEvent(event, contacts);
 
   console.log("\nDone!");
 }
