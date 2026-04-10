@@ -254,7 +254,7 @@
       <button class="btn btn-primary" id="inviteBtn" onclick="sendInvites()" style="margin-top:12px;background:#8b5cf6;">
         ✉️ Email Invites to Attendees
       </button>
-      <button class="btn btn-ghost" id="createBtn" onclick="createEvent()" style="margin-top:8px;">
+      <button class="btn btn-ghost" id="createBtn" onclick="createGoogleEvent()" style="margin-top:8px;">
         📆 Add to Google Calendar directly (requires credentials)
       </button>
       <button class="btn btn-ghost" onclick="reset()">
@@ -474,7 +474,7 @@
       }
     }
 
-    async function createEvent() {
+    async function createGoogleEvent() {
       if (!parsedEvent) return;
       document.getElementById("successBox").style.display = "none";
       hideError();
