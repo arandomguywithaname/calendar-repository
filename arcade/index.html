@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Arc Games — 100 Free Arcade Games</title>
+<meta name="description" content="100 free arcade games. No installs, no accounts, no cost. Play Plinko, Tic Tac Toe, Snake, Blackjack and more. Make friends and chat while you play.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕹️</text></svg>">
+<link rel="stylesheet" href="css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 0;</script>
+</head>
+<body>
+
+<header class="arcade-header">
+  <a class="arcade-logo" href="index.html">
+    <span class="mark"></span>
+    <span><span class="brand-claude">Claude</span><span class="brand-arc">Arc</span>Games</span>
+  </a>
+  <div class="arcade-header-controls">
+    <select id="lang-select" class="select" aria-label="Language">
+      <option value="en">English</option>
+      <option value="es">Español</option>
+      <option value="ru">Русский</option>
+      <option value="ro">Română</option>
+      <option value="fr">Français</option>
+      <option value="de">Deutsch</option>
+    </select>
+    <button id="theme-toggle" class="btn" aria-label="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="hero">
+    <h1 data-i18n="site.name">Claude Arc Games</h1>
+    <p data-i18n="site.tagline">100 free arcade games. No installs, no downloads, no cost — just click and play.</p>
+  </div>
+
+  <input id="search" class="search-box" type="text" data-i18n-placeholder="search.placeholder" placeholder="Search 100 games..." style="display:block;margin:0 auto;">
+
+  <div class="toolbar" id="category-filters">
+    <button class="chip active" data-cat="all" data-i18n="category.all">All</button>
+    <button class="chip" data-cat="arcade" data-i18n="category.arcade">Arcade</button>
+    <button class="chip" data-cat="puzzle" data-i18n="category.puzzle">Puzzle</button>
+    <button class="chip" data-cat="cards" data-i18n="category.cards">Cards & Dice</button>
+    <button class="chip" data-cat="trivia" data-i18n="category.trivia">Trivia & Word</button>
+    <button class="chip" data-cat="skill" data-i18n="category.skill">Skill & Reflex</button>
+  </div>
+
+  <div class="game-grid" id="game-grid"></div>
+  <div class="empty-state" id="empty-state" style="display:none" data-i18n="empty.noResults">No games match your search.</div>
+</div>
+
+<footer class="arcade-footer">
+  <p data-i18n="footer.text">Built for gamers who couldn't find or afford good arcade games. Free forever.</p>
+</footer>
+
+<script src="js/registry.js"></script>
+<script src="i18n/en.js"></script>
+<script src="i18n/es.js"></script>
+<script src="i18n/ru.js"></script>
+<script src="i18n/ro.js"></script>
+<script src="i18n/fr.js"></script>
+<script src="i18n/de.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/common.js"></script>
+<script src="js/friends.js"></script>
+<script>
+(function () {
+  var grid = document.getElementById("game-grid");
+  var empty = document.getElementById("empty-state");
+  var search = document.getElementById("search");
+  var activeCat = "all";
+
+  function badgeMp() {
+    var span = document.createElement("span");
+    span.className = "badge-mp";
+    span.setAttribute("data-i18n", "badge.multiplayer");
+    span.textContent = "2P";
+    return span;
+  }
+
+  function render() {
+    var q = (search.value || "").trim().toLowerCase();
+    grid.innerHTML = "";
+    var shown = 0;
+    window.ARCADE_GAMES.forEach(function (g) {
+      if (activeCat !== "all" && g.category !== activeCat) return;
+      if (q && g.title.toLowerCase().indexOf(q) === -1) return;
+      shown++;
+      var a = document.createElement("a");
+      a.className = "game-card";
+      a.href = "games/" + g.slug + "/index.html";
+      var catLabel = window.ArcadeI18n ? window.ArcadeI18n.t("category." + g.category) : g.category;
+      a.innerHTML =
+        '<span class="icon">' + g.icon + "</span>" +
+        '<span class="title">' + g.title + "</span>" +
+        '<span class="category">' + catLabel + "</span>";
+      if (g.multiplayer) a.appendChild(badgeMp());
+      grid.appendChild(a);
+    });
+    empty.style.display = shown === 0 ? "block" : "none";
+    if (window.ArcadeI18n) window.ArcadeI18n.init && applyDynamicI18n();
+  }
+
+  function applyDynamicI18n() {
+    // Re-run translation pass over freshly-injected cards/badges.
+    document.querySelectorAll("#game-grid [data-i18n]").forEach(function (el) {
+      el.textContent = window.ArcadeI18n.t(el.getAttribute("data-i18n"));
+    });
+  }
+
+  document.getElementById("category-filters").addEventListener("click", function (e) {
+    var btn = e.target.closest(".chip");
+    if (!btn) return;
+    document.querySelectorAll(".chip").forEach(function (c) { c.classList.remove("active"); });
+    btn.classList.add("active");
+    activeCat = btn.getAttribute("data-cat");
+    render();
+  });
+
+  search.addEventListener("input", render);
+  if (window.ArcadeI18n) window.ArcadeI18n.onChange(render);
+
+  render();
+})();
+</script>
+</body>
+</html>

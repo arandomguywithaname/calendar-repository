@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Division Drill — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>➗</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>➗ Division Drill</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.time">Time</span>: <b id="time">60</b></span>
+      <span class="stat"><span data-i18n="common.score">Score</span>: <b id="score">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="quiz-question" id="problem">Press Start to begin</div>
+    <div class="controls-row">
+      <input id="answer" class="search-box" style="width:160px; text-align:center; font-size:1.3rem;" type="number" inputmode="numeric" disabled>
+      <button class="btn btn-primary" id="submit" disabled>Submit</button>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart">Start</button>
+    </div>
+  </div>
+  <p class="instructions">You have 60 seconds to solve as many division problems as you can. Every problem divides evenly, no remainders. Type your answer and press Enter or Submit. Difficulty increases the more you get right. Best score (most correct answers) is saved locally.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

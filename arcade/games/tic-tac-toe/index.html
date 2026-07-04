@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❌</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>❌ Tic Tac Toe</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.score">Score</span>: <b id="wins">0</b>-<b id="losses">0</b>-<b id="ties">0</b></span>
+    </div>
+  </div>
+
+  <div class="game-stage">
+    <div class="controls-row">
+      <button class="chip active" id="mode-cpu" data-i18n="common.cpuTurn">Vs CPU</button>
+      <button class="chip" id="mode-friend">Vs Friend</button>
+    </div>
+    <div id="friend-setup" style="display:none; text-align:center;">
+      <p class="instructions">Open the Friends panel (bottom right), add your friend's code, then enter it here to start a match.</p>
+      <div class="controls-row">
+        <input id="opponent-code" class="search-box" placeholder="Friend's code (e.g. ARC-XXXX-XXXX)" style="width:260px;">
+        <button class="btn btn-primary" id="invite-btn">Invite to play</button>
+      </div>
+      <p class="instructions" id="mp-status"></p>
+    </div>
+    <div class="grid-board" id="board" style="grid-template-columns: repeat(3, 90px);"></div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.restart">Restart</button>
+    </div>
+  </div>
+  <p class="instructions" data-i18n="common.howToPlay">Click a square to place your mark. Get three in a row to win.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

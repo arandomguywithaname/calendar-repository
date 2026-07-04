@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simon Says — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  #board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+    width: min(320px, 80vw);
+    height: min(320px, 80vw);
+  }
+  .simon-quad {
+    border-radius: 14px;
+    border: none;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.1s ease, transform 0.1s ease;
+  }
+  .simon-quad.lit { opacity: 1; transform: scale(0.97); }
+  .simon-quad:disabled { cursor: default; }
+  #q0 { background: #ff5da2; border-top-left-radius: 999px; }
+  #q1 { background: #29e0c9; border-top-right-radius: 999px; }
+  #q2 { background: #ffb84d; border-bottom-left-radius: 999px; }
+  #q3 { background: #7c5cff; border-bottom-right-radius: 999px; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🎵 Simon Says</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.level">Level</span>: <b id="level">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="board">
+      <button class="simon-quad" id="q0" data-idx="0"></button>
+      <button class="simon-quad" id="q1" data-idx="1"></button>
+      <button class="simon-quad" id="q2" data-idx="2"></button>
+      <button class="simon-quad" id="q3" data-idx="3"></button>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Watch the sequence light up, then click the quadrants in the same order. Each round adds one more step — how far can you go?</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

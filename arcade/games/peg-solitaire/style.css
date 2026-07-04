@@ -1,0 +1,36 @@
+.peg-board {
+  gap: 6px;
+}
+
+.peg-board .cell {
+  width: 44px;
+  height: 44px;
+  font-size: 1.6rem;
+  padding: 0;
+}
+
+.peg-board .cell.invalid {
+  background: transparent;
+  border: none;
+  cursor: default;
+  pointer-events: none;
+}
+
+.peg-board .cell.hole {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+}
+
+.peg-board .cell.peg {
+  background: var(--panel-2);
+}
+
+.peg-board .cell.selected {
+  border-color: var(--accent-3);
+  box-shadow: 0 0 0 2px var(--accent-3) inset;
+}
+
+.peg-board .cell.hint {
+  background: var(--panel);
+  border-color: var(--good);
+}
