@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spider Solitaire — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕷️</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<link rel="stylesheet" href="style.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🕷️ Spider Solitaire</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.moves">Moves</span>: <b id="moves">0</b></span>
+      <span class="stat">Runs: <b id="runs">0</b>/4</span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">-</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="solitaire-board" id="board"></div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-accent" id="deal">Deal 10</button>
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Simplified single-suit Spider: this version uses all four copies of one suit for the full 52-card deck, so any descending run is automatically same-suit. Click a card to select the descending run starting there, then click a destination column (its exposed top card must be exactly one rank higher, or the column must be empty). Click "Deal 10" to deal one new card onto each column from the stock (only when no column is empty). Clear a full K-down-to-A run to bank it — bank all 4 runs to win.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

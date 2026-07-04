@@ -1,0 +1,41 @@
+#board {
+  grid-auto-rows: 52px;
+  gap: 0;
+  border: 3px solid var(--border);
+}
+
+#board .cell {
+  width: 52px;
+  height: 52px;
+  border-radius: 0;
+  border: none;
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.cell.light {
+  background: #e8d6b3;
+}
+
+.cell.dark {
+  background: #6b4423;
+}
+
+.cell.selected {
+  outline: 3px solid #ffd54a;
+  outline-offset: -3px;
+}
+
+.cell.legal-move {
+  box-shadow: inset 0 0 0 4px rgba(80, 220, 120, 0.8);
+}
+
+.piece-white {
+  color: #f5f5f5;
+  text-shadow: 0 0 2px #000, 0 0 1px #000;
+}
+
+.piece-black {
+  color: #111;
+  text-shadow: 0 0 2px #ccc;
+}

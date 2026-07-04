@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roulette — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎡</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🎡 Roulette</h1>
+    <div class="hud">
+      <span class="stat">Chips: <b id="chips">100</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">100</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="result-number" style="font-size:3rem; font-weight:800; width:80px; height:80px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:3px solid var(--border); background: var(--panel-2);">?</div>
+    <p id="status-line" style="font-weight:700; min-height:1.5em;">Place your bet, then spin.</p>
+
+    <div class="controls-row">
+      <button class="chip bet-type-btn active" data-type="red">Red (1:1)</button>
+      <button class="chip bet-type-btn" data-type="black">Black (1:1)</button>
+      <button class="chip bet-type-btn" data-type="odd">Odd (1:1)</button>
+      <button class="chip bet-type-btn" data-type="even">Even (1:1)</button>
+      <button class="chip bet-type-btn" data-type="number">Number (35:1)</button>
+    </div>
+    <div class="controls-row" id="number-row" style="display:none;">
+      <label for="number-pick">Pick 0-36:</label>
+      <input id="number-pick" class="search-box" style="width:100px; text-align:center;" type="number" min="0" max="36" value="17">
+    </div>
+    <div class="controls-row">
+      <label for="bet-amount">Bet:</label>
+      <input id="bet-amount" class="search-box" style="width:100px; text-align:center;" type="number" value="10" min="1">
+      <button class="btn btn-primary" id="spin-btn">Spin Wheel</button>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart">Reset Chips</button>
+    </div>
+  </div>
+  <p class="instructions">European roulette with a single 0. Bet on red/black or odd/even for even money (1:1), or bet on an exact number for a 35:1 payout. Chips are a fake local score for fun only, not real money, and are saved in your browser.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

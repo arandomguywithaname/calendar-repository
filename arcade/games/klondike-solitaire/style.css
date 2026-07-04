@@ -1,0 +1,105 @@
+/* Klondike Solitaire — card table styling (self-contained, not shared with other games) */
+
+.solitaire-board {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: 100%;
+  align-items: center;
+}
+
+.row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+
+.row.top-row {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.pile-group {
+  display: flex;
+  gap: 14px;
+}
+
+.card {
+  width: 58px;
+  height: 82px;
+  border-radius: 7px;
+  border: 1px solid #999;
+  background: #fdfdfd;
+  color: #161616;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.card.red { color: #c0392b; }
+.card.black { color: #161616; }
+
+.card .rank-top {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.card .suit-big { font-size: 1.5rem; }
+
+.card.face-down {
+  background: repeating-linear-gradient(135deg, #4a5286, #4a5286 6px, #2a2f52 6px, #2a2f52 12px);
+  border-color: #222;
+}
+
+.card.selected {
+  box-shadow: 0 0 0 3px var(--accent-3), 0 3px 6px rgba(0, 0, 0, 0.5);
+  transform: translateY(-10px);
+}
+
+.card.empty-slot {
+  background: transparent;
+  border: 2px dashed var(--border);
+  box-shadow: none;
+  color: var(--text-dim);
+  font-size: 1.6rem;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 58px;
+  min-height: 82px;
+}
+
+.column .card { margin-top: -56px; }
+.column .card:first-child { margin-top: 0; }
+
+.columns-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.stock-pile.empty-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlay-win, .overlay-lose { display: inline-block; }
