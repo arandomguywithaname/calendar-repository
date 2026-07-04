@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPS Lizard Spock — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦎</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🦎 RPS Lizard Spock</h1>
+    <div class="hud">
+      <span class="stat">W-L-T: <b id="wins">0</b>-<b id="losses">0</b>-<b id="ties">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best streak</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="controls-row" style="font-size:2.5rem;">
+      <div id="player-choice" style="width:80px; height:80px; display:flex; align-items:center; justify-content:center;">❔</div>
+      <div style="font-size:1.5rem; align-self:center;">vs</div>
+      <div id="cpu-choice" style="width:80px; height:80px; display:flex; align-items:center; justify-content:center;">❔</div>
+    </div>
+    <p id="streak-line" style="font-weight:700;">Current streak: 0</p>
+    <div class="controls-row">
+      <button class="btn btn-primary choice-btn" data-choice="rock">🪨 Rock</button>
+      <button class="btn btn-primary choice-btn" data-choice="paper">📄 Paper</button>
+      <button class="btn btn-primary choice-btn" data-choice="scissors">✂️ Scissors</button>
+      <button class="btn btn-primary choice-btn" data-choice="lizard">🦎 Lizard</button>
+      <button class="btn btn-primary choice-btn" data-choice="spock">🖖 Spock</button>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart">Reset Stats</button>
+    </div>
+  </div>
+  <p class="instructions">The extended Rock-Paper-Scissors-Lizard-Spock game: rock crushes scissors and lizard; paper covers rock and disproves Spock; scissors cuts paper and decapitates lizard; lizard poisons Spock and eats paper; Spock vaporizes rock and smashes scissors. Your record and best streak are saved locally.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

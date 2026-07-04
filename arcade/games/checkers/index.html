@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkers — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚫</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<link rel="stylesheet" href="style.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>⚫ Checkers</h1>
+    <div class="hud">
+      <span class="stat" id="turn-stat"><span data-i18n="common.yourTurn">Your turn</span></span>
+      <span class="stat"><span data-i18n="common.moves">Moves</span>: <b id="moves">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="grid-board" id="board" style="grid-template-columns: repeat(8, 48px);"></div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">You play red (moving down the board), CPU plays black. Click one of your pieces then click a dark square to move diagonally, or jump over an adjacent black piece to capture it. Captures are mandatory when available — if a capture chain is possible with the same piece, you must keep capturing before your turn ends. Reach the far row to king a piece (kings move/capture diagonally in any direction). Win by capturing all opponent pieces or leaving the opponent with no legal move.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

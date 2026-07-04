@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower of Hanoi — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗼</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  #pegs { display: flex; gap: 24px; align-items: flex-end; justify-content: center; height: 260px; width: 100%; max-width: 480px; }
+  .peg { flex: 1; display: flex; flex-direction: column-reverse; align-items: center; height: 100%; position: relative; cursor: pointer; border-radius: 6px; padding-bottom: 10px; }
+  .peg::before { content: ""; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 8px; height: 220px; background: var(--border); border-radius: 4px; z-index: 0; }
+  .peg-base { position: absolute; bottom: 0; left: 10%; width: 80%; height: 8px; background: var(--border); border-radius: 4px; }
+  .peg.selected { background: rgba(124, 92, 255, 0.15); }
+  .disc { height: 26px; border-radius: 6px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: white; z-index: 1; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🗼 Tower of Hanoi</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.moves">Moves</span>: <b id="moves">0</b></span>
+      <span class="stat">Optimal: <b id="optimal">31</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">-</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="pegs">
+      <div class="peg" id="peg-0" data-peg="0"><div class="peg-base"></div></div>
+      <div class="peg" id="peg-1" data-peg="1"><div class="peg-base"></div></div>
+      <div class="peg" id="peg-2" data-peg="2"><div class="peg-base"></div></div>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Click a peg to pick up its top disc, then click another peg to drop it there. You can never place a larger disc on a smaller one. Move the whole stack to the last peg in as few moves as possible.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

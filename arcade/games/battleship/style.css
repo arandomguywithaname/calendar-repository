@@ -1,0 +1,43 @@
+.boards-row {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.board-wrap {
+  text-align: center;
+}
+
+.board-wrap h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+#player-board, #cpu-board {
+  grid-auto-rows: 36px;
+}
+
+#player-board .cell, #cpu-board .cell {
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+}
+
+.cell.ship {
+  background: var(--accent-3, #3b6ea5);
+}
+
+.cell.hit {
+  background: var(--danger, #c0392b);
+}
+
+.cell.miss {
+  background: var(--panel-2);
+  opacity: 0.6;
+}
+
+.cell.sunk {
+  background: #4a0e0e;
+}

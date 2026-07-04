@@ -1,0 +1,45 @@
+#board {
+  grid-auto-rows: 48px;
+  gap: 0;
+  border: 3px solid var(--border);
+}
+
+#board .cell {
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
+  border: none;
+  font-size: 1.7rem;
+}
+
+.cell.light {
+  background: #e8d6b3;
+  cursor: default;
+}
+
+.cell.dark {
+  background: #6b4423;
+}
+
+.cell.dark:hover {
+  background: #7c5232;
+}
+
+.cell.selected {
+  outline: 3px solid #ffd54a;
+  outline-offset: -3px;
+}
+
+.cell.legal-move {
+  box-shadow: inset 0 0 0 4px rgba(80, 220, 120, 0.8);
+}
+
+.piece-red {
+  color: #d6392e;
+  text-shadow: 0 0 2px #000;
+}
+
+.piece-black {
+  color: #222;
+  text-shadow: 0 0 2px #aaa;
+}

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reaction Time — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  #zone {
+    width: min(480px, 90vw);
+    height: 260px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    font-weight: 800;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    transition: background 0.1s ease;
+  }
+  #zone.wait { background: var(--danger); color: white; }
+  #zone.go { background: var(--good); color: #05131c; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>⚡ Reaction Time</h1>
+    <div class="hud">
+      <span class="stat">Last: <b id="score">-</b> ms</span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">-</b> ms</span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="zone">Click to start</div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.restart">Restart</button>
+    </div>
+  </div>
+  <p class="instructions">Click "Click to start", wait for the box to turn green, then click as fast as you can. Clicking too early restarts the round.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

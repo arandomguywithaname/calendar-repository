@@ -1,0 +1,54 @@
+#piles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.nim-pile {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.nim-pile.selected {
+  border-color: var(--accent-3);
+  box-shadow: 0 0 0 2px var(--accent-3) inset;
+}
+
+.nim-pile.disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.nim-pile-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.nim-sticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nim-stick {
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nim-pile.disabled .nim-stick {
+  cursor: default;
+}
+
+#amount-controls .btn {
+  min-width: 40px;
+  justify-content: center;
+}

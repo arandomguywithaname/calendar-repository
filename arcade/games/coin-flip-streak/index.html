@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coin Flip Streak — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🪙</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🪙 Coin Flip Streak</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.score">Streak</span>: <b id="score">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="coin" style="font-size:5rem; transition: transform 0.5s ease;">🪙</div>
+    <p id="status-line" style="font-weight:700; min-height:1.5em;">Pick heads or tails to start.</p>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="heads-btn">🙂 Heads</button>
+      <button class="btn btn-primary" id="tails-btn">🌟 Tails</button>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart">Reset Streak</button>
+    </div>
+  </div>
+  <p class="instructions">Guess heads or tails before each flip. Guess right and your streak grows and you keep flipping; guess wrong and the streak ends. Your best streak ever is saved locally.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
