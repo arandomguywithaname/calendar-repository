@@ -11,9 +11,12 @@
   var onlineSet = {};
   var pendingMessages = {};
   var peer = null;
+  var peerStatus = "connecting"; // "connecting" | "connected" | "failed"
   var activeChatWith = null;
   var retryTimers = {};
+  var connectAttempts = {}; // code -> { startedAt, failCount }
   var gameListeners = [];
+  var CONNECT_TIMEOUT_MS = 15000;
 
   function rootPath() {
     var depth = window.ARCADE_ROOT_DEPTH || 0;
@@ -93,6 +96,7 @@
     connections[code] = conn;
     conn.on("open", function () {
       onlineSet[code] = true;
+      if (connectAttempts[code]) connectAttempts[code].failCount = 0;
       flushPending(code);
       renderPanel();
     });
@@ -124,6 +128,23 @@
     try {
       var conn = peer.connect(code, { reliable: true });
       setupConnection(code, conn);
+      var attempt = connectAttempts[code] || { failCount: 0 };
+      attempt.startedAt = Date.now();
+      connectAttempts[code] = attempt;
+      // WebRTC connections that fail at the ICE/NAT-traversal stage often
+      // never fire any PeerJS "error" event at all - they just hang forever
+      // in a not-open state. Without this, a friend behind a strict NAT
+      // would show as permanently "connecting" with no way to recover.
+      setTimeout(function () {
+        var c = connections[code];
+        if (c && !c.open) {
+          try { c.close(); } catch (e) {}
+          delete connections[code];
+          onlineSet[code] = false;
+          connectAttempts[code].failCount = (connectAttempts[code].failCount || 0) + 1;
+          renderPanel();
+        }
+      }, CONNECT_TIMEOUT_MS);
     } catch (e) {}
   }
 
@@ -182,14 +203,50 @@
     panel.querySelector("#fp-close").addEventListener("click", function () {
       panel.classList.remove("open");
     });
+
+    // Keep "Connecting..." / online dots live while the panel is open,
+    // even if no PeerJS event happens to fire in the meantime.
+    setInterval(function () {
+      if (panel.classList.contains("open")) renderPanel();
+    }, 3000);
+  }
+
+  function friendStatusLine(code) {
+    if (onlineSet[code]) return "";
+    var attempt = connectAttempts[code];
+    var fails = attempt ? attempt.failCount || 0 : 0;
+    if (fails >= 2) {
+      return '<div style="color:var(--warn); font-size:0.78rem; margin-top:2px;">' +
+        "⚠ Couldn't connect after several tries. This usually means one of you is on a network " +
+        "that blocks direct peer-to-peer connections (school/office WiFi, a VPN, or a strict firewall). " +
+        "Try a different network (e.g. home WiFi) on either side, or " +
+        '<button class="btn" data-action="retry" data-code="' + code + '" style="padding:2px 8px; font-size:0.75rem;">Retry now</button></div>';
+    }
+    return '<div style="color:var(--text-dim); font-size:0.78rem; margin-top:2px;">Connecting...</div>';
+  }
+
+  function relayStatusBanner() {
+    if (peerStatus === "connected") return "";
+    if (peerStatus === "failed") {
+      return '<div class="instructions" style="text-align:left; color:var(--danger);">' +
+        "⚠ Couldn't reach the connection service used to find friends. Check your internet connection, " +
+        "or a VPN/firewall/ad-blocker may be blocking it. Friends/chat won't work until this connects, " +
+        "but every game still works fine.</div>";
+    }
+    return '<div class="instructions" style="text-align:left; color:var(--text-dim);">Connecting to the friends service...</div>';
   }
 
   function renderPanel() {
     if (!els.body) return;
     if (activeChatWith) return renderChat(activeChatWith);
 
+    var prevInput = els.body.querySelector("#fp-add-input");
+    var preservedValue = prevInput ? prevInput.value : "";
+    var hadFocus = prevInput === document.activeElement;
+
     var friends = getFriends();
     var html = "";
+    html += relayStatusBanner();
     html += '<div class="fp-code"><span>' + myCode() + '</span>' +
       '<button class="btn" id="fp-copy" style="padding:4px 10px;" data-i18n="friends.copy">Copy</button></div>';
     html += '<div class="fp-add"><input id="fp-add-input" data-i18n-placeholder="friends.addPlaceholder" placeholder="Enter friend\'s code">' +
@@ -200,16 +257,26 @@
     } else {
       friends.forEach(function (code) {
         var online = !!onlineSet[code];
-        html += '<div class="friend-row" data-code="' + code + '">' +
+        html += '<div class="friend-row" data-code="' + code + '" style="flex-direction:column; align-items:stretch;">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center;">' +
           '<span><span class="dot ' + (online ? "online" : "") + '"></span>' + code + "</span>" +
           '<span><button class="btn" data-action="chat" data-code="' + code + '" style="padding:4px 8px;">💬</button> ' +
           '<button class="btn" data-action="remove" data-code="' + code + '" style="padding:4px 8px;">🗑️</button></span>' +
+          "</div>" + friendStatusLine(code) +
           "</div>";
       });
     }
     html += '<p class="instructions" data-i18n="friends.helpText" style="text-align:left;">Friends connect peer-to-peer.</p>';
     els.body.innerHTML = html;
     els.body.className = "fp-body";
+
+    if (preservedValue) {
+      var newInput = els.body.querySelector("#fp-add-input");
+      if (newInput) {
+        newInput.value = preservedValue;
+        if (hadFocus) newInput.focus();
+      }
+    }
 
     if (window.ArcadeI18n) {
       els.body.querySelectorAll("[data-i18n]").forEach(function (el) {
@@ -227,6 +294,11 @@
     });
     els.body.querySelector("#fp-add-btn").addEventListener("click", function () {
       var input = els.body.querySelector("#fp-add-input");
+      var code = (input.value || "").trim().toUpperCase();
+      if (code && code === myCode()) {
+        if (window.ArcadeCommon) window.ArcadeCommon.toast("That's your own code! Ask your friend for theirs.");
+        return;
+      }
       if (addFriend(input.value)) { input.value = ""; renderPanel(); }
     });
     els.body.querySelectorAll('[data-action="chat"]').forEach(function (btn) {
@@ -238,17 +310,31 @@
     els.body.querySelectorAll('[data-action="remove"]').forEach(function (btn) {
       btn.addEventListener("click", function () { removeFriend(btn.getAttribute("data-code")); });
     });
+    els.body.querySelectorAll('[data-action="retry"]').forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var code = btn.getAttribute("data-code");
+        delete connections[code];
+        connectTo(code);
+        renderPanel();
+      });
+    });
   }
 
   function renderChat(code) {
     var online = !!onlineSet[code];
     if (!online) connectTo(code);
     var log = loadChat(code);
-    var html = '<div class="friend-row" style="margin-bottom:8px;">' +
-      '<span><button class="btn" id="fp-back" style="padding:4px 8px;">←</button> ' +
+
+    var prevInput = els.body.querySelector("#chat-input");
+    var preservedValue = prevInput ? prevInput.value : "";
+    var hadFocus = prevInput === document.activeElement;
+
+    var html = '<div class="friend-row" style="flex-direction:column; align-items:stretch; margin-bottom:8px;">' +
+      '<div style="display:flex; align-items:center;">' +
+      '<button class="btn" id="fp-back" style="padding:4px 8px;">←</button>&nbsp;' +
       '<span class="dot ' + (online ? "online" : "") + '"></span>' + code +
-      (online ? "" : ' <span data-i18n="friends.connecting" style="color:var(--text-dim); font-weight:400; font-size:0.8rem;">Connecting...</span>') +
-      "</span>" +
+      "</div>" + friendStatusLine(code) +
       "</div>" +
       '<div class="chat-window"><div class="chat-log" id="chat-log"></div>' +
       '<div class="chat-input-row"><input id="chat-input" data-i18n-placeholder="friends.chatPlaceholder" placeholder="Type a message...">' +
@@ -274,7 +360,19 @@
       activeChatWith = null;
       renderPanel();
     });
+    els.body.querySelectorAll('[data-action="retry"]').forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        delete connections[code];
+        connectTo(code);
+        renderChat(code);
+      });
+    });
     var input = els.body.querySelector("#chat-input");
+    if (preservedValue) {
+      input.value = preservedValue;
+      if (hadFocus) input.focus();
+    }
     function doSend() {
       var text = input.value.trim();
       if (!text) return;
@@ -301,6 +399,8 @@
       });
     } catch (e) { return; }
     peer.on("open", function () {
+      peerStatus = "connected";
+      renderPanel();
       pollFriends();
       setInterval(pollFriends, 20000);
     });
@@ -316,6 +416,8 @@
     peer.on("disconnected", function () {
       // Lost the signaling connection (network blip, broker restart, etc).
       // Reconnect so friends can still reach this browser's same code.
+      peerStatus = "connecting";
+      renderPanel();
       setTimeout(function () {
         if (peer && !peer.destroyed) peer.reconnect();
       }, 2000);
@@ -324,6 +426,8 @@
       // Broker unreachable, blocked network, transient failure, etc. Retry
       // unless the failure means this exact ID can never work (already taken).
       var fatal = err && err.type === "unavailable-id";
+      peerStatus = fatal ? "connected" : "failed";
+      renderPanel();
       if (!fatal && peer && !peer.destroyed) {
         setTimeout(function () {
           if (peer && peer.disconnected && !peer.destroyed) peer.reconnect();
@@ -336,6 +440,7 @@
     var s = document.createElement("script");
     s.src = rootPath() + "vendor/peerjs.min.js";
     s.onload = initPeer;
+    s.onerror = function () { peerStatus = "failed"; renderPanel(); };
     document.head.appendChild(s);
   }
 
