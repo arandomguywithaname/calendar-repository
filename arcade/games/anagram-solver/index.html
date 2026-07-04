@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anagram Challenge — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔤</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  #scrambled { font-size: 2.2rem; letter-spacing: 0.35em; font-weight: 800; color: var(--accent-3); }
+  #guess-input { font-size: 1.3rem; padding: 10px 14px; text-align: center; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); width: 260px; text-transform: uppercase; }
+  #hint { color: var(--text-dim); font-size: 0.85rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🔤 Anagram Challenge</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.score">Score</span>: <b id="score">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+      <span class="stat">Round: <b id="round">1</b>/<b id="total-rounds">10</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="scrambled">------</div>
+    <div id="hint"></div>
+    <form id="guess-form">
+      <input id="guess-input" autocomplete="off" maxlength="20" placeholder="Type your guess">
+    </form>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="submit-btn">Submit</button>
+      <button class="btn" id="skip-btn">Skip</button>
+      <button class="btn" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Unscramble the letters to form the hidden word. Type your answer and press Submit or Enter. Skip a round to reveal the answer and move on. 10 rounds per game.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
