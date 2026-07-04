@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Golf Putt — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛳</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>⛳ Mini Golf Putt</h1>
+    <div class="hud">
+      <span class="stat">Hole: <b id="hole-num">1</b> / 3</span>
+      <span class="stat">Strokes: <b id="score">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">-</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <canvas id="board" width="480" height="360"></canvas>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Click and drag back from the ball, then release to putt — the farther you pull, the harder the shot. Sink all 3 holes in as few strokes as possible.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

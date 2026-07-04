@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>War — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  .war-battle { display: flex; gap: 30px; justify-content: center; align-items: center; }
+  .war-side { text-align: center; }
+  .war-side .label { font-weight: 700; color: var(--text-dim); font-size: 0.85rem; margin-bottom: 6px; }
+  .war-card {
+    width: 70px; height: 98px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel-2); display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 1.6rem; box-shadow: 0 3px 8px rgba(0,0,0,0.3); margin: 0 auto;
+  }
+  .war-card.red { color: #ff5d5d; }
+  .war-card.empty { opacity: 0.3; font-size: 1rem; }
+  #war-log { color: var(--text-dim); font-size: 0.85rem; text-align: center; min-height: 2.4em; max-width: 500px; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>⚔️ War</h1>
+    <div class="hud">
+      <span class="stat">Your cards: <b id="player-count">26</b></span>
+      <span class="stat">CPU cards: <b id="cpu-count">26</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="war-battle">
+      <div class="war-side">
+        <div class="label">You</div>
+        <div class="war-card empty" id="player-card">🂠</div>
+      </div>
+      <div class="war-side">
+        <div class="label">CPU</div>
+        <div class="war-card empty" id="cpu-card">🂠</div>
+      </div>
+    </div>
+    <div id="war-log"></div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="play-round">Play Round</button>
+      <button class="btn" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Each round both players flip their top card — higher card wins both cards. On a tie it's War: each side places 3 cards face down and 1 face up, and the higher face-up card takes everything. Collect all 52 cards to win.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Farkle — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎲</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🎲 Farkle</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.score">Score</span>: <b id="score">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="hud" style="margin-bottom:4px;">
+      <span class="stat">You: <b id="player-total">0</b> / 3000</span>
+      <span class="stat">CPU: <b id="cpu-total">0</b> / 3000</span>
+      <span class="stat">Turn score: <b id="turn-score">0</b></span>
+    </div>
+    <div id="dice-row" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; min-height:70px;"></div>
+    <div id="farkle-message" style="color:var(--text-dim); font-size:0.9rem; min-height:1.4em;"></div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="roll-btn">Roll</button>
+      <button class="btn btn-accent" id="bank-btn">Bank &amp; End Turn</button>
+      <button class="btn" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Roll six dice. Scoring dice (1s, 5s, and three-or-more of a kind) are automatically set aside each roll — bank your turn score before you Farkle, or keep rolling the rest for more. First to 3000 beats the CPU.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

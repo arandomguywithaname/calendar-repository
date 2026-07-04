@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Number Memory — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔢</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🔢 Number Memory</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.score">Score</span>: <b id="score">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div id="number-display" style="font-size:2.6rem; font-weight:800; letter-spacing:0.15em; min-height:3.2rem;">Ready?</div>
+    <form id="answer-form" style="display:none;">
+      <input id="answer-input" type="tel" inputmode="numeric" autocomplete="off" style="font-size:1.4rem; padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); text-align:center; width:220px;">
+      <button class="btn btn-primary" type="submit">Submit</button>
+    </form>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Memorize the digits before they disappear, then type them back. Each success adds one more digit.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

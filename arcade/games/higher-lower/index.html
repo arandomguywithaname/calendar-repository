@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Higher or Lower — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⬆️</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  .hl-card {
+    width: 110px; height: 154px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--panel-2); display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 2.4rem; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin: 0 auto;
+  }
+  .hl-card.red { color: #ff5d5d; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>⬆️ Higher or Lower</h1>
+    <div class="hud">
+      <span class="stat">Streak: <b id="streak">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="hl-card" id="current-card">A♠</div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="higher-btn">⬆ Higher</button>
+      <button class="btn btn-primary" id="lower-btn">⬇ Lower</button>
+    </div>
+    <div class="controls-row">
+      <button class="btn" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Guess whether the next card will be higher or lower than the card shown (Ace is low, King is high). A correct guess extends your streak and shows a new card; a wrong guess or an equal-rank card ends your streak. Try to beat your best streak.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

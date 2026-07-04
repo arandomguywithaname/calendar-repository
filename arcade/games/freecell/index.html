@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreeCell — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃁</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  .fc-top { display: flex; gap: 24px; justify-content: center; width: 100%; flex-wrap: wrap; margin-bottom: 8px; }
+  .fc-freecells, .fc-foundations { display: flex; gap: 8px; }
+  .fc-slot {
+    width: 54px; height: 76px; border: 2px dashed var(--border); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; background: var(--panel-2);
+    font-size: 1rem; font-weight: 800; cursor: pointer; text-align: center; line-height: 1.1;
+  }
+  .fc-slot.selected { outline: 3px solid var(--accent-3); border-style: solid; }
+  .fc-slot.red { color: #ff5d5d; }
+  .fc-tableau { display: flex; gap: 10px; justify-content: center; width: 100%; overflow-x: auto; padding: 4px 4px 16px; }
+  .fc-column { width: 54px; min-height: 90px; }
+  .fc-card {
+    width: 54px; height: 76px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel); display: flex; align-items: flex-start; justify-content: flex-start;
+    padding: 5px 0 0 6px; font-weight: 800; font-size: 0.9rem; cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3); line-height: 1.05;
+  }
+  .fc-card.red { color: #ff5d5d; }
+  .fc-card.black { color: var(--text); }
+  .fc-card.selected { outline: 3px solid var(--accent-3); position: relative; z-index: 5; }
+  .fc-column .fc-card:not(:first-child) { margin-top: -56px; }
+  .fc-empty-col { width: 54px; height: 76px; border: 2px dashed var(--border); border-radius: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🃁 FreeCell</h1>
+    <div class="hud">
+      <span class="stat"><span data-i18n="common.moves">Moves</span>: <b id="moves">0</b></span>
+      <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">-</b></span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="fc-top">
+      <div class="fc-freecells" id="freecells"></div>
+      <div class="fc-foundations" id="foundations"></div>
+    </div>
+    <div class="fc-tableau" id="tableau"></div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Click a card to select it, then click a free cell, a foundation, or another column to move it there. Foundations build up Ace to King by suit; tableau columns build downward alternating red/black. Clear the whole deck to the foundations to win.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uno Lite — Claude Arc Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔴</text></svg>">
+<link rel="stylesheet" href="../../css/main.css">
+<script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  .uno-section { text-align: center; margin: 6px 0; width: 100%; }
+  .uno-label { font-weight: 700; color: var(--text-dim); font-size: 0.85rem; margin-bottom: 6px; }
+  .uno-hand { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .uno-card {
+    width: 48px; height: 68px; border-radius: 8px; border: 2px solid rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 1rem; color: white; cursor: default;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  }
+  .uno-card.red { background: #e5443f; }
+  .uno-card.yellow { background: #e8b923; color: #201800; }
+  .uno-card.green { background: #3aa65a; }
+  .uno-card.blue { background: #3577c9; }
+  .uno-card.back { background: repeating-linear-gradient(45deg, #333, #333 6px, #222 6px, #222 12px); }
+  .uno-card.playable { cursor: pointer; outline: 3px solid var(--accent-3); }
+  .uno-mid { display: flex; gap: 24px; justify-content: center; align-items: center; margin: 10px 0; }
+  .uno-pile-label { font-size: 0.75rem; color: var(--text-dim); text-align: center; margin-top: 4px; }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <div class="game-topbar">
+    <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
+    <h1>🔴 Uno Lite</h1>
+    <div class="hud">
+      <span class="stat">Wins: <b id="wins">0</b></span>
+      <span class="stat">Losses: <b id="losses">0</b></span>
+      <span class="stat" id="turn-indicator">Turn: You</span>
+    </div>
+  </div>
+  <div class="game-stage">
+    <div class="uno-section">
+      <div class="uno-label">CPU hand</div>
+      <div class="uno-hand" id="cpu-hand"></div>
+    </div>
+    <div class="uno-mid">
+      <div>
+        <div class="uno-hand"><div class="uno-card back" id="draw-pile">🂠</div></div>
+        <div class="uno-pile-label">Draw pile</div>
+      </div>
+      <div>
+        <div class="uno-hand" id="discard-top"></div>
+        <div class="uno-pile-label">Discard</div>
+      </div>
+    </div>
+    <div class="uno-section">
+      <div class="uno-label">Your hand — click a highlighted card to play it</div>
+      <div class="uno-hand" id="player-hand"></div>
+    </div>
+    <div id="result-banner"></div>
+    <div class="controls-row">
+      <button class="btn" id="draw-btn">Draw Card</button>
+      <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
+    </div>
+  </div>
+  <p class="instructions">Play a card that matches the color or the number/action of the top discard. Skip cards make the CPU lose its next turn, Draw Two makes it draw 2 cards and lose its turn. If you have no valid play (or want to), click Draw Card. First to empty their hand wins.</p>
+</main>
+
+<script src="../../i18n/en.js"></script>
+<script src="../../i18n/es.js"></script>
+<script src="../../i18n/ru.js"></script>
+<script src="../../i18n/ro.js"></script>
+<script src="../../i18n/fr.js"></script>
+<script src="../../i18n/de.js"></script>
+<script src="../../js/i18n.js"></script>
+<script src="../../js/common.js"></script>
+<script src="../../js/friends.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
