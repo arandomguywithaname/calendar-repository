@@ -165,15 +165,18 @@
     window.ArcadeFriends.addFriend(code);
     waitingForOpponent = true;
     myMark = "X";
-    mpStatus.textContent = "Inviting " + code + "...";
-    setTimeout(function () {
-      window.ArcadeFriends.sendGame(opponentCode, { type: "invite", mark: "O" });
-      mpStatus.textContent = window.ArcadeFriends.isOnline(opponentCode)
-        ? "Invite sent. Waiting for them to move..."
-        : "Waiting for " + opponentCode + " to come online...";
-    }, 800);
+    mpStatus.textContent = "Connecting to " + code + "...";
     newGame();
     waitingForOpponent = false;
+    // sendGame queues the invite immediately and flushes it the moment the
+    // peer-to-peer link actually opens, however long that takes - whenReady
+    // just drives the status text for the first few seconds.
+    window.ArcadeFriends.sendGame(opponentCode, { type: "invite", mark: "O" });
+    window.ArcadeFriends.whenReady(opponentCode, function (connected) {
+      mpStatus.textContent = connected
+        ? "Invite sent! Waiting for " + code + " to move..."
+        : "Still trying to reach " + code + " — make sure they also have this page open with a friend code added. (Some school/work networks block peer-to-peer connections.)";
+    }, 10000);
   });
 
   window.ArcadeFriends.onGameMessage(function (fromCode, payload) {

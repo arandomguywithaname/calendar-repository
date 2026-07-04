@@ -9,6 +9,7 @@
   var CHAT_PREFIX = "arcade.chat.";
   var connections = {};
   var onlineSet = {};
+  var pendingMessages = {};
   var peer = null;
   var activeChatWith = null;
   var retryTimers = {};
@@ -80,10 +81,19 @@
     try { localStorage.setItem(CHAT_PREFIX + code, JSON.stringify(log)); } catch (e) {}
   }
 
+  function flushPending(code) {
+    var queue = pendingMessages[code];
+    var conn = connections[code];
+    if (!queue || !queue.length || !conn || !conn.open) return;
+    queue.forEach(function (msg) { try { conn.send(msg); } catch (e) {} });
+    pendingMessages[code] = [];
+  }
+
   function setupConnection(code, conn) {
     connections[code] = conn;
     conn.on("open", function () {
       onlineSet[code] = true;
+      flushPending(code);
       renderPanel();
     });
     conn.on("data", function (data) {
@@ -102,6 +112,9 @@
     });
     conn.on("error", function () {
       onlineSet[code] = false;
+      // Clear it out so the next poll/connectTo actually retries instead of
+      // seeing a stale (permanently failed) connection object and giving up.
+      delete connections[code];
       renderPanel();
     });
   }
@@ -122,8 +135,15 @@
 
   function sendChat(code, text) {
     var conn = connections[code];
+    var msg = { type: "chat", text: text };
     if (conn && conn.open) {
-      conn.send({ type: "chat", text: text });
+      conn.send(msg);
+    } else {
+      // Not connected yet (or connection dropped) - queue it and make sure
+      // we're actively trying to (re)connect, instead of silently losing it.
+      pendingMessages[code] = pendingMessages[code] || [];
+      pendingMessages[code].push(msg);
+      connectTo(code);
     }
     pushChat(code, { from: "me", text: text, ts: Date.now() });
     renderChat(code);
@@ -222,10 +242,13 @@
 
   function renderChat(code) {
     var online = !!onlineSet[code];
+    if (!online) connectTo(code);
     var log = loadChat(code);
     var html = '<div class="friend-row" style="margin-bottom:8px;">' +
       '<span><button class="btn" id="fp-back" style="padding:4px 8px;">←</button> ' +
-      '<span class="dot ' + (online ? "online" : "") + '"></span>' + code + "</span>" +
+      '<span class="dot ' + (online ? "online" : "") + '"></span>' + code +
+      (online ? "" : ' <span data-i18n="friends.connecting" style="color:var(--text-dim); font-weight:400; font-size:0.8rem;">Connecting...</span>') +
+      "</span>" +
       "</div>" +
       '<div class="chat-window"><div class="chat-log" id="chat-log"></div>' +
       '<div class="chat-input-row"><input id="chat-input" data-i18n-placeholder="friends.chatPlaceholder" placeholder="Type a message...">' +
@@ -265,7 +288,17 @@
   function initPeer() {
     if (!window.Peer) return;
     try {
-      peer = new window.Peer(myCode(), { debug: 0 });
+      peer = new window.Peer(myCode(), {
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun.services.mozilla.com" }
+          ]
+        }
+      });
     } catch (e) { return; }
     peer.on("open", function () {
       pollFriends();
@@ -280,9 +313,22 @@
       }
       setupConnection(code, conn);
     });
-    peer.on("error", function () {
-      // Broker unreachable (offline, blocked network, etc). Friends/chat
-      // simply stay unavailable; every other feature of the site is unaffected.
+    peer.on("disconnected", function () {
+      // Lost the signaling connection (network blip, broker restart, etc).
+      // Reconnect so friends can still reach this browser's same code.
+      setTimeout(function () {
+        if (peer && !peer.destroyed) peer.reconnect();
+      }, 2000);
+    });
+    peer.on("error", function (err) {
+      // Broker unreachable, blocked network, transient failure, etc. Retry
+      // unless the failure means this exact ID can never work (already taken).
+      var fatal = err && err.type === "unavailable-id";
+      if (!fatal && peer && !peer.destroyed) {
+        setTimeout(function () {
+          if (peer && peer.disconnected && !peer.destroyed) peer.reconnect();
+        }, 3000);
+      }
     });
   }
 
@@ -306,14 +352,46 @@
     mount();
   }
 
+  function whenReady(code, callback, timeoutMs) {
+    timeoutMs = timeoutMs || 8000;
+    var conn = connections[code];
+    if (conn && conn.open) { callback(true); return; }
+    connectTo(code);
+    var settled = false;
+    var start = Date.now();
+    var interval = setInterval(function () {
+      if (settled) { clearInterval(interval); return; }
+      var c = connections[code];
+      if (c && c.open) {
+        settled = true;
+        clearInterval(interval);
+        callback(true);
+      } else if (Date.now() - start > timeoutMs) {
+        settled = true;
+        clearInterval(interval);
+        callback(false);
+      }
+    }, 250);
+  }
+
   window.ArcadeFriends = {
     myCode: myCode,
     addFriend: addFriend,
     isOnline: function (code) { return !!onlineSet[code]; },
     connect: connectTo,
+    whenReady: whenReady,
     sendGame: function (code, payload) {
       var conn = connections[code];
-      if (conn && conn.open) { conn.send({ type: "game", payload: payload }); return true; }
+      var msg = { type: "game", payload: payload };
+      if (conn && conn.open) {
+        conn.send(msg);
+        return true;
+      }
+      // Queue it and keep trying to connect - it'll flush automatically
+      // once (if) the peer-to-peer link actually opens.
+      pendingMessages[code] = pendingMessages[code] || [];
+      pendingMessages[code].push(msg);
+      connectTo(code);
       return false;
     },
     onGameMessage: function (fn) { gameListeners.push(fn); }
