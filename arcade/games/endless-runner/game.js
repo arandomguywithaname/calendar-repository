@@ -7,15 +7,25 @@
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
   var jumpBtn = document.getElementById("jump-btn");
+  var diffEl = document.getElementById("difficulty");
 
   var W = canvas.width, H = canvas.height;
   var GROUND_Y = H - 46;
   var PLAYER_X = 70;
   var PLAYER_W = 34, PLAYER_H = 44;
-  var GRAVITY = 0.7;
-  var JUMP_VY = -13.5;
+  var OBST_COLORS = ["#ff5da2", "#7c5cff", "#29e0c9", "#ffd24d"];
 
-  var playerY, vy, onGround, obstacles, elapsedMs, spawnTimer, distance, over, groundOffset;
+  // Difficulty tuning. base/max = run speed range, rampMs = acceleration,
+  // spawnBase/spawnMin/spawnRamp = obstacle frequency. Easy also jumps floatier
+  // (higher jump, lower gravity) with a bigger collision margin = forgiving.
+  var DIFFICULTIES = {
+    easy:   { base: 4.0, max: 9,  rampMs: 3600, spawnBase: 1750, spawnMin: 800, spawnRamp: 30, jump: -14.2, gravity: 0.62, margin: 8 },
+    medium: { base: 5.0, max: 13, rampMs: 2600, spawnBase: 1400, spawnMin: 550, spawnRamp: 20, jump: -13.5, gravity: 0.70, margin: 5 },
+    hard:   { base: 6.4, max: 16, rampMs: 1800, spawnBase: 1050, spawnMin: 420, spawnRamp: 14, jump: -13.5, gravity: 0.80, margin: 3 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var playerY, vy, onGround, wasOnGround, obstacles, elapsedMs, spawnTimer, distance, over, groundOffset, particles, squash;
 
   function refreshHud() {
     scoreEl.textContent = Math.floor(distance / 8);
@@ -26,24 +36,36 @@
     playerY = GROUND_Y - PLAYER_H;
     vy = 0;
     onGround = true;
+    wasOnGround = true;
     obstacles = [];
+    particles = [];
     elapsedMs = 0;
     spawnTimer = 0;
     distance = 0;
     groundOffset = 0;
+    squash = 0;
     over = false;
     resultBanner.innerHTML = "";
     refreshHud();
   }
 
-  function currentSpeed() { return Math.min(5 + elapsedMs / 2600, 13); }
-  function currentSpawnInterval() { return Math.max(1400 - elapsedMs / 20, 550); }
+  function currentSpeed() { return Math.min(cfg.base + elapsedMs / cfg.rampMs, cfg.max); }
+  function currentSpawnInterval() { return Math.max(cfg.spawnBase - elapsedMs / cfg.spawnRamp, cfg.spawnMin); }
+
+  function burst(x, y, color, n, up) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var s = 1 + Math.random() * 4;
+      particles.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (up || 0), life: 1, color: color });
+    }
+  }
 
   function jump() {
     if (over) return;
     if (onGround) {
-      vy = JUMP_VY;
+      vy = cfg.jump;
       onGround = false;
+      burst(PLAYER_X, GROUND_Y, "#29e0c9", 6, 1);
     }
   }
 
@@ -55,7 +77,7 @@
       { w: 20, h: 58 }
     ];
     var v = window.ArcadeCommon.pick(variants);
-    obstacles.push({ x: W + v.w, w: v.w, h: v.h });
+    obstacles.push({ x: W + v.w, w: v.w, h: v.h, color: window.ArcadeCommon.pick(OBST_COLORS) });
   }
 
   function update(dt) {
@@ -64,14 +86,20 @@
     var speed = currentSpeed();
     distance += speed;
     groundOffset = (groundOffset + speed) % 30;
+    if (squash > 0) squash -= 0.12;
 
-    vy += GRAVITY;
+    vy += cfg.gravity;
     playerY += vy;
     if (playerY >= GROUND_Y - PLAYER_H) {
       playerY = GROUND_Y - PLAYER_H;
       vy = 0;
       onGround = true;
     }
+    if (onGround && !wasOnGround) {
+      squash = 1;
+      burst(PLAYER_X, GROUND_Y, "#7c5cff", 6, 1);
+    }
+    wasOnGround = onGround;
 
     spawnTimer += dt;
     if (spawnTimer >= currentSpawnInterval()) {
@@ -82,13 +110,14 @@
     obstacles.forEach(function (o) { o.x -= speed; });
     obstacles = obstacles.filter(function (o) { return o.x + o.w > -10; });
 
+    var m = cfg.margin;
     var pLeft = PLAYER_X - PLAYER_W / 2, pRight = PLAYER_X + PLAYER_W / 2;
     var pTop = playerY, pBottom = playerY + PLAYER_H;
     for (var i = 0; i < obstacles.length; i++) {
       var o = obstacles[i];
       var oLeft = o.x, oRight = o.x + o.w;
       var oTop = GROUND_Y - o.h, oBottom = GROUND_Y;
-      if (pLeft < oRight - 5 && pRight > oLeft + 5 && pTop < oBottom - 4 && pBottom > oTop + 4) {
+      if (pLeft < oRight - m && pRight > oLeft + m && pTop < oBottom - 4 && pBottom > oTop + 4) {
         endGame();
         return;
       }
@@ -98,6 +127,7 @@
 
   function endGame() {
     over = true;
+    burst(PLAYER_X, playerY + PLAYER_H / 2, "#ff5da2", 26, 2);
     var score = Math.floor(distance / 8);
     var improved = window.ArcadeCommon.setBest(GAME_ID, score);
     resultBanner.innerHTML = '<span class="overlay-lose">' + window.ArcadeI18n.t("common.gameOver") +
@@ -105,33 +135,119 @@
     refreshHud();
   }
 
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
   function draw() {
+    // Night gradient sky.
     var grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, "#1c2138");
-    grad.addColorStop(1, "#171b2e");
+    grad.addColorStop(1, "#0d1020");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = "#2f3550";
+    var t = Date.now() / 1000;
+    // Parallax glow moons.
+    drawOrb(W - 90 + Math.sin(t * 0.2) * 8, 70, 90, "rgba(124,92,255,0.18)");
+    drawOrb(120, 60, 70, "rgba(41,224,201,0.12)");
+
+    // Parallax scrolling neon skyline.
+    var skyScroll = (distance * 0.3) % 80;
+    ctx.fillStyle = "rgba(124,92,255,0.14)";
+    for (var b = -1; b < W / 40 + 1; b++) {
+      var bx = b * 80 - skyScroll;
+      var bh = 26 + ((b * 37) % 5) * 9;
+      ctx.fillRect(bx, GROUND_Y - bh, 34, bh);
+      ctx.fillRect(bx + 44, GROUND_Y - bh * 0.6, 22, bh * 0.6);
+    }
+
+    // Ground with a glowing neon edge.
+    ctx.fillStyle = "#191d30";
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    ctx.strokeStyle = "rgba(238,240,251,0.35)";
+    ctx.strokeStyle = "#29e0c9";
+    ctx.shadowColor = "#29e0c9";
+    ctx.shadowBlur = 12;
     ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(W, GROUND_Y);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Dashed lane marks.
+    ctx.strokeStyle = "rgba(238,240,251,0.3)";
     ctx.setLineDash([16, 14]);
     ctx.beginPath();
-    ctx.moveTo(-30 + groundOffset, GROUND_Y);
-    ctx.lineTo(W, GROUND_Y);
+    ctx.moveTo(-30 + groundOffset, GROUND_Y + 14);
+    ctx.lineTo(W, GROUND_Y + 14);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = "#ff5da2";
+    // Obstacles: rounded neon blocks with glow.
     obstacles.forEach(function (o) {
-      ctx.fillRect(o.x, GROUND_Y - o.h, o.w, o.h);
+      var oy = GROUND_Y - o.h;
+      var og = ctx.createLinearGradient(o.x, oy, o.x, GROUND_Y);
+      og.addColorStop(0, "#ffffff");
+      og.addColorStop(0.3, o.color);
+      og.addColorStop(1, shade(o.color));
+      ctx.shadowColor = o.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = og;
+      roundRect(o.x, oy, o.w, o.h, 5);
+      ctx.fill();
+      ctx.shadowBlur = 0;
     });
 
-    ctx.font = (PLAYER_H) + "px sans-serif";
+    // Player with squash-on-land and a warm glow.
+    var sx = 1 + squash * 0.2, sy = 1 - squash * 0.2;
+    ctx.save();
+    ctx.translate(PLAYER_X, playerY + PLAYER_H / 2);
+    ctx.scale(sx, sy);
+    ctx.shadowColor = "#ffd23f";
+    ctx.shadowBlur = 16;
+    ctx.font = PLAYER_H + "px sans-serif";
     ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillText("🏃", PLAYER_X, playerY + PLAYER_H + 6);
+    ctx.textBaseline = "middle";
+    ctx.fillText("🏃", 0, 3);
+    ctx.restore();
+    ctx.shadowBlur = 0;
+    ctx.textBaseline = "alphabetic";
+
+    // Particles.
+    particles = particles.filter(function (p) { return p.life > 0; });
+    particles.forEach(function (p) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= 0.03;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.1, 3 * p.life), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function shade(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = Math.round(((n >> 16) & 255) * 0.5);
+    var g = Math.round(((n >> 8) & 255) * 0.5);
+    var b = Math.round((n & 255) * 0.5);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+
+  function drawOrb(cx, cy, radius, color) {
+    var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   var lastTime = null;
@@ -155,6 +271,14 @@
   jumpBtn.addEventListener("click", jump);
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing it restarts with the new tuning.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
   requestAnimationFrame(loop);
 })();

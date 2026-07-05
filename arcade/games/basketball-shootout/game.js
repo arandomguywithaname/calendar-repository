@@ -7,6 +7,7 @@
   var shotNumEl = document.getElementById("shot-num");
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
+  var diffEl = document.getElementById("difficulty");
 
   var W = canvas.width, H = canvas.height;
   var BALL_R = 16;
@@ -15,13 +16,20 @@
   var POWER_SCALE = 0.17;
   var TOTAL_SHOTS = 10;
 
-  var HOOP_X = W / 2;
+  var HOOP_BASE_X = W / 2;
   var RIM_Y = 108;
-  var RIM_HALF = 32;
   var FLOOR_Y = H - 30;
   var START = { x: W / 2, y: FLOOR_Y - BALL_R };
 
-  var ball, state, shotsTaken, makes, resolved, over;
+  // Easy = big stationary hoop; hard = smaller, moving hoop.
+  var DIFFICULTIES = {
+    easy:   { rimHalf: 42, moving: false, hoopSpeed: 0,     amp: 0 },
+    medium: { rimHalf: 32, moving: false, hoopSpeed: 0,     amp: 0 },
+    hard:   { rimHalf: 24, moving: true,  hoopSpeed: 0.028, amp: 95 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var ball, particles, state, shotsTaken, makes, resolved, over, hoopX, hoopPhase;
   var dragging = false, dragCurrent = null;
 
   function refreshHud() {
@@ -40,6 +48,9 @@
     shotsTaken = 0;
     makes = 0;
     over = false;
+    particles = [];
+    hoopPhase = 0;
+    hoopX = HOOP_BASE_X;
     resultBanner.innerHTML = "";
     resetBall();
     refreshHud();
@@ -52,7 +63,30 @@
     return { x: (cx - rect.left) * (W / rect.width), y: (cy - rect.top) * (H / rect.height) };
   }
 
+  function spawnConfetti(cx, cy) {
+    var colors = ["#ff5da2", "#7c5cff", "#29e0c9", "#ffd23f", "#3ddc84"];
+    for (var i = 0; i < 22; i++) {
+      var ang = Math.random() * Math.PI * 2;
+      var spd = 2 + Math.random() * 4;
+      particles.push({ x: cx, y: cy, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 2, life: 1, color: window.ArcadeCommon.pick(colors) });
+    }
+  }
+
   function update() {
+    // Hoop motion (hard mode) always runs so aiming accounts for it.
+    if (cfg.moving) {
+      hoopPhase += cfg.hoopSpeed;
+      hoopX = HOOP_BASE_X + Math.sin(hoopPhase) * cfg.amp;
+    } else {
+      hoopX = HOOP_BASE_X;
+    }
+
+    for (var j = particles.length - 1; j >= 0; j--) {
+      var p = particles[j];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.14; p.life -= 0.02;
+      if (p.life <= 0) particles.splice(j, 1);
+    }
+
     if (state !== "flight") return;
     ball.vy += GRAVITY;
     ball.x += ball.vx;
@@ -62,9 +96,10 @@
     if (ball.x > W - BALL_R) { ball.x = W - BALL_R; ball.vx *= -0.6; }
 
     if (!resolved && ball.vy > 0 && ball.y >= RIM_Y - 4 && ball.y <= RIM_Y + 10) {
-      if (Math.abs(ball.x - HOOP_X) <= RIM_HALF - BALL_R * 0.6) {
+      if (Math.abs(ball.x - hoopX) <= cfg.rimHalf - BALL_R * 0.6) {
         resolved = true;
         makes++;
+        spawnConfetti(hoopX, RIM_Y);
         window.ArcadeCommon.toast("Swish! +1");
         refreshHud();
       }
@@ -96,36 +131,55 @@
 
   function draw() {
     var grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, "#1b2038");
-    grad.addColorStop(1, "#262c4a");
+    grad.addColorStop(0, "#0e1224");
+    grad.addColorStop(1, "#171b2e");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // floor
-    ctx.fillStyle = "#3a2a1c";
+    // Glow orbs.
+    [{ x: W * 0.5, y: RIM_Y, c: "rgba(255,138,61,0.14)", r: 150 },
+     { x: W * 0.5, y: H * 0.75, c: "rgba(124,92,255,0.12)", r: 190 }].forEach(function (o) {
+      var g = ctx.createRadialGradient(o.x, o.y, 4, o.x, o.y, o.r);
+      g.addColorStop(0, o.c); g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // Floor with neon edge.
+    ctx.fillStyle = "#241a2e";
     ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+    ctx.save();
+    ctx.shadowColor = "#7c5cff"; ctx.shadowBlur = 12;
+    ctx.strokeStyle = "rgba(124,92,255,0.7)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, FLOOR_Y); ctx.lineTo(W, FLOOR_Y); ctx.stroke();
+    ctx.restore();
 
-    // backboard
+    // Backboard.
+    ctx.save();
+    ctx.shadowColor = "#29e0c9"; ctx.shadowBlur = 10;
     ctx.fillStyle = "#eef0fb";
-    ctx.fillRect(HOOP_X - 40, RIM_Y - 55, 80, 8);
-    ctx.strokeStyle = "#ff5d5d";
-    ctx.strokeRect(HOOP_X - 14, RIM_Y - 47, 28, 16);
+    ctx.fillRect(hoopX - 40, RIM_Y - 55, 80, 8);
+    ctx.strokeStyle = "#ff5d5d"; ctx.lineWidth = 2;
+    ctx.strokeRect(hoopX - 14, RIM_Y - 47, 28, 16);
+    ctx.restore();
 
-    // rim
+    // Rim with glow.
+    ctx.save();
+    ctx.shadowColor = "#ff8a3d"; ctx.shadowBlur = 18;
     ctx.beginPath();
-    ctx.moveTo(HOOP_X - RIM_HALF, RIM_Y);
-    ctx.lineTo(HOOP_X + RIM_HALF, RIM_Y);
-    ctx.strokeStyle = "#ff8a3d";
-    ctx.lineWidth = 4;
+    ctx.moveTo(hoopX - cfg.rimHalf, RIM_Y);
+    ctx.lineTo(hoopX + cfg.rimHalf, RIM_Y);
+    ctx.strokeStyle = "#ffb84d";
+    ctx.lineWidth = 5;
     ctx.stroke();
+    ctx.restore();
 
-    // net
-    ctx.strokeStyle = "rgba(238,240,251,0.6)";
+    // Net.
+    ctx.strokeStyle = "rgba(238,240,251,0.55)";
     ctx.lineWidth = 1;
     for (var i = -2; i <= 2; i++) {
       ctx.beginPath();
-      ctx.moveTo(HOOP_X + i * (RIM_HALF / 2.2), RIM_Y);
-      ctx.lineTo(HOOP_X + i * (RIM_HALF / 3.2), RIM_Y + 26);
+      ctx.moveTo(hoopX + i * (cfg.rimHalf / 2.2), RIM_Y);
+      ctx.lineTo(hoopX + i * (cfg.rimHalf / 3.2), RIM_Y + 26);
       ctx.stroke();
     }
 
@@ -136,24 +190,39 @@
       ctx.beginPath();
       ctx.moveTo(ball.x, ball.y);
       ctx.lineTo(ball.x + Math.cos(angle) * dist, ball.y + Math.sin(angle) * dist);
-      ctx.strokeStyle = "rgba(238,240,251,0.6)";
+      ctx.strokeStyle = "rgba(238,240,251,0.5)";
       ctx.setLineDash([5, 5]);
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.setLineDash([]);
 
+      ctx.save();
+      ctx.shadowColor = "#29e0c9"; ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.moveTo(ball.x, ball.y);
       ctx.lineTo(ball.x - Math.cos(angle) * dist, ball.y - Math.sin(angle) * dist);
       ctx.strokeStyle = "#29e0c9";
       ctx.lineWidth = 3;
       ctx.stroke();
+      ctx.restore();
     }
 
+    // Ball with glow.
+    ctx.save();
+    ctx.shadowColor = "#ff8a3d"; ctx.shadowBlur = 14;
     ctx.font = (BALL_R * 2) + "px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("🏀", ball.x, ball.y);
+    ctx.restore();
+
+    // Confetti.
+    particles.forEach(function (p) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    });
+    ctx.globalAlpha = 1;
   }
 
   function loop() {
@@ -200,6 +269,15 @@
   canvas.addEventListener("touchend", endDrag);
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing it restarts with the new tuning.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
+
   loop();
 })();

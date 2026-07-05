@@ -7,19 +7,24 @@
   var bestEl = document.getElementById("best");
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
+  var diffEl = document.getElementById("difficulty");
 
   var W = canvas.width, H = canvas.height;
-  var SIZES = [
-    { cols: 9, rows: 9 },
-    { cols: 11, rows: 9 },
-    { cols: 11, rows: 11 }
-  ];
 
-  var cols, rows, cell, grid, player, exitPos, moves, seconds, over, timerId;
+  // Difficulty tuning. Bigger mazes with a tighter countdown are harder; the
+  // timer counts down and hitting zero ends the run.
+  var DIFFICULTIES = {
+    easy:   { cols: 9,  rows: 9,  timeLimit: 90 },
+    medium: { cols: 13, rows: 11, timeLimit: 60 },
+    hard:   { cols: 17, rows: 15, timeLimit: 40 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var cols, rows, cell, grid, player, exitPos, moves, timeLeft, over, won, timerId, rafId, trail, particles;
 
   function refreshHud() {
     movesEl.textContent = moves;
-    timeEl.textContent = seconds;
+    timeEl.textContent = timeLeft;
     var best = window.ArcadeCommon.getBest(GAME_ID);
     bestEl.textContent = best === null ? "-" : best;
   }
@@ -42,7 +47,7 @@
     grid[0][0].visited = true;
     while (stack.length) {
       var cur = stack[stack.length - 1];
-      var neighbors = [];
+      var nbrs = [];
       var dirs = [
         { dr: -1, dc: 0, self: "top", other: "bottom" },
         { dr: 1, dc: 0, self: "bottom", other: "top" },
@@ -52,11 +57,11 @@
       dirs.forEach(function (d) {
         var nr = cur.r + d.dr, nc = cur.c + d.dc;
         if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !grid[nr][nc].visited) {
-          neighbors.push({ r: nr, c: nc, dir: d });
+          nbrs.push({ r: nr, c: nc, dir: d });
         }
       });
-      if (neighbors.length) {
-        var pick = neighbors[Math.floor(Math.random() * neighbors.length)];
+      if (nbrs.length) {
+        var pick = nbrs[Math.floor(Math.random() * nbrs.length)];
         grid[cur.r][cur.c][pick.dir.self] = false;
         grid[pick.r][pick.c][pick.dir.other] = false;
         grid[pick.r][pick.c].visited = true;
@@ -68,57 +73,125 @@
   }
 
   function newGame() {
-    var size = window.ArcadeCommon.pick(SIZES);
-    cols = size.cols;
-    rows = size.rows;
+    cols = cfg.cols;
+    rows = cfg.rows;
     cell = Math.min(Math.floor(W / cols), Math.floor(H / rows));
     generateMaze();
     player = { r: 0, c: 0 };
     exitPos = { r: rows - 1, c: cols - 1 };
     moves = 0;
-    seconds = 0;
+    timeLeft = cfg.timeLimit;
     over = false;
+    won = false;
+    trail = [];
+    particles = [];
     resultBanner.innerHTML = "";
     refreshHud();
     clearInterval(timerId);
     timerId = setInterval(function () {
       if (over) return;
-      seconds++;
+      timeLeft--;
+      if (timeLeft <= 0) { timeLeft = 0; lose(); }
       refreshHud();
     }, 1000);
-    draw();
+    cancelAnimationFrame(rafId);
+    loop();
   }
 
   function offsetX() { return (W - cols * cell) / 2; }
   function offsetY() { return (H - rows * cell) / 2; }
 
+  function burst(x, y, color, n) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var s = 1 + Math.random() * 3.5;
+      particles.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color: color });
+    }
+  }
+
   function draw() {
-    ctx.fillStyle = "#171b2e";
+    if (!grid) return;
+    var t = Date.now() / 1000;
+
+    // Deep gradient background with a glow orb near the exit.
+    var bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, "#141833");
+    bg.addColorStop(1, "#0a0d1c");
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
     var ox = offsetX(), oy = offsetY();
-    ctx.strokeStyle = "#7c5cff";
+    var ex = ox + exitPos.c * cell + cell / 2, ey = oy + exitPos.r * cell + cell / 2;
+    var eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, cell * 2.2);
+    eg.addColorStop(0, "rgba(61,220,132,0.28)");
+    eg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = eg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Breadcrumb trail.
+    trail.forEach(function (p, i) {
+      var a = 0.12 + (i / trail.length) * 0.25;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "#29e0c9";
+      ctx.beginPath();
+      ctx.arc(ox + p.c * cell + cell / 2, oy + p.r * cell + cell / 2, Math.max(0.1, cell * 0.14), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // Neon maze walls with a purple->cyan gradient and a pulsing glow.
+    var wg = ctx.createLinearGradient(ox, oy, ox + cols * cell, oy + rows * cell);
+    wg.addColorStop(0, "#7c5cff");
+    wg.addColorStop(1, "#29e0c9");
+    ctx.strokeStyle = wg;
+    ctx.shadowColor = "#7c5cff";
+    ctx.shadowBlur = 8 + 3 * Math.sin(t * 2);
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
-
+    ctx.beginPath();
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         var x = ox + c * cell, y = oy + r * cell;
         var g = grid[r][c];
-        ctx.beginPath();
         if (g.top) { ctx.moveTo(x, y); ctx.lineTo(x + cell, y); }
         if (g.left) { ctx.moveTo(x, y); ctx.lineTo(x, y + cell); }
         if (g.bottom) { ctx.moveTo(x, y + cell); ctx.lineTo(x + cell, y + cell); }
         if (g.right) { ctx.moveTo(x + cell, y); ctx.lineTo(x + cell, y + cell); }
-        ctx.stroke();
       }
     }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
+    // Exit flag and player, both glowing.
     ctx.font = Math.floor(cell * 0.7) + "px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("🚩", ox + exitPos.c * cell + cell / 2, oy + exitPos.r * cell + cell / 2);
-    ctx.fillText("🙂", ox + player.c * cell + cell / 2, oy + player.r * cell + cell / 2);
+    ctx.shadowColor = "#3ddc84";
+    ctx.shadowBlur = 14;
+    ctx.fillText("🚩", ex, ey);
+    var px = ox + player.c * cell + cell / 2, py = oy + player.r * cell + cell / 2;
+    ctx.shadowColor = "#ffd23f";
+    ctx.shadowBlur = 16;
+    ctx.fillText("🙂", px, py);
+    ctx.shadowBlur = 0;
+
+    // Particles.
+    particles = particles.filter(function (p) { return p.life > 0; });
+    particles.forEach(function (p) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.06; p.life -= 0.025;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.1, 3 * p.life), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = "alphabetic";
+  }
+
+  function loop() {
+    draw();
+    rafId = requestAnimationFrame(loop);
   }
 
   function move(dir) {
@@ -130,11 +203,12 @@
     else if (dir === "left" && !g.left) nc--;
     else if (dir === "right" && !g.right) nc++;
     else return;
+    trail.push({ r: player.r, c: player.c });
+    if (trail.length > 40) trail.shift();
     player.r = nr;
     player.c = nc;
     moves++;
     refreshHud();
-    draw();
     if (player.r === exitPos.r && player.c === exitPos.c) {
       win();
     }
@@ -142,11 +216,21 @@
 
   function win() {
     over = true;
+    won = true;
     clearInterval(timerId);
+    var elapsed = cfg.timeLimit - timeLeft;
+    var ox = offsetX(), oy = offsetY();
+    burst(ox + exitPos.c * cell + cell / 2, oy + exitPos.r * cell + cell / 2, "#3ddc84", 26);
     var improved = window.ArcadeCommon.setBestLowerIsBetter(GAME_ID, moves);
     resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.youWin") +
-      " — " + moves + " " + window.ArcadeI18n.t("common.moves") + ", " + seconds + "s" + (improved ? " 🏆" : "") + "</span>";
+      " — " + moves + " " + window.ArcadeI18n.t("common.moves") + ", " + elapsed + "s" + (improved ? " 🏆" : "") + "</span>";
     refreshHud();
+  }
+
+  function lose() {
+    over = true;
+    clearInterval(timerId);
+    resultBanner.innerHTML = '<span class="overlay-lose">' + window.ArcadeI18n.t("common.gameOver") + "</span>";
   }
 
   document.addEventListener("keydown", function (e) {
@@ -173,5 +257,13 @@
   });
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing it restarts with the new tuning.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();
