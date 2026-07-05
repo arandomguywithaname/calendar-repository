@@ -5,8 +5,17 @@
   var bestEl = document.getElementById("best");
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
+  var diffEl = document.getElementById("difficulty");
 
-  var SIZE = 4;
+  // Difficulty is the board size. "tile" keeps the overall board a sensible size.
+  var DIFFICULTIES = {
+    easy: { size: 3, tile: 84 },
+    medium: { size: 4, tile: 70 },
+    hard: { size: 5, tile: 58 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var SIZE = cfg.size;
   var tiles, moves, over, blankIndex;
 
   function refreshHud() {
@@ -16,6 +25,8 @@
   }
 
   function newGame() {
+    SIZE = cfg.size;
+    boardEl.classList.remove("solved");
     tiles = [];
     for (var i = 1; i < SIZE * SIZE; i++) tiles.push(i);
     tiles.push(0);
@@ -58,7 +69,8 @@
 
   function render() {
     boardEl.innerHTML = "";
-    boardEl.style.gridTemplateColumns = "repeat(" + SIZE + ", 70px)";
+    boardEl.style.gridTemplateColumns = "repeat(" + SIZE + ", " + cfg.tile + "px)";
+    boardEl.style.gridTemplateRows = "repeat(" + SIZE + ", " + cfg.tile + "px)";
     tiles.forEach(function (val, idx) {
       var cell = document.createElement("div");
       cell.className = "cell" + (val === 0 ? " blank" : "");
@@ -88,6 +100,7 @@
     }
     if (tiles[tiles.length - 1] !== 0) return;
     over = true;
+    boardEl.classList.add("solved");
     var improved = window.ArcadeCommon.setBestLowerIsBetter(GAME_ID, moves);
     resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.youWin") +
       " — " + moves + " " + window.ArcadeI18n.t("common.moves") + (improved ? " 🏆" : "") + "</span>";
@@ -95,5 +108,13 @@
   }
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing board size starts a fresh shuffled puzzle.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

@@ -7,6 +7,14 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
 <link rel="stylesheet" href="../../css/main.css">
 <script>window.ARCADE_ROOT_DEPTH = 2;</script>
+<style>
+  #board { position: relative; }
+  #board .cell.back { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: rgba(255,255,255,0.85); box-shadow: 0 0 10px rgba(124,92,255,0.5); }
+  #board .cell.matched { box-shadow: 0 0 14px var(--good); }
+  #board .cell.flash { animation: mmflash 0.6s ease; }
+  @keyframes mmflash { 0% { transform: scale(1); box-shadow: 0 0 8px var(--good); } 50% { transform: scale(1.15); box-shadow: 0 0 26px var(--good); } 100% { transform: scale(1); box-shadow: 0 0 14px var(--good); } }
+  .mm-particle { position: absolute; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; }
+</style>
 </head>
 <body>
 <main class="game-shell">
@@ -19,6 +27,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div class="grid-board" id="board" style="grid-template-columns: repeat(4, 74px);"></div>
     <div id="result-banner"></div>
     <div class="controls-row">

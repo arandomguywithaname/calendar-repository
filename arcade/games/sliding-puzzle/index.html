@@ -10,7 +10,10 @@
 <style>
   #board { grid-template-columns: repeat(4, 70px); grid-template-rows: repeat(4, 70px); }
   #board .cell { font-size: 1.5rem; }
-  #board .cell.blank { background: transparent; border-color: transparent; cursor: default; }
+  #board .cell:not(.blank) { background: linear-gradient(135deg, #2d3566, #3a4176); color: var(--accent-3); font-weight: 800; box-shadow: 0 0 9px rgba(124,92,255,0.4); }
+  #board .cell.blank { background: transparent; border-color: transparent; cursor: default; box-shadow: none; }
+  #board.solved .cell:not(.blank) { animation: spflash 0.7s ease; }
+  @keyframes spflash { 0% { box-shadow: 0 0 9px var(--accent-3); } 50% { box-shadow: 0 0 28px var(--good); transform: scale(1.07); } 100% { box-shadow: 0 0 12px var(--good); } }
 </style>
 </head>
 <body>
@@ -24,6 +27,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div class="grid-board" id="board"></div>
     <div id="result-banner"></div>
     <div class="controls-row">

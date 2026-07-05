@@ -7,6 +7,15 @@
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
   var clearBtn = document.getElementById("clear-cell");
+  var diffEl = document.getElementById("difficulty");
+
+  // Per-difficulty blank count. More blanks = fewer givens = harder.
+  var DIFFICULTIES = {
+    easy: { blanks: 30 },
+    medium: { blanks: 35 },
+    hard: { blanks: 50 }
+  };
+  var cfg = DIFFICULTIES.medium;
 
   var BASE = [
     [1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -71,7 +80,7 @@
     var indexes = [];
     for (var i = 0; i < 81; i++) indexes.push(i);
     indexes = window.ArcadeCommon.shuffle(indexes);
-    var blanks = 35;
+    var blanks = cfg.blanks;
     var blankSet = {};
     for (var k = 0; k < blanks; k++) blankSet[indexes[k]] = true;
     for (var r = 0; r < 9; r++) {
@@ -193,5 +202,13 @@
 
   clearBtn.addEventListener("click", clearCell);
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing the number of givens starts a fresh puzzle.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

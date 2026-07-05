@@ -7,8 +7,17 @@
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
   var flagModeBtn = document.getElementById("flag-mode");
+  var diffEl = document.getElementById("difficulty");
 
-  var SIZE = 9, MINES = 10;
+  // Per-difficulty board size + mine count. Medium is the classic 9x9/10.
+  var DIFFICULTIES = {
+    easy: { size: 9, mines: 8 },
+    medium: { size: 9, mines: 10 },
+    hard: { size: 12, mines: 26 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var SIZE = cfg.size, MINES = cfg.mines;
   var grid, revealedCount, flagCount, over, won, flagMode, timer, seconds, firstClick;
 
   function refreshHud() {
@@ -19,6 +28,8 @@
   }
 
   function newGame() {
+    SIZE = cfg.size;
+    MINES = cfg.mines;
     grid = [];
     for (var r = 0; r < SIZE; r++) {
       var row = [];
@@ -88,6 +99,7 @@
   function render() {
     boardEl.innerHTML = "";
     boardEl.style.gridTemplateColumns = "repeat(" + SIZE + ", 38px)";
+    boardEl.style.gridTemplateRows = "repeat(" + SIZE + ", 38px)";
     for (var r = 0; r < SIZE; r++) {
       for (var c = 0; c < SIZE; c++) {
         (function (r, c) {
@@ -184,5 +196,13 @@
   });
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing board size/mines starts a fresh game.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

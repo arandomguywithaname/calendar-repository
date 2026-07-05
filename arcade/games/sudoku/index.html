@@ -11,8 +11,8 @@
   #board { grid-template-columns: repeat(9, 38px); grid-template-rows: repeat(9, 38px); gap: 2px; background: var(--border); padding: 2px; border-radius: 8px; }
   #board .cell { font-size: 1.1rem; border-radius: 0; background: var(--panel-2); }
   #board .cell.given { color: var(--text); font-weight: 800; background: var(--panel); cursor: default; }
-  #board .cell.selected { background: var(--accent-2); color: white; }
-  #board .cell.conflict { background: var(--danger); color: white; }
+  #board .cell.selected { background: var(--accent-2); color: white; box-shadow: 0 0 12px var(--accent-2), inset 0 0 6px rgba(255,255,255,0.3); }
+  #board .cell.conflict { background: var(--danger); color: white; box-shadow: 0 0 10px var(--danger); }
   #board .cell.b-right { border-right: 2px solid var(--accent-3); }
   #board .cell.b-bottom { border-bottom: 2px solid var(--accent-3); }
   #numpad { display: grid; grid-template-columns: repeat(9, 38px); gap: 4px; }
@@ -30,6 +30,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div class="grid-board" id="board"></div>
     <div id="numpad"></div>
     <div id="result-banner"></div>

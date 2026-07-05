@@ -7,12 +7,21 @@
   var turnStat = document.getElementById("turn-stat");
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
+  var diffEl = document.getElementById("difficulty");
 
   var ROWS = 6, COLS = 7;
   var EMPTY = 0, PLAYER = 1, CPU = 2;
-  var DEPTH = 5;
 
-  var board, over, score, busy;
+  // Per-difficulty CPU strength. Easy plays mostly random, Medium takes/blocks
+  // obvious wins, Hard looks a couple moves ahead with minimax.
+  var DIFFICULTIES = {
+    easy: { mode: "random" },
+    medium: { mode: "block" },
+    hard: { mode: "minimax", depth: 5 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var board, over, score, busy, winLine;
 
   function refreshHud() {
     scoreEl.textContent = score;
@@ -25,6 +34,7 @@
     for (var r = 0; r < ROWS; r++) board.push(new Array(COLS).fill(EMPTY));
     over = false;
     busy = false;
+    winLine = null;
     if (score === undefined) score = 0;
     resultBanner.innerHTML = "";
     setTurnStat(true);
@@ -59,8 +69,11 @@
         var cell = document.createElement("div");
         cell.className = "cell";
         var v = board[r][c];
-        if (v === PLAYER) { cell.textContent = "🔴"; }
-        else if (v === CPU) { cell.textContent = "🟡"; }
+        if (v === PLAYER) { cell.classList.add("disc-red"); }
+        else if (v === CPU) { cell.classList.add("disc-yellow"); }
+        if (winLine && winLine.some(function (p) { return p[0] === r && p[1] === c; })) {
+          cell.classList.add("win");
+        }
         boardEl.appendChild(cell);
       }
     }
@@ -205,9 +218,95 @@
     setTimeout(cpuMove, 400);
   }
 
-  function cpuMove() {
-    var result = minimax(board, DEPTH, -Infinity, Infinity, true);
+  function findWinningMove(b, piece) {
+    var cols = getValidCols(b);
+    for (var i = 0; i < cols.length; i++) {
+      var col = cols[i], r = findOpenRow(b, col);
+      var nb = cloneBoard(b);
+      nb[r][col] = piece;
+      if (checkWinAt(nb, piece)) return col;
+    }
+    return null;
+  }
+
+  function chooseCpuCol() {
+    var valid = getValidCols(board);
+    if (!valid.length) return null;
+    if (cfg.mode === "random") {
+      // Mostly random, but grab a free winning drop if one is sitting there.
+      if (Math.random() < 0.35) {
+        var w = findWinningMove(board, CPU);
+        if (w !== null) return w;
+      }
+      return window.ArcadeCommon.pick(valid);
+    }
+    if (cfg.mode === "block") {
+      var win = findWinningMove(board, CPU);
+      if (win !== null) return win;
+      var block = findWinningMove(board, PLAYER);
+      if (block !== null) return block;
+      var center = Math.floor(COLS / 2);
+      if (valid.indexOf(center) !== -1 && Math.random() < 0.6) return center;
+      return window.ArcadeCommon.pick(valid);
+    }
+    var result = minimax(board, cfg.depth || 5, -Infinity, Infinity, true);
     var col = result.col;
+    if (col === null || !isValidCol(board, col)) col = valid[0];
+    return col;
+  }
+
+  function getWinningLine(b, piece) {
+    var dirs = [[0, 1], [1, 0], [1, 1], [-1, 1]];
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c < COLS; c++) {
+        if (b[r][c] !== piece) continue;
+        for (var d = 0; d < dirs.length; d++) {
+          var dr = dirs[d][0], dc = dirs[d][1];
+          var cells = [[r, c]];
+          for (var k = 1; k < 4; k++) {
+            var nr = r + dr * k, nc = c + dc * k;
+            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS || b[nr][nc] !== piece) break;
+            cells.push([nr, nc]);
+          }
+          if (cells.length === 4) return cells;
+        }
+      }
+    }
+    return null;
+  }
+
+  function burst() {
+    boardEl.style.position = "relative";
+    var cx = boardEl.clientWidth / 2, cy = boardEl.clientHeight / 2;
+    var colors = ["#ff5d5d", "#ffd23f", "#29e0c9", "#7c5cff"];
+    for (var i = 0; i < 26; i++) {
+      var p = document.createElement("div");
+      p.className = "c4-particle";
+      p.style.left = cx + "px";
+      p.style.top = cy + "px";
+      var col = colors[i % colors.length];
+      p.style.background = col;
+      p.style.boxShadow = "0 0 8px " + col;
+      boardEl.appendChild(p);
+      var ang = Math.random() * Math.PI * 2, spd = 2 + Math.random() * 4.5;
+      animateParticle(p, Math.cos(ang) * spd, Math.sin(ang) * spd);
+    }
+  }
+
+  function animateParticle(p, vx, vy) {
+    var x = 0, y = 0, life = 1;
+    function step() {
+      x += vx; y += vy; vy += 0.15; life -= 0.028;
+      p.style.transform = "translate(" + x + "px," + y + "px)";
+      p.style.opacity = Math.max(0, life);
+      if (life > 0) requestAnimationFrame(step);
+      else if (p.parentNode) p.parentNode.removeChild(p);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function cpuMove() {
+    var col = chooseCpuCol();
     if (col === null || !isValidCol(board, col)) {
       var valid = getValidCols(board);
       col = valid[0];
@@ -227,8 +326,13 @@
     if (who === "player") {
       score += 10;
       window.ArcadeCommon.setBest(GAME_ID, score);
+      winLine = getWinningLine(board, PLAYER);
+      render();
+      burst();
       resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.youWin") + "</span>";
     } else if (who === "cpu") {
+      winLine = getWinningLine(board, CPU);
+      render();
       resultBanner.innerHTML = '<span class="overlay-lose">' + window.ArcadeI18n.t("common.youLose") + "</span>";
     } else {
       resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.tie") + "</span>";
@@ -237,5 +341,13 @@
   }
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - changing CPU strength starts a fresh game.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

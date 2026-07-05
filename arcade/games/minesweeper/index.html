@@ -10,9 +10,9 @@
 <style>
   #board { grid-template-columns: repeat(9, 38px); grid-template-rows: repeat(9, 38px); }
   #board .cell { font-size: 1.1rem; border-radius: 4px; }
-  #board .cell.revealed { background: var(--bg-alt); cursor: default; }
-  #board .cell.mine { background: var(--danger); }
-  #board .cell.flagged { background: var(--warn); }
+  #board .cell.revealed { background: var(--bg-alt); cursor: default; box-shadow: inset 0 0 6px rgba(41,224,201,0.16); }
+  #board .cell.mine { background: var(--danger); box-shadow: 0 0 12px var(--danger); }
+  #board .cell.flagged { background: var(--warn); box-shadow: 0 0 10px rgba(255,184,77,0.6); }
 </style>
 </head>
 <body>
@@ -27,6 +27,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div class="controls-row">
       <button class="chip" id="flag-mode">🚩 Flag Mode: Off</button>
     </div>

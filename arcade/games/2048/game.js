@@ -5,7 +5,16 @@
   var bestEl = document.getElementById("best");
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
-  var SIZE = 4;
+  var diffEl = document.getElementById("difficulty");
+
+  // Difficulty is the grid size. Bigger board = easier (more room to merge).
+  var DIFFICULTIES = {
+    easy: { size: 5, tile: 62 },
+    medium: { size: 4, tile: 80 },
+    hard: { size: 3, tile: 94 }
+  };
+  var cfg = DIFFICULTIES.medium;
+  var SIZE = cfg.size;
   var grid, score, over, won;
 
   var TILE_COLORS = {
@@ -36,6 +45,7 @@
   }
 
   function newGame() {
+    SIZE = cfg.size;
     grid = emptyGrid();
     score = 0;
     over = false;
@@ -49,14 +59,21 @@
 
   function render() {
     boardEl.innerHTML = "";
+    boardEl.style.gridTemplateColumns = "repeat(" + SIZE + ", " + cfg.tile + "px)";
+    var fontSize = Math.round(cfg.tile * 0.42);
     for (var r = 0; r < SIZE; r++) {
       for (var c = 0; c < SIZE; c++) {
         var v = grid[r][c];
         var cell = document.createElement("div");
         cell.className = "cell";
         cell.textContent = v === 0 ? "" : v;
-        cell.style.background = TILE_COLORS[v] || "#3ddc84";
+        var bg = TILE_COLORS[v] || "#3ddc84";
+        cell.style.background = bg;
         cell.style.color = v <= 4 ? "var(--text-dim)" : "white";
+        cell.style.height = cfg.tile + "px";
+        cell.style.fontSize = fontSize + "px";
+        // Subtle neon glow that grows with the tile value.
+        cell.style.boxShadow = v >= 64 ? "0 0 " + Math.min(24, 8 + Math.log(v) / Math.LN2 * 1.6) + "px " + bg : "none";
         boardEl.appendChild(cell);
       }
     }
@@ -158,5 +175,13 @@
   });
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  // Difficulty selector - grid size changes; starting fresh at the new size.
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

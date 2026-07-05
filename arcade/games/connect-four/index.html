@@ -8,8 +8,13 @@
 <link rel="stylesheet" href="../../css/main.css">
 <script>window.ARCADE_ROOT_DEPTH = 2;</script>
 <style>
-  #board { grid-template-columns: repeat(7, 52px); grid-template-rows: repeat(6, 52px); background: #1b3a8c; padding: 8px; border-radius: 12px; }
+  #board { grid-template-columns: repeat(7, 52px); grid-template-rows: repeat(6, 52px); background: #1b3a8c; padding: 8px; border-radius: 12px; box-shadow: 0 0 24px rgba(124,92,255,0.25); position: relative; }
   #board .cell { background: var(--bg-alt); border-radius: 50%; font-size: 1.6rem; }
+  #board .cell.disc-red { background: radial-gradient(circle at 35% 30%, #ffb0b0, #ff5d5d 55%, #b02626); box-shadow: 0 0 12px rgba(255,93,93,0.75), inset 0 2px 5px rgba(255,255,255,0.45); }
+  #board .cell.disc-yellow { background: radial-gradient(circle at 35% 30%, #fff2ab, #ffd23f 55%, #d19a00); box-shadow: 0 0 12px rgba(255,210,63,0.75), inset 0 2px 5px rgba(255,255,255,0.45); }
+  #board .cell.win { animation: c4pulse 0.7s ease-in-out infinite; }
+  @keyframes c4pulse { 0%,100% { transform: scale(1); box-shadow: 0 0 12px rgba(255,255,255,0.6); } 50% { transform: scale(1.1); box-shadow: 0 0 26px #ffffff; } }
+  .c4-particle { position: absolute; width: 8px; height: 8px; border-radius: 50%; pointer-events: none; }
   #columns { grid-template-columns: repeat(7, 52px); display: grid; gap: 8px; margin-bottom: -4px; }
   #columns button { width: 52px; height: 30px; padding: 0; }
 </style>
@@ -26,6 +31,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div id="columns"></div>
     <div class="grid-board" id="board"></div>
     <div id="result-banner"></div>
