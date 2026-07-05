@@ -17,6 +17,7 @@
   var connectAttempts = {}; // code -> { startedAt, failCount }
   var gameListeners = [];
   var CONNECT_TIMEOUT_MS = 15000;
+  var editingMyCode = false;
 
   function rootPath() {
     var depth = window.ARCADE_ROOT_DEPTH || 0;
@@ -42,6 +43,36 @@
       try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
     }
     return code;
+  }
+
+  function sanitizeCode(raw) {
+    // PeerJS IDs only allow letters/numbers/hyphens/underscores - strip
+    // anything else so a custom code always works as a real peer ID.
+    var cleaned = (raw || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    return cleaned.slice(0, 40);
+  }
+
+  function setMyCode(raw) {
+    var cleaned = sanitizeCode(raw);
+    if (cleaned.length < 3) return { ok: false, reason: "tooShort" };
+    var current = myCode();
+    if (cleaned === current) return { ok: true, unchanged: true };
+    try { localStorage.setItem(CODE_KEY, cleaned); } catch (e) {}
+    // Existing connections were opened under the old peer ID - drop them and
+    // re-register fresh under the new one so friends can actually reach it.
+    Object.keys(connections).forEach(function (code) {
+      try { connections[code].close(); } catch (e) {}
+    });
+    connections = {};
+    onlineSet = {};
+    connectAttempts = {};
+    if (peer) {
+      try { peer.destroy(); } catch (e) {}
+      peer = null;
+    }
+    peerStatus = "connecting";
+    if (window.Peer) initPeer();
+    return { ok: true, unchanged: false };
   }
 
   function getFriends() {
@@ -247,8 +278,16 @@
     var friends = getFriends();
     var html = "";
     html += relayStatusBanner();
-    html += '<div class="fp-code"><span>' + myCode() + '</span>' +
-      '<button class="btn" id="fp-copy" style="padding:4px 10px;" data-i18n="friends.copy">Copy</button></div>';
+    if (editingMyCode) {
+      html += '<div class="fp-code"><input id="fp-code-edit" value="' + myCode() + '" maxlength="40" style="flex:1; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:6px 8px; color:var(--text); font-family:monospace;">' +
+        '<button class="btn btn-primary" id="fp-code-save" style="padding:4px 10px;">Save</button>' +
+        '<button class="btn" id="fp-code-cancel" style="padding:4px 10px;">✕</button></div>' +
+        '<p class="instructions" style="text-align:left; font-size:0.78rem;">Set the same code on your other devices to use them as the same friend. Letters, numbers, - and _ only.</p>';
+    } else {
+      html += '<div class="fp-code"><span>' + myCode() + '</span>' +
+        '<button class="btn" id="fp-copy" style="padding:4px 10px;" data-i18n="friends.copy">Copy</button>' +
+        '<button class="btn" id="fp-edit-code" style="padding:4px 10px;" title="Set a custom code">✏️</button></div>';
+    }
     html += '<div class="fp-add"><input id="fp-add-input" data-i18n-placeholder="friends.addPlaceholder" placeholder="Enter friend\'s code">' +
       '<button class="btn btn-primary" id="fp-add-btn" data-i18n="friends.add">Add</button></div>';
 
@@ -287,10 +326,33 @@
       });
     }
 
-    els.body.querySelector("#fp-copy").addEventListener("click", function () {
+    var copyBtn = els.body.querySelector("#fp-copy");
+    if (copyBtn) copyBtn.addEventListener("click", function () {
       var code = myCode();
       if (navigator.clipboard) navigator.clipboard.writeText(code).catch(function () {});
       if (window.ArcadeCommon) window.ArcadeCommon.toast(t("friends.copied", "Copied!"));
+    });
+    var editBtn = els.body.querySelector("#fp-edit-code");
+    if (editBtn) editBtn.addEventListener("click", function () {
+      editingMyCode = true;
+      renderPanel();
+    });
+    var cancelBtn = els.body.querySelector("#fp-code-cancel");
+    if (cancelBtn) cancelBtn.addEventListener("click", function () {
+      editingMyCode = false;
+      renderPanel();
+    });
+    var saveBtn = els.body.querySelector("#fp-code-save");
+    if (saveBtn) saveBtn.addEventListener("click", function () {
+      var codeInput = els.body.querySelector("#fp-code-edit");
+      var result = setMyCode(codeInput.value);
+      if (!result.ok) {
+        if (window.ArcadeCommon) window.ArcadeCommon.toast("Code must be at least 3 characters.");
+        return;
+      }
+      editingMyCode = false;
+      if (window.ArcadeCommon) window.ArcadeCommon.toast(result.unchanged ? "Code unchanged." : "Your code is now " + myCode());
+      renderPanel();
     });
     els.body.querySelector("#fp-add-btn").addEventListener("click", function () {
       var input = els.body.querySelector("#fp-add-input");
@@ -481,6 +543,7 @@
 
   window.ArcadeFriends = {
     myCode: myCode,
+    setMyCode: setMyCode,
     addFriend: addFriend,
     isOnline: function (code) { return !!onlineSet[code]; },
     connect: connectTo,
