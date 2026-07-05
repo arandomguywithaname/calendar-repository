@@ -13,11 +13,16 @@
   var WIN_SCORE = 7;
 
   // Per-difficulty tuning. paddleH = your paddle height, ballSpeed = launch speed,
-  // accel = how much the ball speeds up on each paddle hit, cpuSpeed/cpuErr = CPU quality.
+  // accel = how much the ball speeds up on each paddle hit, cpuSpeed/cpuErr = CPU quality,
+  // english = how much vertical speed an angled paddle hit imparts.
+  // IMPORTANT: cpuSpeed must stay BELOW english on every level. The ball's y moves by
+  // up to `english` px/frame after a corner hit, so if the CPU paddle can move at least
+  // that fast it can always keep up and becomes literally unbeatable. Keeping
+  // cpuSpeed < english means a well-angled shot outruns the paddle and scores.
   var DIFFICULTIES = {
-    easy: { paddleH: 96, ballSpeed: 3.2, accel: 1.0, cpuSpeed: 3.0, cpuErr: 55, maxSpeed: 8 },
-    medium: { paddleH: 70, ballSpeed: 4.4, accel: 1.05, cpuSpeed: 4.4, cpuErr: 40, maxSpeed: 11 },
-    hard: { paddleH: 52, ballSpeed: 5.6, accel: 1.09, cpuSpeed: 6.2, cpuErr: 18, maxSpeed: 15 }
+    easy: { paddleH: 104, ballSpeed: 3.4, accel: 1.02, cpuSpeed: 3.0, cpuErr: 60, maxSpeed: 10, english: 7 },
+    medium: { paddleH: 76, ballSpeed: 4.4, accel: 1.05, cpuSpeed: 4.2, cpuErr: 46, maxSpeed: 12, english: 8 },
+    hard: { paddleH: 58, ballSpeed: 5.4, accel: 1.08, cpuSpeed: 5.4, cpuErr: 30, maxSpeed: 14, english: 9 }
   };
   var cfg = DIFFICULTIES.medium;
 
@@ -85,7 +90,7 @@
       ball.x = PADDLE_W + 10;
       ball.vx *= -cfg.accel;
       var rel = (ball.y - (player.y + ph / 2)) / (ph / 2);
-      ball.vy = rel * 5;
+      ball.vy = rel * cfg.english;
       spawnParticles(ball.x, ball.y, "#29e0c9", 12);
     }
 
@@ -95,7 +100,7 @@
       ball.x = W - PADDLE_W - 10;
       ball.vx *= -cfg.accel;
       var rel2 = (ball.y - (cpu.y + ph / 2)) / (ph / 2);
-      ball.vy = rel2 * 5;
+      ball.vy = rel2 * cfg.english;
       spawnParticles(ball.x, ball.y, "#ff5da2", 12);
     }
 
