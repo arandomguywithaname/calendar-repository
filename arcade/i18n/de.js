@@ -51,5 +51,9 @@ window.ARCADE_I18N_DATA["de"] = {
   "friends.helpText": "Freunde verbinden sich direkt (P2P) im Browser. Ihr m\u00fcsst die Seite beide gleichzeitig ge\u00f6ffnet haben, um zu chatten \u2014 es wird nichts auf einem Server gespeichert.",
   "friends.remove": "Entfernen",
   "friends.close": "Schlie\u00dfen",
-  "friends.back": "Zur\u00fcck"
+  "friends.back": "Zur\u00fcck",
+  "difficulty.label": "Schwierigkeit",
+  "difficulty.easy": "Leicht",
+  "difficulty.medium": "Mittel",
+  "difficulty.hard": "Schwer"
 };

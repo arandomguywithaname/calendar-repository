@@ -51,5 +51,9 @@ window.ARCADE_I18N_DATA["ro"] = {
   "friends.helpText": "Prietenii se conecteaz\u0103 direct, peer-to-peer, chiar \u00een browser. Am\u00e2ndoi trebuie s\u0103 ave\u021bi site-ul deschis \u00een acela\u0219i timp ca s\u0103 discuta\u021bi \u2014 nimic nu este stocat pe un server.",
   "friends.remove": "Elimin\u0103",
   "friends.close": "\u00cenchide",
-  "friends.back": "\u00cenapoi"
+  "friends.back": "\u00cenapoi",
+  "difficulty.label": "Dificultate",
+  "difficulty.easy": "U\u0219or",
+  "difficulty.medium": "Mediu",
+  "difficulty.hard": "Greu"
 };

@@ -74,6 +74,60 @@
     return a;
   }
 
+  // Difficulty selector: a shared row of Easy/Medium/Hard chips that games
+  // drop into a container. Remembers the last choice per game in localStorage.
+  // onChange(levelKey) fires immediately with the saved (or default) level,
+  // then again whenever the player picks a different one.
+  var DEFAULT_LEVELS = [
+    { key: "easy", label: "Easy" },
+    { key: "medium", label: "Medium" },
+    { key: "hard", label: "Hard" }
+  ];
+
+  function getDifficulty(gameId, fallback) {
+    try {
+      var v = localStorage.getItem("arcade.diff." + gameId);
+      if (v) return v;
+    } catch (e) {}
+    return fallback || "medium";
+  }
+
+  function setDifficulty(gameId, level) {
+    try { localStorage.setItem("arcade.diff." + gameId, level); } catch (e) {}
+  }
+
+  function mountDifficulty(container, gameId, opts) {
+    opts = opts || {};
+    var levels = opts.levels || DEFAULT_LEVELS;
+    var defaultKey = opts.defaultKey || "medium";
+    var onChange = opts.onChange || function () {};
+    var current = getDifficulty(gameId, defaultKey);
+    if (!levels.some(function (l) { return l.key === current; })) current = defaultKey;
+
+    container.innerHTML = "";
+    container.classList.add("difficulty-row");
+    levels.forEach(function (lvl) {
+      var chip = document.createElement("button");
+      chip.className = "chip" + (lvl.key === current ? " active" : "");
+      chip.setAttribute("data-level", lvl.key);
+      var i18nKey = "difficulty." + lvl.key;
+      var translated = window.ArcadeI18n ? window.ArcadeI18n.t(i18nKey) : null;
+      chip.textContent = (translated && translated !== i18nKey) ? translated : lvl.label;
+      chip.addEventListener("click", function () {
+        if (lvl.key === current) return;
+        current = lvl.key;
+        setDifficulty(gameId, current);
+        container.querySelectorAll(".chip").forEach(function (c) {
+          c.classList.toggle("active", c.getAttribute("data-level") === current);
+        });
+        onChange(current);
+      });
+      container.appendChild(chip);
+    });
+    onChange(current);
+    return { current: function () { return current; } };
+  }
+
   window.ArcadeCommon = {
     initTheme: initTheme,
     toast: toast,
@@ -82,7 +136,10 @@
     setBestLowerIsBetter: setBestLowerIsBetter,
     pick: pick,
     randInt: randInt,
-    shuffle: shuffle
+    shuffle: shuffle,
+    getDifficulty: getDifficulty,
+    setDifficulty: setDifficulty,
+    mountDifficulty: mountDifficulty
   };
 
   if (document.readyState === "loading") {

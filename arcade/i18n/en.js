@@ -51,5 +51,9 @@ window.ARCADE_I18N_DATA["en"] = {
   "friends.helpText": "Friends connect peer-to-peer, right in your browser. Both of you need this site open at the same time to chat \u2014 nothing is stored on a server.",
   "friends.remove": "Remove",
   "friends.close": "Close",
-  "friends.back": "Back"
+  "friends.back": "Back",
+  "difficulty.label": "Difficulty",
+  "difficulty.easy": "Easy",
+  "difficulty.medium": "Medium",
+  "difficulty.hard": "Hard"
 };

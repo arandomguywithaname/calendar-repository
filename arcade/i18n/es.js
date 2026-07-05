@@ -51,5 +51,9 @@ window.ARCADE_I18N_DATA["es"] = {
   "friends.helpText": "Los amigos se conectan de igual a igual, directamente en tu navegador. Ambos deben tener el sitio abierto a la vez para chatear \u2014 no se guarda nada en un servidor.",
   "friends.remove": "Eliminar",
   "friends.close": "Cerrar",
-  "friends.back": "Atr\u00e1s"
+  "friends.back": "Atr\u00e1s",
+  "difficulty.label": "Dificultad",
+  "difficulty.easy": "F\u00e1cil",
+  "difficulty.medium": "Medio",
+  "difficulty.hard": "Dif\u00edcil"
 };

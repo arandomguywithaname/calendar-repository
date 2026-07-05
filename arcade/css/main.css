@@ -319,6 +319,21 @@ select, button, input {
   justify-content: center;
 }
 
+.difficulty-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+
+.difficulty-row .label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-right: 2px;
+}
+
 .instructions {
   color: var(--text-dim);
   font-size: 0.88rem;

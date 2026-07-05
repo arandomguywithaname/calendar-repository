@@ -51,5 +51,9 @@ window.ARCADE_I18N_DATA["fr"] = {
   "friends.helpText": "Les amis se connectent en pair \u00e0 pair, directement dans le navigateur. Vous devez tous les deux avoir le site ouvert en m\u00eame temps pour discuter \u2014 rien n'est stock\u00e9 sur un serveur.",
   "friends.remove": "Retirer",
   "friends.close": "Fermer",
-  "friends.back": "Retour"
+  "friends.back": "Retour",
+  "difficulty.label": "Difficult\u00e9",
+  "difficulty.easy": "Facile",
+  "difficulty.medium": "Moyen",
+  "difficulty.hard": "Difficile"
 };
