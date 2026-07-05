@@ -19,6 +19,9 @@
   var CONNECT_TIMEOUT_MS = 15000;
   var editingMyCode = false;
   var idRetries = 0;
+  var sameIdRetries = 0;
+  var lastPeerError = null;
+  var lastConnError = {}; // friend code -> last PeerJS error type when dialing them
 
   function rootPath() {
     var depth = window.ARCADE_ROOT_DEPTH || 0;
@@ -137,6 +140,7 @@
     connections[code] = conn;
     conn.on("open", function () {
       onlineSet[code] = true;
+      delete lastConnError[code];
       if (connectAttempts[code]) connectAttempts[code].failCount = 0;
       flushPending(code);
       renderPanel();
@@ -166,6 +170,7 @@
 
   function connectTo(code) {
     if (!peer || peer.disconnected || connections[code]) return;
+    delete lastConnError[code]; // fresh dial, fresh diagnosis
     try {
       var conn = peer.connect(code, { reliable: true });
       setupConnection(code, conn);
@@ -254,23 +259,46 @@
 
   function friendStatusLine(code) {
     if (onlineSet[code]) return "";
+
+    // Live diagnostics: name the exact stage that is failing, so "it
+    // doesn't work" turns into something we can actually act on.
+    if (lastConnError[code] === "not-online") {
+      return '<div style="color:var(--warn); font-size:0.78rem; margin-top:2px;">' +
+        "⚠ This code isn't online right now. It must match EXACTLY what their Friends panel " +
+        "shows at this moment (codes can change!) — re-check it on their screen, then " +
+        '<button class="btn" data-action="retry" data-code="' + code + '" style="padding:2px 8px; font-size:0.75rem;">Retry</button></div>';
+    }
+
+    var c = connections[code];
+    var ice = null;
+    try { ice = c && c.peerConnection ? c.peerConnection.iceConnectionState : null; } catch (e) {}
+
+    if (ice === "failed" || ice === "disconnected") {
+      return '<div style="color:var(--warn); font-size:0.78rem; margin-top:2px;">' +
+        "⚠ Found them, but the connection between your devices is blocked (link: " + ice + "). " +
+        "This is usually the router/firewall. Try both devices on different networks, or " +
+        '<button class="btn" data-action="retry" data-code="' + code + '" style="padding:2px 8px; font-size:0.75rem;">Retry</button></div>';
+    }
+
     var attempt = connectAttempts[code];
     var fails = attempt ? attempt.failCount || 0 : 0;
     if (fails >= 2) {
       return '<div style="color:var(--warn); font-size:0.78rem; margin-top:2px;">' +
-        "⚠ Couldn't connect after several tries. This usually means one of you is on a network " +
-        "that blocks direct peer-to-peer connections (school/office WiFi, a VPN, or a strict firewall). " +
-        "Try a different network (e.g. home WiFi) on either side, or " +
+        "⚠ Couldn't connect after several tries" + (ice ? " (link stuck at: " + ice + ")" : "") + ". " +
+        "One of you may be on a network that blocks game connections. " +
         '<button class="btn" data-action="retry" data-code="' + code + '" style="padding:2px 8px; font-size:0.75rem;">Retry now</button></div>';
     }
-    return '<div style="color:var(--text-dim); font-size:0.78rem; margin-top:2px;">Connecting...</div>';
+
+    var stage = !c ? "waiting to dial" : (ice ? "link: " + ice : "calling...");
+    return '<div style="color:var(--text-dim); font-size:0.78rem; margin-top:2px;">Connecting... (' + stage + ")</div>";
   }
 
   function relayStatusBanner() {
     if (peerStatus === "connected") return "";
     if (peerStatus === "failed") {
       return '<div class="instructions" style="text-align:left; color:var(--danger);">' +
-        "⚠ Couldn't reach the connection service used to find friends. Check your internet connection, " +
+        "⚠ Couldn't reach the connection service used to find friends" +
+        (lastPeerError ? " (error: " + lastPeerError + ")" : "") + ". Check your internet connection, " +
         "or a VPN/firewall/ad-blocker may be blocking it. Friends/chat won't work until this connects, " +
         "but every game still works fine.</div>";
     }
@@ -486,6 +514,8 @@
     } catch (e) { return; }
     peer.on("open", function () {
       peerStatus = "connected";
+      sameIdRetries = 0;
+      lastPeerError = null;
       renderPanel();
       pollFriends();
       // Reconnect quickly when a friend reloads or changes page - their old
@@ -514,27 +544,51 @@
       }, 2000);
     });
     peer.on("error", function (err) {
+      lastPeerError = err && err.type ? err.type : "unknown";
       if (err && err.type === "unavailable-id") {
-        // Someone else already registered this exact code (usually two
-        // people picking the same custom code, or a friend typing YOUR
-        // code into their own "edit code" box). The old handler hid this,
-        // leaving the device silently unreachable. Mint a variant so this
-        // browser can still get online, and tell the user loudly.
-        if (idRetries < 2) {
+        // "Code already registered" has TWO very different causes:
+        // (a) A navigation race: when you go hub -> Pong, the new page tries
+        //     to register while the broker hasn't yet noticed the old page's
+        //     socket closing. The SAME code becomes free again within a
+        //     couple of seconds - so retry it first. Renaming here (like v4
+        //     did immediately) silently changes your code on every page
+        //     switch, and friends end up dialing a code that no longer exists.
+        // (b) A genuine collision (two people picked the same custom code).
+        //     Only after the same-code retries fail do we mint a variant.
+        try { peer.destroy(); } catch (e) {}
+        peer = null;
+        peerStatus = "connecting";
+        renderPanel();
+        if (sameIdRetries < 2) {
+          sameIdRetries++;
+          setTimeout(initPeer, 1200 * sameIdRetries);
+        } else if (idRetries < 2) {
           idRetries++;
+          sameIdRetries = 0;
           var chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
           var suffix = chars[Math.floor(Math.random() * chars.length)] + chars[Math.floor(Math.random() * chars.length)];
           var newCode = myCode().slice(0, 36) + "-" + suffix;
           activeCode = newCode;
           try { localStorage.setItem(CODE_KEY, newCode); } catch (e) {}
-          try { peer.destroy(); } catch (e) {}
-          peer = null;
-          peerStatus = "connecting";
           if (window.ArcadeCommon) window.ArcadeCommon.toast("That code was already taken by someone else — your code is now " + newCode);
           renderPanel();
           setTimeout(initPeer, 500);
         } else {
           peerStatus = "failed";
+          renderPanel();
+        }
+        return;
+      }
+      if (err && err.type === "peer-unavailable") {
+        // The code WE dialed isn't registered right now - our own
+        // registration is fine, so this must not flip the panel to "failed"
+        // (it used to, painting a scary red banner just because a friend
+        // was offline). Record it against that friend for the diagnostics.
+        var m = /peer\s+(\S+)\s*$/.exec(err.message || "");
+        var target = m ? m[1] : null;
+        if (target) {
+          lastConnError[target] = "not-online";
+          delete connections[target];
           renderPanel();
         }
         return;
