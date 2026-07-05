@@ -7,12 +7,22 @@
   var bestEl = document.getElementById("best");
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
+  var diffEl = document.getElementById("difficulty");
 
   var W = canvas.width, H = canvas.height;
-  var PADDLE_W = 10, PADDLE_H = 70;
   var WIN_SCORE = 7;
 
-  var player, cpu, ball, score, cpuScore, over, loopId;
+  // Per-difficulty tuning. paddleH = your paddle height, ballSpeed = launch speed,
+  // accel = how much the ball speeds up on each paddle hit, cpuSpeed/cpuErr = CPU quality.
+  var DIFFICULTIES = {
+    easy: { paddleH: 96, ballSpeed: 3.2, accel: 1.0, cpuSpeed: 3.0, cpuErr: 55, maxSpeed: 8 },
+    medium: { paddleH: 70, ballSpeed: 4.4, accel: 1.05, cpuSpeed: 4.4, cpuErr: 40, maxSpeed: 11 },
+    hard: { paddleH: 52, ballSpeed: 5.6, accel: 1.09, cpuSpeed: 6.2, cpuErr: 18, maxSpeed: 15 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var PADDLE_W = 12;
+  var player, cpu, ball, trail, particles, score, cpuScore, over, loopId;
 
   function refreshHud() {
     scoreEl.textContent = score;
@@ -23,17 +33,19 @@
   function resetBall(dir) {
     ball = {
       x: W / 2, y: H / 2,
-      vx: 4.2 * (dir || (Math.random() < 0.5 ? 1 : -1)),
+      vx: cfg.ballSpeed * (dir || (Math.random() < 0.5 ? 1 : -1)),
       vy: (Math.random() * 4 - 2)
     };
+    trail = [];
   }
 
   function newGame() {
-    player = { y: H / 2 - PADDLE_H / 2 };
-    cpu = { y: H / 2 - PADDLE_H / 2, err: 0 };
+    player = { y: H / 2 - cfg.paddleH / 2 };
+    cpu = { y: H / 2 - cfg.paddleH / 2, err: 0 };
     score = 0;
     cpuScore = 0;
     over = false;
+    particles = [];
     resultBanner.innerHTML = "";
     resetBall();
     refreshHud();
@@ -41,8 +53,23 @@
     loop();
   }
 
+  function spawnParticles(x, y, color, count) {
+    for (var i = 0; i < (count || 14); i++) {
+      var ang = Math.random() * Math.PI * 2;
+      var spd = 1 + Math.random() * 3.5;
+      particles.push({
+        x: x, y: y,
+        vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+        life: 1, color: color
+      });
+    }
+  }
+
   function update() {
     if (over) return;
+
+    trail.push({ x: ball.x, y: ball.y });
+    if (trail.length > 14) trail.shift();
 
     ball.x += ball.vx;
     ball.y += ball.vy;
@@ -50,50 +77,55 @@
     if (ball.y < 6) { ball.y = 6; ball.vy *= -1; }
     if (ball.y > H - 6) { ball.y = H - 6; ball.vy *= -1; }
 
+    var ph = cfg.paddleH;
+
     // Player paddle collision (left side)
     if (ball.x - 6 < PADDLE_W + 4 && ball.x - 6 > 4 &&
-        ball.y > player.y && ball.y < player.y + PADDLE_H && ball.vx < 0) {
+        ball.y > player.y && ball.y < player.y + ph && ball.vx < 0) {
       ball.x = PADDLE_W + 10;
-      ball.vx *= -1.06;
-      var rel = (ball.y - (player.y + PADDLE_H / 2)) / (PADDLE_H / 2);
+      ball.vx *= -cfg.accel;
+      var rel = (ball.y - (player.y + ph / 2)) / (ph / 2);
       ball.vy = rel * 5;
+      spawnParticles(ball.x, ball.y, "#29e0c9", 12);
     }
 
     // CPU paddle collision (right side)
     if (ball.x + 6 > W - PADDLE_W - 4 && ball.x + 6 < W - 4 &&
-        ball.y > cpu.y && ball.y < cpu.y + PADDLE_H && ball.vx > 0) {
+        ball.y > cpu.y && ball.y < cpu.y + ph && ball.vx > 0) {
       ball.x = W - PADDLE_W - 10;
-      ball.vx *= -1.06;
-      var rel2 = (ball.y - (cpu.y + PADDLE_H / 2)) / (PADDLE_H / 2);
+      ball.vx *= -cfg.accel;
+      var rel2 = (ball.y - (cpu.y + ph / 2)) / (ph / 2);
       ball.vy = rel2 * 5;
+      spawnParticles(ball.x, ball.y, "#ff5da2", 12);
     }
 
     // Cap speed
-    var maxSpeed = 11;
+    var maxSpeed = cfg.maxSpeed;
     ball.vx = Math.max(-maxSpeed, Math.min(maxSpeed, ball.vx));
     ball.vy = Math.max(-maxSpeed, Math.min(maxSpeed, ball.vy));
 
     // Score
     if (ball.x < -10) {
       cpuScore++;
+      spawnParticles(20, ball.y, "#ff5da2", 22);
       refreshHud();
       checkWin();
       if (!over) resetBall(1);
     } else if (ball.x > W + 10) {
       score++;
+      spawnParticles(W - 20, ball.y, "#29e0c9", 22);
       refreshHud();
       checkWin();
       if (!over) resetBall(-1);
     }
 
-    // CPU AI: track ball with lag/imperfection
-    cpu.err += (Math.random() - 0.5) * 1.2;
-    cpu.err = Math.max(-40, Math.min(40, cpu.err));
-    var target = ball.y - PADDLE_H / 2 + cpu.err;
-    var cpuSpeed = 4.4;
-    if (cpu.y < target) cpu.y = Math.min(cpu.y + cpuSpeed, target);
-    else cpu.y = Math.max(cpu.y - cpuSpeed, target);
-    cpu.y = Math.max(0, Math.min(H - PADDLE_H, cpu.y));
+    // CPU AI: track ball with lag/imperfection scaled by difficulty.
+    cpu.err += (Math.random() - 0.5) * (cfg.cpuErr / 24);
+    cpu.err = Math.max(-cfg.cpuErr, Math.min(cfg.cpuErr, cpu.err));
+    var target = ball.y - ph / 2 + cpu.err;
+    if (cpu.y < target) cpu.y = Math.min(cpu.y + cfg.cpuSpeed, target);
+    else cpu.y = Math.max(cpu.y - cfg.cpuSpeed, target);
+    cpu.y = Math.max(0, Math.min(H - ph, cpu.y));
   }
 
   function checkWin() {
@@ -107,37 +139,116 @@
     }
   }
 
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function glowPaddle(x, y, color) {
+    var ph = cfg.paddleH;
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 22;
+    var g = ctx.createLinearGradient(x, y, x + PADDLE_W, y + ph);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(0.4, color);
+    g.addColorStop(1, color);
+    ctx.fillStyle = g;
+    roundRect(x, y, PADDLE_W, ph, 6);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function draw() {
-    ctx.fillStyle = "#171b2e";
+    // Dark background with faint vertical glow.
+    ctx.fillStyle = "#0b0e1c";
+    ctx.fillRect(0, 0, W, H);
+    var bg = ctx.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, H);
+    bg.addColorStop(0, "rgba(124,92,255,0.10)");
+    bg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = "#323a5c";
-    ctx.setLineDash([8, 8]);
+    // Center dashed glowing line.
+    ctx.save();
+    ctx.shadowColor = "#7c5cff";
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = "rgba(124,92,255,0.7)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 12]);
     ctx.beginPath();
     ctx.moveTo(W / 2, 0);
     ctx.lineTo(W / 2, H);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
 
-    ctx.fillStyle = "#29e0c9";
-    ctx.fillRect(4, player.y, PADDLE_W, PADDLE_H);
-    ctx.fillStyle = "#ff5da2";
-    ctx.fillRect(W - PADDLE_W - 4, cpu.y, PADDLE_W, PADDLE_H);
+    glowPaddle(4, player.y, "#29e0c9");
+    glowPaddle(W - PADDLE_W - 4, cpu.y, "#ff5da2");
 
-    ctx.fillStyle = "#eef0fb";
+    // Ball motion trail.
+    trail.forEach(function (t, i) {
+      var frac = i / trail.length;
+      ctx.globalAlpha = frac * 0.5;
+      ctx.fillStyle = "#eaf6ff";
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 6 * frac, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // Glowing ball.
+    ctx.save();
+    var grad = ctx.createRadialGradient(ball.x, ball.y, 1, ball.x, ball.y, 16);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.4, "#bff6ff");
+    grad.addColorStop(1, "rgba(41,224,201,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = "#29e0c9";
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, 6, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+
+    // Particles.
+    particles = particles.filter(function (p) { return p.life > 0; });
+    particles.forEach(function (p) {
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.94; p.vy *= 0.94; p.life -= 0.05;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3 * p.life + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
   }
 
   function loop() {
     update();
     draw();
     if (!over) loopId = requestAnimationFrame(loop);
+    else drawFinalParticles();
+  }
+
+  // Keep drawing a few frames so the scoring particle flash finishes after game over.
+  function drawFinalParticles() {
+    if (!particles.length) return;
+    draw();
+    requestAnimationFrame(drawFinalParticles);
   }
 
   function setPlayerY(y) {
-    player.y = Math.max(0, Math.min(H - PADDLE_H, y - PADDLE_H / 2));
+    player.y = Math.max(0, Math.min(H - cfg.paddleH, y - cfg.paddleH / 2));
   }
 
   canvas.addEventListener("mousemove", function (e) {
@@ -163,16 +274,23 @@
   setInterval(function () {
     if (over) return;
     if (keys.ArrowUp) player.y = Math.max(0, player.y - 6);
-    if (keys.ArrowDown) player.y = Math.min(H - PADDLE_H, player.y + 6);
+    if (keys.ArrowDown) player.y = Math.min(H - cfg.paddleH, player.y + 6);
   }, 16);
 
   document.getElementById("touch-controls").addEventListener("click", function (e) {
     var btn = e.target.closest("[data-dir]");
     if (!btn || over) return;
     var d = btn.getAttribute("data-dir");
-    player.y = Math.max(0, Math.min(H - PADDLE_H, player.y + (d === "up" ? -30 : 30)));
+    player.y = Math.max(0, Math.min(H - cfg.paddleH, player.y + (d === "up" ? -30 : 30)));
   });
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

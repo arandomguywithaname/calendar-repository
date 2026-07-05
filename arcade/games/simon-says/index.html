@@ -25,10 +25,20 @@
   }
   .simon-quad.lit { opacity: 1; transform: scale(0.97); }
   .simon-quad:disabled { cursor: default; }
+  #board { position: relative; }
   #q0 { background: #ff5da2; border-top-left-radius: 999px; }
   #q1 { background: #29e0c9; border-top-right-radius: 999px; }
   #q2 { background: #ffb84d; border-bottom-left-radius: 999px; }
   #q3 { background: #7c5cff; border-bottom-right-radius: 999px; }
+  #q0.lit { box-shadow: 0 0 26px 6px #ff5da2, 0 0 64px 14px rgba(255,93,162,0.55); }
+  #q1.lit { box-shadow: 0 0 26px 6px #29e0c9, 0 0 64px 14px rgba(41,224,201,0.55); }
+  #q2.lit { box-shadow: 0 0 26px 6px #ffb84d, 0 0 64px 14px rgba(255,184,77,0.55); }
+  #q3.lit { box-shadow: 0 0 26px 6px #7c5cff, 0 0 64px 14px rgba(124,92,255,0.55); }
+  .simon-particle {
+    position: absolute; width: 9px; height: 9px; border-radius: 50%;
+    pointer-events: none; z-index: 5;
+    transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+  }
 </style>
 </head>
 <body>
@@ -42,6 +52,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div id="board">
       <button class="simon-quad" id="q0" data-idx="0"></button>
       <button class="simon-quad" id="q1" data-idx="1"></button>
