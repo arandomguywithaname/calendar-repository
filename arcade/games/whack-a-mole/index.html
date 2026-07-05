@@ -8,8 +8,60 @@
 <link rel="stylesheet" href="../../css/main.css">
 <script>window.ARCADE_ROOT_DEPTH = 2;</script>
 <style>
-  #board { grid-template-columns: repeat(3, 90px); background: var(--bg-alt); padding: 10px; border-radius: 12px; }
-  #board .cell { width: 90px; height: 90px; font-size: 2.4rem; }
+  #board {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 96px);
+    gap: 12px;
+    padding: 18px;
+    border-radius: 18px;
+    background: radial-gradient(120% 120% at 50% 0%, #1b2140, #0c0f1f);
+    border: 1px solid rgba(124, 92, 255, 0.4);
+    box-shadow: 0 0 34px rgba(124, 92, 255, 0.35), inset 0 0 30px rgba(0, 0, 0, 0.6);
+  }
+  #board .hole {
+    width: 96px; height: 96px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.6rem;
+    border-radius: 50%;
+    cursor: pointer;
+    user-select: none;
+    background: radial-gradient(circle at 50% 62%, #05060d 0%, #0a0d1a 55%, #12162a 100%);
+    border: 2px solid rgba(41, 224, 201, 0.35);
+    box-shadow: inset 0 6px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(41, 224, 201, 0.28);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  }
+  #board .hole:hover { border-color: rgba(41, 224, 201, 0.7); }
+  #board .hole.up {
+    background: radial-gradient(circle at 50% 42%, #ff9dc7 0%, #ff5da2 48%, #7c5cff 100%);
+    border-color: #ffd23f;
+    box-shadow: 0 0 26px rgba(255, 93, 162, 0.85), inset 0 0 18px rgba(255, 255, 255, 0.35);
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+    animation: molePop 0.18s ease-out;
+  }
+  #board .hole.whacked {
+    background: radial-gradient(circle at 50% 50%, #ffe680 0%, #ffb700 55%, #ff5da2 100%);
+    border-color: #ffd23f;
+    box-shadow: 0 0 30px rgba(255, 210, 63, 0.9);
+    transform: scale(0.92);
+  }
+  @keyframes molePop {
+    0% { transform: scale(0.4); }
+    100% { transform: scale(1); }
+  }
+  .particle-layer { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .particle {
+    position: absolute;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 10px currentColor;
+    transform: translate(-50%, -50%);
+    animation: whackBurst 0.6s ease-out forwards;
+  }
+  @keyframes whackBurst {
+    to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2); opacity: 0; }
+  }
 </style>
 </head>
 <body>
@@ -24,13 +76,14 @@
     </div>
   </div>
   <div class="game-stage">
-    <div class="grid-board" id="board"></div>
+    <div class="difficulty-row" id="difficulty"></div>
+    <div id="board"></div>
     <div id="result-banner"></div>
     <div class="controls-row">
       <button class="btn btn-primary" id="restart" data-i18n="common.newGame">New Game</button>
     </div>
   </div>
-  <p class="instructions">Click the moles as they pop up before they disappear. You have 30 seconds — score as many hits as you can.</p>
+  <p class="instructions">Click the glowing moles as they pop up before they disappear. You have 30 seconds. <b>Easy</b> moles linger and appear one at a time, <b>Medium</b> is classic, <b>Hard</b> is fast with up to three moles at once.</p>
 </main>
 
 <script src="../../i18n/en.js"></script>

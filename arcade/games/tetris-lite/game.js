@@ -8,6 +8,7 @@
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
   var touchControls = document.getElementById("touch-controls");
+  var diffEl = document.getElementById("difficulty");
 
   var COLS = 10, ROWS = 20, CELL = 30;
   var BOX = 4;
@@ -23,7 +24,16 @@
   };
   var TYPES = Object.keys(SHAPES);
 
-  var grid, cur, score, linesCleared, over, dropTimer, dropDelay, paused;
+  // Per-difficulty tuning. startDelay = initial drop interval,
+  // speedStep = ms shaved per speed-up, everyLines = lines between speed-ups.
+  var DIFFICULTIES = {
+    easy: { startDelay: 950, minDelay: 260, speedStep: 45, everyLines: 6 },
+    medium: { startDelay: 700, minDelay: 120, speedStep: 60, everyLines: 5 },
+    hard: { startDelay: 480, minDelay: 90, speedStep: 80, everyLines: 4 }
+  };
+  var cfg = DIFFICULTIES.medium;
+
+  var grid, cur, score, linesCleared, over, dropTimer, dropDelay, paused, particles, flash, rafId;
   var LINE_SCORES = [0, 100, 300, 500, 800];
 
   function refreshHud() {
@@ -77,13 +87,16 @@
     linesCleared = 0;
     over = false;
     paused = false;
-    dropDelay = 700;
+    particles = [];
+    flash = 0;
+    dropDelay = cfg.startDelay;
     resultBanner.innerHTML = "";
     cur = spawnPiece();
     refreshHud();
-    draw();
     clearInterval(dropTimer);
     dropTimer = setInterval(tickDown, dropDelay);
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(render);
   }
 
   function resetTimer() {
@@ -96,7 +109,6 @@
     var moved = { type: cur.type, rot: cur.rot, x: cur.x + dx, y: cur.y + dy };
     if (collision(pieceCells(moved))) return false;
     cur = moved;
-    draw();
     return true;
   }
 
@@ -108,9 +120,16 @@
       var moved = { type: cur.type, rot: newRot, x: cur.x + kicks[i], y: cur.y };
       if (!collision(pieceCells(moved))) {
         cur = moved;
-        draw();
         return;
       }
+    }
+  }
+
+  function spawnParticles(px, py, color) {
+    for (var i = 0; i < 6; i++) {
+      var ang = Math.random() * Math.PI * 2;
+      var spd = 1 + Math.random() * 3;
+      particles.push({ x: px, y: py, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 1, life: 1, color: color });
     }
   }
 
@@ -122,7 +141,6 @@
     });
     clearLines();
     cur = spawnPiece();
-    draw();
   }
 
   function clearLines() {
@@ -131,6 +149,13 @@
       if (grid[r].every(function (v) { return v; })) full.push(r);
     }
     if (full.length === 0) return;
+    // Neon flash + particle burst across each cleared line.
+    flash = 1;
+    full.forEach(function (r) {
+      for (var c = 0; c < COLS; c++) {
+        spawnParticles(c * CELL + CELL / 2, r * CELL + CELL / 2, grid[r][c] || "#ffffff");
+      }
+    });
     full.forEach(function (r) {
       grid.splice(r, 1);
       grid.unshift(new Array(COLS).fill(null));
@@ -138,7 +163,7 @@
     linesCleared += full.length;
     score += (LINE_SCORES[full.length] || full.length * 200);
     window.ArcadeCommon.toast(full.length >= 4 ? "TETRIS!" : "+" + (LINE_SCORES[full.length] || 0));
-    var newDelay = Math.max(120, 700 - Math.floor(linesCleared / 5) * 60);
+    var newDelay = Math.max(cfg.minDelay, cfg.startDelay - Math.floor(linesCleared / cfg.everyLines) * cfg.speedStep);
     if (newDelay !== dropDelay) {
       dropDelay = newDelay;
       resetTimer();
@@ -178,18 +203,42 @@
     return testY;
   }
 
+  function drawBlock(cx, cy, color, active) {
+    var x = cx * CELL, y = cy * CELL;
+    ctx.save();
+    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
+    var grad = ctx.createLinearGradient(x, y, x, y + CELL);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.14, color);
+    grad.addColorStop(1, "rgba(0,0,0,0.4)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+    ctx.restore();
+    // Inner highlight.
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(x + 3, y + 3, CELL - 6, 4);
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 1.5, y + 1.5, CELL - 3, CELL - 3);
+  }
+
   function draw() {
-    ctx.fillStyle = "#171b2e";
+    ctx.fillStyle = "#0f1326";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    for (var r = 0; r < ROWS; r++) {
-      for (var c = 0; c < COLS; c++) {
-        ctx.strokeStyle = "#242a45";
-        ctx.strokeRect(c * CELL, r * CELL, CELL, CELL);
-        if (grid[r][c]) {
-          ctx.fillStyle = grid[r][c];
-          ctx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2);
-        }
+    // Glowing grid.
+    ctx.strokeStyle = "rgba(124,92,255,0.16)";
+    ctx.lineWidth = 1;
+    for (var r = 0; r <= ROWS; r++) {
+      ctx.beginPath(); ctx.moveTo(0, r * CELL); ctx.lineTo(canvas.width, r * CELL); ctx.stroke();
+    }
+    for (var c = 0; c <= COLS; c++) {
+      ctx.beginPath(); ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, canvas.height); ctx.stroke();
+    }
+
+    for (var rr = 0; rr < ROWS; rr++) {
+      for (var cc = 0; cc < COLS; cc++) {
+        if (grid[rr][cc]) drawBlock(cc, rr, grid[rr][cc], false);
       }
     }
 
@@ -197,17 +246,46 @@
       var gy = ghostY();
       if (gy !== null && gy !== cur.y) {
         var ghostCells = pieceCells({ type: cur.type, rot: cur.rot, x: cur.x, y: gy });
+        ctx.save();
+        ctx.shadowColor = SHAPES[cur.type].color;
+        ctx.shadowBlur = 6;
         ctx.strokeStyle = SHAPES[cur.type].color;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 2;
         ghostCells.forEach(function (c) {
-          if (c[1] >= 0) ctx.strokeRect(c[0] * CELL + 2, c[1] * CELL + 2, CELL - 4, CELL - 4);
+          if (c[1] >= 0) ctx.strokeRect(c[0] * CELL + 3, c[1] * CELL + 3, CELL - 6, CELL - 6);
         });
+        ctx.restore();
       }
       var cells = pieceCells(cur);
-      ctx.fillStyle = SHAPES[cur.type].color;
       cells.forEach(function (c) {
-        if (c[1] >= 0) ctx.fillRect(c[0] * CELL + 1, c[1] * CELL + 1, CELL - 2, CELL - 2);
+        if (c[1] >= 0) drawBlock(c[0], c[1], SHAPES[cur.type].color, true);
       });
     }
+
+    // Line-clear flash overlay.
+    if (flash > 0) {
+      ctx.fillStyle = "rgba(255,255,255," + flash * 0.4 + ")";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      flash = Math.max(0, flash - 0.08);
+    }
+
+    // Particles.
+    particles = particles.filter(function (p) { return p.life > 0; });
+    particles.forEach(function (p) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= 0.03;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function render() {
+    draw();
+    rafId = requestAnimationFrame(render);
   }
 
   document.addEventListener("keydown", function (e) {
@@ -236,5 +314,12 @@
   });
 
   restartBtn.addEventListener("click", newGame);
-  newGame();
+
+  window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
+    defaultKey: "medium",
+    onChange: function (level) {
+      cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
+      newGame();
+    }
+  });
 })();

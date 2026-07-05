@@ -25,8 +25,16 @@
     border: 1px solid var(--border);
     transition: background 0.1s ease;
   }
-  #zone.wait { background: var(--danger); color: white; }
-  #zone.go { background: var(--good); color: #05131c; }
+  #zone.wait { background: var(--danger); color: white; box-shadow: 0 0 30px 4px rgba(255,93,93,0.4); }
+  #zone.go {
+    background: var(--good); color: #05131c;
+    box-shadow: 0 0 70px 14px var(--good), 0 0 140px 30px rgba(41,224,201,0.5);
+    animation: reactPulse 0.5s ease-in-out infinite;
+  }
+  @keyframes reactPulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 60px 10px var(--good), 0 0 120px 24px rgba(41,224,201,0.4); }
+    50% { transform: scale(1.02); box-shadow: 0 0 90px 20px var(--good), 0 0 170px 40px rgba(41,224,201,0.6); }
+  }
 </style>
 </head>
 <body>
@@ -40,6 +48,7 @@
     </div>
   </div>
   <div class="game-stage">
+    <div class="difficulty-row" id="difficulty"></div>
     <div id="zone">Click to start</div>
     <div id="result-banner"></div>
     <div class="controls-row">
