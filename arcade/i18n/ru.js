@@ -56,5 +56,6 @@ window.ARCADE_I18N_DATA["ru"] = {
   "difficulty.easy": "\u041b\u0435\u0433\u043a\u043e",
   "difficulty.medium": "\u0421\u0440\u0435\u0434\u043d\u0435",
   "difficulty.hard": "\u0421\u043b\u043e\u0436\u043d\u043e",
-  "difficulty.impossible": "\u041d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e"
+  "difficulty.impossible": "\u041d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e",
+  "footer.madeBy": "\u0421\u0434\u0435\u043b\u0430\u043b \u0422\u0438\u043c \ud83d\udd79\ufe0f"
 };

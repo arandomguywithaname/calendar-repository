@@ -56,5 +56,6 @@ window.ARCADE_I18N_DATA["ro"] = {
   "difficulty.easy": "U\u0219or",
   "difficulty.medium": "Mediu",
   "difficulty.hard": "Greu",
-  "difficulty.impossible": "Imposibil"
+  "difficulty.impossible": "Imposibil",
+  "footer.madeBy": "Creat de Tim \ud83d\udd79\ufe0f"
 };
