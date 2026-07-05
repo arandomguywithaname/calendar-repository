@@ -55,5 +55,6 @@ window.ARCADE_I18N_DATA["es"] = {
   "difficulty.label": "Dificultad",
   "difficulty.easy": "F\u00e1cil",
   "difficulty.medium": "Medio",
-  "difficulty.hard": "Dif\u00edcil"
+  "difficulty.hard": "Dif\u00edcil",
+  "difficulty.impossible": "Imposible"
 };

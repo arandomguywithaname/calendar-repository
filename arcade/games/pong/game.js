@@ -8,6 +8,13 @@
   var resultBanner = document.getElementById("result-banner");
   var restartBtn = document.getElementById("restart");
   var diffEl = document.getElementById("difficulty");
+  var modeCpuBtn = document.getElementById("mode-cpu");
+  var modeFriendBtn = document.getElementById("mode-friend");
+  var friendSetup = document.getElementById("friend-setup");
+  var opponentInput = document.getElementById("opponent-code");
+  var inviteBtn = document.getElementById("invite-btn");
+  var mpStatus = document.getElementById("mp-status");
+  var p2Label = document.getElementById("p2-label");
 
   var W = canvas.width, H = canvas.height;
   var WIN_SCORE = 7;
@@ -15,23 +22,39 @@
   // Per-difficulty tuning. paddleH = your paddle height, ballSpeed = launch speed,
   // accel = how much the ball speeds up on each paddle hit, cpuSpeed/cpuErr = CPU quality,
   // english = how much vertical speed an angled paddle hit imparts.
-  // IMPORTANT: cpuSpeed must stay BELOW english on every level. The ball's y moves by
-  // up to `english` px/frame after a corner hit, so if the CPU paddle can move at least
-  // that fast it can always keep up and becomes literally unbeatable. Keeping
-  // cpuSpeed < english means a well-angled shot outruns the paddle and scores.
+  // cpuSpeed must stay BELOW english for a level to be winnable - "impossible"
+  // deliberately breaks that rule (the CPU can always outrun the ball), which
+  // is the whole joke of the mode.
   var DIFFICULTIES = {
     easy: { paddleH: 104, ballSpeed: 3.4, accel: 1.02, cpuSpeed: 3.0, cpuErr: 60, maxSpeed: 10, english: 7 },
     medium: { paddleH: 76, ballSpeed: 4.4, accel: 1.05, cpuSpeed: 4.2, cpuErr: 46, maxSpeed: 12, english: 8 },
-    hard: { paddleH: 58, ballSpeed: 5.4, accel: 1.08, cpuSpeed: 5.4, cpuErr: 30, maxSpeed: 14, english: 9 }
+    hard: { paddleH: 58, ballSpeed: 5.4, accel: 1.08, cpuSpeed: 5.4, cpuErr: 30, maxSpeed: 14, english: 9 },
+    impossible: { paddleH: 58, ballSpeed: 5.6, accel: 1.08, cpuSpeed: 14, cpuErr: 0, maxSpeed: 15, english: 9 }
   };
   var cfg = DIFFICULTIES.medium;
 
   var PADDLE_W = 12;
   var player, cpu, ball, trail, particles, score, cpuScore, over, loopId;
 
+  // ---- Friend mode state ----
+  // Host runs the real physics; the guest just renders the host's state and
+  // streams its paddle position back. First to 7 still wins.
+  var mode = "cpu";        // "cpu" | "friend"
+  var isHost = true;
+  var opponentCode = null;
+  var remoteY = H / 2;     // guest paddle position as last reported to the host
+  var myGuestY = H / 2;    // guest's own paddle (right side), locally echoed
+  var frameNo = 0;
+
   function refreshHud() {
-    scoreEl.textContent = score;
-    cpuScoreEl.textContent = cpuScore;
+    if (mode === "friend" && !isHost) {
+      // Guest sees their own score first; host's score is the opponent's.
+      scoreEl.textContent = cpuScore;
+      cpuScoreEl.textContent = score;
+    } else {
+      scoreEl.textContent = score;
+      cpuScoreEl.textContent = cpuScore;
+    }
     bestEl.textContent = window.ArcadeCommon.getBest(GAME_ID) || 0;
   }
 
@@ -47,6 +70,8 @@
   function newGame() {
     player = { y: H / 2 - cfg.paddleH / 2 };
     cpu = { y: H / 2 - cfg.paddleH / 2, err: 0 };
+    remoteY = H / 2 - cfg.paddleH / 2;
+    myGuestY = H / 2 - cfg.paddleH / 2;
     score = 0;
     cpuScore = 0;
     over = false;
@@ -94,7 +119,7 @@
       spawnParticles(ball.x, ball.y, "#29e0c9", 12);
     }
 
-    // CPU paddle collision (right side)
+    // Right paddle collision (CPU, or the guest's paddle in friend mode)
     if (ball.x + 6 > W - PADDLE_W - 4 && ball.x + 6 < W - 4 &&
         ball.y > cpu.y && ball.y < cpu.y + ph && ball.vx > 0) {
       ball.x = W - PADDLE_W - 10;
@@ -124,24 +149,45 @@
       if (!over) resetBall(-1);
     }
 
-    // CPU AI: track ball with lag/imperfection scaled by difficulty.
-    cpu.err += (Math.random() - 0.5) * (cfg.cpuErr / 24);
-    cpu.err = Math.max(-cfg.cpuErr, Math.min(cfg.cpuErr, cpu.err));
-    var target = ball.y - ph / 2 + cpu.err;
-    if (cpu.y < target) cpu.y = Math.min(cpu.y + cfg.cpuSpeed, target);
-    else cpu.y = Math.max(cpu.y - cfg.cpuSpeed, target);
-    cpu.y = Math.max(0, Math.min(H - ph, cpu.y));
+    if (mode === "friend") {
+      // Right paddle is the remote friend, not an AI.
+      cpu.y = Math.max(0, Math.min(H - ph, remoteY));
+    } else {
+      // CPU AI: track ball with lag/imperfection scaled by difficulty.
+      cpu.err += (Math.random() - 0.5) * (cfg.cpuErr / 24);
+      cpu.err = Math.max(-cfg.cpuErr, Math.min(cfg.cpuErr, cpu.err));
+      var target = ball.y - ph / 2 + cpu.err;
+      if (cpu.y < target) cpu.y = Math.min(cpu.y + cfg.cpuSpeed, target);
+      else cpu.y = Math.max(cpu.y - cfg.cpuSpeed, target);
+      cpu.y = Math.max(0, Math.min(H - ph, cpu.y));
+    }
   }
 
   function checkWin() {
-    if (score >= WIN_SCORE) {
-      over = true;
+    var hostWon = null;
+    if (score >= WIN_SCORE) { over = true; hostWon = true; }
+    else if (cpuScore >= WIN_SCORE) { over = true; hostWon = false; }
+    if (!over) return;
+
+    if (mode === "friend") {
+      // Host decides; tell the guest who won (from the host's perspective).
+      if (isHost && opponentCode) {
+        window.ArcadeFriends.sendGame(opponentCode, { type: "pong-over", hostWon: hostWon });
+      }
+      showFriendResult(hostWon);
+    } else if (hostWon) {
       window.ArcadeCommon.setBest(GAME_ID, score);
       resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.youWin") + "</span>";
-    } else if (cpuScore >= WIN_SCORE) {
-      over = true;
+    } else {
       resultBanner.innerHTML = '<span class="overlay-lose">' + window.ArcadeI18n.t("common.youLose") + "</span>";
     }
+  }
+
+  function showFriendResult(hostWon) {
+    var iWon = isHost ? hostWon : !hostWon;
+    resultBanner.innerHTML = iWon
+      ? '<span class="overlay-win">' + window.ArcadeI18n.t("common.youWin") + "</span>"
+      : '<span class="overlay-lose">' + window.ArcadeI18n.t("common.youLose") + "</span>";
   }
 
   function roundRect(x, y, w, h, r) {
@@ -193,8 +239,9 @@
     ctx.setLineDash([]);
     ctx.restore();
 
+    var rightY = (mode === "friend" && !isHost) ? myGuestY : cpu.y;
     glowPaddle(4, player.y, "#29e0c9");
-    glowPaddle(W - PADDLE_W - 4, cpu.y, "#ff5da2");
+    glowPaddle(W - PADDLE_W - 4, rightY, "#ff5da2");
 
     // Ball motion trail.
     trail.forEach(function (t, i) {
@@ -232,14 +279,35 @@
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 3 * p.life + 0.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, Math.max(0.1, 3 * p.life + 0.5), 0, Math.PI * 2);
       ctx.fill();
     });
     ctx.globalAlpha = 1;
   }
 
   function loop() {
-    update();
+    frameNo++;
+    if (mode === "friend" && !isHost) {
+      // Guest: physics lives on the host. Just stream our paddle position
+      // and animate the local ball trail between state packets.
+      if (!over && frameNo % 2 === 0 && opponentCode) {
+        window.ArcadeFriends.sendGame(opponentCode, { type: "pong-pad", y: myGuestY });
+      }
+      if (!over && ball) {
+        trail.push({ x: ball.x, y: ball.y });
+        if (trail.length > 14) trail.shift();
+      }
+    } else {
+      update();
+      // Host: broadcast authoritative state every frame (tiny messages).
+      if (mode === "friend" && isHost && !over && opponentCode) {
+        window.ArcadeFriends.sendGame(opponentCode, {
+          type: "pong-state",
+          bx: ball.x, by: ball.y,
+          py: player.y, s: score, cs: cpuScore
+        });
+      }
+    }
     draw();
     if (!over) loopId = requestAnimationFrame(loop);
     else drawFinalParticles();
@@ -252,21 +320,33 @@
     requestAnimationFrame(drawFinalParticles);
   }
 
-  function setPlayerY(y) {
-    player.y = Math.max(0, Math.min(H - cfg.paddleH, y - cfg.paddleH / 2));
+  // ---- Input: left paddle for CPU-mode and host, right paddle for guest ----
+
+  function applyInputY(y) {
+    if (mode === "friend" && !isHost) {
+      myGuestY = Math.max(0, Math.min(H - cfg.paddleH, y - cfg.paddleH / 2));
+    } else {
+      player.y = Math.max(0, Math.min(H - cfg.paddleH, y - cfg.paddleH / 2));
+    }
+  }
+
+  function nudgeInput(delta) {
+    if (mode === "friend" && !isHost) {
+      myGuestY = Math.max(0, Math.min(H - cfg.paddleH, myGuestY + delta));
+    } else {
+      player.y = Math.max(0, Math.min(H - cfg.paddleH, player.y + delta));
+    }
   }
 
   canvas.addEventListener("mousemove", function (e) {
     var rect = canvas.getBoundingClientRect();
-    var y = (e.clientY - rect.top) * (H / rect.height);
-    setPlayerY(y);
+    applyInputY((e.clientY - rect.top) * (H / rect.height));
   });
 
   canvas.addEventListener("touchmove", function (e) {
     e.preventDefault();
     var rect = canvas.getBoundingClientRect();
-    var y = (e.touches[0].clientY - rect.top) * (H / rect.height);
-    setPlayerY(y);
+    applyInputY((e.touches[0].clientY - rect.top) * (H / rect.height));
   }, { passive: false });
 
   var keys = {};
@@ -278,24 +358,105 @@
 
   setInterval(function () {
     if (over) return;
-    if (keys.ArrowUp) player.y = Math.max(0, player.y - 6);
-    if (keys.ArrowDown) player.y = Math.min(H - cfg.paddleH, player.y + 6);
+    if (keys.ArrowUp) nudgeInput(-6);
+    if (keys.ArrowDown) nudgeInput(6);
   }, 16);
 
   document.getElementById("touch-controls").addEventListener("click", function (e) {
     var btn = e.target.closest("[data-dir]");
     if (!btn || over) return;
-    var d = btn.getAttribute("data-dir");
-    player.y = Math.max(0, Math.min(H - cfg.paddleH, player.y + (d === "up" ? -30 : 30)));
+    nudgeInput(btn.getAttribute("data-dir") === "up" ? -30 : 30);
   });
 
-  restartBtn.addEventListener("click", newGame);
+  // ---- Mode switching & friend matchmaking ----
+
+  function setMode(m) {
+    mode = m;
+    modeCpuBtn.classList.toggle("active", m === "cpu");
+    modeFriendBtn.classList.toggle("active", m === "friend");
+    friendSetup.style.display = m === "friend" ? "block" : "none";
+    diffEl.style.display = m === "friend" ? "none" : "";
+    p2Label.textContent = m === "friend" ? "Friend" : "CPU";
+    if (m === "cpu") { isHost = true; opponentCode = null; mpStatus.textContent = ""; }
+    newGame();
+  }
+
+  modeCpuBtn.addEventListener("click", function () { setMode("cpu"); });
+  modeFriendBtn.addEventListener("click", function () { setMode("friend"); });
+
+  inviteBtn.addEventListener("click", function () {
+    var code = opponentInput.value.trim().toUpperCase();
+    if (!code) return;
+    opponentCode = code;
+    isHost = true;
+    window.ArcadeFriends.addFriend(code);
+    mpStatus.textContent = "Connecting to " + code + "...";
+    window.ArcadeFriends.sendGame(opponentCode, { type: "pong-invite" });
+    window.ArcadeFriends.whenReady(opponentCode, function (connected) {
+      mpStatus.textContent = connected
+        ? "Connected! Match on — first to " + WIN_SCORE + "."
+        : "Still trying to reach " + code + " — they need this Pong page open. (Some networks block peer-to-peer.)";
+      if (connected) newGame();
+    }, 10000);
+  });
+
+  window.ArcadeFriends.onGameMessage(function (fromCode, payload) {
+    if (!payload || typeof payload.type !== "string" || payload.type.indexOf("pong-") !== 0) return;
+
+    if (payload.type === "pong-invite") {
+      opponentCode = fromCode;
+      isHost = false;
+      setMode("friend");
+      opponentInput.value = fromCode;
+      mpStatus.textContent = "Match started with " + fromCode + "! You're the pink paddle (right).";
+      window.ArcadeFriends.sendGame(fromCode, { type: "pong-accept" });
+      return;
+    }
+    if (fromCode !== opponentCode || mode !== "friend") return;
+
+    if (payload.type === "pong-accept" && isHost) {
+      mpStatus.textContent = "Friend joined! First to " + WIN_SCORE + ".";
+      newGame();
+    } else if (payload.type === "pong-pad" && isHost) {
+      remoteY = payload.y;
+    } else if (payload.type === "pong-state" && !isHost) {
+      if (!ball) resetBall();
+      ball.x = payload.bx; ball.y = payload.by;
+      player.y = payload.py;
+      if (payload.s !== score || payload.cs !== cpuScore) {
+        score = payload.s; cpuScore = payload.cs;
+        refreshHud();
+      }
+    } else if (payload.type === "pong-over" && !isHost) {
+      over = true;
+      score = WIN_SCORE; // ensure loop stops cleanly
+      showFriendResult(payload.hostWon);
+    } else if (payload.type === "pong-restart" && isHost) {
+      newGame();
+    }
+  });
+
+  restartBtn.addEventListener("click", function () {
+    if (mode === "friend" && !isHost && opponentCode) {
+      // Guest asks the host to restart so both stay in sync.
+      window.ArcadeFriends.sendGame(opponentCode, { type: "pong-restart" });
+      mpStatus.textContent = "Asked your friend to start a new game...";
+      return;
+    }
+    newGame();
+  });
 
   window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {
     defaultKey: "medium",
+    levels: [
+      { key: "easy", label: "Easy" },
+      { key: "medium", label: "Medium" },
+      { key: "hard", label: "Hard" },
+      { key: "impossible", label: "Impossible" }
+    ],
     onChange: function (level) {
       cfg = DIFFICULTIES[level] || DIFFICULTIES.medium;
-      newGame();
+      if (mode === "cpu") newGame();
     }
   });
 })();

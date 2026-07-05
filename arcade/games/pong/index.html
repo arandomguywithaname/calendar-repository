@@ -14,12 +14,24 @@
     <a class="back-link" href="../../index.html">← <span data-i18n="back.toArcade">Back to Arcade</span></a>
     <h1>🏓 Pong</h1>
     <div class="hud">
-      <span class="stat">You: <b id="score">0</b></span>
-      <span class="stat">CPU: <b id="cpuScore">0</b></span>
+      <span class="stat"><span id="p1-label">You</span>: <b id="score">0</b></span>
+      <span class="stat"><span id="p2-label">CPU</span>: <b id="cpuScore">0</b></span>
       <span class="stat"><span data-i18n="common.best">Best</span>: <b id="best">0</b></span>
     </div>
   </div>
   <div class="game-stage">
+    <div class="controls-row">
+      <button class="chip active" id="mode-cpu">Vs CPU</button>
+      <button class="chip" id="mode-friend">Vs Friend</button>
+    </div>
+    <div id="friend-setup" style="display:none; text-align:center;">
+      <p class="instructions">Open the Friends panel (bottom right) to get your code, then enter your friend's code here. They just need this page open.</p>
+      <div class="controls-row">
+        <input id="opponent-code" class="search-box" placeholder="Friend's code (e.g. ARC-XXXX-XXXX)" style="width:260px;">
+        <button class="btn btn-primary" id="invite-btn">Invite to play</button>
+      </div>
+      <p class="instructions" id="mp-status"></p>
+    </div>
     <div class="difficulty-row" id="difficulty"></div>
     <canvas id="board" width="480" height="360"></canvas>
     <div id="result-banner"></div>
@@ -31,7 +43,7 @@
       <button class="btn" data-dir="down">↓</button>
     </div>
   </div>
-  <p class="instructions">Move your paddle with the mouse, touch, or arrow keys. First to 7 points wins against the CPU.</p>
+  <p class="instructions">Move your paddle with the mouse, touch, or arrow keys. First to 7 points wins. Pick a difficulty against the CPU — <b>Impossible</b> is exactly what it says — or invite a friend for a real head-to-head match.</p>
 </main>
 
 <script src="../../i18n/en.js"></script>

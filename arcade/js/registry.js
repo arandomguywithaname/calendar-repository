@@ -3,7 +3,7 @@
    multiplayer:true means the game has a real-time friend-vs-friend mode via friends.js */
 window.ARCADE_GAMES = [
   { slug: "snake", title: "Snake", icon: "🐍", category: "arcade" },
-  { slug: "pong", title: "Pong", icon: "🏓", category: "arcade" },
+  { slug: "pong", title: "Pong", icon: "🏓", category: "arcade", multiplayer: true },
   { slug: "breakout", title: "Breakout", icon: "🧱", category: "arcade" },
   { slug: "space-invaders", title: "Space Invaders", icon: "👾", category: "arcade" },
   { slug: "asteroid-dodge", title: "Asteroid Dodge", icon: "☄️", category: "arcade" },
