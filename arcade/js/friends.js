@@ -461,18 +461,25 @@
       peer = new window.Peer(myCode(), {
         debug: 0,
         config: {
-          // STUN finds a direct path between the two browsers; the TURN
-          // entries are a free public relay (Open Relay by Metered) used as
-          // a fallback when strict routers/firewalls block direct traffic -
-          // without TURN, connections between many home/school networks
-          // simply never open even though both peers reached the broker.
+          // STUN finds a direct path between the two browsers; TURN relays
+          // traffic when routers block direct connections (same-WiFi setups
+          // with client isolation, mobile networks, school firewalls...).
+          // The turn.peerjs.com entries are PeerJS's OWN relay servers -
+          // shipped in the library's default config and run by the same
+          // people as the free broker we use. An earlier version of this
+          // file overrode the config and accidentally dropped them, which
+          // broke every match that needed relaying ("Connecting..." forever
+          // even on the same WiFi). Keep them first; openrelay is a spare.
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun.relay.metered.ca:80" },
+            {
+              urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],
+              username: "peerjs",
+              credential: "peerjsp"
+            },
             { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-            { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-            { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
+            { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
           ]
         }
       });
