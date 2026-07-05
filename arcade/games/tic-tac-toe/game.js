@@ -158,29 +158,52 @@
   modeCpuBtn.addEventListener("click", function () { setMode("cpu"); });
   modeFriendBtn.addEventListener("click", function () { setMode("friend"); });
 
+  // The invite is re-announced until the friend's TIC TAC TOE page answers
+  // with "joined". A single send isn't enough: if the friend is on the hub
+  // or another game when it arrives, this page's listener doesn't exist
+  // there and the invite is silently dropped.
+  var inviteTimer = null;
+  var joined = false;
+
   inviteBtn.addEventListener("click", function () {
     var code = opponentInput.value.trim().toUpperCase();
     if (!code) return;
     opponentCode = code;
+    joined = false;
     window.ArcadeFriends.addFriend(code);
     waitingForOpponent = true;
     myMark = "X";
     mpStatus.textContent = "Connecting to " + code + "...";
     newGame();
     waitingForOpponent = false;
-    // sendGame queues the invite immediately and flushes it the moment the
-    // peer-to-peer link actually opens, however long that takes - whenReady
-    // just drives the status text for the first few seconds.
     window.ArcadeFriends.sendGame(opponentCode, { type: "invite", mark: "O" });
-    window.ArcadeFriends.whenReady(opponentCode, function (connected) {
-      mpStatus.textContent = connected
-        ? "Invite sent! Waiting for " + code + " to move..."
-        : "Still trying to reach " + code + " — make sure they also have this page open with a friend code added. (Some school/work networks block peer-to-peer connections.)";
-    }, 10000);
+
+    clearInterval(inviteTimer);
+    var tries = 0;
+    inviteTimer = setInterval(function () {
+      if (joined || mode !== "friend" || ++tries > 40) {
+        clearInterval(inviteTimer);
+        if (!joined && tries > 40) {
+          mpStatus.textContent = "Couldn't reach " + code + ". Make sure they have THIS Tic Tac Toe page open, then invite again.";
+        }
+        return;
+      }
+      if (window.ArcadeFriends.isOnline(opponentCode)) {
+        window.ArcadeFriends.sendGame(opponentCode, { type: "invite", mark: "O" });
+        mpStatus.textContent = "Friend is online — waiting for them to open Tic Tac Toe...";
+      } else {
+        window.ArcadeFriends.connect(opponentCode);
+        mpStatus.textContent = "Connecting to " + code + "... (they need the site open)";
+      }
+    }, 3000);
   });
 
   window.ArcadeFriends.onGameMessage(function (fromCode, payload) {
     if (payload.type === "invite") {
+      // Duplicate invites are normal (re-announced until we answer). Only
+      // reset the board on the first one, or when no move has been made yet.
+      var alreadyPlaying = mode === "friend" && opponentCode === fromCode &&
+        board && board.some(function (c) { return c; });
       opponentCode = fromCode;
       mode = "friend";
       myMark = payload.mark;
@@ -188,8 +211,17 @@
       modeCpuBtn.classList.remove("active");
       friendSetup.style.display = "block";
       opponentInput.value = fromCode;
-      mpStatus.textContent = "Match started with " + fromCode + "!";
-      newGame();
+      if (!alreadyPlaying) {
+        mpStatus.textContent = "Match started with " + fromCode + "!";
+        newGame();
+      }
+      window.ArcadeFriends.sendGame(fromCode, { type: "joined" });
+    } else if (payload.type === "joined" && mode === "friend" && fromCode === opponentCode) {
+      if (!joined) {
+        joined = true;
+        clearInterval(inviteTimer);
+        mpStatus.textContent = "Friend joined! Your move — you're X.";
+      }
     } else if (payload.type === "move" && mode === "friend" && fromCode === opponentCode) {
       playMove(payload.index, myMark === "X" ? "O" : "X");
     }

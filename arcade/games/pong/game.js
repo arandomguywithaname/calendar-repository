@@ -384,39 +384,70 @@
   modeCpuBtn.addEventListener("click", function () { setMode("cpu"); });
   modeFriendBtn.addEventListener("click", function () { setMode("friend"); });
 
+  // The invite is re-announced every few seconds until the friend's PONG
+  // page answers. A single send is not enough: if the friend is on the hub
+  // (or any other page) when it arrives, no pong listener exists there and
+  // the invite is silently dropped - they have to receive it while this
+  // same game is open on their side.
+  var inviteTimer = null;
+  var accepted = false;
+
   inviteBtn.addEventListener("click", function () {
     var code = opponentInput.value.trim().toUpperCase();
     if (!code) return;
     opponentCode = code;
     isHost = true;
+    accepted = false;
     window.ArcadeFriends.addFriend(code);
     mpStatus.textContent = "Connecting to " + code + "...";
     window.ArcadeFriends.sendGame(opponentCode, { type: "pong-invite" });
-    window.ArcadeFriends.whenReady(opponentCode, function (connected) {
-      mpStatus.textContent = connected
-        ? "Connected! Match on — first to " + WIN_SCORE + "."
-        : "Still trying to reach " + code + " — they need this Pong page open. (Some networks block peer-to-peer.)";
-      if (connected) newGame();
-    }, 10000);
+
+    clearInterval(inviteTimer);
+    var tries = 0;
+    inviteTimer = setInterval(function () {
+      if (accepted || mode !== "friend" || !isHost || ++tries > 40) {
+        clearInterval(inviteTimer);
+        if (!accepted && tries > 40) {
+          mpStatus.textContent = "Couldn't reach " + code + ". Make sure they have THIS Pong page open, then invite again. (Some networks also block peer-to-peer games.)";
+        }
+        return;
+      }
+      if (window.ArcadeFriends.isOnline(opponentCode)) {
+        window.ArcadeFriends.sendGame(opponentCode, { type: "pong-invite" });
+        mpStatus.textContent = "Friend is online — waiting for them to open Pong...";
+      } else {
+        window.ArcadeFriends.connect(opponentCode);
+        mpStatus.textContent = "Connecting to " + code + "... (they need the site open)";
+      }
+    }, 3000);
   });
 
   window.ArcadeFriends.onGameMessage(function (fromCode, payload) {
     if (!payload || typeof payload.type !== "string" || payload.type.indexOf("pong-") !== 0) return;
 
     if (payload.type === "pong-invite") {
+      // Re-announced invites are normal (the host repeats them until we
+      // answer) - only do the full join once, then just re-acknowledge.
+      var alreadyJoined = mode === "friend" && !isHost && opponentCode === fromCode;
       opponentCode = fromCode;
       isHost = false;
-      setMode("friend");
-      opponentInput.value = fromCode;
-      mpStatus.textContent = "Match started with " + fromCode + "! You're the pink paddle (right).";
+      if (!alreadyJoined) {
+        setMode("friend");
+        opponentInput.value = fromCode;
+        mpStatus.textContent = "Match started with " + fromCode + "! You're the pink paddle (right).";
+      }
       window.ArcadeFriends.sendGame(fromCode, { type: "pong-accept" });
       return;
     }
     if (fromCode !== opponentCode || mode !== "friend") return;
 
     if (payload.type === "pong-accept" && isHost) {
-      mpStatus.textContent = "Friend joined! First to " + WIN_SCORE + ".";
-      newGame();
+      if (!accepted) {
+        accepted = true;
+        clearInterval(inviteTimer);
+        mpStatus.textContent = "Friend joined! First to " + WIN_SCORE + ".";
+        newGame();
+      }
     } else if (payload.type === "pong-pad" && isHost) {
       remoteY = payload.y;
     } else if (payload.type === "pong-state" && !isHost) {

@@ -451,11 +451,18 @@
       peer = new window.Peer(myCode(), {
         debug: 0,
         config: {
+          // STUN finds a direct path between the two browsers; the TURN
+          // entries are a free public relay (Open Relay by Metered) used as
+          // a fallback when strict routers/firewalls block direct traffic -
+          // without TURN, connections between many home/school networks
+          // simply never open even though both peers reached the broker.
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun.services.mozilla.com" }
+            { urls: "stun:stun.relay.metered.ca:80" },
+            { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+            { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+            { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
           ]
         }
       });
@@ -464,7 +471,10 @@
       peerStatus = "connected";
       renderPanel();
       pollFriends();
-      setInterval(pollFriends, 20000);
+      // Reconnect quickly when a friend reloads or changes page - their old
+      // connection dies and game invites can't reach them until a new one
+      // opens, so a short poll keeps that gap small.
+      setInterval(pollFriends, 7000);
     });
     peer.on("connection", function (conn) {
       var code = conn.peer;
