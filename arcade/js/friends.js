@@ -18,6 +18,7 @@
   var gameListeners = [];
   var CONNECT_TIMEOUT_MS = 15000;
   var editingMyCode = false;
+  var idRetries = 0;
 
   function rootPath() {
     var depth = window.ARCADE_ROOT_DEPTH || 0;
@@ -35,13 +36,21 @@
     return "ARC-" + s.slice(0, 4) + "-" + s.slice(4);
   }
 
+  // Cached per page-load: this is the code OUR peer connection actually
+  // registered under. Two tabs of the same browser share localStorage, so
+  // re-reading it after the other tab self-heals its collision would show
+  // a code that doesn't belong to this tab.
+  var activeCode = null;
+
   function myCode() {
+    if (activeCode) return activeCode;
     var code = null;
     try { code = localStorage.getItem(CODE_KEY); } catch (e) {}
     if (!code) {
       code = genCode();
       try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
     }
+    activeCode = code;
     return code;
   }
 
@@ -57,6 +66,7 @@
     if (cleaned.length < 3) return { ok: false, reason: "tooShort" };
     var current = myCode();
     if (cleaned === current) return { ok: true, unchanged: true };
+    activeCode = cleaned;
     try { localStorage.setItem(CODE_KEY, cleaned); } catch (e) {}
     // Existing connections were opened under the old peer ID - drop them and
     // re-register fresh under the new one so friends can actually reach it.
@@ -491,16 +501,41 @@
       peerStatus = "connecting";
       renderPanel();
       setTimeout(function () {
-        if (peer && !peer.destroyed) peer.reconnect();
+        // The disconnected guard matters: after an unavailable-id self-heal,
+        // this timer can fire against the NEW peer, which isn't disconnected.
+        if (peer && !peer.destroyed && peer.disconnected) peer.reconnect();
       }, 2000);
     });
     peer.on("error", function (err) {
-      // Broker unreachable, blocked network, transient failure, etc. Retry
-      // unless the failure means this exact ID can never work (already taken).
-      var fatal = err && err.type === "unavailable-id";
-      peerStatus = fatal ? "connected" : "failed";
+      if (err && err.type === "unavailable-id") {
+        // Someone else already registered this exact code (usually two
+        // people picking the same custom code, or a friend typing YOUR
+        // code into their own "edit code" box). The old handler hid this,
+        // leaving the device silently unreachable. Mint a variant so this
+        // browser can still get online, and tell the user loudly.
+        if (idRetries < 2) {
+          idRetries++;
+          var chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+          var suffix = chars[Math.floor(Math.random() * chars.length)] + chars[Math.floor(Math.random() * chars.length)];
+          var newCode = myCode().slice(0, 36) + "-" + suffix;
+          activeCode = newCode;
+          try { localStorage.setItem(CODE_KEY, newCode); } catch (e) {}
+          try { peer.destroy(); } catch (e) {}
+          peer = null;
+          peerStatus = "connecting";
+          if (window.ArcadeCommon) window.ArcadeCommon.toast("That code was already taken by someone else — your code is now " + newCode);
+          renderPanel();
+          setTimeout(initPeer, 500);
+        } else {
+          peerStatus = "failed";
+          renderPanel();
+        }
+        return;
+      }
+      // Broker unreachable, blocked network, transient failure, etc - retry.
+      peerStatus = "failed";
       renderPanel();
-      if (!fatal && peer && !peer.destroyed) {
+      if (peer && !peer.destroyed) {
         setTimeout(function () {
           if (peer && peer.disconnected && !peer.destroyed) peer.reconnect();
         }, 3000);
