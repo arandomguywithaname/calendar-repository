@@ -125,7 +125,7 @@
 
   function render() {
     boardEl.innerHTML = "";
-    boardEl.style.gridTemplateColumns = "repeat(9, 38px)";
+    boardEl.style.gridTemplateColumns = "repeat(9, min(38px, calc((100vw - 56px) / 9)))";
     for (var r = 0; r < 9; r++) {
       for (var c = 0; c < 9; c++) {
         (function (r, c) {

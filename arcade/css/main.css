@@ -288,6 +288,10 @@ select, button, input {
 
 .game-stage canvas {
   max-width: 100%;
+  /* Canvases have fixed pixel width/height attributes; height:auto keeps
+     them proportional when max-width shrinks them on a phone, instead of
+     squashing the drawing. */
+  height: auto;
   background: var(--bg-alt);
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -608,6 +612,75 @@ footer.arcade-footer {
 
 .back-link:hover { color: var(--text); }
 
+/* ---- Mobile ---- */
+
+/* Kill the 300ms double-tap zoom delay everywhere; canvases already use
+   touch-action:none for their own gesture handling. */
+html, body { touch-action: manipulation; }
+
+/* Keep content out from under notches / rounded corners / home indicator
+   (viewport-fit=cover lets the page use that space, so we pad it back). */
+.arcade-header {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+}
+.container, .game-shell {
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+  padding-bottom: max(44px, env(safe-area-inset-bottom));
+}
+#friends-toggle { bottom: max(20px, env(safe-area-inset-bottom)); }
+
+/* Don't let a stray drag on a game highlight text or drag the page around. */
+.game-stage, .grid-board, #touch-controls {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media (max-width: 560px) {
-  .game-topbar { flex-direction: column; align-items: flex-start; }
+  .game-topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .game-topbar h1 { font-size: 1.15rem; }
+
+  .arcade-header { padding: 10px 12px; gap: 8px; }
+  .arcade-logo { font-size: 1.05rem; }
+  .arcade-logo .mark { width: 26px; height: 26px; }
+
+  .container { padding: 14px 10px 60px; }
+  .hero { padding: 22px 8px 10px; }
+  .hero p { font-size: 0.92rem; }
+
+  .game-grid {
+    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+    gap: 10px;
+  }
+  .game-card { padding: 13px 11px; }
+  .game-card .icon { font-size: 1.6rem; }
+  .game-card .title { font-size: 0.88rem; }
+
+  .game-shell { padding: 10px 8px 44px; }
+  .game-stage { padding: 12px 8px; }
+
+  .hud { gap: 8px; }
+  .hud .stat { padding: 5px 10px; font-size: 0.8rem; }
+
+  /* Boards wider than the screen (Minesweeper Hard, Memory Match Hard...)
+     scroll sideways inside the stage instead of clipping off-screen. */
+  .grid-board { max-width: calc(100vw - 36px); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  #friends-panel { right: 8px; left: 8px; width: auto; bottom: 80px; max-height: 62vh; }
+  #friends-toggle { right: 12px; bottom: 12px; width: 52px; height: 52px; }
+}
+
+/* Real fingers need bigger targets than mouse pointers do. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .chip { min-height: 40px; padding: 8px 16px; }
+  select, .select { min-height: 44px; }
+  #touch-controls .btn {
+    min-width: 62px;
+    min-height: 52px;
+    font-size: 1.35rem;
+  }
+  .quiz-choice { min-height: 52px; }
 }

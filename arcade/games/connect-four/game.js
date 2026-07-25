@@ -63,7 +63,7 @@
 
   function render() {
     boardEl.innerHTML = "";
-    boardEl.style.gridTemplateColumns = "repeat(" + COLS + ", 52px)";
+    boardEl.style.gridTemplateColumns = "repeat(" + COLS + ", min(52px, calc((100vw - 90px) / " + COLS + ")))";
     for (var r = 0; r < ROWS; r++) {
       for (var c = 0; c < COLS; c++) {
         var cell = document.createElement("div");

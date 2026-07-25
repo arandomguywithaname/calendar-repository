@@ -57,10 +57,20 @@
     render();
   }
 
+  function tileSize() {
+    // Shrink tiles on narrow (phone) screens so the whole board fits -
+    // 5x5 Easy at the desktop 62px would overflow a 390px-wide phone.
+    var avail = Math.min(window.innerWidth, 560) - 60;
+    var gap = 8;
+    var fit = Math.floor(avail / SIZE) - gap;
+    return Math.max(40, Math.min(cfg.tile, fit));
+  }
+
   function render() {
+    var tile = tileSize();
     boardEl.innerHTML = "";
-    boardEl.style.gridTemplateColumns = "repeat(" + SIZE + ", " + cfg.tile + "px)";
-    var fontSize = Math.round(cfg.tile * 0.42);
+    boardEl.style.gridTemplateColumns = "repeat(" + SIZE + ", " + tile + "px)";
+    var fontSize = Math.round(tile * 0.42);
     for (var r = 0; r < SIZE; r++) {
       for (var c = 0; c < SIZE; c++) {
         var v = grid[r][c];
@@ -70,7 +80,7 @@
         var bg = TILE_COLORS[v] || "#3ddc84";
         cell.style.background = bg;
         cell.style.color = v <= 4 ? "var(--text-dim)" : "white";
-        cell.style.height = cfg.tile + "px";
+        cell.style.height = tile + "px";
         cell.style.fontSize = fontSize + "px";
         // Subtle neon glow that grows with the tile value.
         cell.style.boxShadow = v >= 64 ? "0 0 " + Math.min(24, 8 + Math.log(v) / Math.LN2 * 1.6) + "px " + bg : "none";
@@ -175,6 +185,7 @@
   });
 
   restartBtn.addEventListener("click", newGame);
+  window.addEventListener("resize", function () { if (grid) render(); });
 
   // Difficulty selector - grid size changes; starting fresh at the new size.
   window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {

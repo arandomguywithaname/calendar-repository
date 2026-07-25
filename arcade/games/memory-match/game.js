@@ -39,13 +39,23 @@
     render();
   }
 
+  function cardSize() {
+    // Fit the board on narrow screens - Hard's 6 columns at the desktop
+    // 74px would overflow most phones.
+    var avail = Math.min(window.innerWidth, 560) - 60;
+    var fit = Math.floor(avail / cfg.cols) - 8;
+    return Math.max(44, Math.min(74, fit));
+  }
+
   function render() {
+    var size = cardSize();
     boardEl.innerHTML = "";
-    boardEl.style.gridTemplateColumns = "repeat(" + cfg.cols + ", 74px)";
+    boardEl.style.gridTemplateColumns = "repeat(" + cfg.cols + ", " + size + "px)";
     cards.forEach(function (card) {
       var cell = document.createElement("div");
       cell.className = "cell";
-      cell.style.fontSize = "1.8rem";
+      cell.style.height = size + "px";
+      cell.style.fontSize = Math.round(size * 0.42) + "px";
       if (card.matched) {
         cell.textContent = card.icon;
         cell.classList.add("matched");
@@ -139,6 +149,7 @@
   }
 
   restartBtn.addEventListener("click", newGame);
+  window.addEventListener("resize", function () { if (cards) render(); });
 
   // Difficulty selector - changing pair count starts a fresh board.
   window.ArcadeCommon.mountDifficulty(diffEl, GAME_ID, {

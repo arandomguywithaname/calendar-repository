@@ -172,7 +172,12 @@
     if (mode === "friend") {
       // Host decides; tell the guest who won (from the host's perspective).
       if (isHost && opponentCode) {
-        window.ArcadeFriends.sendGame(opponentCode, { type: "pong-over", hostWon: hostWon });
+        // Carry the final scores: the host stops streaming state the moment
+        // the game ends, so without these the guest's board would sit one
+        // point behind forever on the winning goal.
+        window.ArcadeFriends.sendGame(opponentCode, {
+          type: "pong-over", hostWon: hostWon, s: score, cs: cpuScore
+        });
       }
       showFriendResult(hostWon);
     } else if (hostWon) {
@@ -460,7 +465,8 @@
       }
     } else if (payload.type === "pong-over" && !isHost) {
       over = true;
-      score = WIN_SCORE; // ensure loop stops cleanly
+      if (typeof payload.s === "number") { score = payload.s; cpuScore = payload.cs; }
+      refreshHud();
       showFriendResult(payload.hostWon);
     } else if (payload.type === "pong-restart" && isHost) {
       newGame();
