@@ -1,7 +1,11 @@
 /* Claude Arc Games — admin panel.
 
-   Opens with Ctrl+Q (desktop), by tapping the footer version badge 5 times
-   (phones have no Ctrl key), or by adding #admin to the address.
+   Opens from the small button in the TOP RIGHT of every page, guarded by a
+   passcode. (You can also add your own keyboard shortcut for it from the AI
+   tab - try "when I press ctrl+Q open the admin panel".)
+
+   It is also locked to this site's own web addresses, so if someone copies
+   these files onto a different domain the panel refuses to open there.
 
    IMPORTANT, PLEASE READ: the passcode below keeps a curious sibling out of
    the panel - it is NOT real security. This is a static site with no server,
@@ -13,10 +17,23 @@
    as a list of every player on the site. */
 (function () {
   var PASS_KEY = "arcade.admin.pass";
-  var DEFAULT_PASS = "2468";
+  var DEFAULT_PASS = "676767yo";
+  // Only these hosts may open the panel. localhost/127.0.0.1/"" (file://)
+   // are kept so it still works while testing on your own computer.
+  var ALLOWED_HOSTS = [
+    "claudearcgames.com", "www.claudearcgames.com",
+    "clinquant-meerkat-145283.netlify.app",
+    "localhost", "127.0.0.1", ""
+  ];
+
+  function siteAllowed() {
+    var h = (location.hostname || "").toLowerCase();
+    return ALLOWED_HOSTS.indexOf(h) !== -1;
+  }
+
   var unlocked = false;
   var overlay = null;
-  var activeTab = "codes";
+  var activeTab = "ai";
 
   function rootPath() {
     var depth = window.ARCADE_ROOT_DEPTH || 0;
@@ -179,7 +196,73 @@
     return h;
   }
 
+
+  function tabAI() {
+    var h = '<p class="adm-note">Type what you want changed in plain English and press ' +
+      'Enter. Changes are live but temporary — <b>refreshing the page undoes ' +
+      'everything</b> (except themes, which are saved).</p>';
+    h += '<div class="ai-log" id="ai-log"></div>';
+    h += '<div class="ai-input-row"><input id="ai-input" placeholder="e.g. make the ball faster in pong" autocomplete="off">' +
+      '<button class="btn btn-primary" id="ai-send">Send</button></div>';
+    h += '<div class="ai-chips">' +
+      ['make the ball 2x faster',
+       'change the chicken to an egg',
+       'make the background black',
+       'green on black theme',
+       'when I press ctrl+Q open the admin panel',
+       'help'].map(function (ex) {
+        return '<button class="chip ai-ex">' + esc(ex) + '</button>';
+      }).join('') + '</div>';
+    h += '<div class="ai-active" id="ai-active"></div>';
+    return h;
+  }
+
+  function renderActiveMods() {
+    var el = document.getElementById('ai-active');
+    if (!el || !window.ArcadeMods) return;
+    var bits = [];
+    var sp = window.ArcadeMods.getSpeed();
+    if (sp !== 1) bits.push('speed <b>' + sp.toFixed(2) + 'x</b>');
+    var sw = window.ArcadeMods.getSwaps();
+    Object.keys(sw).forEach(function (k) { bits.push(k + ' → <b>' + sw[k] + '</b>'); });
+    var co = window.ArcadeMods.getColors();
+    Object.keys(co).forEach(function (k) { bits.push(k.replace('--', '') + ' <b>' + co[k] + '</b>'); });
+    window.ArcadeMods.getHotkeys().forEach(function (hk) {
+      bits.push('<b>' + hk.combo.toUpperCase() + '</b> → ' + window.ArcadeMods.actions[hk.action].label);
+    });
+    el.innerHTML = bits.length
+      ? 'Active changes (gone on refresh): ' + bits.join(' &nbsp;·&nbsp; ') +
+        ' <button class="btn adm-mini" id="ai-reset">Undo all</button>'
+      : 'No changes active right now.';
+    var rb = document.getElementById('ai-reset');
+    if (rb) rb.addEventListener('click', function () {
+      window.ArcadeMods.resetAll();
+      aiSay('bot', 'Everything is back to normal.');
+      renderActiveMods();
+    });
+  }
+
+  function aiSay(kind, text) {
+    var log = document.getElementById('ai-log');
+    if (!log) return;
+    var d = document.createElement('div');
+    d.className = 'ai-msg ' + kind;
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function aiSubmit(value) {
+    var text = (value || '').trim();
+    if (!text) return;
+    aiSay('you', text);
+    var res = window.ArcadeAI.ask(text);
+    aiSay(res.ok ? 'bot ok' : 'err', res.msg);
+    renderActiveMods();
+  }
+
   var TABS = [
+    { id: "ai", label: "🤖 AI Panel", render: tabAI },
     { id: "codes", label: "Friend Codes", render: tabCodes },
     { id: "scores", label: "Scores", render: tabScores },
     { id: "plays", label: "Play Stats", render: tabPlays },
@@ -205,6 +288,22 @@
 
   function wire(body) {
     var byId = function (id) { return body.querySelector("#" + id); };
+
+    if (byId("ai-input")) {
+      var input = byId("ai-input");
+      var send = function () { aiSubmit(input.value); input.value = ""; };
+      byId("ai-send").addEventListener("click", send);
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
+      body.querySelectorAll(".ai-ex").forEach(function (b) {
+        b.addEventListener("click", function () { aiSubmit(b.textContent); });
+      });
+      renderActiveMods();
+      if (!byId("ai-log").children.length) {
+        aiSay("bot", "Hi Tim! Tell me what to change — try one of the buttons below, " +
+          "or type your own sentence. Type \"help\" to see everything I can do.");
+      }
+      setTimeout(function () { input.focus(); }, 50);
+    }
 
     if (byId("adm-savecode")) byId("adm-savecode").addEventListener("click", function () {
       var v = byId("adm-mycode").value;
@@ -336,39 +435,38 @@
   }
 
   function promptPass() {
+    if (!siteAllowed()) {
+      // Copied onto someone else's domain - refuse, using the same message
+      // the AI panel gives for anything it won't do.
+      alert(window.ArcadeAI ? window.ArcadeAI.ERR :
+        "Error;error;ShowID(ai.extension<adminpanel>prohibited/Text.message();;return)");
+      return;
+    }
     if (unlocked) { openPanel(); return; }
     var v = prompt("Admin passcode:");
     if (v === null) return;
     if (v === getPass()) {
       unlocked = true;
+      var b = document.getElementById("adm-open");
+      if (b) b.classList.add("locked-in");
       openPanel();
     } else {
       if (window.ArcadeCommon) window.ArcadeCommon.toast("Wrong passcode.");
     }
   }
 
-  // ---------- entry points ----------
-
-  document.addEventListener("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && (e.key === "q" || e.key === "Q")) {
-      e.preventDefault();
-      promptPass();
-    }
-  });
+  // ---------- entry point: the button in the top right ----------
 
   function mount() {
-    // Phones have no Ctrl key: 5 quick taps on the footer version badge.
-    var badge = document.querySelector("footer.arcade-footer p span:last-child");
-    if (badge) {
-      var taps = 0, timer = null;
-      badge.style.cursor = "pointer";
-      badge.addEventListener("click", function () {
-        taps++;
-        clearTimeout(timer);
-        timer = setTimeout(function () { taps = 0; }, 1200);
-        if (taps >= 5) { taps = 0; promptPass(); }
-      });
-    }
+    if (!siteAllowed()) return; // don't even show the button off-site
+    var btn = document.createElement("button");
+    btn.id = "adm-open";
+    btn.type = "button";
+    btn.textContent = "🛠️";
+    btn.title = "Admin (passcode)";
+    btn.setAttribute("aria-label", "Admin panel");
+    btn.addEventListener("click", promptPass);
+    document.body.appendChild(btn);
     if (location.hash === "#admin") promptPass();
   }
 

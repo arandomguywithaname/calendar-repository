@@ -273,7 +273,7 @@
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 3 * p.life + 0.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, Math.max(0.1, 3 * p.life + 0.5), 0, Math.PI * 2);
       ctx.fill();
     });
     ctx.globalAlpha = 1;

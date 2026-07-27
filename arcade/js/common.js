@@ -2,19 +2,52 @@
 (function () {
   var THEME_KEY = "arcade.theme";
 
-  function initTheme() {
+  // The header button cycles through these; the admin AI panel can also set
+  // one by name ("make it green" -> matrix).
+  var THEMES = [
+    { id: "dark", icon: "🌙", label: "Dark" },
+    { id: "light", icon: "☀️", label: "Light" },
+    { id: "matrix", icon: "🟢", label: "Green on Black" },
+    { id: "synthwave", icon: "🌆", label: "Synthwave" },
+    { id: "ocean", icon: "🌊", label: "Ocean" },
+    { id: "amber", icon: "🟠", label: "Amber" },
+    { id: "grape", icon: "🍇", label: "Grape" }
+  ];
+
+  function themeById(id) {
+    for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i];
+    return THEMES[0];
+  }
+
+  function currentTheme() {
     var saved = null;
     try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
-    var theme = saved || "dark";
-    document.documentElement.setAttribute("data-theme", theme);
+    return themeById(saved || "dark").id;
+  }
+
+  function setTheme(id) {
+    var t = themeById(id);
+    document.documentElement.setAttribute("data-theme", t.id);
+    try { localStorage.setItem(THEME_KEY, t.id); } catch (e) {}
     var btn = document.getElementById("theme-toggle");
     if (btn) {
-      btn.textContent = theme === "dark" ? "☀️" : "🌙";
+      btn.textContent = t.icon;
+      btn.setAttribute("title", t.label + " — click for the next theme");
+    }
+    return t;
+  }
+
+  function initTheme() {
+    var theme = setTheme(currentTheme());
+    var btn = document.getElementById("theme-toggle");
+    if (btn) {
       btn.addEventListener("click", function () {
-        var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-        document.documentElement.setAttribute("data-theme", next);
-        try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
-        btn.textContent = next === "dark" ? "☀️" : "🌙";
+        var idx = 0;
+        for (var i = 0; i < THEMES.length; i++) {
+          if (THEMES[i].id === document.documentElement.getAttribute("data-theme")) { idx = i; break; }
+        }
+        var next = setTheme(THEMES[(idx + 1) % THEMES.length].id);
+        toast(next.label);
       });
     }
   }
@@ -143,6 +176,9 @@
 
   window.ArcadeCommon = {
     initTheme: initTheme,
+    themes: THEMES,
+    setTheme: setTheme,
+    currentTheme: currentTheme,
     toast: toast,
     getBest: getBest,
     setBest: setBest,
