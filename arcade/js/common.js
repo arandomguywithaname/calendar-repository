@@ -128,6 +128,19 @@
     return { current: function () { return current; } };
   }
 
+  // Count how often each game is opened, so the admin panel can show real
+  // "most played" stats. Keyed by folder slug, derived from the URL.
+  function trackPlay() {
+    try {
+      var m = /\/games\/([^\/]+)\//.exec(location.pathname);
+      if (!m) return;
+      var key = "arcade.plays";
+      var all = JSON.parse(localStorage.getItem(key) || "{}");
+      all[m[1]] = (all[m[1]] || 0) + 1;
+      localStorage.setItem(key, JSON.stringify(all));
+    } catch (e) {}
+  }
+
   window.ArcadeCommon = {
     initTheme: initTheme,
     toast: toast,
@@ -143,8 +156,9 @@
   };
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initTheme);
+    document.addEventListener("DOMContentLoaded", function () { initTheme(); trackPlay(); });
   } else {
     initTheme();
+    trackPlay();
   }
 })();
