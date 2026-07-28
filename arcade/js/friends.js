@@ -305,19 +305,60 @@
     return '<div class="instructions" style="text-align:left; color:var(--text-dim);">Connecting to the friends service...</div>';
   }
 
-  function renderPanel() {
-    if (!els.body) return;
-    if (activeChatWith) return renderChat(activeChatWith);
+  // The panel refreshes itself every few seconds to keep the online dots and
+  // the "Connecting..." banner honest. It used to do that by replacing the
+  // whole body's innerHTML, which threw away the text box you were typing
+  // your friend's code into and built a new one. On a desktop that is nearly
+  // invisible - the value gets copied across and focus restored. On a phone
+  // it is not: replacing a focused input closes the on-screen keyboard, and
+  // a keyboard can only be reopened by a real tap, so every 3 seconds the
+  // keyboard would vanish mid-code.
+  //
+  // So the body is now split into three regions. The banner and the friend
+  // list are volatile and get redrawn on the timer; the region holding the
+  // text boxes is only rebuilt when it actually changes (you start editing
+  // your code, or your code changes), never on the timer.
+  var staticSig = null;
 
-    var prevInput = els.body.querySelector("#fp-add-input");
+  function ensureShell() {
+    if (els.body.querySelector("#fp-static")) return false;
+    els.body.className = "fp-body";
+    els.body.innerHTML =
+      '<div id="fp-banner" class="fp-sec"></div>' +
+      '<div id="fp-static" class="fp-sec"></div>' +
+      '<div id="fp-list" class="fp-sec"></div>';
+    staticSig = null;
+    return true;
+  }
+
+  function translateIn(root) {
+    if (!window.ArcadeI18n) return;
+    root.querySelectorAll("[data-i18n]").forEach(function (el) {
+      el.textContent = t(el.getAttribute("data-i18n"));
+    });
+    root.querySelectorAll("[data-i18n-placeholder]").forEach(function (el) {
+      el.setAttribute("placeholder", t(el.getAttribute("data-i18n-placeholder")));
+    });
+  }
+
+  // Friend codes are typed, not written prose: stop the phone keyboard from
+  // autocapitalising, autocorrecting or autocompleting them into something
+  // that no longer matches the code the friend actually has.
+  var CODE_INPUT_ATTRS = 'autocapitalize="characters" autocorrect="off" autocomplete="off" spellcheck="false"';
+
+  function renderStatic() {
+    var host = els.body.querySelector("#fp-static");
+    var sig = (editingMyCode ? "edit" : "show") + "|" + myCode();
+    if (sig === staticSig) return;
+
+    var prevInput = host.querySelector("#fp-add-input");
     var preservedValue = prevInput ? prevInput.value : "";
     var hadFocus = prevInput === document.activeElement;
+    staticSig = sig;
 
-    var friends = getFriends();
     var html = "";
-    html += relayStatusBanner();
     if (editingMyCode) {
-      html += '<div class="fp-code"><input id="fp-code-edit" value="' + myCode() + '" maxlength="40" style="flex:1; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:6px 8px; color:var(--text); font-family:monospace;">' +
+      html += '<div class="fp-code"><input id="fp-code-edit" value="' + myCode() + '" maxlength="40" ' + CODE_INPUT_ATTRS + ' style="flex:1; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:6px 8px; color:var(--text); font-family:monospace;">' +
         '<button class="btn btn-primary" id="fp-code-save" style="padding:4px 10px;">Save</button>' +
         '<button class="btn" id="fp-code-cancel" style="padding:4px 10px;">✕</button></div>' +
         '<p class="instructions" style="text-align:left; font-size:0.78rem;">Set the same code on your other devices to use them as the same friend. Letters, numbers, - and _ only.</p>';
@@ -326,9 +367,96 @@
         '<button class="btn" id="fp-copy" style="padding:4px 10px;" data-i18n="friends.copy">Copy</button>' +
         '<button class="btn" id="fp-edit-code" style="padding:4px 10px;" title="Set a custom code">✏️</button></div>';
     }
-    html += '<div class="fp-add"><input id="fp-add-input" data-i18n-placeholder="friends.addPlaceholder" placeholder="Enter friend\'s code">' +
+    html += '<div class="fp-add"><input id="fp-add-input" ' + CODE_INPUT_ATTRS + ' data-i18n-placeholder="friends.addPlaceholder" placeholder="Enter friend\'s code">' +
       '<button class="btn btn-primary" id="fp-add-btn" data-i18n="friends.add">Add</button></div>';
+    host.innerHTML = html;
+    translateIn(host);
 
+    if (preservedValue) {
+      var newInput = host.querySelector("#fp-add-input");
+      if (newInput) {
+        newInput.value = preservedValue;
+        if (hadFocus) newInput.focus();
+      }
+    }
+
+    var copyBtn = host.querySelector("#fp-copy");
+    if (copyBtn) copyBtn.addEventListener("click", function () { copyMyCode(); });
+    var editBtn = host.querySelector("#fp-edit-code");
+    if (editBtn) editBtn.addEventListener("click", function () {
+      editingMyCode = true;
+      renderPanel();
+    });
+    var cancelBtn = host.querySelector("#fp-code-cancel");
+    if (cancelBtn) cancelBtn.addEventListener("click", function () {
+      editingMyCode = false;
+      renderPanel();
+    });
+    var saveBtn = host.querySelector("#fp-code-save");
+    if (saveBtn) saveBtn.addEventListener("click", function () {
+      var codeInput = host.querySelector("#fp-code-edit");
+      var result = setMyCode(codeInput.value);
+      if (!result.ok) {
+        if (window.ArcadeCommon) window.ArcadeCommon.toast("Code must be at least 3 characters.");
+        return;
+      }
+      editingMyCode = false;
+      if (window.ArcadeCommon) window.ArcadeCommon.toast(result.unchanged ? "Code unchanged." : "Your code is now " + myCode());
+      renderPanel();
+    });
+    var addInput = host.querySelector("#fp-add-input");
+    function submitAdd() {
+      var code = (addInput.value || "").trim().toUpperCase();
+      if (code && code === myCode()) {
+        if (window.ArcadeCommon) window.ArcadeCommon.toast("That's your own code! Ask your friend for theirs.");
+        return;
+      }
+      if (addFriend(addInput.value)) { addInput.value = ""; renderPanel(); }
+    }
+    host.querySelector("#fp-add-btn").addEventListener("click", submitAdd);
+    // Phone keyboards show a "Go"/"Enter" key rather than a visible Add
+    // button once the keyboard covers the panel.
+    addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") submitAdd(); });
+  }
+
+  // Only say the code was copied if it really was. navigator.clipboard is
+  // missing or refused on plenty of phone browsers, and the old code always
+  // claimed success - so you would tap Copy, paste nothing, and blame the
+  // code. When the clipboard is unavailable the code is selected instead so
+  // it can be copied with the usual long-press.
+  function copyMyCode() {
+    var code = myCode();
+    function selectFallback() {
+      var span = els.body.querySelector(".fp-code span");
+      try {
+        if (span && window.getSelection && document.createRange) {
+          var range = document.createRange();
+          range.selectNodeContents(span);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          if (document.execCommand && document.execCommand("copy")) {
+            sel.removeAllRanges();
+            if (window.ArcadeCommon) window.ArcadeCommon.toast(t("friends.copied", "Copied!"));
+            return;
+          }
+        }
+      } catch (e) {}
+      if (window.ArcadeCommon) window.ArcadeCommon.toast("Hold on the code to copy it: " + code);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function () {
+        if (window.ArcadeCommon) window.ArcadeCommon.toast(t("friends.copied", "Copied!"));
+      }, selectFallback);
+    } else {
+      selectFallback();
+    }
+  }
+
+  function renderList() {
+    var host = els.body.querySelector("#fp-list");
+    var friends = getFriends();
+    var html = "";
     if (friends.length === 0) {
       html += '<div class="instructions" data-i18n="friends.noFriends" style="text-align:left;">No friends yet.</div>';
     } else {
@@ -344,73 +472,19 @@
       });
     }
     html += '<p class="instructions" data-i18n="friends.helpText" style="text-align:left;">Friends connect peer-to-peer.</p>';
-    els.body.innerHTML = html;
-    els.body.className = "fp-body";
+    host.innerHTML = html;
+    translateIn(host);
 
-    if (preservedValue) {
-      var newInput = els.body.querySelector("#fp-add-input");
-      if (newInput) {
-        newInput.value = preservedValue;
-        if (hadFocus) newInput.focus();
-      }
-    }
-
-    if (window.ArcadeI18n) {
-      els.body.querySelectorAll("[data-i18n]").forEach(function (el) {
-        el.textContent = t(el.getAttribute("data-i18n"));
-      });
-      els.body.querySelectorAll("[data-i18n-placeholder]").forEach(function (el) {
-        el.setAttribute("placeholder", t(el.getAttribute("data-i18n-placeholder")));
-      });
-    }
-
-    var copyBtn = els.body.querySelector("#fp-copy");
-    if (copyBtn) copyBtn.addEventListener("click", function () {
-      var code = myCode();
-      if (navigator.clipboard) navigator.clipboard.writeText(code).catch(function () {});
-      if (window.ArcadeCommon) window.ArcadeCommon.toast(t("friends.copied", "Copied!"));
-    });
-    var editBtn = els.body.querySelector("#fp-edit-code");
-    if (editBtn) editBtn.addEventListener("click", function () {
-      editingMyCode = true;
-      renderPanel();
-    });
-    var cancelBtn = els.body.querySelector("#fp-code-cancel");
-    if (cancelBtn) cancelBtn.addEventListener("click", function () {
-      editingMyCode = false;
-      renderPanel();
-    });
-    var saveBtn = els.body.querySelector("#fp-code-save");
-    if (saveBtn) saveBtn.addEventListener("click", function () {
-      var codeInput = els.body.querySelector("#fp-code-edit");
-      var result = setMyCode(codeInput.value);
-      if (!result.ok) {
-        if (window.ArcadeCommon) window.ArcadeCommon.toast("Code must be at least 3 characters.");
-        return;
-      }
-      editingMyCode = false;
-      if (window.ArcadeCommon) window.ArcadeCommon.toast(result.unchanged ? "Code unchanged." : "Your code is now " + myCode());
-      renderPanel();
-    });
-    els.body.querySelector("#fp-add-btn").addEventListener("click", function () {
-      var input = els.body.querySelector("#fp-add-input");
-      var code = (input.value || "").trim().toUpperCase();
-      if (code && code === myCode()) {
-        if (window.ArcadeCommon) window.ArcadeCommon.toast("That's your own code! Ask your friend for theirs.");
-        return;
-      }
-      if (addFriend(input.value)) { input.value = ""; renderPanel(); }
-    });
-    els.body.querySelectorAll('[data-action="chat"]').forEach(function (btn) {
+    host.querySelectorAll('[data-action="chat"]').forEach(function (btn) {
       btn.addEventListener("click", function () {
         activeChatWith = btn.getAttribute("data-code");
         renderChat(activeChatWith);
       });
     });
-    els.body.querySelectorAll('[data-action="remove"]').forEach(function (btn) {
+    host.querySelectorAll('[data-action="remove"]').forEach(function (btn) {
       btn.addEventListener("click", function () { removeFriend(btn.getAttribute("data-code")); });
     });
-    els.body.querySelectorAll('[data-action="retry"]').forEach(function (btn) {
+    host.querySelectorAll('[data-action="retry"]').forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         var code = btn.getAttribute("data-code");
@@ -421,46 +495,66 @@
     });
   }
 
+  function renderPanel() {
+    if (!els.body) return;
+    if (activeChatWith) return renderChat(activeChatWith);
+    ensureShell();
+    els.body.querySelector("#fp-banner").innerHTML = relayStatusBanner();
+    renderStatic();
+    renderList();
+  }
+
+  // Same story as the panel: the chat used to rebuild its whole body - message
+  // box included - on the refresh timer and on every incoming message, which
+  // shut the phone keyboard mid-sentence. The message box is now built once
+  // per conversation and left alone; only the header and the log redraw.
+  var chatSig = null;
+
+  function buildChatShell(code) {
+    els.body.className = "fp-body chat-mode";
+    els.body.innerHTML =
+      '<div id="chat-head"></div>' +
+      '<div class="chat-window"><div class="chat-log" id="chat-log"></div>' +
+      '<div class="chat-input-row"><input id="chat-input" autocomplete="off" data-i18n-placeholder="friends.chatPlaceholder" placeholder="Type a message...">' +
+      '<button class="btn btn-primary" id="chat-send" data-i18n="friends.send">Send</button></div></div>';
+    chatSig = code;
+
+    var input = els.body.querySelector("#chat-input");
+    function doSend() {
+      var text = input.value.trim();
+      if (!text) return;
+      sendChat(code, text);
+      input.value = "";
+      // Keep the keyboard up so you can carry on typing - re-focusing here is
+      // allowed because it happens inside the tap that sent the message.
+      input.focus();
+    }
+    els.body.querySelector("#chat-send").addEventListener("click", doSend);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") doSend(); });
+    translateIn(els.body);
+  }
+
   function renderChat(code) {
     var online = !!onlineSet[code];
     if (!online) connectTo(code);
-    var log = loadChat(code);
 
-    var prevInput = els.body.querySelector("#chat-input");
-    var preservedValue = prevInput ? prevInput.value : "";
-    var hadFocus = prevInput === document.activeElement;
+    if (chatSig !== code || !els.body.querySelector("#chat-input")) buildChatShell(code);
 
-    var html = '<div class="friend-row" style="flex-direction:column; align-items:stretch; margin-bottom:8px;">' +
+    var head = els.body.querySelector("#chat-head");
+    head.innerHTML = '<div class="friend-row" style="flex-direction:column; align-items:stretch; margin-bottom:8px;">' +
       '<div style="display:flex; align-items:center;">' +
       '<button class="btn" id="fp-back" style="padding:4px 8px;">←</button>&nbsp;' +
       '<span class="dot ' + (online ? "online" : "") + '"></span>' + code +
       "</div>" + friendStatusLine(code) +
-      "</div>" +
-      '<div class="chat-window"><div class="chat-log" id="chat-log"></div>' +
-      '<div class="chat-input-row"><input id="chat-input" data-i18n-placeholder="friends.chatPlaceholder" placeholder="Type a message...">' +
-      '<button class="btn btn-primary" id="chat-send" data-i18n="friends.send">Send</button></div></div>';
-    els.body.innerHTML = html;
-    els.body.className = "fp-body chat-mode";
+      "</div>";
+    translateIn(head);
 
-    var logEl = els.body.querySelector("#chat-log");
-    log.forEach(function (m) {
-      var d = document.createElement("div");
-      d.className = "chat-msg" + (m.from === "me" ? " me" : "");
-      d.textContent = m.text;
-      logEl.appendChild(d);
-    });
-    logEl.scrollTop = logEl.scrollHeight;
-
-    if (window.ArcadeI18n) {
-      els.body.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t(el.getAttribute("data-i18n")); });
-      els.body.querySelectorAll("[data-i18n-placeholder]").forEach(function (el) { el.setAttribute("placeholder", t(el.getAttribute("data-i18n-placeholder"))); });
-    }
-
-    els.body.querySelector("#fp-back").addEventListener("click", function () {
+    head.querySelector("#fp-back").addEventListener("click", function () {
       activeChatWith = null;
+      chatSig = null;
       renderPanel();
     });
-    els.body.querySelectorAll('[data-action="retry"]').forEach(function (btn) {
+    head.querySelectorAll('[data-action="retry"]').forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         delete connections[code];
@@ -468,19 +562,18 @@
         renderChat(code);
       });
     });
-    var input = els.body.querySelector("#chat-input");
-    if (preservedValue) {
-      input.value = preservedValue;
-      if (hadFocus) input.focus();
-    }
-    function doSend() {
-      var text = input.value.trim();
-      if (!text) return;
-      sendChat(code, text);
-      input.value = "";
-    }
-    els.body.querySelector("#chat-send").addEventListener("click", doSend);
-    input.addEventListener("keydown", function (e) { if (e.key === "Enter") doSend(); });
+
+    var logEl = els.body.querySelector("#chat-log");
+    var atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+    logEl.innerHTML = "";
+    loadChat(code).forEach(function (m) {
+      var d = document.createElement("div");
+      d.className = "chat-msg" + (m.from === "me" ? " me" : "");
+      d.textContent = m.text;
+      logEl.appendChild(d);
+    });
+    // Don't yank the view to the bottom if they've scrolled up to read.
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
   }
 
   function initPeer() {

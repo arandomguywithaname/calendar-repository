@@ -520,6 +520,17 @@ select, button, input {
   gap: 8px;
 }
 
+/* The body is split into banner / text-boxes / friend-list regions so the
+   auto-refresh can redraw the volatile ones without touching the inputs.
+   Each region carries the same column spacing the body used to apply. */
+#friends-panel .fp-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#friends-panel .fp-sec:empty { display: none; }
+
 #friends-panel .fp-add {
   display: flex;
   gap: 6px;
@@ -533,6 +544,15 @@ select, button, input {
   border-radius: 8px;
   padding: 7px 8px;
   color: var(--text);
+}
+
+/* iOS Safari zooms the whole page in whenever you focus an input that
+   renders below 16px, and never zooms back out - which made the panel jump
+   and go half off-screen the moment you tapped the friend-code box. */
+#friends-panel input,
+.chat-input-row input,
+.search-box {
+  font-size: 16px;
 }
 
 .friend-row {
