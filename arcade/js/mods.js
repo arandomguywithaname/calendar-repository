@@ -9,6 +9,8 @@
    Nothing here is written to storage on purpose. Refresh = back to normal. */
 (function () {
   var speed = 1;            // 1 = normal, 2 = double, 0.5 = half
+  var paused = false;       // freeze without killing the loop
+  var scale = 1;            // visual zoom of the play area
   var swaps = {};           // "🐔" -> "🥚" applied to canvas + DOM text
   var colorOverrides = {};  // css var name -> value
   var styleEl = null;
@@ -32,6 +34,7 @@
       // (the old approach) turned anything under 1.5x into no change at all.
       // The counter lives on the callback so it survives the game
       // re-registering the same loop function every frame.
+      if (paused) { origRAF(tick); return; }
       cb.__arcAcc = (cb.__arcAcc || 0) + speed;
       var reps = Math.floor(cb.__arcAcc);
       cb.__arcAcc -= reps;
@@ -61,6 +64,7 @@
     var handle = { stopped: false };
     function loop() {
       if (handle.stopped) return;
+      if (paused) { handle.id = setTimeout(loop, 60); return; }
       try { fn(); } catch (e) {}
       if (!handle.stopped) handle.id = setTimeout(loop, scaled());
     }
@@ -74,6 +78,14 @@
     if (h && typeof h === "object" && "id" in h) { h.stopped = true; clearTimeout(h.id); return; }
     return origClearInterval(h);
   };
+
+  function setPaused(v) { paused = !!v; return paused; }
+
+  function setScale(v) {
+    scale = Math.max(0.5, Math.min(2.2, v));
+    writeStyle();
+    return scale;
+  }
 
   function setSpeed(v) {
     speed = Math.max(0.1, Math.min(6, v));
@@ -169,7 +181,12 @@
     // variables alone never touch the part the player is actually looking
     // at. A filter on the canvas itself is what makes a colour change
     // visible inside the game.
-    if (tintCss) css += "canvas,.grid-board,#board{filter:" + tintCss + ";}";
+    var rules = [];
+    if (tintCss) rules.push("filter:" + tintCss);
+    // Games map pointer coords through getBoundingClientRect, which already
+    // accounts for a CSS transform, so scaling stays click-accurate.
+    if (scale !== 1) rules.push("transform:scale(" + scale + ");transform-origin:center center");
+    if (rules.length) css += "canvas,.grid-board,#board{" + rules.join(";") + ";}";
     styleEl.textContent = css;
   }
 
@@ -233,6 +250,8 @@
 
   function resetAll() {
     speed = 1;
+    paused = false;
+    scale = 1;
     swaps = {};
     colorOverrides = {};
     tintCss = "";
@@ -248,9 +267,13 @@
   }
 
   window.ArcadeMods = {
-    VERSION: "v10",
+    VERSION: "v11",
     setSpeed: setSpeed,
     getSpeed: function () { return speed; },
+    setPaused: setPaused,
+    isPaused: function () { return paused; },
+    setScale: setScale,
+    getScale: function () { return scale; },
     addSwap: addSwap,
     getSwaps: function () { return swaps; },
     setColor: setColor,
