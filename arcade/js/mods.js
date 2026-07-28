@@ -248,6 +248,7 @@
   }
 
   window.ArcadeMods = {
+    VERSION: "v10",
     setSpeed: setSpeed,
     getSpeed: function () { return speed; },
     addSwap: addSwap,

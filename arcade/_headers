@@ -1,0 +1,18 @@
+# Netlify cache rules.
+# HTML must never be cached, or a new deploy keeps showing the old page and
+# the old ?v= asset links with it. The JS/CSS URLs carry ?v=N, so when the
+# HTML is fresh the browser is forced to fetch new asset URLs anyway.
+/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/js/*
+  Cache-Control: public, max-age=300
+
+/css/*
+  Cache-Control: public, max-age=300
+
+/i18n/*
+  Cache-Control: public, max-age=300

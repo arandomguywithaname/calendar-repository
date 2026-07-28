@@ -28,7 +28,10 @@
 
   function siteAllowed() {
     var h = (location.hostname || "").toLowerCase();
-    return ALLOWED_HOSTS.indexOf(h) !== -1;
+    if (ALLOWED_HOSTS.indexOf(h) !== -1) return true;
+    // Netlify Drop gives a new random *.netlify.app name on every fresh
+    // drop; allow those too rather than mysteriously vanishing.
+    return /\.netlify\.app$/.test(h);
   }
 
   var unlocked = false;
@@ -75,7 +78,7 @@
   function ensureRegistry(cb) {
     if (window.ARCADE_GAMES) return cb();
     var s = document.createElement("script");
-    s.src = rootPath() + "js/registry.js";
+    s.src = rootPath() + "js/registry.js?v=10";
     s.onload = cb;
     s.onerror = cb;
     document.head.appendChild(s);
@@ -214,6 +217,9 @@
         return '<button class="chip ai-ex">' + esc(ex) + '</button>';
       }).join('') + '</div>';
     h += '<div class="ai-active" id="ai-active"></div>';
+    h += '<div class="ai-active"><b>Engine ' + (window.ArcadeMods ? window.ArcadeMods.VERSION : '(not loaded!)') +
+      '</b> &nbsp;<button class="btn adm-mini" id="ai-selftest">Run self-test</button> ' +
+      '<span id="ai-selftest-out"></span></div>';
     return h;
   }
 
@@ -250,6 +256,35 @@
     d.textContent = text;
     log.appendChild(d);
     log.scrollTop = log.scrollHeight;
+  }
+
+  function runSelfTest() {
+    var out = document.getElementById('ai-selftest-out');
+    var lines = [];
+    if (!window.ArcadeMods) {
+      out.innerHTML = '<span style="color:var(--danger)">FAILED: the mod engine did not load. ' +
+        'Your browser is probably showing a cached old copy — hard-refresh the page ' +
+        '(Ctrl+Shift+R, or Cmd+Shift+R on a Mac).</span>';
+      return;
+    }
+    // Speed: set a fractional rate and read it back.
+    window.ArcadeMods.setSpeed(1.25);
+    lines.push((window.ArcadeMods.getSpeed() === 1.25 ? 'PASS' : 'FAIL') + ' fractional speed');
+    window.ArcadeMods.setSpeed(1);
+    // Tint: apply and confirm the canvas really carries a filter.
+    window.ArcadeMods.setTint('hue-rotate(90deg)');
+    var cv = document.querySelector('canvas');
+    var f = cv ? getComputedStyle(cv).filter : '';
+    lines.push((!cv ? 'SKIP (no canvas on this page)' : (f && f !== 'none' ? 'PASS' : 'FAIL')) + ' colour tint');
+    window.ArcadeMods.setTint('');
+    // Swap plumbing.
+    window.ArcadeMods.addSwap('\u2764\ufe0f', '\u2b50');
+    lines.push((window.ArcadeMods.getSwaps()['\u2764\ufe0f'] === '\u2b50' ? 'PASS' : 'FAIL') + ' picture swap');
+    window.ArcadeMods.resetAll();
+    var bad = lines.filter(function (l) { return l.indexOf('FAIL') === 0; }).length;
+    out.innerHTML = '<span style="color:' + (bad ? 'var(--danger)' : 'var(--good)') + '">' +
+      lines.join(' · ') + (bad ? '' : ' — engine is live ✓') + '</span>';
+    renderActiveMods();
   }
 
   function aiSubmit(value) {
@@ -297,6 +332,7 @@
       body.querySelectorAll(".ai-ex").forEach(function (b) {
         b.addEventListener("click", function () { aiSubmit(b.textContent); });
       });
+      if (byId("ai-selftest")) byId("ai-selftest").addEventListener("click", runSelfTest);
       renderActiveMods();
       if (!byId("ai-log").children.length) {
         aiSay("bot", "Hi Tim! Tell me what to change — try one of the buttons below, " +
