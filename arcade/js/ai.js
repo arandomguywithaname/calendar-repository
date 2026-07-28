@@ -39,6 +39,13 @@
     lime: "#b6ff00", gold: "#ffab00", teal: "#00c2ff"
   };
 
+  // Approximate hue of each colour, used to rotate the canvas towards it.
+  var HUE = {
+    red: 0, orange: 25, gold: 40, yellow: 50, lime: 80, green: 120,
+    teal: 175, cyan: 175, blue: 210, purple: 275, pink: 330,
+    white: 0, black: 0, grey: 0, gray: 0
+  };
+
   var THEME_WORDS = {
     dark: "dark", night: "dark", light: "light", day: "light", bright: "light",
     green: "matrix", matrix: "matrix", hacker: "matrix",
@@ -111,10 +118,16 @@
     var to = findEmoji(m[2]);
     if (!from || !to) return null;
     if (from === to) return { ok: true, msg: "Those are already the same picture!" };
+    var present = window.ArcadeMods.isOnPage(from);
     window.ArcadeMods.addSwap(from, to);
     window.ArcadeMods.note(from + " -> " + to);
-    return { ok: true, msg: "Swapped " + from + " for " + to + " everywhere on this page." +
-      (isGamePage() ? "" : " (It'll show up inside games that use it.)") };
+    if (!present) {
+      // Don't claim a change the player will never see.
+      return { ok: true, msg: "Set up " + from + " → " + to + ", but I can't see any " +
+        from + " on this page, so nothing will look different here. Try it on a game " +
+        "that actually uses " + from + "." };
+    }
+    return { ok: true, msg: "Swapped " + from + " for " + to + " — look at the game!" };
   }
 
   function tryColor(t, raw) {
@@ -124,18 +137,28 @@
       if (new RegExp("\\b" + c + "\\b").test(t)) found = c;
     });
     if (!found) return null;
+    // Games paint hard-coded colours straight onto the canvas, so changing
+    // CSS variables alone leaves the actual game looking identical. Tinting
+    // the canvas is what the player actually sees change.
+    var rot = (HUE[found] - 300 + 360) % 360;
+    var filter = found === "black" ? "brightness(0.35)"
+      : found === "white" ? "brightness(1.6) saturate(0.4)"
+      : (found === "grey" || found === "gray") ? "grayscale(1)"
+      : "hue-rotate(" + rot + "deg) saturate(1.35)";
+    window.ArcadeMods.setTint(filter);
+
     var bg = /\b(background|behind|back)\b/.test(t);
     if (bg) {
       window.ArcadeMods.setColor("--bg", COLORS[found]);
       window.ArcadeMods.setColor("--bg-alt", COLORS[found]);
-      window.ArcadeMods.note("background " + found);
-      return { ok: true, msg: "Background is now " + found + "." };
+    } else {
+      window.ArcadeMods.setColor("--accent", COLORS[found]);
+      window.ArcadeMods.setColor("--accent-2", COLORS[found]);
+      window.ArcadeMods.setColor("--accent-3", COLORS[found]);
     }
-    window.ArcadeMods.setColor("--accent", COLORS[found]);
-    window.ArcadeMods.setColor("--accent-2", COLORS[found]);
-    window.ArcadeMods.setColor("--accent-3", COLORS[found]);
-    window.ArcadeMods.note("accent " + found);
-    return { ok: true, msg: "Made the bright colours " + found + "." };
+    window.ArcadeMods.note((bg ? "background " : "colour ") + found);
+    return { ok: true, msg: "Everything is " + found + " now" +
+      (isGamePage() ? " — including the game itself." : ". Open a game to see it there too.") };
   }
 
   function tryTheme(t) {

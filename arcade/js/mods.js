@@ -26,24 +26,28 @@
     // or each replay would fork a new chain and multiply forever.
     if (swallowing) return -1;
 
-    var frames = 0;
     function tick(t) {
-      if (speed >= 1) {
-        var reps = Math.max(1, Math.round(speed));
-        for (var i = 0; i < reps; i++) {
-          // Every repeat except the last is swallowed, so exactly one new
-          // frame gets queued no matter how many times we advance the game.
-          swallowing = (i < reps - 1);
-          try { cb(t); } catch (e) { swallowing = false; throw e; }
-          swallowing = false;
-        }
-      } else {
-        // Slow motion: keep the rAF chain alive ourselves on skipped frames,
-        // otherwise the game never re-queues and the loop dies.
-        var every = Math.max(1, Math.round(1 / Math.max(0.05, speed)));
-        frames++;
-        if (frames % every === 0) cb(t);
-        else origRAF(tick);
+      // Fractional speeds need an accumulator, not rounding: at 1.25x we
+      // advance one step on most frames and two on every fourth. Rounding
+      // (the old approach) turned anything under 1.5x into no change at all.
+      // The counter lives on the callback so it survives the game
+      // re-registering the same loop function every frame.
+      cb.__arcAcc = (cb.__arcAcc || 0) + speed;
+      var reps = Math.floor(cb.__arcAcc);
+      cb.__arcAcc -= reps;
+
+      if (reps <= 0) {
+        // Slow motion: keep our own chain alive on skipped frames, or the
+        // game never re-queues and the loop dies.
+        origRAF(tick);
+        return;
+      }
+      for (var i = 0; i < reps; i++) {
+        // Every repeat except the last is swallowed, so exactly one new
+        // frame gets queued no matter how many times we advance the game.
+        swallowing = (i < reps - 1);
+        try { cb(t); } catch (e) { swallowing = false; throw e; }
+        swallowing = false;
       }
     }
     return origRAF(tick);
@@ -80,10 +84,17 @@
 
   var origFillText = CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText = function (text) {
-    var t = applySwaps(String(text));
+    var raw = String(text);
+    noteCanvasText(raw);
     var args = Array.prototype.slice.call(arguments);
-    args[0] = t;
+    args[0] = applySwaps(raw);
     return origFillText.apply(this, args);
+  };
+  var origStrokeText = CanvasRenderingContext2D.prototype.strokeText;
+  CanvasRenderingContext2D.prototype.strokeText = function (text) {
+    var args = Array.prototype.slice.call(arguments);
+    args[0] = applySwaps(String(text));
+    return origStrokeText.apply(this, args);
   };
 
   function applySwaps(s) {
@@ -118,10 +129,34 @@
     sweepDom();
   }
 
+  // Is this emoji actually drawn anywhere on this page? Used so the AI can
+  // say "there's no chicken on this page" instead of claiming a success the
+  // player will never see. Canvas text is recorded as the game draws it.
+  var seenOnCanvas = {};
+  function noteCanvasText(s) {
+    for (var i = 0; i < s.length; i++) {
+      var code = s.codePointAt(i);
+      if (code > 126) {
+        var ch = String.fromCodePoint(code);
+        seenOnCanvas[ch] = true;
+        if (code > 0xffff) i++;
+      }
+    }
+  }
+  function isOnPage(emoji) {
+    if (seenOnCanvas[emoji]) return true;
+    try {
+      if (document.body.innerText.indexOf(emoji) !== -1) return true;
+    } catch (e) {}
+    // The emoji may simply not have been drawn yet this frame.
+    return false;
+  }
+
   // ---------- colors ----------
 
-  function setColor(varName, value) {
-    colorOverrides[varName] = value;
+  var tintCss = "";
+
+  function writeStyle() {
     if (!styleEl) {
       styleEl = document.createElement("style");
       styleEl.id = "arc-mod-style";
@@ -129,7 +164,23 @@
     }
     var css = ":root{";
     Object.keys(colorOverrides).forEach(function (k) { css += k + ":" + colorOverrides[k] + " !important;"; });
-    styleEl.textContent = css + "}";
+    css += "}";
+    // Games paint their own hard-coded colours onto the canvas, so CSS
+    // variables alone never touch the part the player is actually looking
+    // at. A filter on the canvas itself is what makes a colour change
+    // visible inside the game.
+    if (tintCss) css += "canvas,.grid-board,#board{filter:" + tintCss + ";}";
+    styleEl.textContent = css;
+  }
+
+  function setColor(varName, value) {
+    colorOverrides[varName] = value;
+    writeStyle();
+  }
+
+  function setTint(css) {
+    tintCss = css;
+    writeStyle();
   }
 
   // ---------- hotkeys ----------
@@ -184,6 +235,7 @@
     speed = 1;
     swaps = {};
     colorOverrides = {};
+    tintCss = "";
     if (styleEl) { styleEl.textContent = ""; }
     hotkeys = [];
     history = [];
@@ -202,6 +254,9 @@
     getSwaps: function () { return swaps; },
     setColor: setColor,
     getColors: function () { return colorOverrides; },
+    setTint: setTint,
+    getTint: function () { return tintCss; },
+    isOnPage: isOnPage,
     addHotkey: addHotkey,
     getHotkeys: function () { return hotkeys; },
     actions: ACTIONS,
