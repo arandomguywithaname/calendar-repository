@@ -54,13 +54,22 @@
     orange: "#ff8c1a", purple: "#b14aff", pink: "#ff5da2", cyan: "#29e0c9",
     white: "#ffffff", black: "#05070f", grey: "#8a90ad", gray: "#8a90ad",
     lime: "#b6ff00", gold: "#ffab00", teal: "#00c2ff", violet: "#b14aff",
-    magenta: "#ff2e97", turquoise: "#29e0c9"
+    magenta: "#ff2e97", turquoise: "#29e0c9",
+    crimson: "#dc143c", scarlet: "#ff2400", ruby: "#e0115f", maroon: "#800000",
+    navy: "#001f7a", aqua: "#00ffff", emerald: "#00c957", mint: "#98ff98",
+    olive: "#808000", indigo: "#4b0082", lavender: "#c9a7ff",
+    coral: "#ff7f50", salmon: "#fa8072", peachy: "#ffb07c", tan: "#d2b48c",
+    beige: "#f5f5dc", silver: "#c0c0c0", bronze: "#cd7f32", rose: "#ff66a3"
   };
 
   var HUE = {
     red: 0, orange: 25, gold: 40, yellow: 50, lime: 80, green: 120,
     teal: 175, cyan: 175, turquoise: 175, blue: 210, purple: 275,
-    violet: 275, magenta: 315, pink: 330, white: 0, black: 0, grey: 0, gray: 0
+    violet: 275, magenta: 315, pink: 330, white: 0, black: 0, grey: 0, gray: 0,
+    crimson: 348, scarlet: 8, ruby: 337, maroon: 0, navy: 225, aqua: 180,
+    emerald: 145, mint: 150, olive: 60, indigo: 275, lavender: 270,
+    coral: 16, salmon: 6, peachy: 25, tan: 34, beige: 60, silver: 0,
+    bronze: 30, rose: 340
   };
 
   var THEME_WORDS = {
@@ -176,18 +185,12 @@
 
   // ---------- intents ----------
 
-  function tryReset(t) {
-    if (!hasWord(t, ["reset", "undo", "revert", "normal"]) &&
-        !/back to normal|start over|clear changes|undo everything/.test(t)) return null;
+  function doReset() {
     window.ArcadeMods.resetAll();
     return { ok: true, msg: "Done — everything is back to normal." };
   }
 
-  function tryHelp(t, raw) {
-    var r = String(raw || "").toLowerCase();
-    if (!hasWord(t, ["help", "commands", "examples"]) &&
-        !/what (can|do) (you )?(do|change)|how do i|what do i (type|say)|what else|list/.test(t) &&
-        !/what can you do|what do you do|what can i (say|type|ask)/.test(r)) return null;
+  function doHelp() {
     return { ok: true, msg:
       "Type it however you like — these all work:\n" +
       "• \"make the ball go way faster\"  \"slow snake down a bit\"  \"3x speed\"\n" +
@@ -200,21 +203,18 @@
       "• \"reset\" undoes everything. So does refreshing." };
   }
 
-  function tryPause(t) {
-    var stop = hasWord(t, ["pause", "freeze", "stop", "hold"]);
+  function doPause(t) {
     var go = hasWord(t, ["unpause", "resume", "unfreeze", "continue", "unstop"]) ||
       /start again|keep going|carry on/.test(t);
-    if (!stop && !go) return null;
     if (go) { window.ArcadeMods.setPaused(false); return { ok: true, msg: "Running again." }; }
     window.ArcadeMods.setPaused(true);
     window.ArcadeMods.note("paused");
     return { ok: true, msg: "Frozen. Say \"unpause\" to start it moving again." };
   }
 
-  function trySize(t) {
-    var big = hasWord(t, ["bigger", "larger", "huge", "enlarge", "zoom"]) || /zoom in|scale up|blow up/.test(t);
-    var small = hasWord(t, ["smaller", "tinier", "shrink", "tiny"]) || /zoom out|scale down/.test(t);
-    if (!big && !small) return null;
+  function doSize(t) {
+    var small = hasWord(t, ["smaller", "tinier", "shrink", "tiny", "minuscule"]) || /zoom out|scale down/.test(t);
+    var big = !small;
     if (/zoom out/.test(t)) { big = false; small = true; }
     var step = hasWord(t, ["bit", "little", "slightly"]) ? 1.15 : 1.35;
     var cur = window.ArcadeMods.getScale();
@@ -224,13 +224,25 @@
       Math.round(applied * 100) + "% size." + seeIt() };
   }
 
-  function tryEffect(t) {
+  function doEffect(t) {
     var f = null, name = "";
-    if (/black and white|greyscale|grayscale|no colou?r/.test(t)) { f = "grayscale(1)"; name = "black and white"; }
-    else if (hasExact(t, ["invert", "inverted", "negative", "opposite"])) { f = "invert(1)"; name = "inverted"; }
+    if (/black and white|no colou?r/.test(t) ||
+        hasExact(t, ["greyscale", "grayscale", "monochrome", "colourless", "colorless"])) {
+      f = "grayscale(1)"; name = "black and white";
+    }
+    else if (hasExact(t, ["invert", "inverted", "negative", "opposite", "flip", "reverse", "flipped", "reversed"])) {
+      f = "invert(1)"; name = "inverted";
+    }
     else if (hasExact(t, ["blurry", "blur", "fuzzy"])) { f = "blur(2px)"; name = "blurry"; }
-    else if (hasWord(t, ["brighter", "brighten"])) { f = "brightness(1.5)"; name = "brighter"; }
-    else if (hasWord(t, ["darker", "darken", "dimmer", "dim"])) { f = "brightness(0.5)"; name = "darker"; }
+    else if (/wash(ed)? out/.test(t) || hasExact(t, ["desaturate", "desaturated", "faded", "pale", "washed"])) {
+      f = "saturate(0.25)"; name = "washed out";
+    }
+    else if (hasWord(t, ["brighter", "brighten", "brightness"]) || /crank|light(en| it) up/.test(t)) {
+      f = "brightness(1.5)"; name = "brighter";
+    }
+    else if (hasWord(t, ["darker", "darken", "dimmer", "gloomy", "murky"]) || hasExact(t, ["dim"])) {
+      f = "brightness(0.5)"; name = "darker";
+    }
     else if (hasWord(t, ["rainbow", "psychedelic", "trippy"])) { f = "hue-rotate(120deg) saturate(2.2) contrast(1.2)"; name = "rainbow-ish"; }
     if (!f) return null;
     window.ArcadeMods.setTint(f);
@@ -238,12 +250,16 @@
     return { ok: true, msg: "Made it " + name + "." + seeIt() };
   }
 
-  function tryTheme(t) {
-    if (!hasWord(t, ["theme", "mode", "skin", "style", "look"])) return null;
+  function themePick(t) {
     var pick = null;
     Object.keys(THEME_WORDS).forEach(function (w) {
       if (new RegExp("\\b" + w + "\\b").test(t)) pick = THEME_WORDS[w];
     });
+    return pick;
+  }
+
+  function doTheme(t) {
+    var pick = themePick(t);
     if (!pick) return null;
     var applied = window.ArcadeCommon.setTheme(pick);
     window.ArcadeMods.note("theme " + applied.id);
@@ -251,17 +267,46 @@
       " (themes stay after a refresh)." };
   }
 
-  function trySwap(t, raw) {
+  function swapPair(raw) {
+    var r = String(raw);
     var m =
-      /(?:change|swap|turn|replace|make|put|use)\s+(?:the\s+|a\s+|an\s+|some\s+)?(.+?)\s+(?:in ?to|into|to be|to|with|for|as)\s+(?:the\s+|a\s+|an\s+|some\s+)?([^\s,]+)/i.exec(raw) ||
-      /instead of\s+(?:the\s+|a\s+|an\s+)?([a-z]+)[,\s]+(?:you can\s+)?(?:use|put|show|have|do|make it|maybe)?\s*(?:the\s+|a\s+|an\s+)?([^\s,]+)/i.exec(raw) ||
-      /(?:no more|get rid of)\s+(?:the\s+)?([a-z]+)[,\s]+(?:use|put|show)?\s*(?:the\s+|a\s+|an\s+)?([^\s,]+)/i.exec(raw) ||
-      // "make the bird a pizza" - no connector word at all
-      /(?:make|turn)\s+(?:the\s+|a\s+)?([a-z]+)\s+(?:in\s*to\s+)?(?:a|an)\s+([a-z]+)/i.exec(raw);
-    if (!m) return null;
-    var from = findEmoji(m[1]);
-    var to = findEmoji(m[2]);
-    if (!from || !to) return null;
+      // change/swap/turn/replace/make X (in)to/with/for Y
+      /(?:change|swap|turn|replace|make|put|use|switch|substitute)\s+(?:the\s+|a\s+|an\s+|some\s+|that\s+|this\s+)?([a-z]+)\s*(?:out\s+)?(?:in ?to|into|to be|to|with|for|as)\s+(?:the\s+|a\s+|an\s+|some\s+)?([^\s,.!?]+)/i.exec(r) ||
+      // instead of X (use/put/show) Y
+      /instead of\s+(?:the\s+|a\s+|an\s+)?([a-z]+)[,\s]+(?:you can\s+)?(?:use|put|show|have|do|make it|maybe)?\s*(?:the\s+|a\s+|an\s+)?([^\s,.!?]+)/i.exec(r) ||
+      // no more X, use Y
+      /(?:no more|get rid of)\s+(?:the\s+)?([a-z]+)[,\s]+(?:use|put|show)?\s*(?:the\s+|a\s+|an\s+)?([^\s,.!?]+)/i.exec(r) ||
+      // X should/ought to be a Y
+      /(?:the\s+|a\s+)?([a-z]+)\s+(?:should|ought to|needs to|has to|must)\s+be\s+(?:a\s+|an\s+|the\s+)?([^\s,.!?]+)/i.exec(r) ||
+      // make the X a Y   (no connector word at all)
+      /(?:make|turn)\s+(?:the\s+|a\s+)?([a-z]+)\s+(?:in\s*to\s+)?(?:a|an)\s+([a-z]+)/i.exec(r);
+    if (m) {
+      var from = findEmoji(m[1]), to = findEmoji(m[2]);
+      if (from && to) return { from: from, to: to };
+    }
+    // Reversed wording: "put a shark where the bird is/was"
+    var rev = /(?:put|use|show|place)\s+(?:a\s+|an\s+|the\s+)?([a-z]+)\s+(?:where|in place of|instead of)\s+(?:the\s+|a\s+|an\s+)?([a-z]+)/i.exec(r);
+    if (rev) {
+      var to2 = findEmoji(rev[1]), from2 = findEmoji(rev[2]);
+      if (from2 && to2) return { from: from2, to: to2 };
+    }
+    return null;
+  }
+
+  function doSwap(t, raw) {
+    var pair = swapPair(raw);
+    if (!pair) {
+      // "I'd rather see a crown" names what they want but not what to
+      // replace - asking is more use than refusing.
+      var words = String(raw).toLowerCase().split(/[^a-z]+/).filter(Boolean);
+      for (var i = words.length - 1; i >= 0; i--) {
+        var e = EMOJI[words[i]];
+        if (e) return { ok: true, msg: "Which picture should become " + e +
+          "? Try \"change the bird into " + words[i] + "\"." };
+      }
+      return null;
+    }
+    var from = pair.from, to = pair.to;
     if (from === to) return { ok: true, msg: "Those are the same picture already!" };
     var present = window.ArcadeMods.isOnPage(from);
     window.ArcadeMods.addSwap(from, to);
@@ -273,14 +318,10 @@
     return { ok: true, msg: "Swapped " + from + " for " + to + " — look at the game!" };
   }
 
-  function trySpeed(t) {
-    var faster = hasWord(t, ["faster", "quicker", "fast", "quick", "speedy", "zoom", "rapid", "hyper"]) ||
-      /speed (it |the \w+ )?up|speed up|more speed|go faster/.test(t);
-    var slower = hasWord(t, ["slower", "slow", "sluggish", "slowmo"]) ||
-      /slow (it|the \w+|down)|slow down|less speed|slo-?mo/.test(t);
-    if (/zoom (in|out)/.test(t)) return null; // that's a size request
-    if (!faster && !slower) return null;
-    if (faster && slower) faster = !/slow/.test(t.split(" ")[0]);
+  function doSpeed(t) {
+    var slower = hasWord(t, ["slower", "slow", "sluggish", "slowmo", "crawl", "snail"]) ||
+      /slow (it|the \w+|down)|less speed|slo-?mo/.test(t);
+    var faster = !slower;
     var amt = amountFrom(t);
     var cur = window.ArcadeMods.getSpeed();
     var applied = window.ArcadeMods.setSpeed(faster ? cur * amt : cur / amt);
@@ -289,14 +330,10 @@
       applied.toFixed(2) + "x normal speed." + seeIt() };
   }
 
-  function tryColor(t) {
+  function doColour(t) {
+    // The scorer already decided this is a colour request; all we need is a
+    // colour word to act on.
     var found = findColor(t);
-    var keyworded = hasWord(t, ["colour", "color", "background", "paint", "tint"]) ||
-      /make (it|everything|them)|turn (it|everything|them)/.test(t);
-    // A colour word plus something meaning "the whole thing" is enough:
-    // "everything to be green", "all green", "green screen".
-    var scoped = found && /\b(everything|all|it|screen|game|whole|board)\b/.test(t);
-    if (!keyworded && !scoped) return null;
     if (!found) return null;
     var rot = (HUE[found] - 300 + 360) % 360;
     var filter = found === "black" ? "brightness(0.35)"
@@ -316,10 +353,8 @@
     return { ok: true, msg: "Everything's " + found + " now." + seeIt() };
   }
 
-  function tryHotkey(t, raw) {
-    var tight = raw.toLowerCase().replace(/\s*\+\s*/g, "+");
-    var hasCombo = /((?:command|control|ctrl|cmd|shift|alt|option)\+)+[a-z0-9]\b/.test(tight);
-    if (!hasCombo && !hasWord(t, ["press", "click", "hit", "push", "shortcut", "key", "button", "command"])) return null;
+  function doHotkey(t, raw) {
+    var tight = String(raw).toLowerCase().replace(/\s*\+\s*/g, "+");
     var combo = /((?:command|control|ctrl|cmd|shift|alt|option)\+)+[a-z0-9]\b/.exec(tight);
     if (!combo) {
       if (/\b(press|hit|push)\s+(?:the\s+)?['"]?([a-z0-9])['"]?\b/.test(tight)) {
@@ -353,7 +388,7 @@
       window.ArcadeMods.actions[spec.action].label + "." };
   }
 
-  function tryQuestion(t) {
+  function doQuestion(t) {
     if (/my (friend )?code|what.*my code/.test(t)) {
       return { ok: true, msg: "Your friend code is " +
         (window.ArcadeFriends ? window.ArcadeFriends.myCode() : "(not loaded)") + "." };
@@ -367,47 +402,176 @@
     return null;
   }
 
-  var HANDLERS = [tryReset, tryHelp, tryQuestion, tryPause, tryTheme, trySwap,
-    trySize, tryEffect, trySpeed, tryColor, tryHotkey];
+  // ---------- intent scoring ----------
+  //
+  // Rather than requiring set phrases, every intent declares words that
+  // point towards it. Any of those words, anywhere in the sentence, in any
+  // order, adds to that intent's score; the slots found (a colour, a key
+  // combo, two swappable pictures) add more. The highest scorer wins. That
+  // is what lets unseen phrasings work instead of only the ones written as
+  // patterns - "quicker" means speed whether you say "go quicker",
+  // "quicker please" or "why is this not quicker".
+
+  var CUES = {
+    speed: { faster: 4, quicker: 4, slower: 4, fast: 3, quick: 3, slow: 3,
+      speed: 3, speedy: 3, rapid: 3, hyper: 3, sluggish: 4, slowmo: 4,
+      zoomy: 2, accelerate: 4, hurry: 3, crawl: 3, snail: 3, lightning: 2,
+      turbo: 4, sonic: 2, pace: 2, tempo: 2, snappier: 4, snappy: 4,
+      zippy: 4, nippy: 3, brisk: 3, swift: 3, speedier: 4, laggy: 3,
+      lagging: 3, dragging: 3, plodding: 3, breakneck: 4, blazing: 3,
+      frantic: 3, gentler: 3, calmer: 3, relaxed: 2, leisurely: 3 },
+    size: { bigger: 4, larger: 4, huge: 4, enlarge: 4, smaller: 4, tinier: 4,
+      shrink: 4, tiny: 3, big: 3, small: 3, size: 3, giant: 4, massive: 4,
+      minuscule: 3, scale: 3, chunkier: 4, wider: 3, zoom: 3, magnify: 4,
+      expand: 4, grow: 3, stretch: 3, compact: 3, shrunk: 4, oversized: 4 },
+    pause: { pause: 5, freeze: 5, unpause: 6, resume: 5, unfreeze: 6,
+      frozen: 4, stop: 3, halt: 4, wait: 3, continue: 4, hold: 3,
+      chill: 3, standby: 3, suspend: 4, restart: 2, unhold: 4, going: 2 },
+    effect: { invert: 5, inverted: 5, negative: 3, greyscale: 5, grayscale: 5,
+      blur: 5, blurry: 5, fuzzy: 4, brighter: 4, brighten: 4, darker: 4,
+      darken: 4, dim: 3, rainbow: 5, psychedelic: 5, trippy: 5, glow: 2,
+      brightness: 4, dimmer: 4, gloomy: 3, washed: 4, desaturate: 5,
+      desaturated: 5, faded: 4, pale: 3, monochrome: 5, colourless: 4,
+      colorless: 4, flip: 3, reverse: 3, opposite: 3, crank: 2, murky: 3 },
+    colour: { colour: 4, color: 4, background: 4, paint: 4, tint: 4,
+      colours: 4, colors: 4, backdrop: 3 },
+    theme: { theme: 5, skin: 4, mode: 2, style: 3, look: 2, hacker: 4,
+      matrix: 4, synthwave: 5, vaporwave: 5, ocean: 4, amber: 4, grape: 4,
+      retro: 4, neon: 3 },
+    swap: { instead: 5, replace: 5, swap: 5, change: 3, turn: 2, become: 4,
+      becomes: 4, into: 3, rather: 4, ought: 3, should: 2, where: 2,
+      substitute: 5, switch: 3, exchange: 4 },
+    hotkey: { press: 4, shortcut: 5, hotkey: 5, keybind: 5, hit: 2, push: 2,
+      click: 2, key: 3, button: 2, binding: 4 },
+    reset: { reset: 6, undo: 6, revert: 5, normal: 4, restore: 5, default: 4,
+      original: 4, unchanged: 3, scrap: 5, discard: 5, cancel: 4, wipe: 4,
+      forget: 4, ditch: 4, clear: 3, remove: 3, undoing: 5 },
+    help: { help: 6, commands: 5, examples: 4, options: 4, instructions: 4,
+      capabilities: 4, abilities: 4 }
+  };
+
+  var RUNNERS = {
+    speed: doSpeed, size: doSize, pause: doPause, effect: doEffect,
+    colour: doColour, theme: doTheme, swap: doSwap, hotkey: doHotkey,
+    reset: doReset, help: doHelp
+  };
+
+  // Order used to break ties, most specific first.
+  var PRIORITY = ["reset", "help", "pause", "hotkey", "swap", "theme",
+    "effect", "size", "colour", "speed"];
+
+  function scoreAll(t, raw) {
+    var words = t.split(/[^a-z0-9+]+/).filter(Boolean);
+    var scores = {};
+    Object.keys(CUES).forEach(function (intent) {
+      var total = 0, map = CUES[intent];
+      words.forEach(function (w) {
+        if (map[w]) { total += map[w]; return; }
+        // typo tolerance, but never for short words where it collides
+        Object.keys(map).forEach(function (cue) {
+          if (cue.length >= 5 && near(w, cue)) total += map[cue] - 1;
+        });
+      });
+      scores[intent] = total;
+    });
+
+    // Slot evidence - concrete things found in the sentence.
+    var slots = {
+      colour: findColor(t),
+      amount: /\d+\s*(x|times)/.test(t) || hasWord(t, ["double", "twice", "triple", "half"]),
+      combo: /((?:command|control|ctrl|cmd|shift|alt|option)\+)+[a-z0-9]\b/.test(
+        String(raw).toLowerCase().replace(/\s*\+\s*/g, "+")),
+      pair: swapPair(raw),
+      theme: themePick(t)
+    };
+    if (slots.colour) scores.colour += 4;
+    if (slots.combo) scores.hotkey += 6;
+    if (slots.pair) scores.swap += 7;
+    if (slots.theme) scores.theme += 3;
+    if (slots.amount) scores.speed += 2;
+
+    // Phrases that a single word can't capture.
+    if (/back to normal|start over|as (it |they )?w(as|ere)|all (my |the )?changes/.test(t)) scores.reset += 5;
+    if (/what (can|do|are)|how do i|what else|my options/.test(t)) scores.help += 5;
+    if (/black and white|no colou?r/.test(t)) scores.effect += 6;
+    if (/zoom (in|out)|scale (up|down)|blow (it |this |that )?up|too (small|big|tiny|large)/.test(t)) scores.size += 5;
+    if (/speed .*up|slow .*down|go (faster|slower)|too (slow|fast)/.test(t)) scores.speed += 4;
+    if (/keep going|carry on|run again|let it (run|go)|go on/.test(t)) scores.pause += 6;
+    if (/wash(ed)? out|flip .*colou?rs?|reverse .*colou?rs?/.test(t)) scores.effect += 5;
+    if (/make (it|everything|them|the \w+)|turn (it|everything|them)/.test(t)) {
+      if (slots.colour) scores.colour += 3;
+    }
+    // "make X a Y" is a swap even with no swap verb
+    if (slots.pair) scores.swap += 2;
+
+    return { scores: scores, slots: slots };
+  }
+
+  function best(t, raw) {
+    var res = scoreAll(t, raw);
+    var top = null, topScore = 0;
+    PRIORITY.forEach(function (id) {
+      if (res.scores[id] > topScore) { topScore = res.scores[id]; top = id; }
+    });
+    return { id: top, score: topScore, slots: res.slots };
+  }
 
   function runOne(raw) {
     var t = normalize(raw);
     if (!t) return null;
-    for (var i = 0; i < HANDLERS.length; i++) {
-      var res = HANDLERS[i](t, raw);
-      if (res) return res;
+    var q = doQuestion(t);
+    if (q) return q;
+    var pick = best(t, raw);
+    // Below this the sentence isn't really asking for anything we can do.
+    // 3 is deliberately low so a single clear word ("stop") or a typo'd one
+    // ("fastr", which scores one less than an exact hit) still counts;
+    // unrelated sentences score 0 because none of their words are cues.
+    if (!pick.id || pick.score < 3) return null;
+    var out = RUNNERS[pick.id](t, raw, pick.slots);
+    if (out) return out;
+    // Winner couldn't complete (e.g. "change" with no recognisable pictures):
+    // try the runners-up before giving up.
+    var ordered = PRIORITY.slice().sort(function (a, b) {
+      return (best(t, raw).slots, 0);
+    });
+    for (var i = 0; i < PRIORITY.length; i++) {
+      var id = PRIORITY[i];
+      if (id === pick.id) continue;
+      var sc = scoreAll(t, raw).scores[id];
+      if (sc >= 3) {
+        var alt = RUNNERS[id](t, raw, pick.slots);
+        if (alt) return alt;
+      }
     }
     return null;
   }
 
   // "make it faster and turn everything green" -> two instructions.
   function split(raw) {
-    var protectedPhrases = /black and white/gi;
     var holder = [];
-    var masked = String(raw).replace(protectedPhrases, function (m) {
-      holder.push(m); return " " + (holder.length - 1) + " ";
+    var masked = String(raw).replace(/black and white/gi, function (m) {
+      holder.push(m); return " \u0001" + (holder.length - 1) + " ";
     });
-    var parts = masked.split(/\s+and\s+then\s+|\s+and\s+|\s*,\s*|\s+then\s+/i);
-    return parts.map(function (p) {
-      return p.replace(/ (\d+) /g, function (m, i) { return holder[i]; }).trim();
-    }).filter(Boolean);
+    return masked.split(/\s+and\s+then\s+|\s+and\s+|\s*,\s*|\s+then\s+/i)
+      .map(function (p) {
+        return p.replace(/\u0001(\d+)/g, function (m, i) { return holder[i]; }).trim();
+      }).filter(Boolean);
   }
 
   function ask(raw) {
     var text = String(raw || "").trim();
     if (!text) return { ok: false, msg: ERR };
     var low = text.toLowerCase();
-    for (var i = 0; i < RUDE.length; i++) if (low.indexOf(RUDE[i]) !== -1) return { ok: false, msg: ERR };
+    // Whole-word match only: substring matching made "scrap" trip on "crap".
+    for (var i = 0; i < RUDE.length; i++) {
+      if (new RegExp("(^|[^a-z])" + RUDE[i] + "([^a-z]|$)").test(low)) return { ok: false, msg: ERR };
+    }
 
-    // Try it as several instructions first, but only accept that reading if
-    // at least two pieces genuinely mean something. Otherwise fall back to
-    // the whole sentence, which keeps phrases like "when I press ctrl+Q and
-    // open the admin panel" in one piece.
     var parts = split(text);
     if (parts.length > 1) {
       var msgs = [], hits = 0;
-      for (var i = 0; i < parts.length; i++) {
-        var r = runOne(parts[i]);
+      for (var j = 0; j < parts.length; j++) {
+        var r = runOne(parts[j]);
         if (r) { hits++; msgs.push(r.msg); }
       }
       if (hits >= 2) return { ok: true, msg: msgs.join("\n") };
@@ -416,15 +580,15 @@
     var whole = runOne(text);
     if (whole) return whole;
 
-    // One understood piece inside a longer sentence is better than an error.
     if (parts.length > 1) {
-      for (var j = 0; j < parts.length; j++) {
-        var one = runOne(parts[j]);
+      for (var k = 0; k < parts.length; k++) {
+        var one = runOne(parts[k]);
         if (one) return one;
       }
     }
     return { ok: false, msg: ERR };
   }
 
-  window.ArcadeAI = { ask: ask, ERR: ERR, emoji: EMOJI, normalize: normalize };
+  window.ArcadeAI = { ask: ask, ERR: ERR, emoji: EMOJI, normalize: normalize,
+    debug: function (s) { return best(normalize(s), s); } };
 })();

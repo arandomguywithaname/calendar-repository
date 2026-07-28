@@ -29,6 +29,7 @@
   var player, cpu, puck, score, cpuScore, over, loopId, particles, trail;
   var pointerTarget = null;
   var frame = 0;
+  var idleFrames = 0;
 
   function refreshHud() {
     scoreEl.textContent = score;
@@ -53,6 +54,7 @@
     particles = [];
     trail = [];
     resultBanner.innerHTML = "";
+    idleFrames = 0;
     resetPuck();
     refreshHud();
     cancelAnimationFrame(loopId);
@@ -125,6 +127,20 @@
     // Cap runaway speed.
     var sp = Math.sqrt(puck.vx * puck.vx + puck.vy * puck.vy);
     if (sp > cfg.maxPuck) { var k = cfg.maxPuck / sp; puck.vx *= k; puck.vy *= k; }
+
+    // Friction can leave the puck crawling in a spot neither paddle can
+    // reach, which deadlocks the match with no way to restart the point.
+    // Re-serve if it has been essentially motionless for ~1.5 seconds.
+    if (sp < 0.6) {
+      idleFrames++;
+      if (idleFrames > 90) {
+        idleFrames = 0;
+        resetPuck();
+        window.ArcadeCommon.toast("Puck re-served");
+      }
+    } else {
+      idleFrames = 0;
+    }
 
     trail.push({ x: puck.x, y: puck.y });
     if (trail.length > 9) trail.shift();
@@ -211,13 +227,17 @@
 
     // Glowing goals.
     var goalLeft = W / 2 - GOAL_W / 2, goalRight = W / 2 + GOAL_W / 2;
+    // Each goal is drawn in the colour of the paddle that DEFENDS it, so the
+    // top (pink, CPU's) is the one to shoot at and the bottom (teal, yours)
+    // is the one to protect. These were previously swapped, which made the
+    // target look like it belonged to the player.
     ctx.lineWidth = 6;
-    ctx.strokeStyle = "#29e0c9";
-    ctx.shadowColor = "#29e0c9";
-    ctx.shadowBlur = 18;
-    ctx.beginPath(); ctx.moveTo(goalLeft, 3); ctx.lineTo(goalRight, 3); ctx.stroke();
     ctx.strokeStyle = "#ff5da2";
     ctx.shadowColor = "#ff5da2";
+    ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.moveTo(goalLeft, 3); ctx.lineTo(goalRight, 3); ctx.stroke();
+    ctx.strokeStyle = "#29e0c9";
+    ctx.shadowColor = "#29e0c9";
     ctx.beginPath(); ctx.moveTo(goalLeft, H - 3); ctx.lineTo(goalRight, H - 3); ctx.stroke();
     ctx.shadowBlur = 0;
 

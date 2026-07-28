@@ -78,7 +78,7 @@
   function ensureRegistry(cb) {
     if (window.ARCADE_GAMES) return cb();
     var s = document.createElement("script");
-    s.src = rootPath() + "js/registry.js?v=11";
+    s.src = rootPath() + "js/registry.js?v=12";
     s.onload = cb;
     s.onerror = cb;
     document.head.appendChild(s);
