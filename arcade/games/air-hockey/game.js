@@ -18,11 +18,20 @@
 
   // Difficulty tuning. puckSpeed = serve speed, maxPuck = speed cap, cpuSpeed =
   // paddle move speed, reactZone = how far down the CPU tracks the puck,
-  // cpuError = aim wobble (bigger = weaker), impact = min hit speed.
+  // cpuError = aim wobble (bigger = weaker), impact = min hit speed,
+  // reactDelay = how many frames the CPU's view of the puck is stale,
+  // lapse* = how often and how long it stops tracking altogether.
+  //
+  // The wobble has to be bigger than the paddle's catch radius
+  // (PADDLE_R + PUCK_R = 39px) or it can never actually miss - the old
+  // values were all at or under that, which made the CPU a perfect wall on
+  // every difficulty and left matches goalless. The stale view is what
+  // creates real openings: the CPU commits to where the puck WAS, so a shot
+  // that changes direction late gets past it.
   var DIFFICULTIES = {
-    easy:   { puckSpeed: 3.2, maxPuck: 8,  cpuSpeed: 3.0, reactZone: 0.42, cpuError: 46, impact: 5.0 },
-    medium: { puckSpeed: 4.2, maxPuck: 10, cpuSpeed: 4.5, reactZone: 0.50, cpuError: 20, impact: 6.0 },
-    hard:   { puckSpeed: 5.4, maxPuck: 13, cpuSpeed: 6.2, reactZone: 0.64, cpuError: 4,  impact: 7.5 }
+    easy:   { puckSpeed: 3.2, maxPuck: 8,  cpuSpeed: 2.6, reactZone: 0.40, cpuError: 120, impact: 5.0, reactDelay: 14, lapseChance: 0.004, lapseFrames: 45 },
+    medium: { puckSpeed: 4.2, maxPuck: 10, cpuSpeed: 4.2, reactZone: 0.50, cpuError: 80,  impact: 6.0, reactDelay: 9,  lapseChance: 0.002, lapseFrames: 30 },
+    hard:   { puckSpeed: 5.4, maxPuck: 13, cpuSpeed: 6.0, reactZone: 0.64, cpuError: 65,  impact: 7.5, reactDelay: 6,  lapseChance: 0,     lapseFrames: 0 }
   };
   var cfg = DIFFICULTIES.medium;
 
@@ -43,11 +52,16 @@
       vx: (Math.random() * 2 - 1) * cfg.puckSpeed * 0.6,
       vy: cfg.puckSpeed * (dir || (Math.random() < 0.5 ? 1 : -1))
     };
+    // The trail is a list of recent puck positions. Teleporting the puck back
+    // to the centre without clearing it drew a line of ghost pucks stretching
+    // from the goal mouth all the way to the middle of the rink for the next
+    // few frames - a streak across half the board after every single goal.
+    trail = [];
   }
 
   function newGame() {
     player = { x: W / 2, y: H - 70 };
-    cpu = { x: W / 2, y: 70, aimErr: 0 };
+    cpu = { x: W / 2, y: 70, aimErr: 0, lapse: 0, seen: { x: W / 2, y: H / 2 } };
     score = 0;
     cpuScore = 0;
     over = false;
@@ -85,10 +99,21 @@
   function updateCpu() {
     // Refresh the aim wobble occasionally so weak CPUs drift off target.
     if (frame % 24 === 0) cpu.aimErr = (Math.random() * 2 - 1) * cfg.cpuError;
+
+    // Occasionally the CPU switches off for a moment and drifts back to its
+    // goal, which is what gives a slower player a chance to set up a shot.
+    if (cfg.lapseChance && cpu.lapse <= 0 && Math.random() < cfg.lapseChance) cpu.lapse = cfg.lapseFrames;
+    if (cpu.lapse > 0) cpu.lapse--;
+
+    // The CPU only refreshes where it thinks the puck is every reactDelay
+    // frames, so it chases a slightly out-of-date position instead of being
+    // welded to the puck every single frame.
+    if (frame % (cfg.reactDelay || 1) === 0) cpu.seen = { x: puck.x, y: puck.y };
+
     var targetX = W / 2, targetY = 70;
-    if (puck.y < H * cfg.reactZone) {
-      targetX = puck.x + cpu.aimErr;
-      targetY = Math.max(PADDLE_R, Math.min(H / 2 - PADDLE_R, puck.y - 10));
+    if (cpu.lapse <= 0 && cpu.seen.y < H * cfg.reactZone) {
+      targetX = cpu.seen.x + cpu.aimErr;
+      targetY = Math.max(PADDLE_R, Math.min(H / 2 - PADDLE_R, cpu.seen.y - 10));
     }
     var speed = cfg.cpuSpeed;
     cpu.x += Math.max(-speed, Math.min(speed, targetX - cpu.x));
@@ -182,7 +207,14 @@
   function checkWin() {
     if (score >= WIN_SCORE) {
       over = true;
-      var isBest = window.ArcadeCommon.setBest(GAME_ID, score);
+      // "Best" used to record `score`, which on a win is always exactly
+      // WIN_SCORE - so the HUD read 0 until your first win and 5 for ever
+      // after, no matter how well you played. Record the winning margin
+      // instead, so a 5-0 shut-out actually beats a 5-4 squeaker.
+      var isBest = window.ArcadeCommon.setBest(GAME_ID, score - cpuScore);
+      // The score HUD is refreshed before checkWin runs, so without this the
+      // new best only appeared after starting another match.
+      refreshHud();
       var msg = window.ArcadeI18n.t("common.youWin");
       if (isBest) msg += " 🏆";
       resultBanner.innerHTML = '<span class="overlay-win">' + msg + "</span>";
