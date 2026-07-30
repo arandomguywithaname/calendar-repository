@@ -267,7 +267,7 @@
   }
 
   window.ArcadeMods = {
-    VERSION: "v14",
+    VERSION: "v15",
     setSpeed: setSpeed,
     getSpeed: function () { return speed; },
     setPaused: setPaused,

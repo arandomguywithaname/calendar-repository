@@ -39,3 +39,82 @@
   color: #111;
   text-shadow: 0 0 2px #ccc;
 }
+
+/* ---- CPU strength slider ---- */
+
+.elo-row {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.elo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.elo-readout b {
+  color: var(--accent-3);
+  font-size: 1.05rem;
+  text-shadow: 0 0 10px rgba(41, 224, 201, 0.45);
+}
+
+.elo-readout span { color: var(--text); font-weight: 600; }
+
+.elo-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+#elo-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  /* A comfortable thumb target on a phone. */
+  height: 28px;
+  margin: 0;
+}
+
+#elo-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent-2), var(--accent));
+}
+
+#elo-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent-2), var(--accent));
+}
+
+#elo-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent-2);
+  box-shadow: 0 0 12px rgba(124, 92, 255, 0.7);
+  cursor: pointer;
+}
+
+#elo-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent-2);
+  box-shadow: 0 0 12px rgba(124, 92, 255, 0.7);
+  cursor: pointer;
+}
