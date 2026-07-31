@@ -18,179 +18,316 @@
   var DIAG_DIRS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
   var ORTHO_DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
-  var board, turn, over, moves, selected;
+  var board, state, turn, over, moves, selected, repetition;
   var thinking = false;
-
-  var ELO_KEY = "arcade.chess.elo";
-  var eloInput = document.getElementById("elo-slider");
-  var eloLabel = document.getElementById("elo-value");
-  var eloTier = document.getElementById("elo-tier");
-
-  function currentElo() {
-    return eloInput ? parseInt(eloInput.value, 10) : 1200;
-  }
-
-  // Plain-language name for the number, so the slider means something before
-  // you know what a rating is.
-  function tierName(elo) {
-    if (elo < 500) return "Just learning";
-    if (elo < 800) return "Beginner";
-    if (elo < 1100) return "Getting there";
-    if (elo < 1400) return "Club player";
-    if (elo < 1700) return "Strong";
-    return "Very strong";
-  }
-
-  function syncElo() {
-    if (!eloInput) return;
-    var elo = currentElo();
-    if (eloLabel) eloLabel.textContent = elo;
-    if (eloTier) eloTier.textContent = tierName(elo);
-    try { localStorage.setItem(ELO_KEY, String(elo)); } catch (e) {}
-  }
-
-  if (eloInput) {
-    var saved = null;
-    try { saved = localStorage.getItem(ELO_KEY); } catch (e) {}
-    if (saved && !isNaN(parseInt(saved, 10))) eloInput.value = saved;
-    eloInput.addEventListener("input", syncElo);
-    syncElo();
-  }
 
   function inBounds(r, c) { return r >= 0 && r < SIZE && c >= 0 && c < SIZE; }
   function isDark(r, c) { return (r + c) % 2 === 1; }
+  function other(color) { return color === "white" ? "black" : "white"; }
 
-  function newGame() {
-    board = [];
-    for (var r = 0; r < SIZE; r++) {
-      var row = [];
-      for (var c = 0; c < SIZE; c++) row.push(null);
-      board.push(row);
-    }
-    var backRank = ["r", "n", "b", "q", "k", "b", "n", "r"];
-    for (var c2 = 0; c2 < SIZE; c2++) {
-      board[0][c2] = { type: backRank[c2], color: "black" };
-      board[1][c2] = { type: "p", color: "black" };
-      board[6][c2] = { type: "p", color: "white" };
-      board[7][c2] = { type: backRank[c2], color: "white" };
-    }
-    turn = "white";
-    over = false;
-    moves = 0;
-    selected = null;
-    resultBanner.innerHTML = "";
-    refreshHud();
-    render();
+  // ---------- position state ----------
+  //
+  // Castling and en passant depend on history, not just on where the pieces
+  // are, so they live alongside the board and are saved/restored by the
+  // search the same way captured pieces are.
+
+  function initialState() {
+    return {
+      castle: { white: { k: true, q: true }, black: { k: true, q: true } },
+      ep: null,   // square a pawn may capture onto this turn, e.g. [2,4]
+      half: 0     // plies since the last capture or pawn move (50-move rule)
+    };
   }
 
-  function refreshHud() {
-    movesEl.textContent = moves;
-    if (!over) {
-      turnStat.textContent = thinking
-        ? "Thinking…"
-        : (turn === "white" ? window.ArcadeI18n.t("common.yourTurn") : window.ArcadeI18n.t("common.cpuTurn"));
-    }
-  }
+  // ---------- attack detection ----------
+  //
+  // Worked out directly from the square rather than by generating every enemy
+  // move, because castling needs to ask "is this square attacked?" while it is
+  // itself being generated - going through move generation would recurse.
 
-  function stepMoves(b, r, c, color, offsets) {
-    var res = [];
-    offsets.forEach(function (o) {
-      var rr = r + o[0], cc = c + o[1];
-      if (inBounds(rr, cc)) {
-        var occ = b[rr][cc];
-        if (!occ || occ.color !== color) res.push([rr, cc]);
+  function isAttacked(b, r, c, by) {
+    // Pawns. A white pawn moves up the board, so one sitting a row BELOW this
+    // square (and a file to either side) is attacking it.
+    var pd = by === "white" ? 1 : -1;
+    for (var i = 0; i < 2; i++) {
+      var pr = r + pd, pc = c + (i === 0 ? -1 : 1);
+      if (inBounds(pr, pc)) {
+        var pp = b[pr][pc];
+        if (pp && pp.color === by && pp.type === "p") return true;
       }
-    });
-    return res;
+    }
+    var j, rr, cc, q;
+    for (j = 0; j < KNIGHT_OFFSETS.length; j++) {
+      rr = r + KNIGHT_OFFSETS[j][0]; cc = c + KNIGHT_OFFSETS[j][1];
+      if (inBounds(rr, cc)) { q = b[rr][cc]; if (q && q.color === by && q.type === "n") return true; }
+    }
+    for (j = 0; j < KING_OFFSETS.length; j++) {
+      rr = r + KING_OFFSETS[j][0]; cc = c + KING_OFFSETS[j][1];
+      if (inBounds(rr, cc)) { q = b[rr][cc]; if (q && q.color === by && q.type === "k") return true; }
+    }
+    function ray(dirs, types) {
+      for (var d = 0; d < dirs.length; d++) {
+        var ar = r + dirs[d][0], ac = c + dirs[d][1];
+        while (inBounds(ar, ac)) {
+          var pc2 = b[ar][ac];
+          if (pc2) {
+            if (pc2.color === by && types.indexOf(pc2.type) !== -1) return true;
+            break;
+          }
+          ar += dirs[d][0]; ac += dirs[d][1];
+        }
+      }
+      return false;
+    }
+    return ray(DIAG_DIRS, ["b", "q"]) || ray(ORTHO_DIRS, ["r", "q"]);
   }
 
-  function slide(b, r, c, color, dirs) {
-    var res = [];
+  function findKing(b, color) {
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        var p = b[r][c];
+        if (p && p.type === "k" && p.color === color) return [r, c];
+      }
+    }
+    return null;
+  }
+
+  function inCheck(b, color) {
+    var k = findKing(b, color);
+    return k ? isAttacked(b, k[0], k[1], other(color)) : false;
+  }
+
+  // ---------- move generation ----------
+
+  function slideTo(b, r, c, color, dirs, out) {
     dirs.forEach(function (d) {
       var rr = r + d[0], cc = c + d[1];
       while (inBounds(rr, cc)) {
         var occ = b[rr][cc];
-        if (!occ) {
-          res.push([rr, cc]);
-        } else {
-          if (occ.color !== color) res.push([rr, cc]);
+        if (!occ) out.push({ from: [r, c], to: [rr, cc] });
+        else {
+          if (occ.color !== color) out.push({ from: [r, c], to: [rr, cc] });
           break;
         }
         rr += d[0]; cc += d[1];
       }
     });
-    return res;
   }
 
-  function pawnMoves(b, r, c, color) {
+  function stepTo(b, r, c, color, offsets, out) {
+    offsets.forEach(function (o) {
+      var rr = r + o[0], cc = c + o[1];
+      if (!inBounds(rr, cc)) return;
+      var occ = b[rr][cc];
+      if (!occ || occ.color !== color) out.push({ from: [r, c], to: [rr, cc] });
+    });
+  }
+
+  function pawnTo(b, st, r, c, color, out) {
     var dir = color === "white" ? -1 : 1;
     var startRow = color === "white" ? 6 : 1;
-    var res = [];
+    var lastRow = color === "white" ? 0 : SIZE - 1;
+    function push(m) {
+      if (m.to[0] === lastRow) m.promo = "q";
+      out.push(m);
+    }
     var oneR = r + dir;
     if (inBounds(oneR, c) && !b[oneR][c]) {
-      res.push([oneR, c]);
+      push({ from: [r, c], to: [oneR, c] });
       var twoR = r + 2 * dir;
-      if (r === startRow && !b[twoR][c]) res.push([twoR, c]);
+      if (r === startRow && inBounds(twoR, c) && !b[twoR][c]) {
+        out.push({ from: [r, c], to: [twoR, c], double: true });
+      }
     }
     [c - 1, c + 1].forEach(function (cc) {
-      if (inBounds(oneR, cc)) {
-        var occ = b[oneR][cc];
-        if (occ && occ.color !== color) res.push([oneR, cc]);
+      if (!inBounds(oneR, cc)) return;
+      var occ = b[oneR][cc];
+      if (occ && occ.color !== color) push({ from: [r, c], to: [oneR, cc] });
+      // En passant: the square behind a pawn that has just run past us.
+      else if (!occ && st.ep && st.ep[0] === oneR && st.ep[1] === cc) {
+        out.push({ from: [r, c], to: [oneR, cc], ep: true });
       }
     });
-    return res;
   }
 
-  function pieceMoves(b, r, c) {
-    var p = b[r][c];
-    if (!p) return [];
-    switch (p.type) {
-      case "p": return pawnMoves(b, r, c, p.color);
-      case "n": return stepMoves(b, r, c, p.color, KNIGHT_OFFSETS);
-      case "b": return slide(b, r, c, p.color, DIAG_DIRS);
-      case "r": return slide(b, r, c, p.color, ORTHO_DIRS);
-      case "q": return slide(b, r, c, p.color, DIAG_DIRS.concat(ORTHO_DIRS));
-      case "k": return stepMoves(b, r, c, p.color, KING_OFFSETS);
-      default: return [];
+  function castleMoves(b, st, color, out) {
+    var rights = st.castle[color];
+    if (!rights.k && !rights.q) return;
+    var row = color === "white" ? 7 : 0;
+    var king = b[row][4];
+    if (!king || king.type !== "k" || king.color !== color) return;
+    // You may not castle out of check, nor through a square the enemy covers.
+    if (isAttacked(b, row, 4, other(color))) return;
+    if (rights.k && !b[row][5] && !b[row][6]) {
+      var rookK = b[row][7];
+      if (rookK && rookK.type === "r" && rookK.color === color &&
+          !isAttacked(b, row, 5, other(color)) && !isAttacked(b, row, 6, other(color))) {
+        out.push({ from: [row, 4], to: [row, 6], castle: "k" });
+      }
+    }
+    if (rights.q && !b[row][1] && !b[row][2] && !b[row][3]) {
+      var rookQ = b[row][0];
+      if (rookQ && rookQ.type === "r" && rookQ.color === color &&
+          !isAttacked(b, row, 3, other(color)) && !isAttacked(b, row, 2, other(color))) {
+        out.push({ from: [row, 4], to: [row, 2], castle: "q" });
+      }
     }
   }
 
-  function allMovesFor(b, color) {
-    var res = [];
+  function pseudoMoves(b, st, color) {
+    var out = [];
     for (var r = 0; r < SIZE; r++) {
       for (var c = 0; c < SIZE; c++) {
         var p = b[r][c];
-        if (p && p.color === color) {
-          pieceMoves(b, r, c).forEach(function (to) {
-            res.push({ from: [r, c], to: to });
-          });
+        if (!p || p.color !== color) continue;
+        switch (p.type) {
+          case "p": pawnTo(b, st, r, c, color, out); break;
+          case "n": stepTo(b, r, c, color, KNIGHT_OFFSETS, out); break;
+          case "b": slideTo(b, r, c, color, DIAG_DIRS, out); break;
+          case "r": slideTo(b, r, c, color, ORTHO_DIRS, out); break;
+          case "q": slideTo(b, r, c, color, DIAG_DIRS.concat(ORTHO_DIRS), out); break;
+          case "k": stepTo(b, r, c, color, KING_OFFSETS, out); break;
         }
       }
     }
-    return res;
+    castleMoves(b, st, color, out);
+    return out;
+  }
+
+  // ---------- make / unmake ----------
+
+  function applyMove(b, st, m) {
+    var piece = b[m.from[0]][m.from[1]];
+    // Rights are saved as four flat booleans rather than a nested object -
+    // this runs at every node of the search, and the object churn showed up.
+    var undo = {
+      piece: piece,
+      captured: null,
+      capturedAt: null,
+      wk: st.castle.white.k, wq: st.castle.white.q,
+      bk: st.castle.black.k, bq: st.castle.black.q,
+      ep: st.ep,
+      half: st.half,
+      rook: null
+    };
+
+    var capSq = m.to;
+    if (m.ep) capSq = [m.from[0], m.to[1]];   // the pawn taken en passant sits beside us
+    var captured = b[capSq[0]][capSq[1]];
+    if (captured) { undo.captured = captured; undo.capturedAt = capSq; b[capSq[0]][capSq[1]] = null; }
+
+    b[m.from[0]][m.from[1]] = null;
+    b[m.to[0]][m.to[1]] = m.promo ? { type: m.promo, color: piece.color } : piece;
+
+    if (m.castle) {
+      var row = m.from[0];
+      var fromC = m.castle === "k" ? 7 : 0;
+      var toC = m.castle === "k" ? 5 : 3;
+      undo.rook = { from: [row, fromC], to: [row, toC], piece: b[row][fromC] };
+      b[row][toC] = b[row][fromC];
+      b[row][fromC] = null;
+    }
+
+    // Rights are lost by moving the king or a rook, or by having a rook taken.
+    var rights = st.castle[piece.color];
+    if (piece.type === "k") { rights.k = false; rights.q = false; }
+    if (piece.type === "r") {
+      if (m.from[1] === 7) rights.k = false;
+      if (m.from[1] === 0) rights.q = false;
+    }
+    if (captured && captured.type === "r") {
+      var oc = st.castle[captured.color];
+      if (capSq[1] === 7) oc.k = false;
+      if (capSq[1] === 0) oc.q = false;
+    }
+
+    st.ep = m.double ? [(m.from[0] + m.to[0]) / 2, m.to[1]] : null;
+    st.half = (captured || piece.type === "p") ? 0 : st.half + 1;
+    return undo;
+  }
+
+  function undoMove(b, st, m, u) {
+    b[m.from[0]][m.from[1]] = u.piece;
+    b[m.to[0]][m.to[1]] = null;
+    if (u.captured) b[u.capturedAt[0]][u.capturedAt[1]] = u.captured;
+    if (u.rook) {
+      b[u.rook.from[0]][u.rook.from[1]] = u.rook.piece;
+      b[u.rook.to[0]][u.rook.to[1]] = null;
+    }
+    st.castle.white.k = u.wk; st.castle.white.q = u.wq;
+    st.castle.black.k = u.bk; st.castle.black.q = u.bq;
+    st.ep = u.ep;
+    st.half = u.half;
+  }
+
+  // A move is legal only if it does not leave your own king attacked.
+  function legalMoves(b, st, color) {
+    var pseudo = pseudoMoves(b, st, color);
+    var out = [];
+    for (var i = 0; i < pseudo.length; i++) {
+      var u = applyMove(b, st, pseudo[i]);
+      if (!inCheck(b, color)) out.push(pseudo[i]);
+      undoMove(b, st, pseudo[i], u);
+    }
+    return out;
+  }
+
+  // ---------- draws ----------
+
+  function insufficientMaterial(b) {
+    var minor = [];
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        var p = b[r][c];
+        if (!p || p.type === "k") continue;
+        if (p.type === "p" || p.type === "q" || p.type === "r") return false;
+        minor.push({ type: p.type, color: p.color, dark: isDark(r, c) });
+      }
+    }
+    if (minor.length === 0) return true;                       // K v K
+    if (minor.length === 1) return true;                       // K+minor v K
+    if (minor.length === 2 && minor[0].type === "b" && minor[1].type === "b" &&
+        minor[0].color !== minor[1].color && minor[0].dark === minor[1].dark) {
+      return true;                                             // bishops on one colour
+    }
+    return false;
+  }
+
+  function positionKey(b, st, color) {
+    var s = color + "|";
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        var p = b[r][c];
+        s += p ? (p.color === "white" ? p.type.toUpperCase() : p.type) : ".";
+      }
+    }
+    s += "|" + (st.castle.white.k ? "K" : "") + (st.castle.white.q ? "Q" : "") +
+         (st.castle.black.k ? "k" : "") + (st.castle.black.q ? "q" : "");
+    s += "|" + (st.ep ? st.ep.join(",") : "-");
+    return s;
+  }
+
+  // What is the position, for the side about to move?
+  function statusFor(b, st, color) {
+    if (legalMoves(b, st, color).length === 0) {
+      return inCheck(b, color) ? "checkmate" : "stalemate";
+    }
+    if (st.half >= 100) return "fifty";
+    if (insufficientMaterial(b)) return "insufficient";
+    if (repetition && repetition[positionKey(b, st, color)] >= 3) return "repetition";
+    return null;
   }
 
   // ---------- engine ----------
   //
-  // The old opponent had no lookahead whatsoever: if a capture existed it
-  // grabbed the biggest one, otherwise it played a RANDOM legal move. That is
-  // why it felt like two different players - it would snap off a hanging queen
-  // like a grandmaster and then shuffle a rook into nothing on the next move.
-  // It also never noticed its own pieces being attacked, and would happily
-  // take a pawn defended by a queen.
-  //
-  // This is a real (if small) engine: alpha-beta search over material,
-  // piece-square tables and mobility. Strength is set by one slider instead of
-  // being a coin flip.
+  // Alpha-beta over material and piece-square tables. Because move generation
+  // is now fully legal, mate and stalemate are simply "no moves left", and the
+  // engine both delivers mate and avoids walking into one.
 
-  // Centipawns. The king is huge so that losing it dominates everything -
-  // this game ends on king capture rather than checkmate, so "don't let the
-  // king be taken" falls out of the search for free.
-  var CP = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+  var CP = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+  var MATE = 100000;
 
-  // Piece-square tables, written from White's point of view (row 0 = Black's
-  // back rank). They are what stop the engine shuffling pieces aimlessly:
-  // knights want the middle, pawns want to advance, the king wants to hide.
+  // Written from White's point of view (row 0 = Black's back rank).
   var PST = {
     p: [[0,0,0,0,0,0,0,0],[5,10,10,-20,-20,10,10,5],[5,-5,-10,0,0,-10,-5,5],
         [0,0,0,20,20,0,0,0],[5,5,10,25,25,10,5,5],[10,10,20,30,30,20,10,10],
@@ -230,129 +367,213 @@
     return score;
   }
 
-  function doMove(b, m) {
-    var piece = b[m.from[0]][m.from[1]];
-    var captured = b[m.to[0]][m.to[1]];
-    b[m.from[0]][m.from[1]] = null;
-    var promoted = piece.type === "p" &&
-      ((piece.color === "white" && m.to[0] === 0) || (piece.color === "black" && m.to[0] === SIZE - 1));
-    b[m.to[0]][m.to[1]] = promoted ? { type: "q", color: piece.color } : piece;
-    return { piece: piece, captured: captured };
-  }
-
-  function undoMove(b, m, u) {
-    b[m.from[0]][m.from[1]] = u.piece;
-    b[m.to[0]][m.to[1]] = u.captured;
-  }
-
-  // Captures first, biggest prize first. Ordering is what makes alpha-beta
-  // actually cut branches, so this is a speed feature, not a strength one.
   function orderMoves(b, list) {
     return list.map(function (m) {
       var t = b[m.to[0]][m.to[1]];
-      return { m: m, s: t ? CP[t.type] : 0 };
+      return { m: m, s: (t ? CP[t.type] : 0) + (m.promo ? 800 : 0) };
     }).sort(function (a, z) { return z.s - a.s; }).map(function (x) { return x.m; });
   }
 
-  function kingAlive(b, color) {
-    for (var r = 0; r < SIZE; r++) {
-      for (var c = 0; c < SIZE; c++) {
-        var p = b[r][c];
-        if (p && p.type === "k" && p.color === color) return true;
-      }
-    }
-    return false;
-  }
-
-  // Negamax with alpha-beta. Returns the score from `color`'s point of view.
-  function search(b, depth, alpha, beta, color) {
-    if (!kingAlive(b, "black")) return color === "black" ? -CP.k : CP.k;
-    if (!kingAlive(b, "white")) return color === "black" ? CP.k : -CP.k;
+  function search(b, st, depth, alpha, beta, color, ply) {
     if (depth === 0) return color === "black" ? evaluate(b) : -evaluate(b);
 
-    var list = orderMoves(b, allMovesFor(b, color));
-    if (list.length === 0) return 0; // stalemated in this simplified game
-    var best = -Infinity;
-    var other = color === "black" ? "white" : "black";
+    // Filter for legality inline rather than calling legalMoves() first.
+    // legalMoves already makes and unmakes every move to test it, so calling
+    // it and then making the moves again did the whole job twice.
+    var list = orderMoves(b, pseudoMoves(b, st, color));
+    var best = -Infinity, legal = 0;
     for (var i = 0; i < list.length; i++) {
-      var u = doMove(b, list[i]);
-      var sc = -search(b, depth - 1, -beta, -alpha, other);
-      undoMove(b, list[i], u);
+      var u = applyMove(b, st, list[i]);
+      if (inCheck(b, color)) { undoMove(b, st, list[i], u); continue; }
+      legal++;
+      var sc = -search(b, st, depth - 1, -beta, -alpha, other(color), ply + 1);
+      undoMove(b, st, list[i], u);
       if (sc > best) best = sc;
       if (best > alpha) alpha = best;
-      if (alpha >= beta) break;   // this branch is already refuted
+      if (alpha >= beta) break;
     }
+    // Mate found sooner is worth more, so the engine actually finishes you off
+    // instead of shuffling around in a won position.
+    if (legal === 0) return inCheck(b, color) ? -(MATE - ply) : 0;
     return best;
   }
 
   // ---------- strength dial ----------
-  //
-  // These numbers are calibrated by self-play, not guessed: see the ladder
-  // check in the commit. `slack` is how many centipawns worse than the best
-  // move the engine is willing to play, and `blunder` is the chance it throws
-  // the search away entirely and plays something random. Both shrink as the
-  // slider goes up, so low ratings are gently bad rather than insane, and high
-  // ratings are consistent instead of streaky.
+
   var ELO_MIN = 250, ELO_MAX = 2000;
 
   function eloConfig(elo) {
     var t = (elo - ELO_MIN) / (ELO_MAX - ELO_MIN); // 0..1
-    var depth = elo < 700 ? 1 : elo < 1200 ? 2 : elo < 1600 ? 3 : elo < 1900 ? 4 : 5;
+
+    // Search depth is a whole number - you cannot look ahead 3.4 moves - so
+    // picking it with a threshold gave the slider a few flat plateaus where
+    // 1250 and 1550 played identically. Instead the depth is a FRACTION and
+    // the leftover part is the chance of searching one ply deeper this move,
+    // so average strength climbs with every single notch.
+    var exact = 1 + 4 * Math.pow(t, 1.25);
+    var base = Math.floor(exact);
+    var depth = (Math.random() < exact - base) ? base + 1 : base;
+
     return {
-      depth: depth,
+      depth: Math.min(5, depth),
+      exactDepth: exact,
       slack: Math.round(400 * Math.pow(1 - t, 2)),
       blunder: Math.max(0, 0.40 * Math.pow(1 - t, 1.6))
     };
   }
 
-  function chooseMove(b, elo) {
+  function chooseMove(b, st, elo) {
     var cfg = eloConfig(elo);
-    var list = allMovesFor(b, "black");
+    var list = legalMoves(b, st, "black");
     if (list.length === 0) return null;
 
     if (Math.random() < cfg.blunder) return window.ArcadeCommon.pick(list);
 
-    var scored = [];
-    var best = -Infinity;
     var ordered = orderMoves(b, list);
+    var scored = [], best = -Infinity;
     for (var i = 0; i < ordered.length; i++) {
-      var u = doMove(b, ordered[i]);
-      var sc = -search(b, cfg.depth - 1, -Infinity, Infinity, "white");
-      undoMove(b, ordered[i], u);
+      var u = applyMove(b, st, ordered[i]);
+      var sc = -search(b, st, cfg.depth - 1, -Infinity, Infinity, "white", 1);
+      undoMove(b, st, ordered[i], u);
       scored.push({ m: ordered[i], s: sc });
       if (sc > best) best = sc;
     }
-    // Anything within `slack` of the best move is fair game, which is what
-    // makes a low rating play plausibly-weak moves rather than nonsense.
+    // A forced mate is never thrown away, however low the rating - but at low
+    // ratings it may simply not have searched deep enough to see one.
+    if (best >= MATE - 100) {
+      var mates = scored.filter(function (x) { return x.s === best; });
+      return window.ArcadeCommon.pick(mates).m;
+    }
     var pool = scored.filter(function (x) { return x.s >= best - cfg.slack; });
     return window.ArcadeCommon.pick(pool).m;
   }
 
-  function movePiece(from, to) {
-    var p = board[from[0]][from[1]];
-    var captured = board[to[0]][to[1]];
-    board[from[0]][from[1]] = null;
-    board[to[0]][to[1]] = p;
-    if (p.type === "p") {
-      if ((p.color === "white" && to[0] === 0) || (p.color === "black" && to[0] === SIZE - 1)) {
-        p.type = "q";
-      }
+  // ---------- slider ----------
+
+  var ELO_KEY = "arcade.chess.elo";
+  var eloInput = document.getElementById("elo-slider");
+  var eloLabel = document.getElementById("elo-value");
+  var eloTier = document.getElementById("elo-tier");
+
+  function currentElo() {
+    return eloInput ? parseInt(eloInput.value, 10) : 1200;
+  }
+
+  function tierName(elo) {
+    if (elo < 500) return "Just learning";
+    if (elo < 800) return "Beginner";
+    if (elo < 1100) return "Getting there";
+    if (elo < 1400) return "Club player";
+    if (elo < 1700) return "Strong";
+    return "Very strong";
+  }
+
+  function syncElo() {
+    if (!eloInput) return;
+    var elo = currentElo();
+    if (eloLabel) eloLabel.textContent = elo;
+    if (eloTier) eloTier.textContent = tierName(elo);
+    try { localStorage.setItem(ELO_KEY, String(elo)); } catch (e) {}
+  }
+
+  if (eloInput) {
+    var saved = null;
+    try { saved = localStorage.getItem(ELO_KEY); } catch (e) {}
+    if (saved && !isNaN(parseInt(saved, 10))) eloInput.value = saved;
+    eloInput.addEventListener("input", syncElo);
+    syncElo();
+  }
+
+  // ---------- game flow ----------
+
+  function newGame() {
+    board = [];
+    for (var r = 0; r < SIZE; r++) {
+      var row = [];
+      for (var c = 0; c < SIZE; c++) row.push(null);
+      board.push(row);
     }
-    return captured;
+    var backRank = ["r", "n", "b", "q", "k", "b", "n", "r"];
+    for (var c2 = 0; c2 < SIZE; c2++) {
+      board[0][c2] = { type: backRank[c2], color: "black" };
+      board[1][c2] = { type: "p", color: "black" };
+      board[6][c2] = { type: "p", color: "white" };
+      board[7][c2] = { type: backRank[c2], color: "white" };
+    }
+    state = initialState();
+    repetition = {};
+    turn = "white";
+    over = false;
+    thinking = false;
+    moves = 0;
+    selected = null;
+    resultBanner.innerHTML = "";
+    notePosition();
+    refreshHud();
+    render();
+  }
+
+  function notePosition() {
+    var key = positionKey(board, state, turn);
+    repetition[key] = (repetition[key] || 0) + 1;
+  }
+
+  function refreshHud() {
+    movesEl.textContent = moves;
+    if (over) return;
+    if (thinking) { turnStat.textContent = "Thinking…"; return; }
+    var label = turn === "white"
+      ? window.ArcadeI18n.t("common.yourTurn")
+      : window.ArcadeI18n.t("common.cpuTurn");
+    if (inCheck(board, turn)) label += " — Check!";
+    turnStat.textContent = label;
+  }
+
+  var DRAW_TEXT = {
+    stalemate: "Stalemate — it's a draw",
+    fifty: "Draw — 50 moves with no capture or pawn move",
+    insufficient: "Draw — not enough pieces left to mate",
+    repetition: "Draw — same position three times"
+  };
+
+  // Called after a move, for whoever is about to play.
+  function checkEnd() {
+    var st = statusFor(board, state, turn);
+    if (!st) return false;
+    over = true;
+    if (st === "checkmate") {
+      // The side to move has no escape, so the OTHER side delivered mate.
+      var youWon = turn === "black";
+      turnStat.textContent = "Checkmate";
+      resultBanner.innerHTML = youWon
+        ? '<span class="overlay-win">Checkmate! ' + window.ArcadeI18n.t("common.youWin") + "</span>"
+        : '<span class="overlay-lose">Checkmate — ' + window.ArcadeI18n.t("common.youLose") + "</span>";
+    } else {
+      turnStat.textContent = window.ArcadeI18n.t("common.tie");
+      resultBanner.innerHTML = '<span class="overlay-win">' + DRAW_TEXT[st] + "</span>";
+    }
+    movesEl.textContent = moves;
+    render();
+    return true;
   }
 
   function render() {
     boardEl.innerHTML = "";
     var legalDests = [];
     if (selected) {
-      legalDests = pieceMoves(board, selected[0], selected[1]);
+      legalMoves(board, state, "white").forEach(function (m) {
+        if (m.from[0] === selected[0] && m.from[1] === selected[1]) legalDests.push(m.to);
+      });
     }
+    var checkedKing = over ? null : findKing(board, turn);
+    var showCheck = checkedKing && inCheck(board, turn);
     for (var r = 0; r < SIZE; r++) {
       for (var c = 0; c < SIZE; c++) {
         var cell = document.createElement("div");
         cell.className = "cell " + (isDark(r, c) ? "dark" : "light");
         if (selected && selected[0] === r && selected[1] === c) cell.className += " selected";
         if (legalDests.some(function (d) { return d[0] === r && d[1] === c; })) cell.className += " legal-move";
+        if (showCheck && checkedKing[0] === r && checkedKing[1] === c) cell.className += " in-check";
         var piece = board[r][c];
         if (piece) {
           var span = document.createElement("span");
@@ -368,6 +589,13 @@
     }
   }
 
+  function playMove(m) {
+    applyMove(board, state, m);
+    moves++;
+    turn = other(turn);
+    notePosition();
+  }
+
   function handleClick(r, c) {
     // Ignore clicks while the engine is searching, or a fast tapper could move
     // twice off one position and desync the board.
@@ -375,28 +603,20 @@
     var piece = board[r][c];
 
     if (selected) {
-      var dests = pieceMoves(board, selected[0], selected[1]);
-      var isDest = dests.some(function (d) { return d[0] === r && d[1] === c; });
-      if (isDest) {
-        var captured = movePiece(selected, [r, c]);
-        moves++;
+      var mine = legalMoves(board, state, "white").filter(function (m) {
+        return m.from[0] === selected[0] && m.from[1] === selected[1] &&
+               m.to[0] === r && m.to[1] === c;
+      });
+      if (mine.length) {
         selected = null;
-        refreshHud();
+        playMove(mine[0]);
         render();
-        if (captured && captured.type === "k") {
-          endGame("white");
-          return;
-        }
-        turn = "black";
         refreshHud();
-        setTimeout(cpuTurn, 500);
+        if (checkEnd()) return;
+        setTimeout(cpuTurn, 350);
         return;
       }
-      if (piece && piece.color === "white") {
-        selected = [r, c];
-        render();
-        return;
-      }
+      if (piece && piece.color === "white") { selected = [r, c]; render(); return; }
       selected = null;
       render();
       return;
@@ -410,43 +630,32 @@
 
   function cpuTurn() {
     if (over) return;
-    if (allMovesFor(board, "black").length === 0) {
-      resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.tie") + "</span>";
-      over = true;
-      refreshHud();
-      return;
-    }
-    // Searching deeply can take a moment on a phone, so hand the browser a
-    // frame to paint "Thinking..." before we start crunching.
+    // Searching can take a moment on a phone, so hand the browser a frame to
+    // paint "Thinking..." before we start crunching.
     thinking = true;
     refreshHud();
     setTimeout(function () {
-      var chosen = chooseMove(board, currentElo());
+      var chosen = chooseMove(board, state, currentElo());
       thinking = false;
-      if (!chosen || over) { refreshHud(); return; }
-      var captured = movePiece(chosen.from, chosen.to);
-      moves++;
+      if (over) return;
+      if (!chosen) { checkEnd(); return; }
+      playMove(chosen);
       render();
-      if (captured && captured.type === "k") {
-        endGame("black");
-        return;
-      }
-      turn = "white";
       refreshHud();
+      checkEnd();
     }, 20);
-  }
-
-  function endGame(winner) {
-    over = true;
-    if (winner === "white") {
-      resultBanner.innerHTML = '<span class="overlay-win">' + window.ArcadeI18n.t("common.youWin") + "</span>";
-    } else {
-      resultBanner.innerHTML = '<span class="overlay-lose">' + window.ArcadeI18n.t("common.youLose") + "</span>";
-    }
-    refreshHud();
-    render();
   }
 
   restartBtn.addEventListener("click", newGame);
   newGame();
+
+  // Exposed for the automated rules tests; harmless in the page.
+  window.__chess = {
+    legalMoves: legalMoves, pseudoMoves: pseudoMoves, applyMove: applyMove,
+    undoMove: undoMove, inCheck: inCheck, isAttacked: isAttacked,
+    statusFor: statusFor, initialState: initialState, chooseMove: chooseMove,
+    evaluate: evaluate, eloConfig: eloConfig, search: search,
+    insufficientMaterial: insufficientMaterial, positionKey: positionKey,
+    repetitionMap: function () { return repetition; }
+  };
 })();
