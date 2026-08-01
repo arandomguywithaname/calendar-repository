@@ -230,6 +230,37 @@ textarea{resize:vertical;min-height:96px;line-height:1.5}
 .list-item .x{margin-left:auto;color:var(--muted);font-size:15px;padding:0 4px}
 .list-item .x:hover{color:var(--bad)}
 
+/* ---------- present mode ---------- */
+.present-shell{
+  position:fixed;inset:0;z-index:95;background:#05070c;
+  display:flex;flex-direction:column;
+}
+.present-bar{
+  display:flex;align-items:center;gap:14px;padding:8px 16px;flex:0 0 auto;
+  background:rgba(20,26,36,.92);border-bottom:1px solid var(--line);font-size:14px;
+}
+.present-bar .mini{color:var(--muted);font-size:12.5px}
+.present-host{flex:1;min-height:0;display:flex}
+/* editors drop their toolbars when they are presenting */
+.presenting .tools,
+.presenting .slide-strip,
+.presenting .timeline,
+.presenting .wb-hud{display:none}
+.presenting .stage,
+.presenting .slide-canvas-wrap{background:#05070c}
+/* nothing removable by accident while showing the class */
+.presenting .widget .wbar .x{display:none}
+.present-stage{flex:1;display:grid;place-items:center;padding:20px;position:relative;width:100%}
+.present-stage .slide-canvas{width:min(100%,1700px)}
+.present-count{
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  color:var(--muted);font-size:13px;display:flex;gap:8px;align-items:center;
+}
+.gl-hud.big-label{
+  top:auto;bottom:24px;left:50%;transform:translateX(-50%);
+  background:transparent;border:none;font-size:28px;font-weight:750;color:var(--text);
+}
+
 /* toast */
 .toast{
   position:fixed;bottom:22px;left:50%;transform:translateX(-50%);

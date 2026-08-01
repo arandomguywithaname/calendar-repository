@@ -13,7 +13,7 @@ const SHAPES = [
 const COLORS = ["#6ea8fe", "#a78bfa", "#4ade80", "#fbbf24", "#f87171", "#38bdf8", "#fb923c", "#e8eef7"];
 const MOTIONS = [["spin", "Spin"], ["bob", "Bob"], ["orbit", "Orbit"], ["pulse", "Pulse"], ["none", "Still"]];
 
-export function mount(root, project, api) {
+export function mount(root, project, api, opts = {}) {
   const c = project.content;
 
   root.innerHTML = `
@@ -224,6 +224,15 @@ export function mount(root, project, api) {
     viewer.draw();
     canvas.toBlob((b) => download(b, project.name.replace(/\s+/g, "_") + ".png"));
   };
+
+  // presenting: no toolbars (hidden by CSS), always moving, label shown big
+  if (opts.present) {
+    const hud = $(".gl-hud");
+    hud.classList.add("big-label");
+    hud.firstChild.textContent = "";           // drop the "drag to rotate" hint
+    viewer.state.autoSpin = c.motion !== "none";
+    viewer.start();
+  }
 
   const onResize = () => viewer.draw();
   window.addEventListener("resize", onResize);

@@ -169,26 +169,78 @@ function renderProjects() {
       meta.append(el("div", "pinfo", "by " + escapeHtml(owner.name)));
     }
     const row = el("div", "row");
-    const openBtn = el("button", "btn sm primary", "Open");
-    const dupBtn = el("button", "btn sm", "Copy");
-    const delBtn = el("button", "btn sm danger", "Delete");
-    openBtn.onclick = (e) => { e.stopPropagation(); openEditor(p.id); };
-    dupBtn.onclick = (e) => { e.stopPropagation(); store.duplicateProject(p.id); renderProjects(); toast("Copied"); };
-    delBtn.onclick = (e) => {
-      e.stopPropagation();
-      confirmModal(`Delete "${p.name}"?`, "This cannot be undone.", () => {
-        store.deleteProject(p.id);
-        renderProjects();
-        toast("Deleted");
-      });
-    };
-    row.append(openBtn, dupBtn, delBtn);
+    const editBtn = el("button", "btn sm primary", "✏️ Edit");
+    const presentBtn = el("button", "btn sm", "▶ Present");
+    const moreBtn = el("button", "btn sm", "⋯");
+    moreBtn.title = "More";
+    editBtn.onclick = (e) => { e.stopPropagation(); openEditor(p.id); };
+    presentBtn.onclick = (e) => { e.stopPropagation(); presentProject(p.id); };
+    moreBtn.onclick = (e) => { e.stopPropagation(); projectMenu(p.id); };
+    row.append(editBtn, presentBtn, moreBtn);
     meta.append(row);
     card.append(thumb, meta);
-    card.addEventListener("dblclick", () => openEditor(p.id));
+    // selecting the card asks what you want to do with it
+    card.addEventListener("click", () => projectMenu(p.id));
     grid.append(card);
   }
 }
+
+/** Shown when you select a project: edit it, present it, or manage it. */
+function projectMenu(projectId) {
+  const p = store.projectById(projectId);
+  if (!p) return;
+  const t = store.TYPES[p.type];
+  const m = openModal();
+  m.innerHTML = `
+    <h1>${escapeHtml(p.name)}</h1>
+    <p class="sub">${t.icon} ${t.label} · last worked on ${timeAgo(p.updatedAt)}</p>
+    <div class="pick-grid">
+      <button class="pick" data-do="edit"><span class="ico">✏️</span>
+        <div class="t">Edit</div>
+        <div class="d">Open it in the editor and keep working on it.</div></button>
+      <button class="pick" data-do="present"><span class="ico">▶</span>
+        <div class="t">Present</div>
+        <div class="d">${escapeHtml(PRESENT_BLURB[p.type])}</div></button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="rename">Rename</button>
+      <button class="btn ghost" data-act="copy">Make a copy</button>
+      <button class="btn danger" data-act="delete">Delete</button>
+      <button class="btn ghost" data-close>Cancel</button>
+    </div>`;
+
+  m.querySelector('[data-do="edit"]').onclick = () => { closeModal(); openEditor(p.id); };
+  m.querySelector('[data-do="present"]').onclick = () => { closeModal(); presentProject(p.id); };
+  m.querySelector('[data-act="rename"]').onclick = () => {
+    const name = prompt("Name for this project:", p.name);
+    if (name && name.trim()) {
+      store.updateProject(p.id, { name: name.trim() });
+      renderProjects();
+      toast("Renamed");
+    }
+    closeModal();
+  };
+  m.querySelector('[data-act="copy"]').onclick = () => {
+    store.duplicateProject(p.id);
+    closeModal();
+    renderProjects();
+    toast("Copied");
+  };
+  m.querySelector('[data-act="delete"]').onclick = () => {
+    confirmModal(`Delete "${p.name}"?`, "This cannot be undone.", () => {
+      store.deleteProject(p.id);
+      renderProjects();
+      toast("Deleted");
+    });
+  };
+}
+
+const PRESENT_BLURB = {
+  "3d": "Full screen, spinning, with no toolbars in the way.",
+  "2d": "Full screen slideshow — arrow keys move through it.",
+  whiteboard: "Full screen board, ready to show the class.",
+  animation: "Full screen, playing on a loop.",
+};
 
 function thumbFor(p) {
   if (p.type === "2d") {
@@ -340,14 +392,70 @@ async function openEditor(projectId) {
     project: p,
   };
 
-  const mod = await import(
-    p.type === "3d" ? "./editors/threed.js"
-      : p.type === "2d" ? "./editors/slides.js"
-      : p.type === "whiteboard" ? "./editors/whiteboard.js"
-      : "./editors/animation.js"
-  );
+  const mod = await import(editorModule(p.type));
   activeEditor = mod.mount(body, p, api);
 }
+
+/* ===================== present mode ===================== */
+const PRESENT_HINT = {
+  "3d": "Drag to spin · scroll to zoom",
+  "2d": "← → or click to change slide",
+  whiteboard: "Drag to move around · scroll to zoom",
+  animation: "Click the picture to pause or play",
+};
+
+let presenting = null;
+
+async function presentProject(projectId) {
+  const p = store.projectById(projectId);
+  if (!p) return;
+  if (presenting) exitPresent();
+
+  const shell = el("div", "present-shell");
+  const bar = el("div", "present-bar");
+  bar.innerHTML = `<b>${escapeHtml(p.name)}</b>
+    <span class="mini">${escapeHtml(PRESENT_HINT[p.type] || "")}</span>
+    <span class="grow"></span>
+    <button class="btn sm ghost" id="present-exit">✕ Exit</button>`;
+  const host = el("div", "present-host presenting");
+  shell.append(bar, host);
+  document.body.append(shell);
+
+  const api = {
+    save(content) { store.updateProject(projectId, { content }); },
+    status() {},
+    toast,
+    project: p,
+  };
+
+  const mod = await import(editorModule(p.type));
+  const inst = mod.mount(host, p, api, { present: true });
+  presenting = { shell, inst };
+
+  bar.querySelector("#present-exit").onclick = exitPresent;
+  document.addEventListener("keydown", onPresentKey);
+  shell.requestFullscreen?.().catch(() => {});
+}
+
+function exitPresent() {
+  if (!presenting) return;
+  document.removeEventListener("keydown", onPresentKey);
+  presenting.inst?.destroy?.();
+  presenting.shell.remove();
+  presenting = null;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  renderProjects();
+}
+
+function onPresentKey(e) {
+  if (e.key === "Escape") exitPresent();
+}
+
+const editorModule = (type) =>
+  type === "3d" ? "./editors/threed.js"
+    : type === "2d" ? "./editors/slides.js"
+    : type === "whiteboard" ? "./editors/whiteboard.js"
+    : "./editors/animation.js";
 
 let statusTimer;
 function setStatus(msg) {
@@ -361,6 +469,10 @@ $("#btn-back-dash").addEventListener("click", () => {
   activeEditor = null;
   activeProjectId = null;
   openDashboard();
+});
+
+$("#btn-editor-present").addEventListener("click", () => {
+  if (activeProjectId) presentProject(activeProjectId);
 });
 
 $("#project-title").addEventListener("change", (e) => {

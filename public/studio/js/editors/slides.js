@@ -8,9 +8,11 @@ const TEXT_COLORS = ["#111827", "#1d4ed8", "#b91c1c", "#047857", "#7c3aed", "#b4
 const BG_COLORS = ["#ffffff", "#f1f5f9", "#0f172a", "#1e293b", "#fef3c7", "#dbeafe", "#dcfce7"];
 const STICKERS = ["📐", "📏", "✏️", "🔢", "➗", "✖️", "➕", "➖", "🧮", "⭐", "✅", "❓", "💡", "🎯", "🍕", "🚀"];
 
-export function mount(root, project, api) {
+export function mount(root, project, api, opts = {}) {
   const c = project.content;
   if (!c.slides || !c.slides.length) c.slides = [{ id: sid(), bg: "#ffffff", elements: [] }];
+  if (opts.present) return mountPresent(root, c);
+
   let current = 0;
   let selected = null;
 
@@ -77,8 +79,6 @@ export function mount(root, project, api) {
   /* ---------------- rendering ---------------- */
   function slide() { return c.slides[current]; }
 
-  function scaleFactor(host) { return (host.clientWidth || 960) / 1000; }
-
   function renderStrip() {
     const strip = $("#strip");
     strip.innerHTML = "";
@@ -94,64 +94,23 @@ export function mount(root, project, api) {
     });
   }
 
-  function renderCanvas(host = canvas, interactive = true) {
+  /** Paints the current slide, then wires up dragging, resizing and editing. */
+  function renderCanvas(host = canvas) {
     const s = slide();
-    host.innerHTML = "";
-    host.style.background = s.bg;
-    const k = scaleFactor(host);
+    paintSlide(host, s);
     s.elements.forEach((e) => {
-      const n = elNode(e, k);
-      if (interactive) {
-        n.classList.toggle("selected", selected === e.id);
-        n.addEventListener("mousedown", (ev) => startDrag(ev, e, host));
-        n.addEventListener("dblclick", () => editText(e, n));
-        if (selected === e.id) {
-          const h = document.createElement("div");
-          h.className = "handle";
-          h.addEventListener("mousedown", (ev) => startResize(ev, e, host));
-          n.append(h);
-        }
+      const n = host.querySelector(`[data-id="${cssId(e.id)}"]`);
+      if (!n) return;
+      n.classList.toggle("selected", selected === e.id);
+      n.addEventListener("mousedown", (ev) => startDrag(ev, e, host));
+      n.addEventListener("dblclick", () => editText(e, n));
+      if (selected === e.id) {
+        const h = document.createElement("div");
+        h.className = "handle";
+        h.addEventListener("mousedown", (ev) => startResize(ev, e, host));
+        n.append(h);
       }
-      host.append(n);
     });
-  }
-
-  function elNode(e, k) {
-    const n = document.createElement("div");
-    n.className = "el";
-    n.dataset.id = e.id;
-    n.style.left = e.x + "%";
-    n.style.top = e.y + "%";
-    n.style.width = (e.w || 30) + "%";
-    if (e.kind === "text") {
-      n.style.fontSize = (e.size || 32) * k + "px";
-      n.style.color = e.color || "#111827";
-      n.style.fontWeight = e.bold ? "800" : "400";
-      n.style.textAlign = e.align || "left";
-      n.style.lineHeight = "1.25";
-      n.style.whiteSpace = "pre-wrap";
-      n.textContent = e.text;
-    } else if (e.kind === "sticker") {
-      n.style.fontSize = (e.size || 60) * k + "px";
-      n.style.width = "auto";
-      n.textContent = e.text;
-    } else if (e.kind === "rect" || e.kind === "ellipse") {
-      n.style.height = (e.h || 20) + "%";
-      n.style.background = e.color || "#6ea8fe";
-      n.style.opacity = e.opacity ?? 1;
-      if (e.kind === "ellipse") n.style.borderRadius = "50%";
-      else n.style.borderRadius = 8 * k + "px";
-    } else if (e.kind === "image") {
-      const img = document.createElement("img");
-      img.src = e.src;
-      img.style.width = "100%";
-      img.style.display = "block";
-      img.style.borderRadius = 8 * k + "px";
-      img.draggable = false;
-      img.onerror = () => { n.style.background = "#33415577"; n.textContent = "image failed to load"; };
-      n.append(img);
-    }
-    return n;
   }
 
   function renderAll() {
@@ -374,10 +333,7 @@ export function mount(root, project, api) {
     presenting = back;
 
     const paint = () => {
-      const saveCur = current;
-      current = idx;
-      renderCanvas(host, false);
-      current = saveCur;
+      paintSlide(host, c.slides[idx]);
       hud.querySelector("[data-count]").textContent = `${idx + 1} / ${c.slides.length}`;
     };
     const go = (d) => { idx = clamp(idx + d, 0, c.slides.length - 1); paint(); };
@@ -418,6 +374,107 @@ export function mount(root, project, api) {
       ro.disconnect();
       presenting?.remove();
       api.save(c);
+    },
+  };
+}
+
+/* ===========================================================
+   Shared slide painter — used by the editor canvas, the little
+   thumbnails' big brother, and both presenting modes.
+   =========================================================== */
+function scaleFactor(host) {
+  return (host.clientWidth || 960) / 1000;
+}
+
+function paintSlide(host, s) {
+  host.innerHTML = "";
+  host.style.background = s.bg;
+  const k = scaleFactor(host);
+  s.elements.forEach((e) => host.append(elNode(e, k)));
+}
+
+function elNode(e, k) {
+  const n = document.createElement("div");
+  n.className = "el";
+  n.dataset.id = e.id;
+  n.style.left = e.x + "%";
+  n.style.top = e.y + "%";
+  n.style.width = (e.w || 30) + "%";
+  if (e.kind === "text") {
+    n.style.fontSize = (e.size || 32) * k + "px";
+    n.style.color = e.color || "#111827";
+    n.style.fontWeight = e.bold ? "800" : "400";
+    n.style.textAlign = e.align || "left";
+    n.style.lineHeight = "1.25";
+    n.style.whiteSpace = "pre-wrap";
+    n.textContent = e.text;
+  } else if (e.kind === "sticker") {
+    n.style.fontSize = (e.size || 60) * k + "px";
+    n.style.width = "auto";
+    n.textContent = e.text;
+  } else if (e.kind === "rect" || e.kind === "ellipse") {
+    n.style.height = (e.h || 20) + "%";
+    n.style.background = e.color || "#6ea8fe";
+    n.style.opacity = e.opacity ?? 1;
+    n.style.borderRadius = e.kind === "ellipse" ? "50%" : 8 * k + "px";
+  } else if (e.kind === "image") {
+    const img = document.createElement("img");
+    img.src = e.src;
+    img.style.width = "100%";
+    img.style.display = "block";
+    img.style.borderRadius = 8 * k + "px";
+    img.draggable = false;
+    img.onerror = () => { n.style.background = "#33415577"; n.textContent = "image failed to load"; };
+    n.append(img);
+  }
+  return n;
+}
+
+/* ===========================================================
+   Present mode — just the deck, no editing furniture.
+   =========================================================== */
+function mountPresent(root, c) {
+  let idx = 0;
+
+  root.innerHTML = `
+    <div class="present-stage">
+      <div class="slide-canvas" id="pslide"></div>
+      <div class="present-count">
+        <button class="btn sm" data-prev>←</button>
+        <span data-count></span>
+        <button class="btn sm" data-next>→</button>
+      </div>
+    </div>`;
+
+  const host = root.querySelector("#pslide");
+  const counter = root.querySelector("[data-count]");
+
+  const paint = () => {
+    paintSlide(host, c.slides[idx]);
+    counter.textContent = `${idx + 1} / ${c.slides.length}`;
+  };
+  const go = (d) => { idx = clamp(idx + d, 0, c.slides.length - 1); paint(); };
+
+  root.querySelector("[data-prev]").onclick = (e) => { e.stopPropagation(); go(-1); };
+  root.querySelector("[data-next]").onclick = (e) => { e.stopPropagation(); go(1); };
+  host.onclick = () => go(1);
+
+  const onKey = (e) => {
+    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(-1); }
+    else if (e.key === "Home") go(-c.slides.length);
+    else if (e.key === "End") go(c.slides.length);
+  };
+  document.addEventListener("keydown", onKey);
+
+  const ro = new ResizeObserver(paint);
+  ro.observe(host);
+  paint();
+
+  return {
+    destroy() {
+      document.removeEventListener("keydown", onKey);
+      ro.disconnect();
     },
   };
 }
@@ -463,6 +520,7 @@ function exportHTML(content, name) {
 
 /* ---------------- utils ---------------- */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const cssId = (id) => (window.CSS && CSS.escape ? CSS.escape(id) : id);
 const sid = () => "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 const eid = () => "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 function textish(bg) {

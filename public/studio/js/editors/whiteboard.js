@@ -13,7 +13,7 @@ const TOOLS = [
   ["rect", "▭ Box"], ["ellipse", "◯ Circle"], ["line", "／ Line"], ["arrow", "➔ Arrow"], ["pan", "✋ Pan"],
 ];
 
-export function mount(root, project, api) {
+export function mount(root, project, api, opts = {}) {
   const c = project.content;
   c.items = c.items || [];
   c.widgets = c.widgets || [];
@@ -758,8 +758,11 @@ export function mount(root, project, api) {
   function onKeyUp(e) {
     if (e.code === "Space") { spaceDown = false; stage.style.cursor = tool === "pan" ? "grab" : tool === "select" ? "default" : "crosshair"; }
   }
-  document.addEventListener("keydown", onKey);
-  document.addEventListener("keyup", onKeyUp);
+  // while presenting, the board is for showing and playing — not for editing
+  if (!opts.present) {
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("keyup", onKeyUp);
+  }
 
   // paste an image straight from the system clipboard
   function onPaste(e) {
@@ -771,7 +774,7 @@ export function mount(root, project, api) {
     r.onload = () => addImage(r.result);
     r.readAsDataURL(f);
   }
-  document.addEventListener("paste", onPaste);
+  if (!opts.present) document.addEventListener("paste", onPaste);
 
   /* ---------------- boot ---------------- */
   const ro = new ResizeObserver(resize);
@@ -780,6 +783,13 @@ export function mount(root, project, api) {
   renderWidgets();
   $("#hud-tool").textContent = "Pen";
   stage.style.cursor = "crosshair";
+
+  if (opts.present) {
+    // show the whole board, and let dragging move it around instead of drawing
+    tool = "pan";
+    stage.style.cursor = "grab";
+    setTimeout(fit, 60);
+  }
 
   let raf = 0;
   (function tick() {

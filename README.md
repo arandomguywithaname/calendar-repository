@@ -34,7 +34,29 @@ From the dashboard: **+ New Project** → pick a creation type → pick **With A
 
 **With AI** asks you to describe what you want in plain English and builds it into
 the editor, where you can still change everything by hand. Projects are named
-`Project 1`, `Project 2`, `Project 3`… and can be renamed at the top of the editor.
+`Project 1`, `Project 2`, `Project 3`… and can be renamed.
+
+### Editing and presenting a finished project
+
+Select a project on the dashboard and it asks what you'd like to do:
+
+- **✏️ Edit** — open it in its editor and keep working
+- **▶ Present** — full screen with every toolbar hidden, ready to show the class
+
+Both are also one-click buttons on the card, and there's a **▶ Present** button in
+the editor's top bar for going straight from making to showing. **Esc** or
+**✕ Exit** leaves present mode and puts you back where you started.
+
+What "present" means per type:
+
+| Type | Presenting |
+| --- | --- |
+| **3D** | The model full screen, turning on its own, with its label underneath. Drag to spin, scroll to zoom. |
+| **2D Slides** | A slideshow — arrow keys, space, click, or the on-screen arrows; a slide counter at the bottom. |
+| **Whiteboard** | The whole board zoomed to fit. Drag to move around, scroll to zoom, and the games stay playable. |
+| **Animation** | Plays full screen on a loop; click the picture to pause or resume. |
+
+The `⋯` button on a card renames, copies or deletes it.
 
 There's a **Chat** drawer for a class chat and a per-project chat. Start a message
 with `@claude` to ask the AI helper a question.

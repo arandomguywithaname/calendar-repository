@@ -12,7 +12,7 @@ const STICKERS = ["🚀", "⭐", "📐", "🔢", "🍕", "🎯", "🐢", "💡",
 const BG_COLORS = ["#0b1220", "#05060f", "#111827", "#ffffff", "#f1f5f9", "#1e1b34", "#0f2419"];
 const W = 1280, H = 720;
 
-export function mount(root, project, api) {
+export function mount(root, project, api, opts = {}) {
   const c = project.content;
   c.duration = c.duration || 6;
   c.fps = c.fps || 30;
@@ -580,7 +580,16 @@ export function mount(root, project, api) {
   renderLayers();
   renderTracks();
   drawFrame(0);
-  if (!c.layers.length) api.toast("Add a photo, sticker, video or 3D model to get started.");
+
+  if (opts.present) {
+    // play it on a loop; clicking the picture pauses and resumes
+    looping = true;
+    canvas.style.cursor = "pointer";
+    canvas.onclick = () => setPlaying(!playing);
+    setPlaying(true);
+  } else if (!c.layers.length) {
+    api.toast("Add a photo, sticker, video or 3D model to get started.");
+  }
 
   return {
     destroy() {
