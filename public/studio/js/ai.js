@@ -1,0 +1,245 @@
+/* ===========================================================
+   ai.js — "Make it with AI" client.
+   Tries the server (/api/studio/generate, which uses Claude).
+   If the server is unreachable or has no API key, it falls back
+   to a local generator so the studio still works offline.
+   =========================================================== */
+
+import { defaultContent } from "./store.js";
+
+/** Cached answer to "is Claude switched on for this studio?" */
+let aiStatus = null;
+
+export async function checkAI() {
+  if (aiStatus !== null) return aiStatus;
+  try {
+    const res = await fetch("/api/studio/status");
+    aiStatus = res.ok ? !!(await res.json()).ai : false;
+  } catch {
+    aiStatus = false;
+  }
+  return aiStatus;
+}
+
+export async function generate(type, prompt) {
+  if (!(await checkAI())) return { content: localGenerate(type, prompt), source: "offline" };
+  try {
+    const res = await fetch("/api/studio/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, prompt }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.content) return { content: data.content, source: data.source || "claude" };
+    }
+  } catch {
+    /* offline — fall through to the local generator */
+  }
+  return { content: localGenerate(type, prompt), source: "offline" };
+}
+
+export async function chatReply(messages) {
+  if (!(await checkAI())) return OFFLINE_REPLY;
+  try {
+    const res = await fetch("/api/studio/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.reply) return data.reply;
+    }
+  } catch {
+    /* ignore */
+  }
+  return OFFLINE_REPLY;
+}
+
+const OFFLINE_REPLY =
+  "I'm in offline mode right now (no ANTHROPIC_API_KEY on the server), so I can't think properly — but the studio itself works fine. Add the key to .env and restart to switch me on.";
+
+/* ===========================================================
+   Local (offline) generation — keyword driven, deterministic.
+   =========================================================== */
+
+const PALETTE = ["#6ea8fe", "#a78bfa", "#4ade80", "#fbbf24", "#f87171", "#38bdf8", "#fb923c"];
+
+function pickColor(prompt) {
+  const named = {
+    red: "#f87171", blue: "#6ea8fe", green: "#4ade80", yellow: "#fbbf24",
+    purple: "#a78bfa", orange: "#fb923c", pink: "#f472b6", white: "#e8eef7", cyan: "#38bdf8",
+  };
+  const p = prompt.toLowerCase();
+  for (const k in named) if (p.includes(k)) return named[k];
+  return PALETTE[Math.abs(hash(prompt)) % PALETTE.length];
+}
+
+function hash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+function titleOf(prompt) {
+  const clean = prompt.replace(/^(make|create|build|draw|show|do|a|an|the)\s+/gi, "").trim();
+  const t = clean.split(/[.!?\n]/)[0].slice(0, 60) || "New project";
+  return t[0].toUpperCase() + t.slice(1);
+}
+
+function sentences(prompt) {
+  return prompt
+    .split(/[.\n;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 2);
+}
+
+export function localGenerate(type, prompt) {
+  const c = defaultContent(type);
+  const color = pickColor(prompt);
+  const p = prompt.toLowerCase();
+  const title = titleOf(prompt);
+
+  if (type === "3d") {
+    const shapes = ["cube", "sphere", "torus", "pyramid", "cylinder", "prism", "octahedron"];
+    let shape = shapes.find((s) => p.includes(s)) || null;
+    if (!shape) {
+      if (p.includes("ball") || p.includes("planet") || p.includes("circle")) shape = "sphere";
+      else if (p.includes("donut") || p.includes("ring")) shape = "torus";
+      else if (p.includes("pyramid") || p.includes("triangle")) shape = "pyramid";
+      else if (p.includes("can") || p.includes("tube")) shape = "cylinder";
+      else shape = "cube";
+    }
+    let motion = "spin";
+    if (p.includes("bounce") || p.includes("bob")) motion = "bob";
+    if (p.includes("orbit")) motion = "orbit";
+    if (p.includes("pulse") || p.includes("grow")) motion = "pulse";
+    if (p.includes("still") || p.includes("no anim")) motion = "none";
+    return { ...c, shape, color, motion, autoSpin: motion !== "none", label: title };
+  }
+
+  if (type === "2d") {
+    const lines = sentences(prompt);
+    const bullets = lines.length > 1 ? lines.slice(1) : defaultBullets(p);
+    const slides = [
+      makeSlide("t", [
+        text("Title", title, 8, 30, 84, 56, "#0f172a", true, "center"),
+        text("Sub", "Made in Joseph's Math Studio", 8, 56, 84, 22, "#64748b", false, "center"),
+      ], "#ffffff"),
+    ];
+    chunk(bullets, 3).forEach((group, i) => {
+      slides.push(
+        makeSlide("s" + i, [
+          text("h", group[0].slice(0, 60), 7, 10, 86, 40, "#0f172a", true, "left"),
+          ...group.slice(1).map((b, j) =>
+            text("b" + j, "•  " + b, 9, 34 + j * 13, 84, 24, "#334155", false, "left")
+          ),
+        ], "#ffffff")
+      );
+    });
+    slides.push(
+      makeSlide("end", [
+        text("q", "Your turn — try one!", 8, 40, 84, 46, "#0f172a", true, "center"),
+      ], "#f1f5f9")
+    );
+    return { slides };
+  }
+
+  if (type === "whiteboard") {
+    const lines = sentences(prompt).slice(0, 6);
+    const items = [
+      { id: id(), kind: "text", x: 90, y: 70, text: title, size: 42, color: "#e8eef7", bold: true },
+      // box sized to the title so long headings don't spill out of it
+      { id: id(), kind: "rect", x: 78, y: 46, w: Math.max(340, title.length * 24 + 40), h: 74, color, fill: false, width: 3 },
+    ];
+    lines.forEach((l, i) => {
+      items.push({ id: id(), kind: "text", x: 100, y: 190 + i * 58, text: "• " + l.slice(0, 70), size: 24, color: "#cbd5e1" });
+    });
+    items.push({ id: id(), kind: "sticker", x: 700, y: 150, text: "📐", size: 74 });
+    items.push({ id: id(), kind: "sticker", x: 800, y: 260, text: "✏️", size: 64 });
+    const widgets = [];
+    if (p.includes("tetris")) widgets.push({ id: id(), kind: "game", game: "tetris", x: 760, y: 380, w: 260, h: 420 });
+    if (p.includes("blockoff") || p.includes("breakout") || p.includes("brick"))
+      widgets.push({ id: id(), kind: "game", game: "blockoff", x: 120, y: 470, w: 420, h: 320 });
+    if (p.includes("code") || p.includes("python") || p.includes("javascript"))
+      widgets.push({ id: id(), kind: "code", x: 120, y: 470, w: 420, h: 240, lang: "javascript",
+        text: "// " + title + "\nfor (let n = 1; n <= 10; n++) {\n  console.log(n, n * n);\n}" });
+    return { items, widgets, camera: { x: 0, y: 0, z: 1 } };
+  }
+
+  if (type === "animation") {
+    const emojiPool = matchEmoji(p);
+    const layers = emojiPool.map((e, i) => ({
+      id: id(),
+      name: e + " sticker",
+      kind: "sticker",
+      text: e,
+      src: null,
+      keys: [
+        { t: 0, x: 12, y: 30 + i * 18, scale: 1, rot: 0, opacity: 1 },
+        { t: 3, x: 50, y: 42 + i * 10, scale: 1.6, rot: 180, opacity: 1 },
+        { t: 6, x: 86, y: 30 + i * 18, scale: 1, rot: 360, opacity: 1 },
+      ],
+    }));
+    layers.unshift({
+      id: id(),
+      name: "Title",
+      kind: "text",
+      text: title,
+      color: "#ffffff",
+      size: 54,
+      keys: [
+        { t: 0, x: 50, y: 14, scale: 0.6, rot: 0, opacity: 0 },
+        { t: 1, x: 50, y: 14, scale: 1, rot: 0, opacity: 1 },
+        { t: 6, x: 50, y: 14, scale: 1, rot: 0, opacity: 1 },
+      ],
+    });
+    return { duration: 6, fps: 30, bg: pickBg(p), layers };
+  }
+
+  return c;
+}
+
+function pickBg(p) {
+  if (p.includes("space") || p.includes("planet")) return "#05060f";
+  if (p.includes("white") || p.includes("clean")) return "#f8fafc";
+  return "#0b1220";
+}
+
+function matchEmoji(p) {
+  const map = [
+    [/(triangle|angle|geometry)/, ["📐", "🔺"]],
+    [/(circle|pi|round)/, ["⭕", "🥧"]],
+    [/(fraction|pizza|slice)/, ["🍕", "🔢"]],
+    [/(rocket|space|planet)/, ["🚀", "🪐"]],
+    [/(money|percent|interest)/, ["💰", "📈"]],
+    [/(graph|chart|function|parabola)/, ["📈", "📊"]],
+    [/(dice|probability|chance)/, ["🎲", "🎯"]],
+    [/(clock|time|speed)/, ["⏱️", "🏃"]],
+  ];
+  for (const [re, list] of map) if (re.test(p)) return list;
+  return ["✨", "🔢"];
+}
+
+function defaultBullets(p) {
+  if (p.includes("fraction")) return ["What a fraction is", "Numerator and denominator", "Adding fractions", "Practice time"];
+  if (p.includes("pythag")) return ["a² + b² = c²", "Only for right triangles", "Find the missing side", "Practice time"];
+  return ["Key idea", "Worked example", "Common mistake", "Practice time"];
+}
+
+function chunk(arr, n) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out.length ? out : [["Key idea"]];
+}
+
+function makeSlide(sid, elements, bg) {
+  return { id: "s" + sid + Math.random().toString(36).slice(2, 5), bg, elements };
+}
+function text(k, t, x, y, w, size, color, bold, align) {
+  return { id: "e" + k + Math.random().toString(36).slice(2, 5), kind: "text", x, y, w, text: t, size, color, bold: !!bold, align: align || "left" };
+}
+function id() {
+  return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}

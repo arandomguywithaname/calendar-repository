@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Joseph's Math Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236ea8fe'/%3E%3Ctext x='32' y='46' font-size='40' font-family='sans-serif' font-weight='bold' text-anchor='middle' fill='%230b1020'%3E%E2%88%91%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./css/studio.css" />
+</head>
+<body>
+
+<!-- ============ 1. PASSWORD GATE ============ -->
+<section class="screen gate" id="screen-gate">
+  <div class="gate-bg"></div>
+  <form class="card gate-card" id="gate-form">
+    <div class="logo">∑</div>
+    <h1>Joseph's Math Studio</h1>
+    <p class="sub">Enter the studio password to continue.</p>
+    <input type="password" id="gate-pass" placeholder="Studio password" autocomplete="off" spellcheck="false" />
+    <button class="btn primary block" type="submit">Enter Studio</button>
+    <p class="err" id="gate-err"></p>
+  </form>
+</section>
+
+<!-- ============ 2. PROFILE PICKER ============ -->
+<section class="screen" id="screen-profiles" hidden>
+  <div class="center-wrap">
+    <h1 class="big">Who's creating today?</h1>
+    <p class="sub center">Pick your profile, then sign in.</p>
+    <div class="profile-grid" id="profile-grid"></div>
+    <button class="btn ghost" id="btn-back-gate">← Back</button>
+  </div>
+</section>
+
+<!-- ============ 3. SIGN IN ============ -->
+<section class="screen" id="screen-signin" hidden>
+  <form class="card signin-card" id="signin-form">
+    <div class="avatar big-avatar" id="signin-avatar">J</div>
+    <h1 id="signin-title">Sign in</h1>
+    <p class="sub" id="signin-sub">Welcome back.</p>
+    <label id="lbl-name">Your name</label>
+    <input type="text" id="signin-name" placeholder="Name" autocomplete="off" />
+    <label>Passcode</label>
+    <input type="password" id="signin-code" placeholder="Passcode" autocomplete="off" />
+    <p class="hint" id="signin-hint"></p>
+    <button class="btn primary block" type="submit" id="signin-btn">Sign in</button>
+    <button class="btn ghost block" type="button" id="btn-back-profiles">← Choose a different profile</button>
+    <p class="err" id="signin-err"></p>
+  </form>
+</section>
+
+<!-- ============ 4. DASHBOARD ============ -->
+<section class="screen dashboard" id="screen-dashboard" hidden>
+  <header class="topbar">
+    <div class="brand"><span class="logo sm">∑</span> Math Studio</div>
+    <div class="grow"></div>
+    <button class="btn ghost sm" id="btn-open-chat">💬 Chat</button>
+    <div class="who" id="who"></div>
+    <button class="btn ghost sm" id="btn-signout">Sign out</button>
+  </header>
+
+  <main class="dash-main">
+    <div class="dash-head">
+      <div>
+        <h1 class="big" id="dash-hello">Your projects</h1>
+        <p class="sub" id="dash-sub">Everything you make is saved right here.</p>
+      </div>
+      <button class="btn primary lg" id="btn-new-project">+ New Project</button>
+    </div>
+
+    <div class="filters" id="filters">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="3d">3D</button>
+      <button class="chip" data-filter="2d">2D Slides</button>
+      <button class="chip" data-filter="whiteboard">Whiteboard</button>
+      <button class="chip" data-filter="animation">Animation</button>
+    </div>
+
+    <div class="project-grid" id="project-grid"></div>
+    <div class="empty" id="dash-empty" hidden>
+      <div class="empty-art">✦</div>
+      <h2>No projects yet</h2>
+      <p>Click <b>+ New Project</b> to make your first one.</p>
+    </div>
+  </main>
+</section>
+
+<!-- ============ 5. EDITOR SHELL ============ -->
+<section class="screen editor-shell" id="screen-editor" hidden>
+  <header class="topbar">
+    <button class="btn ghost sm" id="btn-back-dash">← Dashboard</button>
+    <span class="type-badge" id="editor-badge"></span>
+    <input class="title-input" id="project-title" spellcheck="false" />
+    <div class="grow"></div>
+    <span class="save-status" id="save-status"></span>
+    <button class="btn ghost sm" id="btn-editor-chat">💬 Chat</button>
+  </header>
+  <div class="editor-body" id="editor-body"></div>
+</section>
+
+<!-- ============ MODALS ============ -->
+<div class="modal-back" id="modal-back" hidden>
+  <div class="modal" id="modal"></div>
+</div>
+
+<!-- ============ CHAT DRAWER ============ -->
+<aside class="chat-drawer" id="chat-drawer" hidden>
+  <div class="chat-head">
+    <b>Studio Chat</b>
+    <select id="chat-room"></select>
+    <button class="btn ghost sm" id="chat-close">✕</button>
+  </div>
+  <div class="chat-log" id="chat-log"></div>
+  <form class="chat-form" id="chat-form">
+    <input id="chat-input" placeholder="Message… (start with @claude to ask the AI)" autocomplete="off" />
+    <button class="btn primary sm" type="submit">Send</button>
+  </form>
+</aside>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

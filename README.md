@@ -1,3 +1,74 @@
+# Calendar Repository
+
+Two apps live here:
+
+- **Joseph's Math Studio** — a project studio for a maths classroom ([docs](#josephs-math-studio))
+- **Calendar Planning Agent** — the original natural-language → Google Calendar agent
+
+---
+
+# Joseph's Math Studio
+
+A creation studio for Joseph's maths class. Run the server and open
+**http://localhost:3000/studio/**.
+
+### How you get in
+
+1. **Studio password** — `williamiscool123`
+2. **Pick a profile** — Joseph (teacher), an existing student, or *Another user* to make a new one
+3. **Sign in** with that profile's passcode (the first passcode you type for a profile becomes its passcode)
+
+Joseph is a teacher account and sees every project in the studio, with the
+student's name on each card. Students see only their own.
+
+### Making a project
+
+From the dashboard: **+ New Project** → pick a creation type → pick **With AI** or **From scratch**.
+
+| Type | What it is |
+| --- | --- |
+| **3D Creation** | Spin a model around — a built-in shape or your own `.obj` — with colour, wireframe, and motion (spin / bob / orbit / pulse). Exports `.obj` and PNG. |
+| **2D Slides** | Slides you edit and present full screen with the arrow keys. Text, boxes, circles, photos, web images and stickers. Exports a standalone web page. |
+| **Whiteboard** | Draw, type, stickers, shapes, photos, code blocks and playable games (Tetris, Blockoff) on an infinite pannable board. Ctrl+C / Ctrl+V, Ctrl+Z, Delete. Exports PNG. |
+| **Animation** | A keyframe timeline over photos, videos, web images, text, stickers and 3D models. Play, scrub, and export to video (`.webm`). |
+
+**With AI** asks you to describe what you want in plain English and builds it into
+the editor, where you can still change everything by hand. Projects are named
+`Project 1`, `Project 2`, `Project 3`… and can be renamed at the top of the editor.
+
+There's a **Chat** drawer for a class chat and a per-project chat. Start a message
+with `@claude` to ask the AI helper a question.
+
+### Where things are saved
+
+Everything (users, projects, chat) is saved in the browser's `localStorage` on
+that device — no database and no accounts server. Use the export buttons in each
+editor to get files out.
+
+### AI setup (optional)
+
+The studio works fully without any API key: "With AI" falls back to a built-in
+offline builder and says so on screen. To switch Claude on, put
+`ANTHROPIC_API_KEY` in `.env` and restart — `/api/studio/status` reports which
+mode you're in.
+
+### Files
+
+```
+public/studio/
+  index.html            — the whole app shell (screens + modals + chat)
+  css/studio.css
+  js/store.js           — localStorage: users, projects, chat
+  js/ai.js              — AI client + offline generator
+  js/app.js             — gate, profiles, sign-in, dashboard, editor loading
+  js/gl.js              — hand-rolled WebGL renderer + .obj loader/exporter
+  js/editors/           — threed.js, slides.js, whiteboard.js, animation.js
+  js/games/             — tetris.js, blockoff.js
+src/studio.ts           — /api/studio/{status,generate,chat}
+```
+
+---
+
 # Calendar Planning Agent
 
 An AI-powered agent that parses natural language (or images) into Google Calendar events using Claude.
