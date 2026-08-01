@@ -12,6 +12,115 @@ const STICKERS = ["🚀", "⭐", "📐", "🔢", "🍕", "🎯", "🐢", "💡",
 const BG_COLORS = ["#0b1220", "#05060f", "#111827", "#ffffff", "#f1f5f9", "#1e1b34", "#0f2419"];
 const W = 1280, H = 720;
 
+/* Easing curves. "smooth" is the safe default; the others are what make a
+   movement feel snappy, springy or heavy instead of flat. */
+function bounceOut(u) {
+  const n = 7.5625, d = 2.75;
+  if (u < 1 / d) return n * u * u;
+  if (u < 2 / d) return n * (u -= 1.5 / d) * u + 0.75;
+  if (u < 2.5 / d) return n * (u -= 2.25 / d) * u + 0.9375;
+  return n * (u -= 2.625 / d) * u + 0.984375;
+}
+
+const EASES = {
+  smooth: (u) => u * u * (3 - 2 * u),
+  linear: (u) => u,
+  snap: (u) => 1 - Math.pow(1 - u, 4),                      // fast out, gentle landing
+  pop: (u) => 1 + 2.70158 * Math.pow(u - 1, 3) + 1.70158 * Math.pow(u - 1, 2), // overshoots
+  bounce: bounceOut,
+  elastic: (u) =>
+    u === 0 || u === 1 ? u : Math.pow(2, -10 * u) * Math.sin((u * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1,
+};
+
+const EASE_NAMES = [
+  ["smooth", "Smooth"], ["snap", "Snappy"], ["pop", "Pop"],
+  ["bounce", "Bouncy"], ["elastic", "Springy"], ["linear", "Steady"],
+];
+
+const EFFECT_NAMES = [
+  ["none", "None"], ["float", "Float"], ["spin", "Spin"],
+  ["wiggle", "Wiggle"], ["pulse", "Pulse"], ["sway", "Sway"],
+];
+
+const K = (t, x, y, scale = 1, rot = 0, opacity = 1, squash = 1) => ({ t, x, y, scale, rot, opacity, squash });
+
+/* Each preset returns a whole movement: the keyframes plus the easing,
+   path and effect that make it read the way its name suggests. */
+const PRESETS = {
+  "Pop in": (d, p) => ({
+    ease: "pop",
+    keys: [
+      K(0, p.x, p.y, 0.2, -12, 0),
+      K(Math.min(0.7, d * 0.25), p.x, p.y, 1, 0, 1),
+      K(d, p.x, p.y, 1, 0, 1),
+    ],
+  }),
+  "Fly across": (d) => ({
+    ease: "smooth",
+    keys: [K(0, -18, 50, 0.9, -8), K(d * 0.5, 50, 44, 1.15, 0), K(d, 118, 50, 0.9, 8)],
+  }),
+  Bounce: (d, p) => ({
+    ease: "bounce",
+    keys: [
+      K(0, p.x, 14, 1, 0, 1, 1.12),
+      K(d * 0.3, p.x, 74, 1, 0, 1, 0.8),
+      K(d * 0.36, p.x, 70, 1, 0, 1, 1.06),
+      K(d * 0.65, p.x, 34, 1, 0, 1, 1.06),
+      K(d * 0.9, p.x, 74, 1, 0, 1, 0.85),
+      K(d, p.x, 70, 1, 0, 1, 1),
+    ],
+  }),
+  Orbit: (d, p) => ({
+    ease: "linear",
+    path: "curve",
+    keys: [
+      K(0, p.x + 26, p.y, 1),
+      K(d * 0.25, p.x, p.y - 26, 1.1),
+      K(d * 0.5, p.x - 26, p.y, 1),
+      K(d * 0.75, p.x, p.y + 26, 0.9),
+      K(d, p.x + 26, p.y, 1),
+    ],
+  }),
+  "Zoom punch": (d, p) => ({
+    ease: "snap",
+    keys: [
+      K(0, p.x, p.y, 0.1, -20, 0),
+      K(d * 0.18, p.x, p.y, 1.45, 4, 1),
+      K(d * 0.3, p.x, p.y, 1, 0, 1),
+      K(d, p.x, p.y, 1, 0, 1),
+    ],
+  }),
+  Wobble: (d, p) => ({
+    ease: "elastic",
+    keys: [
+      K(0, p.x, p.y, 1, -14),
+      K(d * 0.35, p.x, p.y, 1, 14),
+      K(d * 0.7, p.x, p.y, 1, -8),
+      K(d, p.x, p.y, 1, 0),
+    ],
+  }),
+  Drift: (d, p) => ({
+    ease: "smooth",
+    path: "curve",
+    effect: "float",
+    keys: [
+      K(0, 16, p.y + 12, 0.85, -6),
+      K(d * 0.4, 42, p.y - 14, 1.05, 3),
+      K(d * 0.75, 68, p.y + 8, 1, -3),
+      K(d, 86, p.y - 6, 0.9, 5),
+    ],
+  }),
+  "Fade in": (d, p) => ({
+    ease: "smooth",
+    keys: [
+      K(0, p.x, p.y + 6, 0.86, 0, 0),
+      K(Math.min(1.4, d * 0.35), p.x, p.y, 1, 0, 1),
+      K(d, p.x, p.y, 1, 0, 1),
+    ],
+  }),
+  "Stand still": (d, p) => ({ ease: "smooth", path: "straight", effect: "none", keys: [K(0, p.x, p.y)] }),
+};
+
 export function mount(root, project, api, opts = {}) {
   const c = project.content;
   c.duration = c.duration || 6;
@@ -74,19 +183,29 @@ export function mount(root, project, api, opts = {}) {
         </div>
         <div id="tracks"></div>
         <div class="tgroup" id="layer-props" hidden>
+          <div class="tlabel">Ready-made movements</div>
+          <div class="trow presets">
+            ${Object.keys(PRESETS).map((n) => `<button class="btn sm" data-preset="${n}">${n}</button>`).join("")}
+          </div>
+          <div class="tlabel">How it moves</div>
+          <div class="trow">
+            <label class="pick-field">Style
+              <select id="p-ease">${EASE_NAMES.map(([v, n]) => `<option value="${v}">${n}</option>`).join("")}</select>
+            </label>
+            <label class="pick-field">Always
+              <select id="p-effect">${EFFECT_NAMES.map(([v, n]) => `<option value="${v}">${n}</option>`).join("")}</select>
+            </label>
+            <label class="pick-field">Path
+              <select id="p-path"><option value="straight">Straight</option><option value="curve">Curved</option></select>
+            </label>
+            <button class="btn sm" id="p-trail">✨ Trail: off</button>
+          </div>
           <div class="tlabel">Selected layer at this moment</div>
           <div class="field"><label>Across</label><input type="range" id="p-x" min="-20" max="120" step="0.5"><span class="num-out" id="o-x"></span></div>
           <div class="field"><label>Down</label><input type="range" id="p-y" min="-20" max="120" step="0.5"><span class="num-out" id="o-y"></span></div>
           <div class="field"><label>Size</label><input type="range" id="p-s" min="0.05" max="4" step="0.01"><span class="num-out" id="o-s"></span></div>
           <div class="field"><label>Turn</label><input type="range" id="p-r" min="-720" max="720" step="1"><span class="num-out" id="o-r"></span></div>
           <div class="field"><label>Fade</label><input type="range" id="p-o" min="0" max="1" step="0.01"><span class="num-out" id="o-o"></span></div>
-          <div class="trow">
-            <button class="btn sm" id="preset-fly">Fly in</button>
-            <button class="btn sm" id="preset-spin">Spin</button>
-            <button class="btn sm" id="preset-bounce">Bounce</button>
-            <button class="btn sm" id="preset-fade">Fade in</button>
-            <button class="btn sm" id="preset-clear">Clear keys</button>
-          </div>
         </div>
       </div>
     </div>`;
@@ -108,11 +227,17 @@ export function mount(root, project, api, opts = {}) {
 
   function addLayer(layer) {
     layer.id = uid();
-    // stagger new layers a little so they don't all land on the same spot
+    // stagger new layers so they don't land on the same spot, and give them a
+    // pop-in straight away — adding something should never sit there doing nothing
     const n = c.layers.length;
-    layer.keys = layer.keys || [
-      { t: 0, x: 50 + ((n % 3) - 1) * 16, y: 50 + (Math.floor(n / 3) % 3 - 1) * 16, scale: 1, rot: 0, opacity: 1 },
-    ];
+    const spot = { x: 50 + ((n % 3) - 1) * 16, y: 50 + ((Math.floor(n / 3) % 3) - 1) * 16 };
+    if (!layer.keys) {
+      const preset = PRESETS["Pop in"](c.duration, spot);
+      layer.keys = preset.keys.map((k) => ({ ...k, t: Math.min(c.duration, k.t + n * 0.18) }));
+      layer.keys[0].t = Math.max(0, n * 0.18);
+      if (n) layer.keys.unshift({ ...preset.keys[0], t: 0, opacity: 0 });
+      layer.ease = layer.ease || preset.ease;
+    }
     c.layers.push(layer);
     selectedId = layer.id;
     prepareLayer(layer);
@@ -154,27 +279,67 @@ export function mount(root, project, api, opts = {}) {
 
   c.layers.forEach(prepareLayer);
 
-  /* ---------------- keyframes ---------------- */
+  /* ---------------- keyframes ----------------
+     Movement quality comes from three things stacked on top of each other:
+       1. the easing curve used between two keyframes
+       2. an optional curved (spline) path through three or more keyframes
+       3. a continuous effect layered on top of the whole thing
+  ------------------------------------------------------------------- */
   function sample(l, t) {
     const keys = (l.keys || []).slice().sort((a, b) => a.t - b.t);
-    if (!keys.length) return { x: 50, y: 50, scale: 1, rot: 0, opacity: 1 };
-    if (t <= keys[0].t) return { ...keys[0] };
-    if (t >= keys[keys.length - 1].t) return { ...keys[keys.length - 1] };
+    if (!keys.length) return withEffect(l, { x: 50, y: 50, scale: 1, rot: 0, opacity: 1 }, t);
+    if (keys.length === 1 || t <= keys[0].t) return withEffect(l, { ...keys[0] }, t);
+    if (t >= keys[keys.length - 1].t) return withEffect(l, { ...keys[keys.length - 1] }, t);
+
+    const ease = EASES[l.ease] || EASES.smooth;
+
     for (let i = 0; i < keys.length - 1; i++) {
       const a = keys[i], b = keys[i + 1];
-      if (t >= a.t && t <= b.t) {
-        const u = (t - a.t) / (b.t - a.t || 1);
-        const e = u * u * (3 - 2 * u);            // smooth in/out
-        return {
-          x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
-          scale: lerp(a.scale, b.scale, e), rot: lerp(a.rot, b.rot, e),
-          opacity: lerp(a.opacity ?? 1, b.opacity ?? 1, e),
-        };
+      if (t < a.t || t > b.t) continue;
+      const u = (t - a.t) / (b.t - a.t || 1);
+      const e = ease(u);
+
+      // curved path: run the position through a Catmull-Rom spline so a layer
+      // sweeps through its keyframes instead of turning hard corners
+      let x, y;
+      if (l.path === "curve" && keys.length > 2) {
+        const p0 = keys[Math.max(0, i - 1)], p3 = keys[Math.min(keys.length - 1, i + 2)];
+        x = catmull(p0.x, a.x, b.x, p3.x, e);
+        y = catmull(p0.y, a.y, b.y, p3.y, e);
+      } else {
+        x = lerp(a.x, b.x, e);
+        y = lerp(a.y, b.y, e);
       }
+
+      return withEffect(l, {
+        x, y,
+        scale: lerp(a.scale, b.scale, e),
+        rot: lerp(a.rot, b.rot, e),
+        opacity: lerp(a.opacity ?? 1, b.opacity ?? 1, e),
+        squash: lerp(a.squash ?? 1, b.squash ?? 1, e),
+      }, t);
     }
-    return { ...keys[keys.length - 1] };
+    return withEffect(l, { ...keys[keys.length - 1] }, t);
   }
+
+  /** Continuous motion added on top of the keyframes — free life for any layer. */
+  function withEffect(l, s, t) {
+    s.squash = s.squash ?? 1;
+    switch (l.effect) {
+      case "spin": s.rot += t * 90; break;
+      case "float": s.y += Math.sin(t * 2.2) * 3; s.rot += Math.sin(t * 1.1) * 3; break;
+      case "wiggle": s.rot += Math.sin(t * 9) * 7; break;
+      case "pulse": s.scale *= 1 + Math.sin(t * 3.4) * 0.09; break;
+      case "sway": s.x += Math.sin(t * 1.6) * 4; s.rot += Math.sin(t * 1.6) * 5; break;
+    }
+    return s;
+  }
+
   const lerp = (a, b, u) => a + (b - a) * u;
+  const catmull = (p0, p1, p2, p3, u) => {
+    const u2 = u * u, u3 = u2 * u;
+    return 0.5 * ((2 * p1) + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3);
+  };
 
   function keyAt(l, t) {
     return (l.keys || []).find((k) => Math.abs(k.t - t) < 0.06) || null;
@@ -206,50 +371,84 @@ export function mount(root, project, api, opts = {}) {
   /* ---------------- drawing ---------------- */
   function drawFrame(t) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, W, H);
 
     for (const l of c.layers) {
       if (l.hidden) continue;
-      const s = sample(l, t);
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, Math.min(1, s.opacity ?? 1));
-      ctx.translate((s.x / 100) * W, (s.y / 100) * H);
-      ctx.rotate((s.rot * Math.PI) / 180);
-      ctx.scale(s.scale, s.scale);
-
-      if (l.kind === "sticker") {
-        ctx.font = `${l.size || 160}px serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(l.text, 0, 0);
-      } else if (l.kind === "text") {
-        ctx.font = `700 ${l.size || 64}px -apple-system, Segoe UI, sans-serif`;
-        ctx.fillStyle = l.color || "#ffffff";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(l.text || "", 0, 0);
-      } else if (l.kind === "image" || l.kind === "video") {
-        const m = media.get(l.id);
-        const ready = l.kind === "image" ? m?.complete && m.naturalWidth : m?.readyState >= 2;
-        if (ready) {
-          const nw = l.kind === "image" ? m.naturalWidth : m.videoWidth;
-          const nh = l.kind === "image" ? m.naturalHeight : m.videoHeight;
-          const fit = Math.min((W * 0.6) / nw, (H * 0.6) / nh);
-          ctx.drawImage(m, (-nw * fit) / 2, (-nh * fit) / 2, nw * fit, nh * fit);
-        }
-      } else if (l.kind === "obj") {
-        const v = viewers.get(l.id);
-        if (v) {
-          v.viewer.state.rotY = (l.spin === false ? 0 : t * 1.2) + (s.rot * Math.PI) / 180;
-          v.viewer.state.color = l.color || "#6ea8fe";
-          v.viewer.draw(t);
-          const size = 460;
-          ctx.drawImage(v.canvas, -size / 2, -size / 2, size, size);
+      // motion trail: a few faded copies from just before now
+      if (l.trail) {
+        for (let g = 4; g >= 1; g--) {
+          const gt = t - g * 0.055;
+          if (gt < 0) continue;
+          paintLayer(l, sample(l, gt), gt, 0.13 * (1 - g / 5.5));
         }
       }
-      ctx.restore();
+      paintLayer(l, sample(l, t), t, 1);
     }
+  }
+
+  /** Draws one layer for one moment. `fade` scales opacity (used by trails). */
+  function paintLayer(l, s, t, fade) {
+    const alpha = Math.max(0, Math.min(1, (s.opacity ?? 1) * fade));
+    if (alpha <= 0.002 || s.scale <= 0) return;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate((s.x / 100) * W, (s.y / 100) * H);
+    ctx.rotate((s.rot * Math.PI) / 180);
+    // squash & stretch — wider when squashed, taller when stretched
+    const q = s.squash ?? 1;
+    ctx.scale(s.scale * (2 - q), s.scale * q);
+
+    if (l.kind === "sticker") {
+      ctx.font = `${l.size || 160}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,.35)";
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 6;
+      ctx.fillText(l.text, 0, 0);
+    } else if (l.kind === "text") {
+      const size = l.size || 64;
+      ctx.font = `800 ${size}px -apple-system, Segoe UI, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const lines = String(l.text || "").split("\n");
+      lines.forEach((line, i) => {
+        const y = (i - (lines.length - 1) / 2) * size * 1.15;
+        if (l.outline !== false) {
+          // dark halo so light text still reads on a light background, and vice versa
+          ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(4, size * 0.11);
+          ctx.strokeStyle = isLight(l.color || "#ffffff") ? "rgba(8,12,20,.55)" : "rgba(255,255,255,.5)";
+          ctx.strokeText(line, 0, y);
+        }
+        ctx.fillStyle = l.color || "#ffffff";
+        ctx.fillText(line, 0, y);
+      });
+    } else if (l.kind === "image" || l.kind === "video") {
+      const m = media.get(l.id);
+      const ready = l.kind === "image" ? m?.complete && m.naturalWidth : m?.readyState >= 2;
+      if (ready) {
+        const nw = l.kind === "image" ? m.naturalWidth : m.videoWidth;
+        const nh = l.kind === "image" ? m.naturalHeight : m.videoHeight;
+        const fit = Math.min((W * 0.6) / nw, (H * 0.6) / nh);
+        ctx.drawImage(m, (-nw * fit) / 2, (-nh * fit) / 2, nw * fit, nh * fit);
+      }
+    } else if (l.kind === "obj") {
+      const v = viewers.get(l.id);
+      if (v) {
+        v.viewer.state.rotY = (l.spin === false ? 0 : t * 1.2) + (s.rot * Math.PI) / 180;
+        v.viewer.state.color = l.color || "#6ea8fe";
+        v.viewer.draw(t);
+        const size = 460;
+        ctx.drawImage(v.canvas, -size / 2, -size / 2, size, size);
+      }
+    }
+    ctx.restore();
   }
 
   /* ---------------- playback ---------------- */
@@ -311,8 +510,13 @@ export function mount(root, project, api, opts = {}) {
       const row = document.createElement("div");
       row.className = "list-item" + (l.id === selectedId ? " active" : "");
       row.innerHTML = `<span>${icon(l)}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${escapeHtml(l.name || l.kind)}</span>
+        <span class="x" data-up title="Bring forward">▲</span><span class="x" data-down title="Send back">▼</span>
         <span class="x" data-eye title="Show/hide">${l.hidden ? "🚫" : "👁"}</span><span class="x" data-del title="Delete">✕</span>`;
       row.onclick = (e) => {
+        const i = c.layers.indexOf(l);
+        // touching any part of a row selects it, so the controls below always
+        // belong to the layer you just poked
+        if (e.target.dataset.del === undefined) selectedId = l.id;
         if (e.target.dataset.del !== undefined) {
           c.layers = c.layers.filter((x) => x !== l);
           media.delete(l.id);
@@ -320,6 +524,10 @@ export function mount(root, project, api, opts = {}) {
           if (selectedId === l.id) selectedId = null;
         } else if (e.target.dataset.eye !== undefined) {
           l.hidden = !l.hidden;
+        } else if (e.target.dataset.up !== undefined) {
+          if (i < c.layers.length - 1) c.layers.splice(i + 1, 0, c.layers.splice(i, 1)[0]);
+        } else if (e.target.dataset.down !== undefined) {
+          if (i > 0) c.layers.splice(i - 1, 0, c.layers.splice(i, 1)[0]);
         } else selectedId = l.id;
         renderLayers();
         renderTracks();
@@ -406,7 +614,32 @@ export function mount(root, project, api, opts = {}) {
     setSlider("#p-s", "#o-s", s.scale, 2);
     setSlider("#p-r", "#o-r", s.rot, 0);
     setSlider("#p-o", "#o-o", s.opacity ?? 1, 2);
+    $("#p-ease").value = l.ease || "smooth";
+    $("#p-effect").value = l.effect || "none";
+    $("#p-path").value = l.path || "straight";
+    $("#p-trail").textContent = "✨ Trail: " + (l.trail ? "on" : "off");
+    $("#p-trail").classList.toggle("active", !!l.trail);
   }
+
+  const onLayerField = (sel, prop) => {
+    $(sel).onchange = () => {
+      const l = selected();
+      if (!l) return;
+      l[prop] = $(sel).value;
+      saveSoon();
+    };
+  };
+  onLayerField("#p-ease", "ease");
+  onLayerField("#p-effect", "effect");
+  onLayerField("#p-path", "path");
+
+  $("#p-trail").onclick = () => {
+    const l = selected();
+    if (!l) return;
+    l.trail = !l.trail;
+    renderProps();
+    saveSoon();
+  };
   function setSlider(sel, out, val, dp) {
     const el = $(sel);
     el.value = val;
@@ -433,34 +666,22 @@ export function mount(root, project, api, opts = {}) {
   });
 
   /* ---------------- presets ---------------- */
-  function setKeys(keys) {
+  function applyPreset(name) {
     const l = selected();
     if (!l) return api.toast("Pick a layer first.");
-    l.keys = keys;
+    const here = sample(l, 0);
+    const built = PRESETS[name](c.duration, { x: here.x, y: here.y });
+    l.keys = built.keys;
+    if (built.ease) l.ease = built.ease;
+    if (built.path) l.path = built.path;
+    if (built.effect !== undefined) l.effect = built.effect;
     renderTracks();
+    renderProps();
     saveSoon();
+    api.toast(name + " applied");
   }
-  $("#preset-fly").onclick = () => setKeys([
-    { t: 0, x: -15, y: 50, scale: 1, rot: 0, opacity: 1 },
-    { t: c.duration / 2, x: 50, y: 50, scale: 1.2, rot: 0, opacity: 1 },
-    { t: c.duration, x: 115, y: 50, scale: 1, rot: 0, opacity: 1 },
-  ]);
-  $("#preset-spin").onclick = () => setKeys([
-    { t: 0, x: 50, y: 50, scale: 1, rot: 0, opacity: 1 },
-    { t: c.duration, x: 50, y: 50, scale: 1, rot: 360, opacity: 1 },
-  ]);
-  $("#preset-bounce").onclick = () => setKeys([
-    { t: 0, x: 50, y: 20, scale: 1, rot: 0, opacity: 1 },
-    { t: c.duration * 0.33, x: 50, y: 70, scale: 1.1, rot: 0, opacity: 1 },
-    { t: c.duration * 0.66, x: 50, y: 30, scale: 1, rot: 0, opacity: 1 },
-    { t: c.duration, x: 50, y: 70, scale: 1.1, rot: 0, opacity: 1 },
-  ]);
-  $("#preset-fade").onclick = () => setKeys([
-    { t: 0, x: 50, y: 50, scale: 0.8, rot: 0, opacity: 0 },
-    { t: Math.min(1.5, c.duration), x: 50, y: 50, scale: 1, rot: 0, opacity: 1 },
-    { t: c.duration, x: 50, y: 50, scale: 1, rot: 0, opacity: 1 },
-  ]);
-  $("#preset-clear").onclick = () => setKeys([{ t: 0, x: 50, y: 50, scale: 1, rot: 0, opacity: 1 }]);
+
+  root.querySelectorAll("[data-preset]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.preset)));
 
   /* ---------------- adding layers ---------------- */
   $("#add-photo").onclick = () => $("#photo-file").click();
@@ -603,4 +824,12 @@ export function mount(root, project, api, opts = {}) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+/** Used to pick a contrasting halo colour for text. */
+function isLight(hex) {
+  const h = String(hex).replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map((x) => x + x).join("") : h, 16);
+  if (Number.isNaN(n)) return true;
+  return ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114 > 140;
 }

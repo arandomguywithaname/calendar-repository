@@ -72,13 +72,23 @@ Whiteboard coordinates are plain pixels on an infinite board; keep everything be
       "text": "an emoji for stickers, or the words for text",
       "color": "#rrggbb (text layers only)",
       "size": number (sticker 120-220, text 40-90),
+      "ease": "smooth" | "snap" | "pop" | "bounce" | "elastic" | "linear",
+      "path": "straight" | "curve",
+      "effect": "none" | "float" | "spin" | "wiggle" | "pulse" | "sway",
+      "trail": boolean,
       "keys": [
-        { "t": seconds, "x": 0-100, "y": 0-100, "scale": number, "rot": degrees, "opacity": 0-1 }
+        { "t": seconds, "x": 0-100, "y": 0-100, "scale": number, "rot": degrees, "opacity": 0-1, "squash": number (1 = normal, <1 squashed, >1 stretched) }
       ]
     }
   ]
 }
-Every layer needs at least two keyframes so it actually moves, the first at t = 0.`,
+Make it move well, not just move:
+- Every layer needs at least three keyframes; the first is at t = 0.
+- Stagger the layers' entrances by a few tenths of a second instead of starting them all together.
+- Match the easing to the motion: "pop" or "snap" for entrances, "bounce" for anything falling, "linear" for orbits, "smooth" for drifting.
+- Use "path": "curve" whenever something travels through three or more points.
+- Use "squash" on impacts (about 0.8 when it lands, 1.1 just before) — it is what makes a bounce look alive.
+- Give a layer an "effect" so it keeps moving after it arrives, and "trail": true for anything fast.`,
 };
 
 const SYSTEM = `You build content for a maths teacher's creation studio. The teacher is Joseph; the users are Joseph and his students.

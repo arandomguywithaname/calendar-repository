@@ -169,33 +169,73 @@ export function localGenerate(type, prompt) {
   }
 
   if (type === "animation") {
+    const d = 6;
     const emojiPool = matchEmoji(p);
-    const layers = emojiPool.map((e, i) => ({
-      id: id(),
-      name: e + " sticker",
-      kind: "sticker",
-      text: e,
-      src: null,
-      keys: [
-        { t: 0, x: 12, y: 30 + i * 18, scale: 1, rot: 0, opacity: 1 },
-        { t: 3, x: 50, y: 42 + i * 10, scale: 1.6, rot: 180, opacity: 1 },
-        { t: 6, x: 86, y: 30 + i * 18, scale: 1, rot: 360, opacity: 1 },
-      ],
-    }));
+    const wantsFly = /(fly|across|travel|move|race|zoom|launch)/.test(p);
+    const wantsBounce = /(bounce|drop|fall|jump)/.test(p);
+    const wantsSpin = /(spin|turn|rotate|orbit|round)/.test(p);
+
+    const layers = emojiPool.map((e, i) => {
+      const y = 46 + (i - (emojiPool.length - 1) / 2) * 20;
+      const start = i * 0.35;                       // stagger the entrances
+      if (wantsFly) {
+        return {
+          id: id(), kind: "sticker", name: e + " flying", text: e, size: 170,
+          ease: "smooth", path: "curve", effect: "float", trail: true,
+          keys: [
+            { t: start, x: -16, y: y + 8, scale: 0.8, rot: -10, opacity: 1 },
+            { t: start + (d - start) * 0.45, x: 48, y: y - 12, scale: 1.25, rot: 4, opacity: 1 },
+            { t: d, x: 118, y, scale: 0.9, rot: 12, opacity: 1 },
+          ],
+        };
+      }
+      if (wantsBounce) {
+        return {
+          id: id(), kind: "sticker", name: e + " bouncing", text: e, size: 170, ease: "bounce",
+          keys: [
+            { t: start, x: 30 + i * 20, y: 12, scale: 1, rot: 0, opacity: 1, squash: 1.12 },
+            { t: start + 1.4, x: 30 + i * 20, y: 74, scale: 1, rot: 0, opacity: 1, squash: 0.8 },
+            { t: start + 1.7, x: 30 + i * 20, y: 70, scale: 1, rot: 0, opacity: 1, squash: 1.05 },
+            { t: start + 3.2, x: 30 + i * 20, y: 38, scale: 1, rot: 0, opacity: 1 },
+            { t: d, x: 30 + i * 20, y: 72, scale: 1, rot: 0, opacity: 1, squash: 0.9 },
+          ],
+        };
+      }
+      if (wantsSpin) {
+        return {
+          id: id(), kind: "sticker", name: e + " orbiting", text: e, size: 160,
+          ease: "linear", path: "curve", effect: "spin",
+          keys: [
+            { t: 0, x: 50 + 24, y: 52, scale: 1, rot: 0, opacity: 1 },
+            { t: d * 0.25, x: 50, y: 52 - 24, scale: 1.1, rot: 90, opacity: 1 },
+            { t: d * 0.5, x: 50 - 24, y: 52, scale: 1, rot: 180, opacity: 1 },
+            { t: d * 0.75, x: 50, y: 52 + 24, scale: 0.9, rot: 270, opacity: 1 },
+            { t: d, x: 50 + 24, y: 52, scale: 1, rot: 360, opacity: 1 },
+          ],
+        };
+      }
+      // default: a lively pop-in that keeps moving afterwards
+      return {
+        id: id(), kind: "sticker", name: e + " sticker", text: e, size: 170,
+        ease: "pop", effect: i % 2 ? "float" : "sway",
+        keys: [
+          { t: start, x: 34 + i * 26, y, scale: 0.2, rot: -14, opacity: 0 },
+          { t: start + 0.7, x: 34 + i * 26, y, scale: 1, rot: 0, opacity: 1 },
+          { t: d, x: 34 + i * 26, y, scale: 1, rot: 0, opacity: 1 },
+        ],
+      };
+    });
+
     layers.unshift({
-      id: id(),
-      name: "Title",
-      kind: "text",
-      text: title,
-      color: "#ffffff",
-      size: 54,
+      id: id(), kind: "text", name: "Title", text: title, color: "#ffffff", size: 62, ease: "pop",
       keys: [
-        { t: 0, x: 50, y: 14, scale: 0.6, rot: 0, opacity: 0 },
-        { t: 1, x: 50, y: 14, scale: 1, rot: 0, opacity: 1 },
-        { t: 6, x: 50, y: 14, scale: 1, rot: 0, opacity: 1 },
+        { t: 0, x: 50, y: 16, scale: 0.5, rot: -6, opacity: 0 },
+        { t: 0.8, x: 50, y: 16, scale: 1, rot: 0, opacity: 1 },
+        { t: d, x: 50, y: 16, scale: 1, rot: 0, opacity: 1 },
       ],
     });
-    return { duration: 6, fps: 30, bg: pickBg(p), layers };
+
+    return { duration: d, fps: 30, bg: pickBg(p), layers };
   }
 
   return c;
