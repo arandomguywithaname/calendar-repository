@@ -257,8 +257,9 @@ function compile(gl, type, src) {
 }
 
 export function hexToRgb(hex) {
-  const h = hex.replace("#", "");
+  const h = String(hex ?? "").replace("#", "");
   const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  if (!Number.isFinite(n)) return [0.43, 0.66, 1];      // fall back to the studio blue
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 

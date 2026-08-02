@@ -67,12 +67,37 @@ Everything (users, projects, chat) is saved in the browser's `localStorage` on
 that device — no database and no accounts server. Use the export buttons in each
 editor to get files out.
 
-### AI setup (optional)
+### AI setup
 
-The studio works fully without any API key: "With AI" falls back to a built-in
-offline builder and says so on screen. To switch Claude on, put
-`ANTHROPIC_API_KEY` in `.env` and restart — `/api/studio/status` reports which
-mode you're in.
+"With AI" has two modes and the app tells you which one you're in:
+
+- **Claude** — reads whatever you type, however you phrase it.
+- **Offline builder** — a keyword matcher built into the page, used when no
+  API key is configured. It still produces a real, editable project.
+
+Put `ANTHROPIC_API_KEY` in `.env` and restart to switch Claude on;
+`/api/studio/status` reports the current mode.
+
+Whatever the model returns is passed through `normalize()` in
+`public/studio/js/ai.js` before it reaches an editor — missing fields, wrong
+shapes and stringly-typed numbers are repaired against the defaults, so a bad
+generation can never break the app.
+
+### Publishing to Netlify
+
+`netlify.toml` publishes `public/studio` and deploys one dependency-free
+function (`netlify/functions/studio.mjs`) that serves the same
+`/api/studio/*` routes as the Express server. Set `ANTHROPIC_API_KEY` in the
+site's environment variables to switch Claude on there; without it the site
+falls back to the offline builder.
+
+The function talks to the API over plain `fetch` rather than the SDK on
+purpose: a Netlify drag-and-drop deploy never runs `npm install`, so a
+function with dependencies wouldn't work. The Express server uses the
+official SDK.
+
+Both read their prompts from `studio-prompts.json` so the two paths can't
+drift apart.
 
 ### Files
 

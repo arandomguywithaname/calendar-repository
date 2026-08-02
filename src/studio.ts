@@ -1,117 +1,47 @@
 import Anthropic from "@anthropic-ai/sdk";
+import * as fs from "fs";
+import * as path from "path";
 import express, { Request, Response, Router } from "express";
 
 /**
  * Backend for Joseph's Math Studio (public/studio).
  *
- * Two endpoints:
+ *   GET  /api/studio/status   — is Claude switched on for this studio?
  *   POST /api/studio/generate — turn a plain-English description into project content
  *   POST /api/studio/chat     — the @claude helper in the studio chat drawer
  *
- * Both degrade gracefully: with no ANTHROPIC_API_KEY the studio falls back to
- * its own offline generator in the browser, so nothing in the app breaks.
+ * The prompts live in studio-prompts.json at the repo root so that this server
+ * and the Netlify function (netlify/functions/studio.mjs) can never drift apart.
+ *
+ * Everything degrades gracefully: with no ANTHROPIC_API_KEY the studio falls
+ * back to its own offline builder in the browser, so nothing in the app breaks.
  */
 
-const MODEL = "claude-opus-5";
-
-const SCHEMAS: Record<string, string> = {
-  "3d": `{
-  "shape": "cube" | "sphere" | "torus" | "pyramid" | "cylinder" | "prism" | "octahedron",
-  "color": "#rrggbb",
-  "bg": "#rrggbb",
-  "wireframe": boolean,
-  "autoSpin": boolean,
-  "spinSpeed": number (0-3),
-  "motion": "spin" | "bob" | "orbit" | "pulse" | "none",
-  "label": "short caption shown on the model"
-}`,
-  "2d": `{
-  "slides": [
-    {
-      "id": "unique string",
-      "bg": "#rrggbb",
-      "elements": [
-        {
-          "id": "unique string",
-          "kind": "text",
-          "x": number (0-100, percent from left),
-          "y": number (0-100, percent from top),
-          "w": number (0-100, width in percent),
-          "text": "the words on the slide",
-          "size": number (font size on a 1000px-wide design, 18-72),
-          "color": "#rrggbb",
-          "bold": boolean,
-          "align": "left" | "center" | "right"
-        }
-      ]
-    }
-  ]
-}`,
-  whiteboard: `{
-  "items": [
-    { "id": "unique", "kind": "text", "x": number, "y": number, "text": "string", "size": number, "color": "#rrggbb", "bold": boolean },
-    { "id": "unique", "kind": "sticker", "x": number, "y": number, "text": "one emoji", "size": number },
-    { "id": "unique", "kind": "rect" | "ellipse" | "line" | "arrow", "x": number, "y": number, "w": number, "h": number, "color": "#rrggbb", "width": number, "fill": false }
-  ],
-  "widgets": [
-    { "id": "unique", "kind": "code", "x": number, "y": number, "w": number, "h": number, "lang": "javascript", "text": "source code" },
-    { "id": "unique", "kind": "game", "game": "tetris" | "blockoff", "x": number, "y": number, "w": number, "h": number }
-  ],
-  "camera": { "x": 0, "y": 0, "z": 1 }
-}
-Whiteboard coordinates are plain pixels on an infinite board; keep everything between 60 and 1100.`,
-  animation: `{
-  "duration": number (seconds, 3-12),
-  "fps": 30,
-  "bg": "#rrggbb",
-  "layers": [
-    {
-      "id": "unique",
-      "name": "short name",
-      "kind": "sticker" | "text",
-      "text": "an emoji for stickers, or the words for text",
-      "color": "#rrggbb (text layers only)",
-      "size": number (sticker 120-220, text 40-90),
-      "ease": "smooth" | "snap" | "pop" | "bounce" | "elastic" | "linear",
-      "path": "straight" | "curve",
-      "effect": "none" | "float" | "spin" | "wiggle" | "pulse" | "sway",
-      "trail": boolean,
-      "keys": [
-        { "t": seconds, "x": 0-100, "y": 0-100, "scale": number, "rot": degrees, "opacity": 0-1, "squash": number (1 = normal, <1 squashed, >1 stretched) }
-      ]
-    }
-  ]
-}
-Make it move well, not just move:
-- Every layer needs at least three keyframes; the first is at t = 0.
-- Stagger the layers' entrances by a few tenths of a second instead of starting them all together.
-- Match the easing to the motion: "pop" or "snap" for entrances, "bounce" for anything falling, "linear" for orbits, "smooth" for drifting.
-- Use "path": "curve" whenever something travels through three or more points.
-- Use "squash" on impacts (about 0.8 when it lands, 1.1 just before) — it is what makes a bounce look alive.
-- Give a layer an "effect" so it keeps moving after it arrives, and "trail": true for anything fast.`,
+type Prompts = {
+  model: string;
+  system: string;
+  chatSystem: string;
+  schemas: Record<string, string>;
 };
 
-const SYSTEM = `You build content for a maths teacher's creation studio. The teacher is Joseph; the users are Joseph and his students.
+const PROMPTS: Prompts = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../studio-prompts.json"), "utf-8")
+);
 
-You reply with ONLY a JSON object — no prose, no markdown fences, no explanation. The JSON must match the schema you are given exactly: no extra keys, no missing required keys.
-
-Guidelines:
-- Keep the maths correct and age appropriate for a school classroom.
-- Prefer clear, short wording over clever wording.
-- Use plenty of colour, but keep text readable against its background.
-- Everything you produce is edited by hand afterwards, so leave it tidy and easy to change.`;
+/** Claude Opus 5 can decline a request; when it does, say so plainly. */
+const REFUSED = "Claude declined that request. Try describing it a different way.";
 
 export function studioRouter(): Router {
   const router = express.Router();
 
   /** Lets the studio tell the user whether AI is switched on before they type a prompt. */
   router.get("/status", (_req: Request, res: Response) => {
-    res.json({ ai: !!process.env.ANTHROPIC_API_KEY, model: MODEL });
+    res.json({ ai: !!process.env.ANTHROPIC_API_KEY, model: PROMPTS.model });
   });
 
   router.post("/generate", async (req: Request, res: Response) => {
     const { type, prompt } = req.body || {};
-    const schema = SCHEMAS[type];
+    const schema = PROMPTS.schemas[type];
 
     if (!schema) {
       res.status(400).json({ error: "Unknown project type." });
@@ -127,11 +57,9 @@ export function studioRouter(): Router {
     }
 
     try {
-      const client = new Anthropic();
-      const message = await client.messages.create({
-        model: MODEL,
+      const message = await createMessage({
         max_tokens: 16000,
-        system: SYSTEM,
+        system: PROMPTS.system,
         messages: [
           {
             role: "user",
@@ -140,12 +68,12 @@ export function studioRouter(): Router {
         ],
       });
 
-      const text = message.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("");
+      if (message.stop_reason === "refusal") {
+        res.status(422).json({ error: REFUSED });
+        return;
+      }
 
-      res.json({ content: parseJson(text), source: "claude" });
+      res.json({ content: parseJson(textOf(message)), source: "claude" });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Generation failed." });
     }
@@ -164,12 +92,9 @@ export function studioRouter(): Router {
     }
 
     try {
-      const client = new Anthropic();
-      const message = await client.messages.create({
-        model: MODEL,
+      const message = await createMessage({
         max_tokens: 2048,
-        system:
-          "You are the helper inside Joseph's Math Studio, a project studio used by a maths teacher and his students. Answer maths and studio questions briefly and clearly, in a friendly classroom voice. Keep answers under about 120 words unless asked for more.",
+        system: PROMPTS.chatSystem,
         messages: messages
           .filter((m: any) => typeof m?.content === "string" && m.content.trim())
           .slice(-8)
@@ -179,12 +104,8 @@ export function studioRouter(): Router {
           })),
       });
 
-      const reply = message.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("")
-        .trim();
-
+      const reply =
+        message.stop_reason === "refusal" ? REFUSED : textOf(message).trim();
       res.json({ reply: reply || "I didn't catch that — try asking again." });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Chat failed." });
@@ -192,6 +113,40 @@ export function studioRouter(): Router {
   });
 
   return router;
+}
+
+/**
+ * One call site for the API. Asks for a server-side fallback so a declined
+ * request is retried on another model automatically, and quietly drops that
+ * option if this account can't use it rather than failing the whole request.
+ */
+async function createMessage(params: {
+  max_tokens: number;
+  system: string;
+  messages: Anthropic.MessageParam[];
+}): Promise<Anthropic.Message> {
+  const client = new Anthropic();
+  const base = { model: PROMPTS.model, ...params };
+
+  try {
+    return (await (client as any).beta.messages.create({
+      ...base,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+    })) as Anthropic.Message;
+  } catch (err: any) {
+    const msg = String(err?.message || "");
+    if (!/fallback|beta|unexpected|unknown/i.test(msg)) throw err;
+    // this account or SDK build doesn't support the fallback beta — go plain
+    return client.messages.create(base);
+  }
+}
+
+function textOf(message: Anthropic.Message): string {
+  return message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
 }
 
 /** Claude is asked for bare JSON, but tolerate a stray fence or surrounding prose. */

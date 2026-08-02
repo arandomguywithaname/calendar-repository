@@ -8,7 +8,7 @@
 import { debounce, download, buildSwatches } from "./threed.js";
 import { createViewer, primitives, parseOBJ } from "../gl.js";
 
-const STICKERS = ["🚀", "⭐", "📐", "🔢", "🍕", "🎯", "🐢", "💡", "🧮", "➗", "✖️", "🎈", "🪐", "🔺", "⭕", "✅"];
+const STICKERS = ["🚀", "⭐", "📐", "🔢", "🍕", "🎯", "🐢", "💡", "🧮", "➗", "✖️", "🎈", "🌟", "🔺", "⭕", "✅"];
 const BG_COLORS = ["#0b1220", "#05060f", "#111827", "#ffffff", "#f1f5f9", "#1e1b34", "#0f2419"];
 const W = 1280, H = 720;
 

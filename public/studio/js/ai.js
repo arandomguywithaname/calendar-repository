@@ -22,7 +22,7 @@ export async function checkAI() {
 }
 
 export async function generate(type, prompt) {
-  if (!(await checkAI())) return { content: localGenerate(type, prompt), source: "offline" };
+  if (!(await checkAI())) return { content: normalize(type, localGenerate(type, prompt)), source: "offline" };
   try {
     const res = await fetch("/api/studio/generate", {
       method: "POST",
@@ -31,12 +31,186 @@ export async function generate(type, prompt) {
     });
     if (res.ok) {
       const data = await res.json();
-      if (data && data.content) return { content: data.content, source: data.source || "claude" };
+      // never hand raw model output straight to an editor — see normalize()
+      if (data && data.content) return { content: normalize(type, data.content), source: data.source || "claude" };
     }
   } catch {
-    /* offline — fall through to the local generator */
+    /* unreachable server — fall through to the local builder */
   }
-  return { content: localGenerate(type, prompt), source: "offline" };
+  return { content: normalize(type, localGenerate(type, prompt)), source: "offline" };
+}
+
+/* ===========================================================
+   normalize() — the airbag between a language model and the
+   editors. A model can miss a field, invent a shape name or
+   return a number as a string; an editor should never crash
+   because of it. Anything unusable falls back to the default.
+   =========================================================== */
+
+const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+const num = (v, fallback, lo = -1e6, hi = 1e6) => {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+};
+const hex = (v, fallback) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim() : fallback);
+const str = (v, fallback = "") => (typeof v === "string" ? v : fallback);
+const bool = (v, fallback = false) => (typeof v === "boolean" ? v : fallback);
+const oneOf = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
+const arr = (v) => (Array.isArray(v) ? v : []);
+const nid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+export function normalize(type, content) {
+  const d = defaultContent(type);
+  if (!content || typeof content !== "object") return d;
+
+  if (type === "3d") {
+    return {
+      shape: oneOf(content.shape, ["cube", "sphere", "torus", "pyramid", "cylinder", "prism", "octahedron"], d.shape),
+      obj: typeof content.obj === "string" && content.obj.includes("v ") ? content.obj : null,
+      color: hex(content.color, d.color),
+      bg: hex(content.bg, d.bg),
+      wireframe: bool(content.wireframe, d.wireframe),
+      autoSpin: bool(content.autoSpin, d.autoSpin),
+      spinSpeed: num(content.spinSpeed, d.spinSpeed, 0, 3),
+      motion: oneOf(content.motion, ["spin", "bob", "orbit", "pulse", "none"], d.motion),
+      label: str(content.label).slice(0, 80),
+    };
+  }
+
+  if (type === "2d") {
+    const slides = arr(content.slides).map((s) => ({
+      id: str(s?.id) || nid("s"),
+      bg: hex(s?.bg, "#ffffff"),
+      elements: arr(s?.elements).map(normalizeElement).filter(Boolean),
+    }));
+    return { slides: slides.length ? slides : d.slides };
+  }
+
+  if (type === "whiteboard") {
+    const cam = content.camera || {};
+    return {
+      items: arr(content.items).map(normalizeItem).filter(Boolean),
+      widgets: arr(content.widgets).map(normalizeWidget).filter(Boolean),
+      camera: { x: num(cam.x, 0), y: num(cam.y, 0), z: num(cam.z, 1, 0.15, 5) },
+    };
+  }
+
+  if (type === "animation") {
+    const duration = num(content.duration, d.duration, 1, 60);
+    const layers = arr(content.layers).map((l) => normalizeLayer(l, duration)).filter(Boolean);
+    return {
+      duration,
+      fps: num(content.fps, d.fps, 5, 60),
+      bg: hex(content.bg, d.bg),
+      layers,
+    };
+  }
+
+  return d;
+}
+
+function normalizeElement(e) {
+  const kind = oneOf(e?.kind, ["text", "sticker", "rect", "ellipse", "image"], null);
+  if (!kind) return null;
+  if ((kind === "text" || kind === "sticker") && !str(e.text).trim()) return null;
+  if (kind === "image" && !str(e.src).trim()) return null;
+  return {
+    id: str(e.id) || nid("e"),
+    kind,
+    x: num(e.x, 10, -20, 120),
+    y: num(e.y, 10, -20, 120),
+    w: num(e.w, 40, 2, 140),
+    h: num(e.h, 20, 2, 140),
+    text: str(e.text),
+    src: str(e.src),
+    size: num(e.size, kind === "sticker" ? 60 : 32, 8, 200),
+    color: hex(e.color, kind === "text" ? "#111827" : "#6ea8fe"),
+    bold: bool(e.bold),
+    align: oneOf(e.align, ["left", "center", "right"], "left"),
+    opacity: num(e.opacity, 1, 0, 1),
+  };
+}
+
+function normalizeItem(i) {
+  const kind = oneOf(i?.kind, ["stroke", "text", "sticker", "rect", "ellipse", "line", "arrow", "image"], null);
+  if (!kind) return null;
+  if (kind === "stroke") {
+    const points = arr(i.points).map((p) => ({ x: num(p?.x, 0), y: num(p?.y, 0) }));
+    if (points.length < 2) return null;
+    return { id: str(i.id) || nid("i"), kind, points, color: hex(i.color, "#e8eef7"), width: num(i.width, 4, 1, 40) };
+  }
+  if ((kind === "text" || kind === "sticker") && !str(i.text).trim()) return null;
+  if (kind === "image" && !str(i.src).trim()) return null;
+  return {
+    id: str(i.id) || nid("i"),
+    kind,
+    x: num(i.x, 100),
+    y: num(i.y, 100),
+    w: num(i.w, 200, -4000, 4000),
+    h: num(i.h, 120, -4000, 4000),
+    text: str(i.text),
+    src: str(i.src),
+    size: num(i.size, kind === "sticker" ? 80 : 28, 8, 400),
+    color: hex(i.color, "#e8eef7"),
+    width: num(i.width, 4, 1, 40),
+    bold: bool(i.bold),
+    fill: bool(i.fill),
+  };
+}
+
+function normalizeWidget(w) {
+  const kind = oneOf(w?.kind, ["code", "game"], null);
+  if (!kind) return null;
+  const game = oneOf(w.game, ["tetris", "blockoff"], "tetris");
+  return {
+    id: str(w.id) || nid("w"),
+    kind,
+    game,
+    lang: str(w.lang, "javascript"),
+    text: str(w.text),
+    x: num(w.x, 120),
+    y: num(w.y, 120),
+    w: num(w.w, kind === "code" ? 420 : game === "tetris" ? 260 : 440, 120, 1200),
+    h: num(w.h, kind === "code" ? 240 : game === "tetris" ? 440 : 330, 100, 900),
+  };
+}
+
+function normalizeLayer(l, duration) {
+  const kind = oneOf(l?.kind, ["sticker", "text", "image", "video", "obj"], null);
+  if (!kind) return null;
+  if ((kind === "sticker" || kind === "text") && !str(l.text).trim()) return null;
+  if ((kind === "image" || kind === "video") && !str(l.src).trim()) return null;
+
+  let keys = arr(l.keys)
+    .map((k) => ({
+      t: num(k?.t, 0, 0, duration),
+      x: num(k?.x, 50, -50, 150),
+      y: num(k?.y, 50, -50, 150),
+      scale: num(k?.scale, 1, 0.02, 8),
+      rot: num(k?.rot, 0, -3600, 3600),
+      opacity: num(k?.opacity, 1, 0, 1),
+      squash: num(k?.squash, 1, 0.2, 2),
+    }))
+    .sort((a, b) => a.t - b.t);
+  if (!keys.length) keys = [{ t: 0, x: 50, y: 50, scale: 1, rot: 0, opacity: 1, squash: 1 }];
+
+  return {
+    id: str(l.id) || nid("l"),
+    kind,
+    name: str(l.name, kind).slice(0, 40),
+    text: str(l.text),
+    src: str(l.src) || null,
+    shape: oneOf(l.shape, ["cube", "sphere", "torus", "pyramid", "cylinder", "prism", "octahedron"], "cube"),
+    obj: typeof l.obj === "string" && l.obj.includes("v ") ? l.obj : undefined,
+    color: hex(l.color, kind === "obj" ? "#6ea8fe" : "#ffffff"),
+    size: num(l.size, kind === "sticker" ? 170 : 62, 8, 400),
+    ease: oneOf(l.ease, ["smooth", "linear", "snap", "pop", "bounce", "elastic"], "smooth"),
+    path: oneOf(l.path, ["straight", "curve"], "straight"),
+    effect: oneOf(l.effect, ["none", "float", "spin", "wiggle", "pulse", "sway"], "none"),
+    trail: bool(l.trail),
+    spin: bool(l.spin, true),
+    keys,
+  };
 }
 
 export async function chatReply(messages) {
@@ -251,7 +425,6 @@ function pickBg(p) {
    rocket plus whatever else happened to share its theme. */
 const EMOJI_WORDS = [
   [/\brockets?\b|\blaunch(es|ing)?\b|\bspaceships?\b/, "🚀"],
-  [/\bplanets?\b|\bsaturn\b|\bjupiter\b|\borbits?\b|\bsolar system\b/, "🪐"],
   [/\bstars?\b/, "⭐"],
   [/\bmoons?\b/, "🌙"],
   [/\bsuns?\b|\bsunny\b/, "☀️"],
