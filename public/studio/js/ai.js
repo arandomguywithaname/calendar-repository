@@ -242,24 +242,49 @@ export function localGenerate(type, prompt) {
 }
 
 function pickBg(p) {
-  if (p.includes("space") || p.includes("planet")) return "#05060f";
+  if (/space|planet|rocket|star|moon/.test(p)) return "#05060f";
   if (p.includes("white") || p.includes("clean")) return "#f8fafc";
   return "#0b1220";
 }
 
+/* One word, one thing. Asking for a rocket should get you a rocket — not a
+   rocket plus whatever else happened to share its theme. */
+const EMOJI_WORDS = [
+  [/\brockets?\b|\blaunch(es|ing)?\b|\bspaceships?\b/, "🚀"],
+  [/\bplanets?\b|\bsaturn\b|\bjupiter\b|\borbits?\b|\bsolar system\b/, "🪐"],
+  [/\bstars?\b/, "⭐"],
+  [/\bmoons?\b/, "🌙"],
+  [/\bsuns?\b|\bsunny\b/, "☀️"],
+  [/\btriangles?\b/, "🔺"],
+  [/\bcircles?\b/, "⭕"],
+  [/\bsquares?\b/, "🟦"],
+  [/\bangles?\b|\bprotractors?\b|\bgeometry\b/, "📐"],
+  [/\brulers?\b|\bmeasur(e|ing)\b|\blength\b/, "📏"],
+  [/\bpizzas?\b|\bfractions?\b|\bslices?\b/, "🍕"],
+  [/\bmoney\b|\bcoins?\b|\bprices?\b|\bcost(s)?\b/, "💰"],
+  [/\bpercent(age)?s?\b|\binterest\b|\bgrowth\b/, "📈"],
+  [/\bgraphs?\b|\bcharts?\b|\bdata\b/, "📊"],
+  [/\bdice\b|\bprobability\b|\bchance\b|\brandom\b/, "🎲"],
+  [/\btargets?\b|\bgoals?\b/, "🎯"],
+  [/\bclocks?\b|\btimers?\b|\bseconds?\b|\bminutes?\b/, "⏱️"],
+  [/\bballs?\b|\bbounc(e|es|ing|y)\b/, "⚽"],
+  [/\bcars?\b/, "🚗"],
+  [/\bturtles?\b/, "🐢"],
+  [/\bapples?\b/, "🍎"],
+  [/\bcakes?\b/, "🍰"],
+  [/\bballoons?\b/, "🎈"],
+  [/\bbooks?\b|\breading\b/, "📚"],
+  [/\bnumbers?\b|\bcounting\b|\bdigits?\b/, "🔢"],
+  [/\bideas?\b|\bthinking\b/, "💡"],
+];
+
 function matchEmoji(p) {
-  const map = [
-    [/(triangle|angle|geometry)/, ["📐", "🔺"]],
-    [/(circle|pi|round)/, ["⭕", "🥧"]],
-    [/(fraction|pizza|slice)/, ["🍕", "🔢"]],
-    [/(rocket|space|planet)/, ["🚀", "🪐"]],
-    [/(money|percent|interest)/, ["💰", "📈"]],
-    [/(graph|chart|function|parabola)/, ["📈", "📊"]],
-    [/(dice|probability|chance)/, ["🎲", "🎯"]],
-    [/(clock|time|speed)/, ["⏱️", "🏃"]],
-  ];
-  for (const [re, list] of map) if (re.test(p)) return list;
-  return ["✨", "🔢"];
+  const found = [];
+  for (const [re, emoji] of EMOJI_WORDS) {
+    if (re.test(p) && !found.includes(emoji)) found.push(emoji);
+  }
+  // only fall back to something generic when the prompt named nothing at all
+  return found.length ? found.slice(0, 3) : ["✨"];
 }
 
 function defaultBullets(p) {
