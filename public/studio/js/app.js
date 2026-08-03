@@ -126,15 +126,18 @@ $("#btn-signout").addEventListener("click", () => {
 
 /* ===================== 4. dashboard ===================== */
 let filter = "all";
+let showEveryone = false;      // teacher-only, and off unless asked for
 
 function openDashboard() {
   const u = store.currentUser();
   if (!u) return show("profiles");
   $("#dash-hello").textContent = `Hi ${u.name} 👋`;
-  $("#dash-sub").textContent =
-    u.role === "teacher"
-      ? "Every project in the studio is listed here."
-      : "Your projects are saved on this device.";
+  $("#dash-sub").textContent = showEveryone
+    ? "Showing everyone's work — click the button again for just yours."
+    : "Your own projects, saved on this device.";
+  // only Joseph gets the class view, and only when he turns it on
+  $("#chip-everyone").hidden = u.role !== "teacher";
+  $("#chip-everyone").classList.toggle("active", showEveryone);
   $("#who").innerHTML = "";
   const av = el("div", "avatar sm", u.avatar);
   av.style.background = `linear-gradient(135deg, ${u.color}, #a78bfa)`;
@@ -143,9 +146,17 @@ function openDashboard() {
   show("dashboard");
 }
 
+/**
+ * Your dashboard shows your own projects and nothing else. Joseph can switch on
+ * "Everyone's work" to see the whole class — but only when he asks for it, so
+ * other people's projects never appear on a dashboard unannounced.
+ */
 function visibleProjects() {
   const u = store.currentUser();
-  const all = u.role === "teacher" ? store.get().projects.slice().sort((a, b) => b.updatedAt - a.updatedAt) : store.projectsFor(u.id);
+  const mine = u.role === "teacher" && showEveryone;
+  const all = mine
+    ? store.get().projects.slice().sort((a, b) => b.updatedAt - a.updatedAt)
+    : store.projectsFor(u.id);
   return filter === "all" ? all : all.filter((p) => p.type === filter);
 }
 
@@ -256,9 +267,32 @@ function thumbFor(p) {
 $("#filters").addEventListener("click", (e) => {
   const b = e.target.closest(".chip");
   if (!b) return;
+  if (b.id === "chip-everyone") {
+    showEveryone = !showEveryone;
+    openDashboard();
+    return;
+  }
   filter = b.dataset.filter;
-  [...$("#filters").children].forEach((c) => c.classList.toggle("active", c === b));
+  [...$("#filters").querySelectorAll("[data-filter]")].forEach((c) => c.classList.toggle("active", c === b));
   renderProjects();
+});
+
+/* ---- delete everything currently listed ---- */
+$("#btn-delete-all").addEventListener("click", () => {
+  const list = visibleProjects();
+  if (!list.length) return toast("There are no projects to delete.");
+
+  const u = store.currentUser();
+  const whose = showEveryone && u.role === "teacher" ? "everyone's" : "your";
+  confirmModal(
+    `Delete all ${list.length} ${list.length === 1 ? "project" : "projects"}?`,
+    `This deletes ${whose} ${filter === "all" ? "" : store.TYPES[filter].label.toLowerCase() + " "}projects on this device. It cannot be undone.`,
+    () => {
+      const n = store.deleteProjects(list.map((p) => p.id));
+      renderProjects();
+      toast(`Deleted ${n} ${n === 1 ? "project" : "projects"}`);
+    }
+  );
 });
 
 /* ===================== new project flow ===================== */

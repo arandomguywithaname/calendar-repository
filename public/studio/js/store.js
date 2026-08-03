@@ -134,6 +134,15 @@ export function deleteProject(id) {
   save();
 }
 
+/** Deletes a whole list of projects at once (the "delete all" button). */
+export function deleteProjects(ids) {
+  const gone = new Set(ids);
+  state.projects = state.projects.filter((p) => !gone.has(p.id));
+  for (const id of gone) delete state.chats[id];
+  save();
+  return gone.size;
+}
+
 export function duplicateProject(id) {
   const src = projectById(id);
   if (!src) return null;
