@@ -789,6 +789,13 @@ export function mount(root, project, api, opts = {}) {
     tool = "pan";
     stage.style.cursor = "grab";
     setTimeout(fit, 60);
+    // hand the keyboard to the first game so it can be played straight away —
+    // otherwise nothing is focused and the arrow keys do nothing at all
+    setTimeout(() => {
+      for (const [, w] of liveWidgets) {
+        if (w.game?.focus) { w.game.focus(); break; }
+      }
+    }, 400);
   }
 
   let raf = 0;

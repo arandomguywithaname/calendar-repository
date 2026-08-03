@@ -19,6 +19,14 @@ const KEYS = Object.keys(SHAPES);
 export function start(canvas) {
   canvas.tabIndex = 0;
   const ctx = canvas.getContext("2d");
+
+  // A canvas only gets key presses once it has been clicked. Without saying so,
+  // the game looks broken — especially while presenting.
+  let focused = document.activeElement === canvas;
+  const onFocus = () => (focused = true);
+  const onBlur = () => (focused = false);
+  canvas.addEventListener("focus", onFocus);
+  canvas.addEventListener("blur", onBlur);
   let grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
   let piece = spawn();
   let score = 0, lines = 0, level = 1, over = false, paused = false;
@@ -126,7 +134,17 @@ export function start(canvas) {
     ctx.textAlign = "right";
     ctx.fillText(`Lv ${level} · ${lines} lines`, W - 8, 17);
 
-    if (over || paused) {
+    if (!focused) {
+      ctx.fillStyle = "rgba(5,8,14,.66)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#e8eef7";
+      ctx.textAlign = "center";
+      ctx.font = "700 17px -apple-system, Segoe UI, sans-serif";
+      ctx.fillText("▶  Click to play", W / 2, H / 2 - 4);
+      ctx.font = "500 12px -apple-system, Segoe UI, sans-serif";
+      ctx.fillStyle = "#93a2b8";
+      ctx.fillText("then use the arrow keys", W / 2, H / 2 + 18);
+    } else if (over || paused) {
       ctx.fillStyle = "rgba(5,8,14,.8)";
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = "#e8eef7";
@@ -182,9 +200,15 @@ export function start(canvas) {
   canvas.addEventListener("mousedown", () => canvas.focus());
 
   return {
+    /** Used by present mode to hand the keyboard straight to the game. */
+    focus() {
+      canvas.focus({ preventScroll: true });
+    },
     destroy() {
       cancelAnimationFrame(raf);
       canvas.removeEventListener("keydown", onKey);
+      canvas.removeEventListener("focus", onFocus);
+      canvas.removeEventListener("blur", onBlur);
     },
   };
 }

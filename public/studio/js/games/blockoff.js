@@ -10,6 +10,14 @@ export function start(canvas) {
   canvas.tabIndex = 0;
   const ctx = canvas.getContext("2d");
 
+  // Same as Tetris: without the keyboard the game can't be played, and nothing
+  // would otherwise tell you that you need to click it first.
+  let focused = document.activeElement === canvas;
+  const onFocus = () => (focused = true);
+  const onBlur = () => (focused = false);
+  canvas.addEventListener("focus", onFocus);
+  canvas.addEventListener("blur", onBlur);
+
   let W = canvas.width, H = canvas.height;
   let paddle, ball, bricks, score, lives, stuck, paused, won, raf = 0, last = performance.now();
   let leftDown = false, rightDown = false;
@@ -127,7 +135,17 @@ export function start(canvas) {
     ctx.textAlign = "right";
     ctx.fillText("♥".repeat(Math.max(0, lives)), W - 8, 18);
 
-    if (stuck || paused || won || lives <= 0) {
+    if (!focused) {
+      ctx.fillStyle = "rgba(5,8,14,.66)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#e8eef7";
+      ctx.textAlign = "center";
+      ctx.font = "700 17px -apple-system, Segoe UI, sans-serif";
+      ctx.fillText("▶  Click to play", W / 2, H / 2 - 4);
+      ctx.font = "500 12px -apple-system, Segoe UI, sans-serif";
+      ctx.fillStyle = "#93a2b8";
+      ctx.fillText("then move with the mouse", W / 2, H / 2 + 18);
+    } else if (stuck || paused || won || lives <= 0) {
       ctx.fillStyle = "rgba(5,8,14,.72)";
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = "#e8eef7";
@@ -189,12 +207,18 @@ export function start(canvas) {
 
   return {
     resize() { layout(); },
+    /** Used by present mode to hand the keyboard straight to the game. */
+    focus() {
+      canvas.focus({ preventScroll: true });
+    },
     destroy() {
       cancelAnimationFrame(raf);
       canvas.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("mousedown", onDown);
       canvas.removeEventListener("keydown", onKey);
       canvas.removeEventListener("keyup", onKeyUp);
+      canvas.removeEventListener("focus", onFocus);
+      canvas.removeEventListener("blur", onBlur);
     },
   };
 }
