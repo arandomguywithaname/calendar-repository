@@ -494,7 +494,11 @@ export function mount(root, project, api, opts = {}) {
       cv.width = w.w;
       cv.height = w.h - 28;
       box.append(cv);
-      import(w.game === "tetris" ? "../games/tetris.js" : "../games/blockoff.js").then((mod) => {
+      // written out in full so a bundler can follow them — see EDITORS in app.js
+      const load = w.game === "blockoff"
+        ? import("../games/blockoff.js")
+        : import("../games/tetris.js");
+      load.then((mod) => {
         game = mod.start(cv);
         liveWidgets.get(w.id).game = game;
       });

@@ -43,6 +43,10 @@ REDIR
 
 cp "$REPO/DEPLOY.txt" "$OUT/README.txt"
 
+# the everything-in-one-file version, for publishing by hand
+node "$REPO/scripts/build-single-file.mjs" >/dev/null
+cp "$REPO/build/math-studio.html" "$OUT/math-studio-SINGLE-FILE.html"
+
 cd "$OUT"
 zip -qr "$ZIP" .                                            # contents at the root
 cd "$REPO"

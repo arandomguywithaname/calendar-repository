@@ -6,19 +6,38 @@ WHAT THIS IS
   No build step, no npm install.
 
 
-1. PUT IT ONLINE (about 30 seconds)
----------------------------------
+1. PUT IT ONLINE — THE EASY WAY (recommended)
+---------------------------------------------
+  Use  math-studio-SINGLE-FILE.html  — the whole studio in one file.
+
+  1. Rename it to      index.html
+  2. Put that ONE file in an empty folder
+  3. Drag the folder onto  https://app.netlify.com/drop
+
+  Because it is one file, there is nothing to lose on the way up. If a
+  publish ever gives you a page with plain black text on white and nothing
+  works, that is a sign the css/ and js/ folders did not upload — the
+  single file cannot suffer from that.
+
+  (The single file has no AI backend. Everything else works, and "With AI"
+  falls back to the built-in offline builder.)
+
+
+1b. THE FOLDER WAY (needed only if you want real Claude)
+--------------------------------------------------------
   1. Go to  https://app.netlify.com/drop
   2. Drag the .zip straight onto the page.
      (Unzipping first and dragging the folder works too — either way,
-      index.html must be at the top level of what you drop.)
-  3. Netlify gives you a web address. That's it, it's live.
+      index.html and the css/ and js/ folders must all arrive.)
+  3. Netlify gives you a web address.
 
   IF YOU GET "Page not found":
-     Your site was published one level too deep. Check the deploy log's
-     "published directory" or try  your-site.netlify.app/math-studio/  —
-     if the studio appears there, re-deploy dropping the .zip itself (or
-     the INSIDE of the folder), so that index.html sits at the top.
+     The site was published one level too deep. Try
+     your-site.netlify.app/math-studio/ — if the studio appears there,
+     re-deploy so that index.html sits at the top level.
+
+  IF THE PAGE LOOKS LIKE PLAIN TEXT ON WHITE:
+     The css/ and js/ folders did not upload. Use the single file above.
 
   To use your own domain: open the site in Netlify -> Domain settings.
   To update it later: drag the new folder onto the same site under "Deploys".

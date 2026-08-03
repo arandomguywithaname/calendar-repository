@@ -14,7 +14,7 @@ const el = (t, cls, html) => {
   return n;
 };
 
-const SCREENS = ["gate", "profiles", "signin", "dashboard", "editor"];
+const SCREENS = ["gate", "role", "profiles", "signin", "dashboard", "editor"];
 function show(name) {
   SCREENS.forEach((s) => ($("#screen-" + s).hidden = s !== name));
 }
@@ -34,8 +34,7 @@ $("#gate-form").addEventListener("submit", (e) => {
   if (store.unlock(val)) {
     $("#gate-err").textContent = "";
     $("#gate-pass").value = "";
-    renderProfiles();
-    show("profiles");
+    show("role");
   } else {
     $("#gate-err").textContent = "Wrong password — ask Joseph.";
     $("#gate-pass").select();
@@ -46,36 +45,52 @@ $("#btn-back-gate").addEventListener("click", () => {
   show("gate");
 });
 
-/* ===================== 2. profile picker ===================== */
+/* ===================== 2. teacher or student ===================== */
+$("#role-teacher").addEventListener("click", () => {
+  const joseph = store.users().find((u) => u.role === "teacher");
+  openSignIn(joseph || null, "teacher");
+});
+$("#role-student").addEventListener("click", () => {
+  renderProfiles();
+  show("profiles");
+});
+$("#btn-back-role").addEventListener("click", () => show("role"));
+
+/* ===================== 3. student picker ===================== */
 function renderProfiles() {
   const grid = $("#profile-grid");
   grid.innerHTML = "";
-  for (const u of store.users()) {
+  // the teacher has his own entrance, so only students are listed here
+  for (const u of store.users().filter((u) => u.role !== "teacher")) {
     const card = el("div", "profile");
     const av = el("div", "avatar", u.avatar);
     av.style.background = `linear-gradient(135deg, ${u.color}, #a78bfa)`;
-    card.append(av, el("div", "name", u.name), el("div", "role", u.role === "teacher" ? "Teacher" : "Student"));
+    card.append(av, el("div", "name", u.name), el("div", "role", "Student"));
     card.addEventListener("click", () => openSignIn(u));
     grid.append(card);
   }
   const add = el("div", "profile add");
-  add.append(el("div", "avatar", "+"), el("div", "name", "Another user"), el("div", "role", "Create a profile"));
+  add.append(el("div", "avatar", "+"), el("div", "name", "New student"), el("div", "role", "Make your own space"));
   add.addEventListener("click", () => openSignIn(null));
   grid.append(add);
 }
 
 /* ===================== 3. sign in ===================== */
 let pendingUser = null;
+let pendingRole = "student";
 
-function openSignIn(user) {
+function openSignIn(user, role = "student") {
   pendingUser = user;
+  pendingRole = user ? user.role : role;
   const av = $("#signin-avatar");
-  av.textContent = user ? user.avatar : "+";
+  av.textContent = user ? user.avatar : pendingRole === "teacher" ? "🧑‍🏫" : "+";
   av.style.background = user ? `linear-gradient(135deg, ${user.color}, #a78bfa)` : "var(--panel-2)";
-  $("#signin-title").textContent = user ? `Sign in as ${user.name}` : "New user";
+  $("#signin-title").textContent = user
+    ? `Sign in as ${user.name}`
+    : pendingRole === "teacher" ? "Set up the teacher area" : "New student";
   $("#signin-sub").textContent = user
     ? user.role === "teacher"
-      ? "Teacher account — you can see every project."
+      ? "The teacher area."
       : "Welcome back."
     : "Pick a name and a passcode you'll remember.";
   $("#lbl-name").hidden = !!user;
@@ -91,6 +106,8 @@ function openSignIn(user) {
 }
 
 $("#btn-back-profiles").addEventListener("click", () => {
+  // back to whichever entrance you came in through
+  if (pendingRole === "teacher") return show("role");
   renderProfiles();
   show("profiles");
 });
@@ -104,7 +121,7 @@ $("#signin-form").addEventListener("submit", (e) => {
     const name = $("#signin-name").value.trim();
     if (!name) return (errEl.textContent = "Please type a name.");
     if (store.findUserByName(name)) return (errEl.textContent = "That name is taken — pick it on the previous screen.");
-    const u = store.addUser({ name, role: "student", passcode: code });
+    const u = store.addUser({ name, role: pendingRole, passcode: code });
     store.signIn(u.id);
   } else {
     if (!pendingUser.passcode) {
@@ -120,8 +137,8 @@ $("#signin-form").addEventListener("submit", (e) => {
 
 $("#btn-signout").addEventListener("click", () => {
   store.signOut();
-  renderProfiles();
-  show("profiles");
+  showEveryone = false;
+  show("role");
 });
 
 /* ===================== 4. dashboard ===================== */
@@ -426,7 +443,7 @@ async function openEditor(projectId) {
     project: p,
   };
 
-  const mod = await import(editorModule(p.type));
+  const mod = await loadEditor(p.type);
   activeEditor = mod.mount(body, p, api);
 }
 
@@ -462,7 +479,7 @@ async function presentProject(projectId) {
     project: p,
   };
 
-  const mod = await import(editorModule(p.type));
+  const mod = await loadEditor(p.type);
   const inst = mod.mount(host, p, api, { present: true });
   presenting = { shell, inst };
 
@@ -485,11 +502,18 @@ function onPresentKey(e) {
   if (e.key === "Escape") exitPresent();
 }
 
-const editorModule = (type) =>
-  type === "3d" ? "./editors/threed.js"
-    : type === "2d" ? "./editors/slides.js"
-    : type === "whiteboard" ? "./editors/whiteboard.js"
-    : "./editors/animation.js";
+/**
+ * Each editor is loaded on demand. The import paths are written out in full on
+ * purpose — a computed path can't be followed by a bundler, which silently
+ * breaks the single-file build (the editor 404s at the moment you open it).
+ */
+const EDITORS = {
+  "3d": () => import("./editors/threed.js"),
+  "2d": () => import("./editors/slides.js"),
+  whiteboard: () => import("./editors/whiteboard.js"),
+  animation: () => import("./editors/animation.js"),
+};
+const loadEditor = (type) => (EDITORS[type] || EDITORS.animation)();
 
 let statusTimer;
 function setStatus(msg) {
@@ -613,6 +637,6 @@ function timeAgo(ts) {
 /* ===================== boot ===================== */
 (function boot() {
   if (store.isUnlocked() && store.currentUser()) openDashboard();
-  else if (store.isUnlocked()) { renderProfiles(); show("profiles"); }
+  else if (store.isUnlocked()) show("role");
   else show("gate");
 })();

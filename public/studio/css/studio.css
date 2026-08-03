@@ -33,7 +33,7 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 
 /* ---------- screens ---------- */
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:auto}
-.gate,#screen-profiles,#screen-signin{align-items:center;justify-content:center;padding:24px}
+.gate,#screen-role,#screen-profiles,#screen-signin{align-items:center;justify-content:center;padding:24px}
 
 .gate-bg{
   position:absolute;inset:0;z-index:0;
@@ -162,6 +162,9 @@ textarea{resize:vertical;min-height:96px;line-height:1.5}
 .head-actions .btn.ghost{color:var(--muted)}
 .head-actions .btn.ghost:hover{color:#ffb4b4;border-color:#5b2b2b}
 .chip.everyone{margin-left:auto}
+.role-grid{max-width:720px;margin-inline:auto}
+.role-grid .pick{text-align:center}
+.role-grid .ico{font-size:42px}
 .filters{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
 .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:18px}
 .pcard{
