@@ -4,12 +4,9 @@
    motion, and export the result back out as .obj.
    =========================================================== */
 
-import { createViewer, primitives, parseOBJ, toOBJ } from "../gl.js";
+import { createViewer, primitives, parseOBJ, toOBJ, shapeInfo, defaultParams } from "../gl.js";
 
-const SHAPES = [
-  ["cube", "Cube"], ["sphere", "Sphere"], ["torus", "Torus"], ["pyramid", "Pyramid"],
-  ["cylinder", "Cylinder"], ["prism", "Prism"], ["octahedron", "Octa"],
-];
+const SHAPES = Object.entries(shapeInfo).map(([key, info]) => [key, info.label]);
 const COLORS = ["#6ea8fe", "#a78bfa", "#4ade80", "#fbbf24", "#f87171", "#38bdf8", "#fb923c", "#e8eef7"];
 const MOTIONS = [["spin", "Spin"], ["bob", "Bob"], ["orbit", "Orbit"], ["pulse", "Pulse"], ["none", "Still"]];
 
@@ -20,7 +17,25 @@ export function mount(root, project, api, opts = {}) {
     <div class="tools">
       <div class="tgroup">
         <div class="tlabel">Shape</div>
-        <div class="trow" id="shapes"></div>
+        <div class="trow wrap" id="shapes"></div>
+      </div>
+      <div class="tgroup">
+        <div class="tlabel">Change it with an equation</div>
+        <div class="mini" id="eq-help"></div>
+        <textarea id="eq" class="eq-box" rows="3" spellcheck="false" placeholder="r = 5"></textarea>
+        <div class="trow">
+          <button class="btn primary" id="eq-apply">Apply</button>
+          <button class="btn" id="eq-reset">Back to normal</button>
+        </div>
+        <div class="mini" id="eq-msg"></div>
+      </div>
+      <div class="tgroup">
+        <div class="tlabel">Zoom</div>
+        <div class="trow">
+          <button class="btn" id="zoom-in">➕ In</button>
+          <button class="btn" id="zoom-out">➖ Out</button>
+          <button class="btn" id="zoom-fit">⤢ Fit</button>
+        </div>
       </div>
       <div class="tgroup">
         <div class="tlabel">Your own model</div>
@@ -61,6 +76,11 @@ export function mount(root, project, api, opts = {}) {
       <div class="gl-wrap">
         <canvas id="gl"></canvas>
         <div class="gl-hud">Drag to rotate · scroll to zoom<div id="hud-label"></div></div>
+        <div class="gl-zoom">
+          <button class="btn sm" id="z-in" title="Zoom in">＋</button>
+          <button class="btn sm" id="z-out" title="Zoom out">－</button>
+          <button class="btn sm" id="z-fit" title="Fit on screen">⤢</button>
+        </div>
       </div>
     </div>`;
 
@@ -75,10 +95,12 @@ export function mount(root, project, api, opts = {}) {
   }
 
   /* ---------- mesh handling ---------- */
+  const shapeKey = () => (shapeInfo[c.shape] ? c.shape : "cube");
+
   function applyMesh() {
     try {
       if (c.obj) viewer.setMesh(parseOBJ(c.obj));
-      else viewer.setMesh(primitives[c.shape] ? primitives[c.shape]() : primitives.cube());
+      else viewer.setMesh(primitives[shapeKey()](c.params || {}));
       $("#obj-info").textContent = c.obj ? `Custom .obj loaded (${(viewer.state.count / 3) | 0} triangles)` : "Using a built-in shape.";
     } catch (e) {
       api.toast("Could not read that model: " + e.message);
@@ -92,6 +114,7 @@ export function mount(root, project, api, opts = {}) {
     autoSpin: c.autoSpin !== false, spinSpeed: c.spinSpeed ?? 0.6, motion: c.motion || "spin",
   });
   applyMesh();
+  viewer.fit();
   viewer.attachControls();
   viewer.start();
 
@@ -104,14 +127,104 @@ export function mount(root, project, api, opts = {}) {
     b.className = "btn" + (!c.obj && c.shape === key ? " active" : "");
     b.textContent = label;
     b.onclick = () => {
+      // keep any letter the new shape also uses, so "r = 5" survives sphere -> cone
+      const kept = {};
+      for (const k of Object.keys(defaultParams(key))) if (c.params && k in c.params) kept[k] = c.params[k];
       c.shape = key;
+      c.params = { ...defaultParams(key), ...kept };
       c.obj = null;
       applyMesh();
+      viewer.fit();
       [...shapesRow.children].forEach((x) => x.classList.toggle("active", x === b));
+      showEquations();
       saveSoon();
     };
     shapesRow.append(b);
   });
+
+  /* ---------- equations ---------- */
+  /**
+   * The student writes one line per letter, e.g. "r = 5". Each letter really is
+   * the letter in the formula that builds the shape, so the picture changes.
+   */
+  function showEquations() {
+    const key = shapeKey();
+    const info = shapeInfo[key];
+    const p = { ...defaultParams(key), ...(c.params || {}) };
+    $("#eq-help").innerHTML =
+      `<b>${info.label}</b> uses: ` +
+      Object.entries(info.params).map(([k, [, what]]) => `<code>${k}</code> = ${what}`).join(" · ");
+    $("#eq").value = Object.keys(info.params).map((k) => `${k} = ${round(p[k])}`).join("\n");
+    $("#eq").disabled = !!c.obj;
+    $("#eq-msg").textContent = c.obj ? "Equations apply to the built-in shapes, not a loaded .obj." : "";
+  }
+
+  function applyEquations() {
+    const key = shapeKey();
+    const allowed = Object.keys(shapeInfo[key].params);
+    const next = { ...defaultParams(key), ...(c.params || {}) };
+    const unknown = [];
+    let changed = 0;
+
+    for (const line of $("#eq").value.split(/[\n;]+/)) {
+      const t = line.trim();
+      if (!t) continue;
+      const m = t.match(/^([A-Za-z]+)\s*=\s*(.+)$/);
+      if (!m) { unknown.push(t); continue; }
+      const name = m[1];
+      const value = evalNumber(m[2]);
+      if (value === null) { unknown.push(t); continue; }
+      const letter = allowed.includes(name) ? name
+        : allowed.find((a) => a.toLowerCase() === name.toLowerCase());
+      if (!letter) { unknown.push(name); continue; }
+      next[letter] = value;
+      changed++;
+    }
+
+    c.params = next;
+    applyMesh();
+    viewer.fit();
+    showEquations();
+    saveSoon();
+    $("#eq-msg").textContent = unknown.length
+      ? `Changed ${changed}. I could not use: ${unknown.join(", ")} — try ${allowed.map((a) => a + " = 2").join(", ")}.`
+      : `Done — ${Object.entries(next).map(([k, v]) => `${k} = ${round(v)}`).join(", ")}.`;
+  }
+
+  $("#eq-apply").onclick = applyEquations;
+  $("#eq").addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyEquations(); }
+  });
+  $("#eq-reset").onclick = () => {
+    c.params = defaultParams(shapeKey());
+    applyMesh();
+    viewer.fit();
+    showEquations();
+    saveSoon();
+    $("#eq-msg").textContent = "Back to the normal size.";
+  };
+  showEquations();
+
+  /* ---------- zoom ---------- */
+  const zoomIn = () => viewer.zoomBy(0.8);
+  const zoomOut = () => viewer.zoomBy(1.25);
+  const zoomFit = () => viewer.fit();
+  [["#zoom-in", zoomIn], ["#zoom-out", zoomOut], ["#zoom-fit", zoomFit],
+   ["#z-in", zoomIn], ["#z-out", zoomOut], ["#z-fit", zoomFit]].forEach(([sel, fn]) => {
+    const b = $(sel);
+    if (b) b.onclick = fn;
+  });
+  const onZoomKey = (e) => {
+    if (root.hidden) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
+    if (e.key === "+" || e.key === "=") zoomIn();
+    else if (e.key === "-" || e.key === "_") zoomOut();
+    else if (e.key.toLowerCase() === "f") zoomFit();
+    else return;
+    e.preventDefault();
+  };
+  document.addEventListener("keydown", onZoomKey);
 
   /* ---------- obj loading ---------- */
   $("#btn-load").onclick = () => $("#file").click();
@@ -201,7 +314,8 @@ export function mount(root, project, api, opts = {}) {
     else { viewer.start(); e.target.textContent = "⏸ Pause"; }
   };
   $("#btn-reset").onclick = () => {
-    Object.assign(viewer.state, { rotX: -0.35, rotY: 0.6, dist: 4.2, spin: 0 });
+    Object.assign(viewer.state, { rotX: -0.35, rotY: 0.6, spin: 0 });
+    viewer.fit();
     viewer.draw();
   };
 
@@ -241,12 +355,35 @@ export function mount(root, project, api, opts = {}) {
     destroy() {
       viewer.stop();
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("keydown", onZoomKey);
       stage.removeEventListener("dragover", onDragOver);
       stage.removeEventListener("dragleave", onDragLeave);
       stage.removeEventListener("drop", onDrop);
       api.save(c);
     },
   };
+}
+
+/* ---------------- equation helpers ---------------- */
+/** Tidy number for display: 5, 2.5, 0.28 — never 0.2800000000000001. */
+function round(n) {
+  return Math.round(Number(n) * 1000) / 1000;
+}
+
+/**
+ * Works out the right-hand side of "r = ...". Plain numbers and simple sums
+ * only — anything with a letter or a symbol we don't allow is rejected rather
+ * than run, so nothing typed here can turn into code.
+ */
+function evalNumber(src) {
+  const t = String(src).trim().replace(/,/g, ".").replace(/×/g, "*").replace(/÷/g, "/");
+  if (!/^[0-9+\-*/(). ]+$/.test(t)) return null;
+  try {
+    const v = Function(`"use strict";return (${t});`)();
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /* ---------------- shared helpers ---------------- */

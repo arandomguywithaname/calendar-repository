@@ -21,9 +21,23 @@ import { readFileSync } from "node:fs";
 const API = (process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/$/, "");
 const REFUSED = "Claude declined that request. Try describing it a different way.";
 
-const PROMPTS = JSON.parse(
-  readFileSync(new URL("./studio-prompts.json", import.meta.url), "utf-8")
-);
+/**
+ * The prompts live in one file, studio-prompts.json at the top of the repo.
+ * The build copies it next to this function for the deploy; running the
+ * function straight out of the repo finds the original two folders up. Keeping
+ * a second copy checked in here is what let the two drift apart before.
+ */
+const PROMPTS = (() => {
+  const tries = ["./studio-prompts.json", "../../studio-prompts.json"];
+  for (const rel of tries) {
+    try {
+      return JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf-8"));
+    } catch {
+      /* try the next place */
+    }
+  }
+  throw new Error("studio-prompts.json not found next to the function or at the repo root");
+})();
 
 export default async (req) => {
   const route = new URL(req.url).pathname.split("/").filter(Boolean).pop();

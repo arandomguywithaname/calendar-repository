@@ -223,6 +223,17 @@ textarea{resize:vertical;min-height:96px;line-height:1.5}
 }
 .trow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .trow .btn{flex:1;min-width:56px;padding:8px 6px;font-size:12.5px;text-align:center}
+.trow.wrap .btn{flex:0 1 auto;min-width:0;padding:7px 9px}
+.eq-box{
+  width:100%;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;
+  line-height:1.5;padding:8px 9px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);color:var(--text);
+}
+.eq-box:disabled{opacity:.5}
+.mini code{
+  background:rgba(110,168,254,.16);color:var(--accent);border-radius:4px;padding:0 4px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
 .swatches{display:flex;gap:6px;flex-wrap:wrap}
 .sw{width:24px;height:24px;border-radius:7px;border:2px solid transparent;cursor:pointer}
 .sw.active{border-color:#fff}
@@ -311,9 +322,53 @@ textarea{resize:vertical;min-height:96px;line-height:1.5}
   position:absolute;right:-6px;bottom:-6px;width:13px;height:13px;border-radius:50%;
   background:var(--accent);cursor:nwse-resize;
 }
+.el-editor{
+  z-index:20;resize:none;overflow:hidden;padding:0;margin:0;border:0;background:transparent;
+  outline:2px dashed var(--accent);outline-offset:3px;caret-color:var(--accent);
+}
 .present-mode{position:fixed;inset:0;background:#000;z-index:100;display:grid;place-items:center}
 .present-mode .slide-canvas{width:min(96vw,1600px);border-radius:0}
 .present-hud{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:101}
+
+/* ---------- slide project (deck) ---------- */
+.deck-wrap{flex:1;display:grid;place-items:center;padding:22px;overflow:auto;background:#0a0e14}
+.deck-canvas{
+  width:min(100%,980px);aspect-ratio:16/9;position:relative;overflow:hidden;
+  border-radius:10px;box-shadow:var(--shadow);
+}
+.field-block{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field-block > label{font-size:12px;color:var(--muted)}
+.field-block input,.field-block textarea,#notes{
+  width:100%;padding:8px 9px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);color:var(--text);font:inherit;font-size:13px;resize:vertical;
+}
+.list-item .num-badge{
+  min-width:20px;height:20px;border-radius:6px;display:grid;place-items:center;
+  background:var(--line);font-size:11px;color:var(--muted);flex:0 0 auto;
+}
+.list-item .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-present .deck-canvas{width:min(96vw,1700px);border-radius:0}
+.deck-present-stage .deck-canvas{width:min(100%,1700px)}
+.deck-notes{
+  position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:101;
+  max-width:min(880px,90vw);background:rgba(10,14,20,.94);border:1px solid var(--line);
+  border-radius:12px;padding:14px 18px;font-size:15px;line-height:1.5;color:#e8eef7;white-space:pre-wrap;
+}
+/* the slide layouts themselves — shared with the exported web page */
+.d-pad{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center}
+.d-center{align-items:center;text-align:center}
+.d-title{font-weight:800;line-height:1.15}
+.d-sub{margin-top:14px;line-height:1.4}
+.d-rule{border-radius:99px;margin:18px 0}
+.d-big{font-weight:900;line-height:1}
+.d-quote{font-style:italic;line-height:1.35;font-weight:600}
+.d-list{list-style:none;display:flex;flex-direction:column;gap:.6em;margin:0;padding:0}
+.d-list li{display:flex;align-items:baseline;gap:.6em;line-height:1.35}
+.d-dot{width:.42em;height:.42em;border-radius:50%;flex:0 0 auto}
+.d-cols{display:flex;flex:1;min-height:0}
+.d-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.d-img{width:100%;display:block}
+.d-imgless{flex:1;display:grid;place-items:center;text-align:center;padding:12px}
 
 /* ---------- whiteboard ---------- */
 .wb-stage{position:relative;flex:1;overflow:hidden;background:#101722;cursor:crosshair}
@@ -367,6 +422,12 @@ textarea{resize:vertical;min-height:96px;line-height:1.5}
 .gl-wrap canvas{width:100%;height:100%}
 .gl-hud{position:absolute;top:10px;left:12px;font-size:12px;color:var(--muted);
   background:rgba(16,22,32,.8);border:1px solid var(--line);border-radius:9px;padding:7px 11px;line-height:1.6}
+/* the zoom pad sits on the picture, so it is there while presenting too */
+.gl-zoom{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;z-index:3}
+.gl-zoom .btn{
+  width:38px;height:38px;padding:0;font-size:16px;line-height:1;border-radius:10px;
+  background:rgba(16,22,32,.85);
+}
 
 /* ---------- ai prompt screen ---------- */
 .ai-box{display:flex;flex-direction:column;gap:10px}

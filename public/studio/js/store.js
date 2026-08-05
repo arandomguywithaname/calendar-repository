@@ -93,6 +93,7 @@ export const TYPES = {
   "2d": { label: "2D Slides", icon: "🖼️" },
   whiteboard: { label: "Whiteboard", icon: "🧑‍🏫" },
   animation: { label: "Animation", icon: "🎬" },
+  deck: { label: "Slide Project", icon: "📊" },
 };
 
 export function projectsFor(userId) {
@@ -162,6 +163,7 @@ export function defaultContent(type) {
     case "3d":
       return {
         shape: "cube",
+        params: { s: 1.6 },       // the letters in the shape's formula, e.g. r for a sphere
         obj: null,                // pasted/loaded OBJ source
         color: "#6ea8fe",
         bg: "#0a0e14",
@@ -188,6 +190,16 @@ export function defaultContent(type) {
       return { items: [], widgets: [], camera: { x: 0, y: 0, z: 1 } };
     case "animation":
       return { duration: 6, fps: 30, bg: "#0b1220", layers: [] };
+    case "deck":
+      return {
+        theme: "midnight",
+        slides: [
+          {
+            id: "d1", layout: "title", title: "New lesson", subtitle: "Type your title on the right →",
+            bullets: [], left: [], right: [], number: "", quote: "", src: "", notes: "",
+          },
+        ],
+      };
     default:
       return {};
   }

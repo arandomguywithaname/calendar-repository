@@ -333,6 +333,9 @@ function pickType() {
       <button class="pick" data-type="animation"><span class="ico">🎬</span>
         <div class="t">Animation</div>
         <div class="d">Animate photos, videos, web images, stickers and 3D models on a timeline.</div></button>
+      <button class="pick" data-type="deck"><span class="ico">📊</span>
+        <div class="t">Slide Project</div>
+        <div class="d">A tidy presentation: pick a layout, type into the boxes, and a theme keeps every slide matching. Speaker notes included.</div></button>
     </div>
     <div class="modal-actions"><button class="btn ghost" data-close>Cancel</button></div>`;
   m.querySelectorAll(".pick").forEach((b) => (b.onclick = () => pickMode(b.dataset.type)));
@@ -373,6 +376,7 @@ const AI_EXAMPLES = {
   "2d": ["a lesson on adding fractions", "intro to the Pythagorean theorem", "5 slides about prime numbers"],
   whiteboard: ["a place value board with stickers", "long division steps plus a Tetris break", "a coding lesson with a code block"],
   animation: ["a rocket flying across the screen", "fractions turning into a pizza", "a bouncing triangle with a title"],
+  deck: ["a 6 slide lesson on percentages", "times tables tips for year 5", "what is a prime number"],
 };
 
 function aiPrompt(type) {
@@ -512,6 +516,7 @@ const EDITORS = {
   "2d": () => import("./editors/slides.js"),
   whiteboard: () => import("./editors/whiteboard.js"),
   animation: () => import("./editors/animation.js"),
+  deck: () => import("./editors/deck.js"),
 };
 const loadEditor = (type) => (EDITORS[type] || EDITORS.animation)();
 

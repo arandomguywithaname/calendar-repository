@@ -52,6 +52,7 @@ export function mount(root, project, api, opts = {}) {
       </div>
       <div class="tgroup" id="sel-panel" hidden>
         <div class="tlabel">Selected item</div>
+        <button class="btn primary" id="edit-text">✏️ Edit the words</button>
         <div class="swatches" id="colors"></div>
         <div class="field"><label>Size</label><input type="range" id="size" min="10" max="140" step="1"><span class="num-out" id="size-out"></span></div>
         <div class="field"><label>Width</label><input type="range" id="width" min="5" max="100" step="1"><span class="num-out" id="width-out"></span></div>
@@ -64,7 +65,7 @@ export function mount(root, project, api, opts = {}) {
           <button class="btn" id="dup-el">Copy</button>
           <button class="btn danger" id="del-el">Delete</button>
         </div>
-        <div class="mini">Tip: double-click text to edit it. Arrow keys nudge, Delete removes.</div>
+        <div class="mini">Double-click any text to type in it, or use the button above. Arrow keys nudge, Delete removes.</div>
       </div>
       <div class="tgroup">
         <div class="tlabel">Export</div>
@@ -101,16 +102,36 @@ export function mount(root, project, api, opts = {}) {
     s.elements.forEach((e) => {
       const n = host.querySelector(`[data-id="${cssId(e.id)}"]`);
       if (!n) return;
-      n.classList.toggle("selected", selected === e.id);
       n.addEventListener("mousedown", (ev) => startDrag(ev, e, host));
-      n.addEventListener("dblclick", () => editText(e, n));
-      if (selected === e.id) {
-        const h = document.createElement("div");
-        h.className = "handle";
-        h.addEventListener("mousedown", (ev) => startResize(ev, e, host));
-        n.append(h);
-      }
+      n.addEventListener("dblclick", (ev) => { ev.preventDefault(); editText(e, n); });
+      paintSelection(n, e);
     });
+  }
+
+  /** Selection is drawn *onto* existing nodes so double-clicks survive a click. */
+  function paintSelection(node, e) {
+    const on = selected === e.id;
+    node.classList.toggle("selected", on);
+    node.querySelector(":scope > .handle")?.remove();
+    if (!on) return;
+    const h = document.createElement("div");
+    h.className = "handle";
+    h.addEventListener("mousedown", (ev) => startResize(ev, e, canvas));
+    node.append(h);
+  }
+
+  /**
+   * Selecting must NOT rebuild the canvas: a mousedown that replaces the node
+   * means the dblclick that follows lands on a node no longer in the page, and
+   * "double-click the text to edit it" silently does nothing.
+   */
+  function selectEl(id) {
+    selected = id;
+    slide().elements.forEach((e) => {
+      const n = canvas.querySelector(`[data-id="${cssId(e.id)}"]`);
+      if (n) paintSelection(n, e);
+    });
+    renderSelPanel();
   }
 
   function renderAll() {
@@ -224,9 +245,9 @@ export function mount(root, project, api, opts = {}) {
   /* ---------------- dragging & resizing ---------------- */
   function startDrag(ev, e, host) {
     if (ev.target.classList.contains("handle")) return;
+    if (ev.target.tagName === "TEXTAREA") return;
     ev.preventDefault();
-    selected = e.id;
-    renderAll();
+    selectEl(e.id);
     const rect = host.getBoundingClientRect();
     const sx = ev.clientX, sy = ev.clientY, ox = e.x, oy = e.y;
     const move = (m) => {
@@ -270,26 +291,79 @@ export function mount(root, project, api, opts = {}) {
     window.addEventListener("mouseup", up);
   }
 
+  /**
+   * Typing happens in a real <textarea> laid exactly over the words. A textarea
+   * takes focus and keystrokes the same way in every browser, which
+   * contentEditable did not.
+   */
+  let editing = null;
   function editText(e, node) {
     if (e.kind !== "text" && e.kind !== "sticker") return;
-    node.contentEditable = "true";
-    node.focus();
-    document.execCommand?.("selectAll", false, null);
-    const finish = () => {
-      e.text = node.innerText.replace(/\n{3,}/g, "\n\n");
-      node.contentEditable = "false";
-      renderAll();
-      saveSoon();
-    };
-    node.addEventListener("blur", finish, { once: true });
-    node.addEventListener("keydown", (k) => {
-      k.stopPropagation();
-      if (k.key === "Escape") node.blur();
+    if (editing) closeEditor(true);
+    selectEl(e.id);
+
+    const box = node.getBoundingClientRect();
+    const wrap = canvas.getBoundingClientRect();
+    const cs = getComputedStyle(node);
+    const ta = document.createElement("textarea");
+    ta.className = "el-editor";
+    ta.value = e.text || "";
+    Object.assign(ta.style, {
+      position: "absolute",
+      left: box.left - wrap.left + "px",
+      top: box.top - wrap.top + "px",
+      width: Math.max(60, box.width) + "px",
+      minHeight: Math.max(24, box.height) + "px",
+      fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight,
+      lineHeight: cs.lineHeight,
+      textAlign: cs.textAlign,
+      color: cs.color,
+      fontFamily: cs.fontFamily,
     });
+    canvas.append(ta);
+    node.style.visibility = "hidden";
+    editing = { el: e, node, ta };
+
+    ta.focus();
+    ta.select();
+    const grow = () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; };
+    grow();
+
+    ta.addEventListener("input", () => {
+      grow();
+      e.text = ta.value;
+      saveSoon();
+    });
+    ta.addEventListener("mousedown", (m) => m.stopPropagation());
+    ta.addEventListener("keydown", (k) => {
+      k.stopPropagation();
+      if (k.key === "Escape" || (k.key === "Enter" && (k.ctrlKey || k.metaKey))) { k.preventDefault(); closeEditor(true); }
+    });
+    ta.addEventListener("blur", () => closeEditor(true));
   }
 
+  function closeEditor(commit) {
+    if (!editing) return;
+    const { el, node, ta } = editing;
+    editing = null;
+    if (commit) el.text = ta.value;
+    ta.remove();
+    node.style.visibility = "";
+    renderAll();
+    saveSoon();
+  }
+
+  $("#edit-text").onclick = () => {
+    const e = selEl();
+    if (!e) return;
+    if (e.kind !== "text" && e.kind !== "sticker") return api.toast("Pick a text or sticker to edit its words.");
+    const node = canvas.querySelector(`[data-id="${cssId(e.id)}"]`);
+    if (node) editText(e, node);
+  };
+
   canvas.addEventListener("mousedown", (e) => {
-    if (e.target === canvas) { selected = null; renderAll(); }
+    if (e.target === canvas) { closeEditor(true); selectEl(null); }
   });
 
   /* ---------------- keyboard ---------------- */
@@ -364,12 +438,13 @@ export function mount(root, project, api, opts = {}) {
     api.toast("Saved — open the file in any browser to present.");
   };
 
-  const ro = new ResizeObserver(() => renderCanvas());
+  const ro = new ResizeObserver(() => { if (!editing) renderCanvas(); });
   ro.observe(canvas);
   renderAll();
 
   return {
     destroy() {
+      closeEditor(true);
       document.removeEventListener("keydown", onKey);
       ro.disconnect();
       presenting?.remove();

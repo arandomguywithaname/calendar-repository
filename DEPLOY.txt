@@ -80,10 +80,11 @@ WHAT THIS IS
   SAVING      Projects are saved in the browser on the device that made
               them. They are not shared between computers. Use the export
               buttons to get real files out:
-                3D          -> .obj and .png
-                2D Slides   -> a standalone .html slideshow
-                Whiteboard  -> .png
-                Animation   -> .webm video and .png frames
+                3D             -> .obj and .png
+                2D Slides      -> a standalone .html slideshow
+                Slide Project  -> a standalone .html slideshow
+                Whiteboard     -> .png
+                Animation      -> .webm video and .png frames
 
   BROWSER     A recent Chrome, Edge, Safari or Firefox. The 3D and
               animation parts need WebGL, which all of those have.

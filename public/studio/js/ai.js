@@ -6,6 +6,14 @@
    =========================================================== */
 
 import { defaultContent } from "./store.js";
+import { shapeInfo, defaultParams } from "./gl.js";
+
+/** Every shape the 3D editor can build — kept in one place, in gl.js. */
+const SHAPE_KEYS = Object.keys(shapeInfo);
+/** Mirrors THEMES and LAYOUTS in editors/deck.js (listed here so the check
+ *  does not have to load the whole editor just to validate a name). */
+const DECK_THEMES = ["midnight", "chalk", "paper", "ocean", "berry", "bright"];
+const DECK_LAYOUTS = ["title", "bullets", "two", "number", "image", "quote"];
 
 /** Cached answer to "is Claude switched on for this studio?" */
 let aiStatus = null;
@@ -59,13 +67,23 @@ const oneOf = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
 const arr = (v) => (Array.isArray(v) ? v : []);
 const nid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+/** Keeps only the letters this shape actually has, as sane numbers. */
+function normalizeParams(shape, given) {
+  const out = defaultParams(shape);
+  if (given && typeof given === "object")
+    for (const k of Object.keys(out)) if (k in given) out[k] = num(given[k], out[k], 0.01, 60);
+  return out;
+}
+
 export function normalize(type, content) {
   const d = defaultContent(type);
   if (!content || typeof content !== "object") return d;
 
   if (type === "3d") {
+    const shape = oneOf(content.shape, SHAPE_KEYS, d.shape);
     return {
-      shape: oneOf(content.shape, ["cube", "sphere", "torus", "pyramid", "cylinder", "prism", "octahedron"], d.shape),
+      shape,
+      params: normalizeParams(shape, content.params),
       obj: typeof content.obj === "string" && content.obj.includes("v ") ? content.obj : null,
       color: hex(content.color, d.color),
       bg: hex(content.bg, d.bg),
@@ -84,6 +102,14 @@ export function normalize(type, content) {
       elements: arr(s?.elements).map(normalizeElement).filter(Boolean),
     }));
     return { slides: slides.length ? slides : d.slides };
+  }
+
+  if (type === "deck") {
+    const slides = arr(content.slides).map(normalizeDeckSlide).filter(Boolean);
+    return {
+      theme: oneOf(content.theme, DECK_THEMES, "midnight"),
+      slides: slides.length ? slides : d.slides,
+    };
   }
 
   if (type === "whiteboard") {
@@ -107,6 +133,29 @@ export function normalize(type, content) {
   }
 
   return d;
+}
+
+/** One slide-project slide, with only the fields its layout uses. */
+function normalizeDeckSlide(s) {
+  if (!s || typeof s !== "object") return null;
+  const lines = (v) =>
+    (Array.isArray(v) ? v : typeof v === "string" ? v.split("\n") : [])
+      .map((x) => str(x).trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  return {
+    id: str(s.id) || nid("d"),
+    layout: oneOf(s.layout, DECK_LAYOUTS, "bullets"),
+    title: str(s.title).slice(0, 120),
+    subtitle: str(s.subtitle).slice(0, 160),
+    number: str(s.number ?? (typeof s.number === "number" ? String(s.number) : "")).slice(0, 12),
+    quote: str(s.quote).slice(0, 240),
+    src: typeof s.src === "string" && /^(https?:|data:image\/)/i.test(s.src.trim()) ? s.src.trim() : "",
+    bullets: lines(s.bullets),
+    left: lines(s.left),
+    right: lines(s.right),
+    notes: str(s.notes).slice(0, 600),
+  };
 }
 
 function normalizeElement(e) {
@@ -200,7 +249,7 @@ function normalizeLayer(l, duration) {
     name: str(l.name, kind).slice(0, 40),
     text: str(l.text),
     src: str(l.src) || null,
-    shape: oneOf(l.shape, ["cube", "sphere", "torus", "pyramid", "cylinder", "prism", "octahedron"], "cube"),
+    shape: oneOf(l.shape, SHAPE_KEYS, "cube"),
     obj: typeof l.obj === "string" && l.obj.includes("v ") ? l.obj : undefined,
     color: hex(l.color, kind === "obj" ? "#6ea8fe" : "#ffffff"),
     size: num(l.size, kind === "sticker" ? 170 : 62, 8, 400),
@@ -276,21 +325,50 @@ export function localGenerate(type, prompt) {
   const title = titleOf(prompt);
 
   if (type === "3d") {
-    const shapes = ["cube", "sphere", "torus", "pyramid", "cylinder", "prism", "octahedron"];
-    let shape = shapes.find((s) => p.includes(s)) || null;
-    if (!shape) {
-      if (p.includes("ball") || p.includes("planet") || p.includes("circle")) shape = "sphere";
-      else if (p.includes("donut") || p.includes("ring")) shape = "torus";
-      else if (p.includes("pyramid") || p.includes("triangle")) shape = "pyramid";
-      else if (p.includes("can") || p.includes("tube")) shape = "cylinder";
-      else shape = "cube";
-    }
+    const has = (w) => new RegExp(`\\b${w}s?\\b`, "i").test(p);
+    const SYNONYMS = {
+      sphere: ["ball", "circle", "globe", "orb"],
+      torus: ["donut", "doughnut", "bagel"],
+      cylinder: ["can", "tube", "pipe", "roll"],
+      cone: ["ice cream", "party hat", "funnel"],
+      cube: ["box", "block", "dice", "square"],
+      pyramid: ["triangle", "egypt"],
+      human: ["person", "people", "man", "woman", "boy", "girl", "kid", "figure", "body", "stick figure", "student", "teacher"],
+      house: ["home", "building"],
+      tree: ["plant", "forest"],
+      star: ["stars"],
+      heart: ["love"],
+      arrow: ["pointer", "vector"],
+      ring: ["hoop", "washer"],
+      capsule: ["pill"],
+      hemisphere: ["dome", "half ball", "bowl"],
+      tetrahedron: ["tetra", "triangular pyramid"],
+      icosahedron: ["icosa", "d20"],
+      octahedron: ["octa", "diamond"],
+    };
+    let shape = SHAPE_KEYS.find((s) => has(s)) || null;
+    if (!shape)
+      shape = Object.keys(SYNONYMS).find((s) => SYNONYMS[s].some((w) => p.includes(w))) || "cube";
+
+    // "a sphere with radius 5", "r = 5", "height 3" all set the real letters
+    const params = defaultParams(shape);
+    const grab = (re) => { const m = p.match(re); return m ? parseFloat(m[1]) : null; };
+    const named = {
+      r: grab(/\br(?:adius)?\s*(?:=|is|of)?\s*(\d+(?:\.\d+)?)/),
+      h: grab(/\bh(?:eight)?\s*(?:=|is|of)?\s*(\d+(?:\.\d+)?)/),
+      s: grab(/\bs(?:ide)?\s*(?:=|is|of)?\s*(\d+(?:\.\d+)?)/),
+      w: grab(/\bw(?:idth)?\s*(?:=|is|of)?\s*(\d+(?:\.\d+)?)/),
+      n: grab(/\b(\d+)\s*points?\b/),
+    };
+    for (const [k, v] of Object.entries(named))
+      if (v !== null && k in params) params[k] = Math.max(0.05, Math.min(30, v));
+
     let motion = "spin";
     if (p.includes("bounce") || p.includes("bob")) motion = "bob";
     if (p.includes("orbit")) motion = "orbit";
     if (p.includes("pulse") || p.includes("grow")) motion = "pulse";
     if (p.includes("still") || p.includes("no anim")) motion = "none";
-    return { ...c, shape, color, motion, autoSpin: motion !== "none", label: title };
+    return { ...c, shape, params, color, motion, autoSpin: motion !== "none", label: title };
   }
 
   if (type === "2d") {
@@ -318,6 +396,32 @@ export function localGenerate(type, prompt) {
       ], "#f1f5f9")
     );
     return { slides };
+  }
+
+  if (type === "deck") {
+    const lines = sentences(prompt);
+    const points = lines.length > 1 ? lines.slice(1) : defaultBullets(p);
+    const theme = p.includes("bright") || p.includes("white") ? "bright"
+      : p.includes("chalk") || p.includes("green") ? "chalk"
+      : p.includes("paper") ? "paper"
+      : p.includes("ocean") || p.includes("blue") ? "ocean"
+      : p.includes("purple") || p.includes("berry") ? "berry"
+      : "midnight";
+
+    const slides = [
+      { ...deckSlide("title"), title, subtitle: "Made in Joseph's Math Studio" },
+    ];
+    chunk(points, 3).forEach((group) => {
+      slides.push({ ...deckSlide("bullets"), title: group[0].slice(0, 60), bullets: group.slice(1) });
+    });
+    slides.push({
+      ...deckSlide("two"),
+      title: "Remember vs. watch out",
+      left: ["Take it one step at a time", "Check your working", "Show the units"],
+      right: ["Rushing the first step", "Forgetting to simplify", "Losing a minus sign"],
+    });
+    slides.push({ ...deckSlide("quote"), quote: "Your turn — try one!", subtitle: title });
+    return { theme, slides };
   }
 
   if (type === "whiteboard") {
@@ -470,6 +574,15 @@ function chunk(arr, n) {
   const out = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
   return out.length ? out : [["Key idea"]];
+}
+
+/** A blank slide-project slide with every field present. */
+function deckSlide(layout) {
+  return {
+    id: nid("d"), layout,
+    title: "", subtitle: "", number: "", quote: "", src: "",
+    bullets: [], left: [], right: [], notes: "",
+  };
 }
 
 function makeSlide(sid, elements, bg) {

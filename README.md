@@ -27,10 +27,34 @@ From the dashboard: **+ New Project** → pick a creation type → pick **With A
 
 | Type | What it is |
 | --- | --- |
-| **3D Creation** | Spin a model around — a built-in shape or your own `.obj` — with colour, wireframe, and motion (spin / bob / orbit / pulse). Exports `.obj` and PNG. |
-| **2D Slides** | Slides you edit and present full screen with the arrow keys. Text, boxes, circles, photos, web images and stickers. Exports a standalone web page. |
+| **3D Creation** | Spin a model around — 19 built-in shapes (including a human figure, a house and a tree) or your own `.obj` — with colour, wireframe, motion (spin / bob / orbit / pulse) and zoom. Shapes are driven by equations: type `r = 5` and the sphere's radius really is 5. Exports `.obj` and PNG. |
+| **2D Slides** | A free canvas: place text, boxes, circles, photos, web images and stickers anywhere. Double-click any text to type in it. Exports a standalone web page. |
+| **Slide Project** | A tidy presentation deck: pick a layout per slide (title, points, two columns, big number, picture, quote), type into real boxes, and a theme keeps every slide matching. Has speaker notes. Exports a standalone web page. |
 | **Whiteboard** | Draw, type, stickers, shapes, photos, code blocks and playable games (Tetris, Blockoff) on an infinite pannable board. Ctrl+C / Ctrl+V, Ctrl+Z, Delete. Exports PNG. |
 | **Animation** | A keyframe timeline over photos, videos, web images, text, stickers and 3D models. Play, scrub, and export to video (`.webm`). |
+
+**2D Slides vs. Slide Project** — 2D Slides is a blank canvas where you drag things
+into place; a Slide Project has fixed layouts you fill in, so it stays neat by
+itself. Pick 2D when the arrangement matters, Slide Project when the words do.
+
+#### Changing a 3D shape with an equation
+
+Every built-in shape is built from the letters in its own formula, and the
+**Change it with an equation** box lists which letters that shape has. Type one
+per line and press **Apply**:
+
+```
+r = 5          a sphere of radius 5
+R = 2
+r = 0.4        a donut: ring radius 2, tube radius 0.4
+h = 6          a human figure 6 units tall
+n = 7          a star with 7 points
+```
+
+The right-hand side can be simple arithmetic (`r = 10/2`). Anything the shape
+does not use is reported back rather than silently ignored, and **Back to normal**
+restores the standard size. Zoom with the **+ / − / ⤢** pad on the picture (it is
+there while presenting too), the scroll wheel, or the `+`, `-` and `f` keys.
 
 **With AI** asks you to describe what you want in plain English and builds it into
 the editor, where you can still change everything by hand. Projects are named
@@ -53,6 +77,7 @@ What "present" means per type:
 | --- | --- |
 | **3D** | The model full screen, turning on its own, with its label underneath. Drag to spin, scroll to zoom. |
 | **2D Slides** | A slideshow — arrow keys, space, click, or the on-screen arrows; a slide counter at the bottom. |
+| **Slide Project** | The same, plus a **Notes** button (or the `n` key) that shows the speaker notes for the slide you are on. |
 | **Whiteboard** | The whole board zoomed to fit. Drag to move around, scroll to zoom, and the games stay playable. |
 | **Animation** | Plays full screen on a loop; click the picture to pause or resume. |
 
@@ -96,8 +121,11 @@ purpose: a Netlify drag-and-drop deploy never runs `npm install`, so a
 function with dependencies wouldn't work. The Express server uses the
 official SDK.
 
-Both read their prompts from `studio-prompts.json` so the two paths can't
-drift apart.
+Both read their prompts from the single `studio-prompts.json` at the top of the
+repo, so the two paths can't drift apart. The build copies that file next to the
+function for the deploy; running the function straight out of the repo finds the
+original. Adding a project type means adding one entry there and one editor
+module — nothing else has a hard-coded list of types.
 
 ### Files
 
@@ -108,8 +136,8 @@ public/studio/
   js/store.js           — localStorage: users, projects, chat
   js/ai.js              — AI client + offline generator
   js/app.js             — gate, profiles, sign-in, dashboard, editor loading
-  js/gl.js              — hand-rolled WebGL renderer + .obj loader/exporter
-  js/editors/           — threed.js, slides.js, whiteboard.js, animation.js
+  js/gl.js              — hand-rolled WebGL renderer, shape library + .obj loader/exporter
+  js/editors/           — threed.js, slides.js, deck.js, whiteboard.js, animation.js
   js/games/             — tetris.js, blockoff.js
 src/studio.ts           — /api/studio/{status,generate,chat}
 ```
