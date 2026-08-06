@@ -1,0 +1,104 @@
+Joseph's Math Studio — how to put this on Netlify
+=================================================
+
+WHAT THIS IS
+  The whole studio as plain files, plus one small AI backend.
+  No build step, no npm install.
+
+
+1. PUT IT ONLINE — THE EASY WAY (recommended)
+---------------------------------------------
+  Use  math-studio-SINGLE-FILE.html  — the whole studio in one file.
+
+  1. Rename it to      index.html
+  2. Put that ONE file in an empty folder
+  3. Drag the folder onto  https://app.netlify.com/drop
+
+  Because it is one file, there is nothing to lose on the way up. If a
+  publish ever gives you a page with plain black text on white and nothing
+  works, that is a sign the css/ and js/ folders did not upload — the
+  single file cannot suffer from that.
+
+  (The single file has no AI backend. Everything else works, and "With AI"
+  falls back to the built-in offline builder.)
+
+
+1b. THE FOLDER WAY (needed only if you want real Claude)
+--------------------------------------------------------
+  1. Go to  https://app.netlify.com/drop
+  2. Drag the .zip straight onto the page.
+     (Unzipping first and dragging the folder works too — either way,
+      index.html and the css/ and js/ folders must all arrive.)
+  3. Netlify gives you a web address.
+
+  IF YOU GET "Page not found":
+     The site was published one level too deep. Try
+     your-site.netlify.app/math-studio/ — if the studio appears there,
+     re-deploy so that index.html sits at the top level.
+
+  IF THE PAGE LOOKS LIKE PLAIN TEXT ON WHITE:
+     The css/ and js/ folders did not upload. Use the single file above.
+
+  To use your own domain: open the site in Netlify -> Domain settings.
+  To update it later: drag the new folder onto the same site under "Deploys".
+
+
+2. TURN ON REAL AI  (optional, but this is the good bit)
+--------------------------------------------------------
+  Without a key, "With AI" uses a simple built-in builder that only
+  understands certain words. With a key, Claude reads whatever you type
+  and builds it properly.
+
+  1. Get an API key at  https://console.anthropic.com  (Settings -> API keys)
+  2. In Netlify: your site -> Site configuration -> Environment variables
+                 -> Add a variable
+        Key:   ANTHROPIC_API_KEY
+        Value: your key (starts with sk-ant-)
+  3. Deploys -> Trigger deploy -> Deploy site
+
+  Now "With AI" says nothing about offline mode, and typing something like
+  "make a scene where a spaceship zooms past and the title wobbles in
+  afterwards" gets built by Claude. The @claude helper in the Chat drawer
+  works too.
+
+  The key lives on Netlify's servers, not in the web page — visitors can't
+  see it. Usage is billed to your Anthropic account, so keep the site
+  password to people you trust.
+
+  IF NETLIFY DOESN'T PICK UP THE FUNCTION when you drag the folder, connect
+  the GitHub repo instead: Netlify -> Add new site -> Import an existing
+  project. netlify.toml in this folder already has the right settings.
+
+
+3. THINGS TO KNOW
+-----------------
+  PASSWORD    The studio password is  williamiscool123
+              Change it in js/store.js (line 6).
+              It is a "keep people out casually" password, not real
+              security — anyone can read it in the page source.
+
+  SAVING      Projects are saved in the browser on the device that made
+              them. They are not shared between computers. Use the export
+              buttons to get real files out:
+                3D             -> .obj and .png
+                2D Slides      -> a standalone .html slideshow
+                Slide Project  -> a standalone .html slideshow
+                Whiteboard     -> .png
+                Animation      -> .webm video and .png frames
+
+  DRAWING     In a 3D project, "Draw it and make it 3D" turns anything you
+              draw — doodles, words, emoji — into a solid you can spin and
+              export as .obj. A detailed drawing makes a big model, so an
+              .obj of one can be a few megabytes.
+
+  BROWSER     A recent Chrome, Edge, Safari or Firefox. The 3D and
+              animation parts need WebGL, which all of those have.
+
+
+4. WHAT'S IN HERE
+-----------------
+  index.html, css/, js/          the studio
+  netlify/functions/studio.mjs   the AI backend (only used if you set a key)
+  netlify/functions/studio-prompts.json
+                                 what Claude is told to build
+  netlify.toml                   tells Netlify where those live

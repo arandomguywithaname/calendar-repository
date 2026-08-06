@@ -5,6 +5,7 @@ import express, { Request, Response } from "express";
 import multer from "multer";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
+import { studioRouter } from "./studio";
 import { ContactsMap } from "./types";
 
 dotenv.config();
@@ -15,8 +16,11 @@ const PORT = process.env.PORT || 3000;
 // Multer for image uploads (stored in memory)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
+
+// Joseph's Math Studio — static app lives in public/studio, API here
+app.use("/api/studio", studioRouter());
 
 /** Load contacts map */
 function loadContacts(): ContactsMap {
@@ -79,4 +83,5 @@ app.post("/api/create", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`Calendar Agent running at http://localhost:${PORT}`);
+  console.log(`Math Studio running at   http://localhost:${PORT}/studio/`);
 });

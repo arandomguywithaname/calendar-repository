@@ -1,0 +1,23 @@
+# Netlify config for Joseph's Math Studio.
+#
+# The studio itself is the static site in public/studio; the AI backend is a
+# single dependency-free function so the whole thing can be published by
+# dropping a folder onto Netlify with no build step.
+#
+# Switch Claude on:  Site settings → Environment variables → ANTHROPIC_API_KEY
+# Without that key the studio uses its built-in offline builder and says so.
+
+# Used when the site is built from this repo. For a drag-and-drop deploy the
+# folder you drop is itself the publish root, so index.html must sit at its top
+# level — a wrapper folder makes Netlify answer "Page not found" at /.
+[build]
+  publish = "public/studio"
+
+[functions]
+  directory = "netlify/functions"
+
+# the studio calls /api/studio/... — send that to the function
+[[redirects]]
+  from = "/api/studio/*"
+  to = "/.netlify/functions/studio/:splat"
+  status = 200

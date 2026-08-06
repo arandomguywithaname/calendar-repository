@@ -1,3 +1,183 @@
+# Calendar Repository
+
+Two apps live here:
+
+- **Joseph's Math Studio** — a project studio for a maths classroom ([docs](#josephs-math-studio))
+- **Calendar Planning Agent** — the original natural-language → Google Calendar agent
+
+---
+
+# Joseph's Math Studio
+
+A creation studio for Joseph's maths class. Run the server and open
+**http://localhost:3000/studio/**.
+
+### How you get in
+
+1. **Studio password** — `williamiscool123`
+2. **Pick a profile** — Joseph (teacher), an existing student, or *Another user* to make a new one
+3. **Sign in** with that profile's passcode (the first passcode you type for a profile becomes its passcode)
+
+Joseph is a teacher account and sees every project in the studio, with the
+student's name on each card. Students see only their own.
+
+### Making a project
+
+From the dashboard: **+ New Project** → pick a creation type → pick **With AI** or **From scratch**.
+
+| Type | What it is |
+| --- | --- |
+| **3D Creation** | Spin a model around — **draw your own**, pick from 19 built-in shapes (including a human figure, a house and a tree), or load your own `.obj` — with colour, wireframe, motion (spin / bob / orbit / pulse) and zoom. Shapes are driven by equations: type `r = 5` and the sphere's radius really is 5. Exports `.obj` and PNG. |
+| **2D Slides** | A free canvas: place text, boxes, circles, photos, web images and stickers anywhere. Double-click any text to type in it. Exports a standalone web page. |
+| **Slide Project** | A tidy presentation deck: pick a layout per slide (title, points, two columns, big number, picture, quote), type into real boxes, and a theme keeps every slide matching. Has speaker notes. Exports a standalone web page. |
+| **Whiteboard** | Draw, type, stickers, shapes, photos, code blocks and playable games (Tetris, Blockoff) on an infinite pannable board. Ctrl+C / Ctrl+V, Ctrl+Z, Delete. Exports PNG. |
+| **Animation** | A keyframe timeline over photos, videos, web images, text, stickers and 3D models. Play, scrub, and export to video (`.webm`). |
+
+**2D Slides vs. Slide Project** — 2D Slides is a blank canvas where you drag things
+into place; a Slide Project has fixed layouts you fill in, so it stays neat by
+itself. Pick 2D when the arrangement matters, Slide Project when the words do.
+
+#### Drawing your own 3D shape
+
+**✏️ Draw it and make it 3D** opens a pad. Draw freehand, drop in boxes, circles
+and lines, type words, stamp emoji — then **Make it 3D →** and the ink becomes a
+solid you can spin, colour, animate and export like any other model. The rubber
+cuts holes out of what is already there, so a ring or a letter O comes out
+hollow.
+
+A drawn model **keeps the colours it was drawn in**. Pick a pen colour on the
+pad and it shows on the model; an emoji keeps its own colours rather than coming
+out as one flat blob, and the extruded edges take the colour of the ink they are
+the edge of. Untick **Keep the colours I drew** for a single flat colour instead.
+
+The drawing is kept as the list of things you did, not as a picture, so
+**Change my drawing** reopens it exactly as you left it and you can keep adding.
+The **Thickness** slider changes how deep the solid is without redrawing
+anything, and picking a ready-made shape only sets the drawing aside — **Use my
+drawing** brings it back.
+
+With AI, asking for *the word HELLO in 3D* or a prompt with an emoji in it comes
+back as a drawing on that same pad, so you can still change it by hand.
+
+How it works: everything on the pad is painted onto a hidden canvas much larger
+than needed and then shrunk, which gives every square of a grid a "how covered am
+I" value — that is what makes the edges smooth instead of stair-stepped. The grid
+is then walked a square at a time (marching squares) to find where the edge of
+the ink falls, and the flat shape is given a front, a back and walls built from
+the very same edge points, so there are never any cracks. Each point also
+remembers where it sat on the pad, which is how the drawing is painted back onto
+the finished solid. Text, emoji, strokes and shapes all go through that one
+path, which is why they all work.
+
+#### Changing a 3D shape with an equation
+
+Every built-in shape is built from the letters in its own formula, and the
+**Change it with an equation** box lists which letters that shape has. Type one
+per line and press **Apply**:
+
+```
+r = 5          a sphere of radius 5
+R = 2
+r = 0.4        a donut: ring radius 2, tube radius 0.4
+h = 6          a human figure 6 units tall
+n = 7          a star with 7 points
+```
+
+The right-hand side can be simple arithmetic (`r = 10/2`). Anything the shape
+does not use is reported back rather than silently ignored, and **Back to normal**
+restores the standard size. Zoom with the **+ / − / ⤢** pad on the picture (it is
+there while presenting too), the scroll wheel, or the `+`, `-` and `f` keys.
+
+**With AI** asks you to describe what you want in plain English and builds it into
+the editor, where you can still change everything by hand. Projects are named
+`Project 1`, `Project 2`, `Project 3`… and can be renamed.
+
+### Editing and presenting a finished project
+
+Select a project on the dashboard and it asks what you'd like to do:
+
+- **✏️ Edit** — open it in its editor and keep working
+- **▶ Present** — full screen with every toolbar hidden, ready to show the class
+
+Both are also one-click buttons on the card, and there's a **▶ Present** button in
+the editor's top bar for going straight from making to showing. **Esc** or
+**✕ Exit** leaves present mode and puts you back where you started.
+
+What "present" means per type:
+
+| Type | Presenting |
+| --- | --- |
+| **3D** | The model — built-in, drawn, or loaded — full screen, turning on its own, with its label underneath. Drag to spin, scroll or use the zoom pad. |
+| **2D Slides** | A slideshow — arrow keys, space, click, or the on-screen arrows; a slide counter at the bottom. |
+| **Slide Project** | The same, plus a **Notes** button (or the `n` key) that shows the speaker notes for the slide you are on. |
+| **Whiteboard** | The whole board zoomed to fit. Drag to move around, scroll to zoom, and the games stay playable. |
+| **Animation** | Plays full screen on a loop; click the picture to pause or resume. |
+
+The `⋯` button on a card renames, copies or deletes it.
+
+There's a **Chat** drawer for a class chat and a per-project chat. Start a message
+with `@claude` to ask the AI helper a question.
+
+### Where things are saved
+
+Everything (users, projects, chat) is saved in the browser's `localStorage` on
+that device — no database and no accounts server. Use the export buttons in each
+editor to get files out.
+
+### AI setup
+
+"With AI" has two modes and the app tells you which one you're in:
+
+- **Claude** — reads whatever you type, however you phrase it.
+- **Offline builder** — a keyword matcher built into the page, used when no
+  API key is configured. It still produces a real, editable project.
+
+Put `ANTHROPIC_API_KEY` in `.env` and restart to switch Claude on;
+`/api/studio/status` reports the current mode.
+
+Whatever the model returns is passed through `normalize()` in
+`public/studio/js/ai.js` before it reaches an editor — missing fields, wrong
+shapes and stringly-typed numbers are repaired against the defaults, so a bad
+generation can never break the app.
+
+### Publishing to Netlify
+
+`netlify.toml` publishes `public/studio` and deploys one dependency-free
+function (`netlify/functions/studio.mjs`) that serves the same
+`/api/studio/*` routes as the Express server. Set `ANTHROPIC_API_KEY` in the
+site's environment variables to switch Claude on there; without it the site
+falls back to the offline builder.
+
+The function talks to the API over plain `fetch` rather than the SDK on
+purpose: a Netlify drag-and-drop deploy never runs `npm install`, so a
+function with dependencies wouldn't work. The Express server uses the
+official SDK.
+
+Both read their prompts from the single `studio-prompts.json` at the top of the
+repo, so the two paths can't drift apart. The build copies that file next to the
+function for the deploy; running the function straight out of the repo finds the
+original. Adding a project type means adding one entry there and one editor
+module — nothing else has a hard-coded list of types.
+
+### Files
+
+```
+public/studio/
+  index.html            — the whole app shell (screens + modals + chat)
+  css/studio.css
+  js/store.js           — localStorage: users, projects, chat
+  js/ai.js              — AI client + offline generator
+  js/app.js             — gate, profiles, sign-in, dashboard, editor loading
+  js/gl.js              — hand-rolled WebGL renderer, shape library + .obj loader/exporter
+  js/trace.js           — turns a drawing into a solid (marching squares + extrude)
+  js/drawpad.js         — the drawing pad itself
+  js/editors/           — threed.js, slides.js, deck.js, whiteboard.js, animation.js
+  js/games/             — tetris.js, blockoff.js
+src/studio.ts           — /api/studio/{status,generate,chat}
+```
+
+---
+
 # Calendar Planning Agent
 
 An AI-powered agent that parses natural language (or images) into Google Calendar events using Claude.
