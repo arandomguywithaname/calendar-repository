@@ -45,6 +45,11 @@ solid you can spin, colour, animate and export like any other model. The rubber
 cuts holes out of what is already there, so a ring or a letter O comes out
 hollow.
 
+A drawn model **keeps the colours it was drawn in**. Pick a pen colour on the
+pad and it shows on the model; an emoji keeps its own colours rather than coming
+out as one flat blob, and the extruded edges take the colour of the ink they are
+the edge of. Untick **Keep the colours I drew** for a single flat colour instead.
+
 The drawing is kept as the list of things you did, not as a picture, so
 **Change my drawing** reopens it exactly as you left it and you can keep adding.
 The **Thickness** slider changes how deep the solid is without redrawing
@@ -59,8 +64,10 @@ than needed and then shrunk, which gives every square of a grid a "how covered a
 I" value — that is what makes the edges smooth instead of stair-stepped. The grid
 is then walked a square at a time (marching squares) to find where the edge of
 the ink falls, and the flat shape is given a front, a back and walls built from
-the very same edge points, so there are never any cracks. Text, emoji, strokes
-and shapes all go through that one path, which is why they all work.
+the very same edge points, so there are never any cracks. Each point also
+remembers where it sat on the pad, which is how the drawing is painted back onto
+the finished solid. Text, emoji, strokes and shapes all go through that one
+path, which is why they all work.
 
 #### Changing a 3D shape with an equation
 

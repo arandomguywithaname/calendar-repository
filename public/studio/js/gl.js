@@ -573,21 +573,33 @@ export function toOBJ(m, name = "model") {
 const VS = `
 attribute vec3 aPos;
 attribute vec3 aNor;
+attribute vec2 aUV;
 uniform mat4 uProj, uView, uModel;
 varying vec3 vNor, vPos;
+varying vec2 vUV;
 void main(){
   vec4 world = uModel * vec4(aPos, 1.0);
   vNor = mat3(uModel) * aNor;
   vPos = world.xyz;
+  vUV = aUV;
   gl_Position = uProj * uView * world;
 }`;
 
 const FS = `
 precision mediump float;
 varying vec3 vNor, vPos;
+varying vec2 vUV;
 uniform vec3 uColor;
 uniform float uFlat;
+uniform sampler2D uTex;
+uniform float uUseTex;      // 1 = paint it with the drawing's own colours
 void main(){
+  // a drawn model keeps the colours it was drawn in; anything else is
+  // one flat colour. Fully see-through spots fall back to the flat colour
+  // so the walls never come out black.
+  vec4 tex = texture2D(uTex, vUV);
+  vec3 base = mix(uColor, mix(uColor, tex.rgb, step(0.35, tex.a)), uUseTex);
+
   vec3 n = normalize(vNor);
   vec3 lightDir = normalize(vec3(0.5, 0.85, 0.7));
   float diff = max(dot(n, lightDir), 0.0);
@@ -595,8 +607,8 @@ void main(){
   vec3 h = normalize(lightDir + viewDir);
   float spec = pow(max(dot(n, h), 0.0), 40.0) * 0.35;
   float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0) * 0.25;
-  vec3 col = uColor * (0.28 + 0.75 * diff) + vec3(spec + rim);
-  gl_FragColor = vec4(mix(col, uColor, uFlat), 1.0);
+  vec3 col = base * (0.28 + 0.75 * diff) + vec3(spec + rim);
+  gl_FragColor = vec4(mix(col, base, uFlat), 1.0);
 }`;
 
 function compile(gl, type, src) {
@@ -629,13 +641,39 @@ export function createViewer(canvas, opts = {}) {
   const loc = {
     pos: gl.getAttribLocation(prog, "aPos"),
     nor: gl.getAttribLocation(prog, "aNor"),
+    uv: gl.getAttribLocation(prog, "aUV"),
     proj: gl.getUniformLocation(prog, "uProj"),
     view: gl.getUniformLocation(prog, "uView"),
     model: gl.getUniformLocation(prog, "uModel"),
     color: gl.getUniformLocation(prog, "uColor"),
     flat: gl.getUniformLocation(prog, "uFlat"),
+    tex: gl.getUniformLocation(prog, "uTex"),
+    useTex: gl.getUniformLocation(prog, "uUseTex"),
   };
-  const bufPos = gl.createBuffer(), bufNor = gl.createBuffer(), bufLine = gl.createBuffer();
+  const bufPos = gl.createBuffer(), bufNor = gl.createBuffer();
+  const bufUV = gl.createBuffer(), bufLine = gl.createBuffer();
+
+  // one texture slot, used when a model should keep the colours it was drawn in
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  /**
+   * Hands the renderer a picture to paint the flat faces with — the drawing
+   * itself, in its own colours. Pass null to go back to one flat colour.
+   */
+  function setTexture(source) {
+    state.textured = !!source;
+    if (!source) return;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  }
 
   gl.enable(gl.DEPTH_TEST);
 
@@ -647,6 +685,7 @@ export function createViewer(canvas, opts = {}) {
     rotX: -0.35, rotY: 0.6, dist: 4.2,
     spin: 0, autoSpin: true, spinSpeed: 0.6, motion: "spin",
     time: 0, running: false, raf: 0, extraModel: null,
+    textured: false,                    // is this model painted with its own drawing?
   };
 
   const MIN_DIST = 0.6, MAX_DIST = 120;
@@ -675,6 +714,13 @@ export function createViewer(canvas, opts = {}) {
     gl.bufferData(gl.ARRAY_BUFFER, m.positions, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, bufNor);
     gl.bufferData(gl.ARRAY_BUFFER, m.normals, gl.STATIC_DRAW);
+    // a drawn model carries where each point sat on the pad, so the drawing
+    // can be painted back onto it; a plain shape has none and stays one colour
+    state.hasUV = !!(m.uvs && m.uvs.length === state.count * 2);
+    if (state.hasUV) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufUV);
+      gl.bufferData(gl.ARRAY_BUFFER, m.uvs, gl.STATIC_DRAW);
+    }
     // wireframe edges
     const lines = new Float32Array(state.count * 6);
     let k = 0;
@@ -728,6 +774,12 @@ export function createViewer(canvas, opts = {}) {
     gl.uniformMatrix4fv(loc.model, false, model);
     gl.uniform3fv(loc.color, hexToRgb(state.color));
 
+    const paintWithDrawing = state.textured && state.hasUV && !state.wireframe;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.uniform1i(loc.tex, 0);
+    gl.uniform1f(loc.useTex, paintWithDrawing ? 1 : 0);
+
     if (state.wireframe) {
       gl.uniform1f(loc.flat, 1);
       gl.bindBuffer(gl.ARRAY_BUFFER, bufLine);
@@ -735,6 +787,7 @@ export function createViewer(canvas, opts = {}) {
       gl.vertexAttribPointer(loc.pos, 3, gl.FLOAT, false, 0, 0);
       gl.disableVertexAttribArray(loc.nor);
       gl.vertexAttrib3f(loc.nor, 0, 0, 1);
+      if (loc.uv >= 0) { gl.disableVertexAttribArray(loc.uv); gl.vertexAttrib2f(loc.uv, 0, 0); }
       gl.drawArrays(gl.LINES, 0, state.lineCount);
     } else {
       gl.uniform1f(loc.flat, 0);
@@ -744,6 +797,16 @@ export function createViewer(canvas, opts = {}) {
       gl.bindBuffer(gl.ARRAY_BUFFER, bufNor);
       gl.enableVertexAttribArray(loc.nor);
       gl.vertexAttribPointer(loc.nor, 3, gl.FLOAT, false, 0, 0);
+      if (loc.uv >= 0) {
+        if (paintWithDrawing) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, bufUV);
+          gl.enableVertexAttribArray(loc.uv);
+          gl.vertexAttribPointer(loc.uv, 2, gl.FLOAT, false, 0, 0);
+        } else {
+          gl.disableVertexAttribArray(loc.uv);
+          gl.vertexAttrib2f(loc.uv, 0, 0);
+        }
+      }
       gl.drawArrays(gl.TRIANGLES, 0, state.count);
     }
   }
@@ -813,5 +876,5 @@ export function createViewer(canvas, opts = {}) {
     };
   }
 
-  return { gl, canvas, state, setMesh, draw, start, stop, resize, attachControls, zoomBy, fit };
+  return { gl, canvas, state, setMesh, setTexture, draw, start, stop, resize, attachControls, zoomBy, fit };
 }

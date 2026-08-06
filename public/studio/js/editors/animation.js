@@ -241,9 +241,19 @@ export function mount(root, project, api, opts = {}) {
     c.layers.push(layer);
     selectedId = layer.id;
     prepareLayer(layer);
+    // Every layer starts its pop-in from nothing, so at t = 0 it is invisible.
+    // Land the playhead on the moment it has finished arriving, otherwise you
+    // add a sticker and the stage just sits there looking empty.
+    goTo(arrivalTime(layer));
     renderLayers();
     renderTracks();
     saveSoon();
+  }
+
+  /** The first moment a layer is fully visible. */
+  function arrivalTime(layer) {
+    const shown = (layer.keys || []).find((k) => (k.opacity ?? 1) >= 0.99);
+    return Math.min(c.duration, shown ? shown.t : 0);
   }
 
   function prepareLayer(l) {
@@ -501,6 +511,15 @@ export function mount(root, project, api, opts = {}) {
     renderPlayhead();
     renderProps();
   };
+
+  /** Moves the playhead and everything that follows it. */
+  function goTo(t) {
+    time = Math.max(0, Math.min(c.duration, t));
+    scrub.value = time;
+    $("#time-out").textContent = time.toFixed(1) + "s";
+    syncVideos(false);
+    renderPlayhead();
+  }
 
   /* ---------------- layer list + tracks ---------------- */
   function renderLayers() {

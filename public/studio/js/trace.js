@@ -46,8 +46,11 @@ export function paintDrawing(ctx, drawing, scale, ink = "#e8eef7") {
 
   for (const it of items) {
     ctx.globalCompositeOperation = it.kind === "erase" ? "destination-out" : "source-over";
-    ctx.strokeStyle = ink;
-    ctx.fillStyle = ink;
+    // each thing remembers the colour it was drawn in; only the shape matters
+    // when working out the solid, but the colours matter when painting it
+    const col = it.color || ink;
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
     ctx.lineWidth = it.width || 18;
 
     if (it.kind === "stroke" || it.kind === "erase") {
@@ -134,11 +137,25 @@ export function drawingToMesh(drawing, { depth = 0.4, grid = GRID } = {}) {
   const X = (i) => (i / (gw - 1) - 0.5) * spanX;
   const Y = (j) => (0.5 - j / (gh - 1)) * spanY;
 
-  const pos = [], nor = [];
-  const tri = (a, b, c, n) => {
-    for (const p of [a, b, c]) pos.push(p[0], p[1], p[2]);
+  const pos = [], nor = [], uvs = [];
+  // where a point sits on the pad, 0..1 — this is what lets the drawing be
+  // painted back onto the solid so an emoji keeps its own colours
+  const U = (x) => x / spanX + 0.5;
+  const V = (y) => 0.5 - y / spanY;
+  /**
+   * `shift` nudges where the colour is read from, without moving the point.
+   * The walls sit exactly on the edge of the ink, where the colour is fading
+   * out — reading a little way inside instead gives them the solid colour of
+   * whatever they are the edge of.
+   */
+  const tri = (a, b, c, n, shift) => {
+    for (const p of [a, b, c]) {
+      pos.push(p[0], p[1], p[2]);
+      uvs.push(U(p[0] - (shift ? shift[0] : 0)), V(p[1] - (shift ? shift[1] : 0)));
+    }
     for (let k = 0; k < 3; k++) nor.push(n[0], n[1], n[2]);
   };
+  const inset = (spanX / (gw - 1)) * 1.6;        // about one and a half squares
 
   for (let j = 0; j + 1 < gh; j++) {
     for (let i = 0; i + 1 < gw; i++) {
@@ -218,15 +235,20 @@ export function drawingToMesh(drawing, { depth = 0.4, grid = GRID } = {}) {
           const len = Math.hypot(dx, dy);
           if (len < 1e-9) continue;
           const wn = [dy / len, -dx / len, 0];             // points away from the shape
-          tri([a[0], a[1], d], [a[0], a[1], -d], [b[0], b[1], -d], wn);
-          tri([a[0], a[1], d], [b[0], b[1], -d], [b[0], b[1], d], wn);
+          const shift = [wn[0] * inset, wn[1] * inset];
+          tri([a[0], a[1], d], [a[0], a[1], -d], [b[0], b[1], -d], wn, shift);
+          tri([a[0], a[1], d], [b[0], b[1], -d], [b[0], b[1], d], wn, shift);
         }
       }
     }
   }
 
   if (!pos.length) return null;
-  return center({ positions: new Float32Array(pos), normals: new Float32Array(nor) });
+  return center({
+    positions: new Float32Array(pos),
+    normals: new Float32Array(nor),
+    uvs: new Float32Array(uvs),
+  });
 }
 
 /** Puts the shape in the middle and gives it a comfortable size. */
@@ -244,6 +266,18 @@ function center(m) {
   for (let i = 0; i < p.length; i += 3)
     for (let k = 0; k < 3; k++) p[i + k] = (p[i + k] - mid[k]) * s;
   return m;
+}
+
+/**
+ * The drawing painted in its real colours, for the renderer to wrap the solid
+ * in. Same picture as the pad, just at a fixed size.
+ */
+export function drawingTexture(drawing, ink = "#6ea8fe", width = 1024) {
+  const cv = document.createElement("canvas");
+  cv.width = width;
+  cv.height = Math.round((width * PAD_H) / PAD_W);
+  paintDrawing(cv.getContext("2d"), drawing, cv.width / PAD_W, ink);
+  return cv;
 }
 
 /** Roughly how many triangles a drawing will turn into. */

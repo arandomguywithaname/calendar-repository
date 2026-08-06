@@ -167,6 +167,7 @@ export function defaultContent(type) {
         drawing: null,            // what you drew on the pad, kept so you can change it
         useDrawing: false,
         drawDepth: 0.4,           // how thick the drawing comes out
+        drawColours: true,        // keep the colours it was drawn in
         obj: null,                // pasted/loaded OBJ source
         color: "#6ea8fe",
         bg: "#0a0e14",

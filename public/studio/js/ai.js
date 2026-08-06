@@ -76,7 +76,7 @@ function normalizeDrawing(d) {
     .map((it) => {
       const kind = oneOf(it?.kind, ["stroke", "erase", "line", "rect", "ellipse", "text", "emoji"], null);
       if (!kind) return null;
-      const base = { kind, width: num(it.width, 18, 1, 300) };
+      const base = { kind, width: num(it.width, 18, 1, 300), color: hex(it.color, undefined) };
       if (kind === "stroke" || kind === "erase") {
         const points = arr(it.points)
           .filter((p) => Array.isArray(p) && p.length >= 2)
@@ -130,6 +130,7 @@ export function normalize(type, content) {
       drawing,
       useDrawing: !!drawing && bool(content.useDrawing, true),
       drawDepth: num(content.drawDepth, 0.4, 0.05, 2),
+      drawColours: bool(content.drawColours, true),
       obj: typeof content.obj === "string" && content.obj.includes("v ") ? content.obj : null,
       color: hex(content.color, d.color),
       bg: hex(content.bg, d.bg),

@@ -5,7 +5,7 @@
    =========================================================== */
 
 import { createViewer, primitives, parseOBJ, toOBJ, shapeInfo, defaultParams } from "../gl.js";
-import { drawingToMesh, triangleCount } from "../trace.js";
+import { drawingToMesh, drawingTexture, triangleCount } from "../trace.js";
 import { openDrawPad } from "../drawpad.js";
 
 const SHAPES = Object.entries(shapeInfo).map(([key, info]) => [key, info.label]);
@@ -23,6 +23,7 @@ export function mount(root, project, api, opts = {}) {
         <div class="mini">Doodles, words and emoji all turn into a solid you can spin.</div>
         <div id="draw-panel" hidden>
           <div class="trow"><button class="btn" id="btn-use-draw">Use my drawing</button></div>
+          <label class="pad-check"><input type="checkbox" id="draw-colours" checked> Keep the colours I drew</label>
           <div class="field"><label>Thickness</label>
             <input type="range" id="draw-depth" min="0.05" max="2" step="0.05">
             <span class="num-out" id="draw-depth-out"></span></div>
@@ -118,21 +119,27 @@ export function mount(root, project, api, opts = {}) {
     try {
       if (c.obj) {
         viewer.setMesh(parseOBJ(c.obj));
+        viewer.setTexture(null);
         $("#obj-info").textContent = `Custom .obj loaded (${(viewer.state.count / 3) | 0} triangles)`;
       } else if (usingDrawing()) {
         const m = drawingToMesh(c.drawing, { depth: c.drawDepth ?? 0.4 });
         if (!m) throw new Error("that drawing came out empty");
         viewer.setMesh(m);
+        // wrap the solid in the drawing itself, so an emoji stays the colours
+        // it actually is instead of coming out as one flat blob
+        applyDrawColours();
         $("#obj-info").textContent = "Showing your drawing.";
         $("#draw-info").textContent = `Your drawing, ${triangleCount(m).toLocaleString()} triangles.`;
       } else {
         viewer.setMesh(primitives[shapeKey()](c.params || {}));
+        viewer.setTexture(null);
         $("#obj-info").textContent = "Using a built-in shape.";
       }
     } catch (e) {
       api.toast("Could not build that: " + e.message);
       c.obj = null;
       c.useDrawing = false;
+      viewer.setTexture(null);
       viewer.setMesh(primitives.cube());
     }
   }
@@ -177,9 +184,16 @@ export function mount(root, project, api, opts = {}) {
   };
 
   /* ---------- draw your own ---------- */
+  /** Paint the solid with the drawing, or leave it one flat colour. */
+  function applyDrawColours() {
+    const on = c.drawColours !== false;
+    viewer.setTexture(on && hasDrawing() ? drawingTexture(c.drawing, c.color || "#6ea8fe") : null);
+  }
+
   function showDrawPanel() {
     $("#draw-panel").hidden = !hasDrawing();
     $("#btn-draw").textContent = hasDrawing() ? "✏️ Change my drawing" : "✏️ Draw it and make it 3D";
+    $("#draw-colours").checked = c.drawColours !== false;
     const depth = $("#draw-depth");
     depth.value = c.drawDepth ?? 0.4;
     $("#draw-depth-out").textContent = (+depth.value).toFixed(2);
@@ -233,6 +247,14 @@ export function mount(root, project, api, opts = {}) {
     saveSoon();
     api.toast("Drawing removed.");
   };
+  const coloursBox = $("#draw-colours");
+  coloursBox.onchange = () => {
+    c.drawColours = coloursBox.checked;
+    applyDrawColours();
+    viewer.draw();
+    saveSoon();
+  };
+
   const depthSlider = $("#draw-depth");
   depthSlider.oninput = () => {
     c.drawDepth = +depthSlider.value;
@@ -377,6 +399,7 @@ export function mount(root, project, api, opts = {}) {
   /* ---------- colours ---------- */
   buildSwatches($("#swatches"), COLORS, c.color, (col) => {
     c.color = viewer.state.color = col;
+    if (usingDrawing()) { applyDrawColours(); viewer.draw(); }
     saveSoon();
   });
   buildSwatches($("#bgs"), ["#0a0e14", "#111a2b", "#1e1b34", "#0f2419", "#2b1d1d", "#f8fafc"], c.bg, (col) => {

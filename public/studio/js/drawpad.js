@@ -13,6 +13,7 @@
 import { paintDrawing, PAD_W, PAD_H } from "./trace.js";
 
 const EMOJI = ["⭐", "❤️", "🚀", "🐱", "🌳", "☀️", "🍕", "⚽", "🎈", "🔺", "😀", "🦋", "🏠", "🎵", "✔️", "❓"];
+const PEN_COLOURS = ["#6ea8fe", "#f87171", "#fbbf24", "#4ade80", "#a78bfa", "#fb923c", "#38bdf8", "#e8eef7", "#111827"];
 const TOOLS = [
   ["pen", "✏️ Pen"],
   ["erase", "🧽 Rubber"],
@@ -33,6 +34,7 @@ export function openDrawPad({ drawing, ink = "#6ea8fe", onSave, onCancel } = {})
   let width = 22;
   let emoji = "⭐";
   let filled = true;
+  let colour = ink;
 
   const back = document.createElement("div");
   back.className = "pad-back";
@@ -50,6 +52,8 @@ export function openDrawPad({ drawing, ink = "#6ea8fe", onSave, onCancel } = {})
             <input type="range" id="pad-size" min="4" max="150" step="1" value="${width}">
             <span class="num-out" id="pad-size-out">${width}</span></div>
           <label class="pad-check"><input type="checkbox" id="pad-fill" checked> Fill the shape in</label>
+          <div class="tlabel" style="margin-top:6px">Colour</div>
+          <div class="swatches" id="pad-colours"></div>
           <div class="tlabel" style="margin-top:6px">Emoji</div>
           <div class="trow wrap" id="pad-emoji"></div>
           <div class="trow" style="margin-top:6px">
@@ -129,6 +133,18 @@ export function openDrawPad({ drawing, ink = "#6ea8fe", onSave, onCancel } = {})
     toolRow.append(b);
   });
 
+  const colourRow = $("#pad-colours");
+  [ink, ...PEN_COLOURS.filter((x) => x !== ink)].forEach((col, i) => {
+    const sw = document.createElement("div");
+    sw.className = "sw" + (i === 0 ? " active" : "");
+    sw.style.background = col;
+    sw.onclick = () => {
+      colour = col;
+      [...colourRow.children].forEach((x) => x.classList.toggle("active", x === sw));
+    };
+    colourRow.append(sw);
+  });
+
   const emojiRow = $("#pad-emoji");
   EMOJI.forEach((e) => {
     const b = document.createElement("button");
@@ -172,20 +188,20 @@ export function openDrawPad({ drawing, ink = "#6ea8fe", onSave, onCancel } = {})
     if (tool === "text") {
       const said = prompt("What should it say?");
       if (said && said.trim()) {
-        items.push({ kind: "text", x, y, text: said.trim(), size: Math.max(40, width * 5) });
+        items.push({ kind: "text", x, y, text: said.trim(), size: Math.max(40, width * 5), color: colour });
         paint();
       }
       start = null;
       return;
     }
     if (tool === "emoji") {
-      items.push({ kind: "emoji", x, y, text: emoji, size: Math.max(50, width * 7) });
+      items.push({ kind: "emoji", x, y, text: emoji, size: Math.max(50, width * 7) });   // emoji bring their own
       paint();
       start = null;
       return;
     }
     if (tool === "pen" || tool === "erase") {
-      drawing_ = { kind: tool === "pen" ? "stroke" : "erase", points: [[x, y]], width };
+      drawing_ = { kind: tool === "pen" ? "stroke" : "erase", points: [[x, y]], width, color: colour };
       items.push(drawing_);
       paint();
       return;
@@ -222,12 +238,12 @@ export function openDrawPad({ drawing, ink = "#6ea8fe", onSave, onCancel } = {})
   };
 
   function shapeItem(x1, y1, x2, y2) {
-    if (tool === "line") return { kind: "line", x1, y1, x2, y2, width };
+    if (tool === "line") return { kind: "line", x1, y1, x2, y2, width, color: colour };
     return {
       kind: tool === "rect" ? "rect" : "ellipse",
       x: Math.min(x1, x2), y: Math.min(y1, y2),
       w: Math.abs(x2 - x1), h: Math.abs(y2 - y1),
-      fill: filled, width,
+      fill: filled, width, color: colour,
     };
   }
 
