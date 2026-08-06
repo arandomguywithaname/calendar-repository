@@ -164,6 +164,9 @@ export function defaultContent(type) {
       return {
         shape: "cube",
         params: { s: 1.6 },       // the letters in the shape's formula, e.g. r for a sphere
+        drawing: null,            // what you drew on the pad, kept so you can change it
+        useDrawing: false,
+        drawDepth: 0.4,           // how thick the drawing comes out
         obj: null,                // pasted/loaded OBJ source
         color: "#6ea8fe",
         bg: "#0a0e14",

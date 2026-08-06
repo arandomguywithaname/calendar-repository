@@ -67,6 +67,48 @@ const oneOf = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
 const arr = (v) => (Array.isArray(v) ? v : []);
 const nid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+/**
+ * A saved drawing from the pad. Sizes are checked so a bad number can't make
+ * the tracer chew through a huge canvas, and unknown kinds are dropped.
+ */
+function normalizeDrawing(d) {
+  const items = arr(d?.items)
+    .map((it) => {
+      const kind = oneOf(it?.kind, ["stroke", "erase", "line", "rect", "ellipse", "text", "emoji"], null);
+      if (!kind) return null;
+      const base = { kind, width: num(it.width, 18, 1, 300) };
+      if (kind === "stroke" || kind === "erase") {
+        const points = arr(it.points)
+          .filter((p) => Array.isArray(p) && p.length >= 2)
+          .map((p) => [num(p[0], 0, -2000, 3000), num(p[1], 0, -2000, 3000)])
+          .slice(0, 4000);
+        return points.length ? { ...base, points } : null;
+      }
+      if (kind === "line")
+        return {
+          ...base,
+          x1: num(it.x1, 0, -2000, 3000), y1: num(it.y1, 0, -2000, 3000),
+          x2: num(it.x2, 0, -2000, 3000), y2: num(it.y2, 0, -2000, 3000),
+        };
+      if (kind === "rect" || kind === "ellipse")
+        return {
+          ...base,
+          x: num(it.x, 0, -2000, 3000), y: num(it.y, 0, -2000, 3000),
+          w: num(it.w, 100, 0, 3000), h: num(it.h, 100, 0, 3000),
+          fill: bool(it.fill, true),
+        };
+      return {
+        ...base,
+        x: num(it.x, 500, -2000, 3000), y: num(it.y, 300, -2000, 3000),
+        text: str(it.text).slice(0, 60),
+        size: num(it.size, kind === "emoji" ? 190 : 120, 8, 800),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 600);
+  return items.length ? { items } : null;
+}
+
 /** Keeps only the letters this shape actually has, as sane numbers. */
 function normalizeParams(shape, given) {
   const out = defaultParams(shape);
@@ -81,9 +123,13 @@ export function normalize(type, content) {
 
   if (type === "3d") {
     const shape = oneOf(content.shape, SHAPE_KEYS, d.shape);
+    const drawing = normalizeDrawing(content.drawing);
     return {
       shape,
       params: normalizeParams(shape, content.params),
+      drawing,
+      useDrawing: !!drawing && bool(content.useDrawing, true),
+      drawDepth: num(content.drawDepth, 0.4, 0.05, 2),
       obj: typeof content.obj === "string" && content.obj.includes("v ") ? content.obj : null,
       color: hex(content.color, d.color),
       bg: hex(content.bg, d.bg),
@@ -368,7 +414,14 @@ export function localGenerate(type, prompt) {
     if (p.includes("orbit")) motion = "orbit";
     if (p.includes("pulse") || p.includes("grow")) motion = "pulse";
     if (p.includes("still") || p.includes("no anim")) motion = "none";
-    return { ...c, shape, params, color, motion, autoSpin: motion !== "none", label: title };
+
+    // "the word HELLO in 3D", or a prompt with an emoji in it, becomes a
+    // drawing instead — the same pad you would have drawn it on yourself
+    const drawing = wordsOrEmojiDrawing(prompt);
+    return {
+      ...c, shape, params, color, motion, autoSpin: motion !== "none", label: title,
+      drawing, useDrawing: !!drawing,
+    };
   }
 
   if (type === "2d") {
@@ -574,6 +627,42 @@ function chunk(arr, n) {
   const out = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
   return out.length ? out : [["Key idea"]];
+}
+
+/**
+ * Turns "the word HELLO", 'that says "well done"', or a prompt containing an
+ * emoji into a pad drawing, so it comes out as a solid you can still edit.
+ * Returns null when the prompt is not asking for words or an emoji.
+ */
+function wordsOrEmojiDrawing(prompt) {
+  const quoted = prompt.match(/["“']([^"”']{1,24})["”']/);
+  const said = prompt.match(/\b(?:word|words|text|says|saying|spelling)\s+([A-Za-z0-9!?'’ -]{1,32})/i);
+  let words = (quoted?.[1] || said?.[1] || "").trim();
+  // "text saying Well done" and "word is Hello" both leave joining words behind
+  let trimmed;
+  do {
+    trimmed = words;
+    words = words
+      .replace(/^(?:saying|says|say|is|that|which|reads?|the|a|in|3d)\s+/i, "")
+      .replace(/\s+(?:in\s+)?3d$/i, "")
+      .trim();
+  } while (words !== trimmed);
+
+  const emoji = [...prompt.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]).slice(0, 3);
+
+  if (!words && !emoji.length) return null;
+
+  const items = [];
+  if (words) {
+    // long words need smaller letters to stay on the pad
+    const size = Math.max(70, Math.min(300, 1500 / Math.max(2, words.length)));
+    items.push({ kind: "text", x: 500, y: emoji.length ? 230 : 310, text: words, size, width: 18 });
+  }
+  emoji.forEach((e, i) => {
+    const spread = (i - (emoji.length - 1) / 2) * 260;
+    items.push({ kind: "emoji", x: 500 + spread, y: words ? 460 : 310, text: e, size: 260, width: 18 });
+  });
+  return { items };
 }
 
 /** A blank slide-project slide with every field present. */

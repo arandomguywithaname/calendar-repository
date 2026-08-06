@@ -1,10 +1,12 @@
 /* ===========================================================
    threed.js — 3D creation editor.
-   Rotate a built-in shape or your own .obj, colour it, give it
-   motion, and export the result back out as .obj.
+   Rotate a built-in shape, something you drew yourself, or your
+   own .obj; colour it, give it motion, and export it back out.
    =========================================================== */
 
 import { createViewer, primitives, parseOBJ, toOBJ, shapeInfo, defaultParams } from "../gl.js";
+import { drawingToMesh, triangleCount } from "../trace.js";
+import { openDrawPad } from "../drawpad.js";
 
 const SHAPES = Object.entries(shapeInfo).map(([key, info]) => [key, info.label]);
 const COLORS = ["#6ea8fe", "#a78bfa", "#4ade80", "#fbbf24", "#f87171", "#38bdf8", "#fb923c", "#e8eef7"];
@@ -16,7 +18,20 @@ export function mount(root, project, api, opts = {}) {
   root.innerHTML = `
     <div class="tools">
       <div class="tgroup">
-        <div class="tlabel">Shape</div>
+        <div class="tlabel">Draw your own</div>
+        <button class="btn primary" id="btn-draw">✏️ Draw it and make it 3D</button>
+        <div class="mini">Doodles, words and emoji all turn into a solid you can spin.</div>
+        <div id="draw-panel" hidden>
+          <div class="trow"><button class="btn" id="btn-use-draw">Use my drawing</button></div>
+          <div class="field"><label>Thickness</label>
+            <input type="range" id="draw-depth" min="0.05" max="2" step="0.05">
+            <span class="num-out" id="draw-depth-out"></span></div>
+          <div class="trow"><button class="btn danger" id="btn-drop-draw">Throw the drawing away</button></div>
+        </div>
+        <div class="mini" id="draw-info"></div>
+      </div>
+      <div class="tgroup">
+        <div class="tlabel">Or a ready-made shape</div>
         <div class="trow wrap" id="shapes"></div>
       </div>
       <div class="tgroup">
@@ -96,15 +111,28 @@ export function mount(root, project, api, opts = {}) {
 
   /* ---------- mesh handling ---------- */
   const shapeKey = () => (shapeInfo[c.shape] ? c.shape : "cube");
+  const hasDrawing = () => !!c.drawing?.items?.length;
+  const usingDrawing = () => hasDrawing() && c.useDrawing !== false && !c.obj;
 
   function applyMesh() {
     try {
-      if (c.obj) viewer.setMesh(parseOBJ(c.obj));
-      else viewer.setMesh(primitives[shapeKey()](c.params || {}));
-      $("#obj-info").textContent = c.obj ? `Custom .obj loaded (${(viewer.state.count / 3) | 0} triangles)` : "Using a built-in shape.";
+      if (c.obj) {
+        viewer.setMesh(parseOBJ(c.obj));
+        $("#obj-info").textContent = `Custom .obj loaded (${(viewer.state.count / 3) | 0} triangles)`;
+      } else if (usingDrawing()) {
+        const m = drawingToMesh(c.drawing, { depth: c.drawDepth ?? 0.4 });
+        if (!m) throw new Error("that drawing came out empty");
+        viewer.setMesh(m);
+        $("#obj-info").textContent = "Showing your drawing.";
+        $("#draw-info").textContent = `Your drawing, ${triangleCount(m).toLocaleString()} triangles.`;
+      } else {
+        viewer.setMesh(primitives[shapeKey()](c.params || {}));
+        $("#obj-info").textContent = "Using a built-in shape.";
+      }
     } catch (e) {
-      api.toast("Could not read that model: " + e.message);
+      api.toast("Could not build that: " + e.message);
       c.obj = null;
+      c.useDrawing = false;
       viewer.setMesh(primitives.cube());
     }
   }
@@ -133,14 +161,86 @@ export function mount(root, project, api, opts = {}) {
       c.shape = key;
       c.params = { ...defaultParams(key), ...kept };
       c.obj = null;
+      c.useDrawing = false;                 // the drawing is kept, just not shown
       applyMesh();
       viewer.fit();
+      showDrawPanel();
       [...shapesRow.children].forEach((x) => x.classList.toggle("active", x === b));
       showEquations();
       saveSoon();
     };
     shapesRow.append(b);
   });
+  const markShapeButtons = () => {
+    const on = !c.obj && !usingDrawing();
+    [...shapesRow.children].forEach((x, i) => x.classList.toggle("active", on && SHAPES[i][0] === c.shape));
+  };
+
+  /* ---------- draw your own ---------- */
+  function showDrawPanel() {
+    $("#draw-panel").hidden = !hasDrawing();
+    $("#btn-draw").textContent = hasDrawing() ? "✏️ Change my drawing" : "✏️ Draw it and make it 3D";
+    const depth = $("#draw-depth");
+    depth.value = c.drawDepth ?? 0.4;
+    $("#draw-depth-out").textContent = (+depth.value).toFixed(2);
+    $("#btn-use-draw").classList.toggle("active", usingDrawing());
+    $("#btn-use-draw").disabled = usingDrawing();
+    if (!hasDrawing()) $("#draw-info").textContent = "";
+    else if (!usingDrawing()) $("#draw-info").textContent = "Your drawing is saved — press “Use my drawing” to show it.";
+    markShapeButtons();
+  }
+
+  $("#btn-draw").onclick = () => {
+    openDrawPad({
+      drawing: c.drawing,
+      ink: c.color || "#6ea8fe",
+      onSave: (drawing) => {
+        if (!drawing.items.length) {
+          c.drawing = null;
+          c.useDrawing = false;
+          api.toast("Nothing was drawn, so the shape stayed as it was.");
+        } else {
+          c.drawing = drawing;
+          c.useDrawing = true;
+          c.obj = null;
+          c.drawDepth = c.drawDepth ?? 0.4;
+        }
+        applyMesh();
+        viewer.fit();
+        showDrawPanel();
+        showEquations();
+        saveSoon();
+      },
+    });
+  };
+  $("#btn-use-draw").onclick = () => {
+    if (!hasDrawing()) return;
+    c.useDrawing = true;
+    c.obj = null;
+    applyMesh();
+    viewer.fit();
+    showDrawPanel();
+    showEquations();
+    saveSoon();
+  };
+  $("#btn-drop-draw").onclick = () => {
+    c.drawing = null;
+    c.useDrawing = false;
+    applyMesh();
+    viewer.fit();
+    showDrawPanel();
+    showEquations();
+    saveSoon();
+    api.toast("Drawing removed.");
+  };
+  const depthSlider = $("#draw-depth");
+  depthSlider.oninput = () => {
+    c.drawDepth = +depthSlider.value;
+    $("#draw-depth-out").textContent = c.drawDepth.toFixed(2);
+    if (usingDrawing()) applyMesh();
+    saveSoon();
+  };
+  showDrawPanel();
 
   /* ---------- equations ---------- */
   /**
@@ -155,8 +255,13 @@ export function mount(root, project, api, opts = {}) {
       `<b>${info.label}</b> uses: ` +
       Object.entries(info.params).map(([k, [, what]]) => `<code>${k}</code> = ${what}`).join(" · ");
     $("#eq").value = Object.keys(info.params).map((k) => `${k} = ${round(p[k])}`).join("\n");
-    $("#eq").disabled = !!c.obj;
-    $("#eq-msg").textContent = c.obj ? "Equations apply to the built-in shapes, not a loaded .obj." : "";
+    const off = !!c.obj || usingDrawing();
+    $("#eq").disabled = off;
+    $("#eq-msg").textContent = c.obj
+      ? "Equations apply to the ready-made shapes, not a loaded .obj."
+      : usingDrawing()
+        ? "Your drawing is showing — use the Thickness slider above to change it."
+        : "";
   }
 
   function applyEquations() {
@@ -246,6 +351,9 @@ export function mount(root, project, api, opts = {}) {
       c.objName = name;
       [...shapesRow.children].forEach((x) => x.classList.remove("active"));
       $("#obj-info").textContent = `Loaded ${name} (${(viewer.state.count / 3) | 0} triangles)`;
+      viewer.fit();
+      showDrawPanel();
+      showEquations();
       api.toast("Model loaded — drag it around!");
       saveSoon();
     } catch (err) {

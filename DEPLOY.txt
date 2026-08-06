@@ -86,6 +86,11 @@ WHAT THIS IS
                 Whiteboard     -> .png
                 Animation      -> .webm video and .png frames
 
+  DRAWING     In a 3D project, "Draw it and make it 3D" turns anything you
+              draw — doodles, words, emoji — into a solid you can spin and
+              export as .obj. A detailed drawing makes a big model, so an
+              .obj of one can be a few megabytes.
+
   BROWSER     A recent Chrome, Edge, Safari or Firefox. The 3D and
               animation parts need WebGL, which all of those have.
 

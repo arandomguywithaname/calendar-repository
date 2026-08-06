@@ -27,7 +27,7 @@ From the dashboard: **+ New Project** → pick a creation type → pick **With A
 
 | Type | What it is |
 | --- | --- |
-| **3D Creation** | Spin a model around — 19 built-in shapes (including a human figure, a house and a tree) or your own `.obj` — with colour, wireframe, motion (spin / bob / orbit / pulse) and zoom. Shapes are driven by equations: type `r = 5` and the sphere's radius really is 5. Exports `.obj` and PNG. |
+| **3D Creation** | Spin a model around — **draw your own**, pick from 19 built-in shapes (including a human figure, a house and a tree), or load your own `.obj` — with colour, wireframe, motion (spin / bob / orbit / pulse) and zoom. Shapes are driven by equations: type `r = 5` and the sphere's radius really is 5. Exports `.obj` and PNG. |
 | **2D Slides** | A free canvas: place text, boxes, circles, photos, web images and stickers anywhere. Double-click any text to type in it. Exports a standalone web page. |
 | **Slide Project** | A tidy presentation deck: pick a layout per slide (title, points, two columns, big number, picture, quote), type into real boxes, and a theme keeps every slide matching. Has speaker notes. Exports a standalone web page. |
 | **Whiteboard** | Draw, type, stickers, shapes, photos, code blocks and playable games (Tetris, Blockoff) on an infinite pannable board. Ctrl+C / Ctrl+V, Ctrl+Z, Delete. Exports PNG. |
@@ -36,6 +36,31 @@ From the dashboard: **+ New Project** → pick a creation type → pick **With A
 **2D Slides vs. Slide Project** — 2D Slides is a blank canvas where you drag things
 into place; a Slide Project has fixed layouts you fill in, so it stays neat by
 itself. Pick 2D when the arrangement matters, Slide Project when the words do.
+
+#### Drawing your own 3D shape
+
+**✏️ Draw it and make it 3D** opens a pad. Draw freehand, drop in boxes, circles
+and lines, type words, stamp emoji — then **Make it 3D →** and the ink becomes a
+solid you can spin, colour, animate and export like any other model. The rubber
+cuts holes out of what is already there, so a ring or a letter O comes out
+hollow.
+
+The drawing is kept as the list of things you did, not as a picture, so
+**Change my drawing** reopens it exactly as you left it and you can keep adding.
+The **Thickness** slider changes how deep the solid is without redrawing
+anything, and picking a ready-made shape only sets the drawing aside — **Use my
+drawing** brings it back.
+
+With AI, asking for *the word HELLO in 3D* or a prompt with an emoji in it comes
+back as a drawing on that same pad, so you can still change it by hand.
+
+How it works: everything on the pad is painted onto a hidden canvas much larger
+than needed and then shrunk, which gives every square of a grid a "how covered am
+I" value — that is what makes the edges smooth instead of stair-stepped. The grid
+is then walked a square at a time (marching squares) to find where the edge of
+the ink falls, and the flat shape is given a front, a back and walls built from
+the very same edge points, so there are never any cracks. Text, emoji, strokes
+and shapes all go through that one path, which is why they all work.
 
 #### Changing a 3D shape with an equation
 
@@ -75,7 +100,7 @@ What "present" means per type:
 
 | Type | Presenting |
 | --- | --- |
-| **3D** | The model full screen, turning on its own, with its label underneath. Drag to spin, scroll to zoom. |
+| **3D** | The model — built-in, drawn, or loaded — full screen, turning on its own, with its label underneath. Drag to spin, scroll or use the zoom pad. |
 | **2D Slides** | A slideshow — arrow keys, space, click, or the on-screen arrows; a slide counter at the bottom. |
 | **Slide Project** | The same, plus a **Notes** button (or the `n` key) that shows the speaker notes for the slide you are on. |
 | **Whiteboard** | The whole board zoomed to fit. Drag to move around, scroll to zoom, and the games stay playable. |
@@ -137,6 +162,8 @@ public/studio/
   js/ai.js              — AI client + offline generator
   js/app.js             — gate, profiles, sign-in, dashboard, editor loading
   js/gl.js              — hand-rolled WebGL renderer, shape library + .obj loader/exporter
+  js/trace.js           — turns a drawing into a solid (marching squares + extrude)
+  js/drawpad.js         — the drawing pad itself
   js/editors/           — threed.js, slides.js, deck.js, whiteboard.js, animation.js
   js/games/             — tetris.js, blockoff.js
 src/studio.ts           — /api/studio/{status,generate,chat}
