@@ -15,7 +15,9 @@ const path = require('path');
 const REPO = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(REPO, 'dist');
 const OUT = path.join(OUT_DIR, 'operation-dune.zip');
-const PREFIX = 'operation-dune/';
+// index.html must sit at the ROOT of the zip — itch.io and similar static
+// hosts refuse to publish otherwise — so there is no wrapping folder.
+const PREFIX = '';
 
 /* --------------------------- zip writer --------------------------- */
 
@@ -105,18 +107,22 @@ function walk(dir, base, out) {
 
 const zip = new ZipWriter();
 
-// The game itself.
+// The game itself, flattened so index.html is the first thing a host sees.
 const files = [];
-walk(path.join(REPO, 'public', 'game'), 'public/game/', files);
+walk(path.join(REPO, 'public', 'game'), '', files);
 files.sort((a, b) => a[0].localeCompare(b[0]));
 for (const [rel, full] of files) {
   if (rel.endsWith('_test.html')) continue;
-  zip.add(PREFIX + rel, fs.readFileSync(full));
+  const name = rel === 'README.md' ? 'GAME-README.md' : rel;   // keep root README ours
+  zip.add(PREFIX + name, fs.readFileSync(full));
 }
 
-// Standalone server: same file, with the web root next to it.
+// Standalone server: serves this very folder, with the game at "/".
 const server = fs.readFileSync(path.join(REPO, 'scripts', 'serve-game.js'), 'utf8')
-  .replace("path.resolve(__dirname, '..', 'public')", "path.resolve(__dirname, 'public')");
+  .replace("path.resolve(__dirname, '..', 'public')", '__dirname')
+  .replace("if (urlPath === '/') urlPath = '/game/index.html';",
+    "if (urlPath === '/') urlPath = '/index.html';")
+  .replace(/:\$\{PORT\}\/game\//g, ':${PORT}/');
 zip.add(PREFIX + 'server.js', Buffer.from(server));
 
 zip.add(PREFIX + 'package.json', Buffer.from(JSON.stringify({
@@ -131,29 +137,31 @@ zip.add(PREFIX + 'README.md', Buffer.from(`# OPERATION: DUNE
 
 A tactical 5v5 bomb-defusal shooter that runs in the browser.
 No dependencies, no build step, no assets — everything is generated at runtime.
+\`index.html\` sits at the root of this zip, so it publishes as-is.
 
-## Run
+## Publish on itch.io (or any static host)
+
+Upload this zip exactly as it is (itch.io: "Kind of project" → HTML,
+tick "This file will be played in the browser"). Matchmaking vs bots and
+Practice work fully. "Play with Friends" needs the Node relay below —
+players paste its wss:// address into the PvP lobby's Server field.
+
+GitHub Pages / Netlify / Vercel: unzip and serve the folder; index.html
+is the entry point.
+
+## Run it yourself (adds PvP)
 
 \`\`\`bash
 npm start            # or: node server.js
 \`\`\`
 
-Open http://localhost:8080/game/ — share your LAN address for PvP
-(everyone joins the same room code under "Play with Friends").
-Set PORT to change the port.
+Open http://localhost:8080/ and share your LAN address — everyone joins
+the same room code under "Play with Friends". Set PORT to change the port.
+Deployed anywhere Node runs (a VPS, Render, Railway, Fly.io, Glitch…),
+the PvP relay shares the site's port; an HTTPS site needs the relay
+reachable over wss://.
 
-## Publishing
-
-- **Anywhere Node runs** (a VPS, Render, Railway, Fly.io, Glitch…):
-  deploy this folder and run \`node server.js\`. Singleplayer *and* PvP work —
-  the PvP relay runs on the same port as the site.
-- **Static hosts** (itch.io, GitHub Pages, Netlify…): upload the
-  \`public/game/\` folder as-is and serve \`index.html\`. Matchmaking vs bots
-  and Practice work fully; "Play with Friends" needs the Node server above,
-  but players can point the lobby's Server field at one you host elsewhere.
-- HTTPS sites need a \`wss://\` server address in the PvP lobby.
-
-Full docs live in \`public/game/README.md\`.
+Full game docs: GAME-README.md.
 `));
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
