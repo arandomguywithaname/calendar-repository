@@ -67,7 +67,8 @@ class Game {
     this.frameCount = 0;
     this.fps = 0;
     this.matchTarget = 13;
-    this.mobile = IS_TOUCH_DEVICE;
+    this.hasTouch = IS_TOUCH_DEVICE;   // what the hardware reports
+    this.mobile = this.hasTouch;       // which control scheme is active
   }
 
   /* ============================== boot ============================== */
@@ -110,8 +111,7 @@ class Game {
     this.hud = new HUD(this);
     this.hud.buildRadarMap(this.map);
     this.touch = new TouchControls(this);
-    if (this.mobile) document.body.classList.add('mobile');
-    this.applySettings();
+    this.applySettings();   // applies the saved control mode too
     this.bindInput();
     this.bindMenus();
 
@@ -132,6 +132,32 @@ class Game {
     this.renderer.resize();
     this.sound.setVolume(s.volume);
     this.settings = s;
+    this.applyControlMode();
+  }
+
+  /** Auto / Desktop / Touch — switchable at any time, even mid-match. */
+  applyControlMode() {
+    const mode = (this.settings && this.settings.controlMode) || 'auto';
+    const want = mode === 'auto' ? this.hasTouch : mode === 'mobile';
+    const changed = want !== this.mobile;
+    this.mobile = want;
+    document.body.classList.toggle('mobile', want);
+    if (!changed) return;
+    // Drop any held inputs from the old scheme so nothing sticks.
+    this.keys.clear();
+    this.mouse.left = false;
+    this.mouse.right = false;
+    if (this.touch) {
+      this.touch.moveVec.x = 0;
+      this.touch.moveVec.y = 0;
+      this.touch.stickTouch = null;
+      this.touch.tick();
+    }
+    if (want) {
+      this.exitPointerLock();
+    } else if (this.running && !this.paused && !this.shopOpen) {
+      this.requestPointerLock();
+    }
   }
 
   /* ============================ match setup ============================ */

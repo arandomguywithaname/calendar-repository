@@ -24,6 +24,11 @@ The only requirement is a browser with WebGL2 (every current desktop browser).
 | `E` | Plant the bomb, defuse it, or pick up a dropped weapon |
 | `Tab` | Scoreboard · `Esc` pause |
 
+**Controls are switchable** in Settings — *Auto-detect*, *Desktop* or
+*Touch* — so a touchscreen laptop can use mouse and keyboard, a tablet
+with a mouse can go desktop, and anyone can force the touch layout. The
+choice applies instantly, even mid-match, and is remembered.
+
 **On phones and tablets** the same page serves a touch layout automatically:
 a floating movement stick on the left (gentle push = silent walk), drag
 anywhere to aim, a fire button with zoom/jump/crouch/reload/swap/grenade

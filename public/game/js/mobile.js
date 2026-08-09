@@ -179,9 +179,13 @@ class TouchControls {
   tick() {
     const g = this.game;
     if (!this.ui) return;
-    const show = g.mobile && g.running && !g.paused && !g.shopOpen &&
-      g.phase !== PHASE.MATCHEND;
-    this.ui.classList.toggle('hidden', !show);
+    const inMatch = g.running && !g.paused && !g.shopOpen && g.phase !== PHASE.MATCHEND;
+    const show = g.mobile && inMatch;
+    // A real touch device forced into desktop controls keeps just the pause
+    // button, otherwise there is no way back to Settings without a keyboard.
+    const minimal = !g.mobile && g.hasTouch && inMatch;
+    this.ui.classList.toggle('hidden', !(show || minimal));
+    this.ui.classList.toggle('minimal', minimal);
     document.body.classList.toggle('ingame', g.mobile && g.running);
     if (!show) return;
 

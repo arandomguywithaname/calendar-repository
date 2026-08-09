@@ -615,6 +615,10 @@ body.mobile * { -webkit-tap-highlight-color: transparent; }
   border-radius: 17px; font-size: 11px; letter-spacing: 1.5px; padding: 0 14px;
 }
 
+/* Desktop controls on a touch device: keep only the pause button. */
+#touchUI.minimal > *:not(#touchTop) { display: none; }
+#touchUI.minimal #touchTop button:not(#btnPauseT) { display: none; }
+
 #rotateHint { display: none; }
 @media (orientation: portrait) {
   body.mobile.ingame #rotateHint {

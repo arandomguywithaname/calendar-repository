@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   shadows: true, viewmodel: true, invertY: false,
   name: 'player', server: '', room: 'DUNE1',
   skins: {},                       // weapon key -> skin key
+  controlMode: 'auto',             // 'auto' | 'desktop' | 'mobile'
 };
 
 function loadSettings() {
@@ -211,7 +212,8 @@ class HUD {
       if (isCheck) el.checked = s[key];
       else el.value = s[key];
       const apply = () => {
-        s[key] = isCheck ? el.checked : (el.type === 'color' ? el.value : parseFloat(el.value));
+        s[key] = isCheck ? el.checked
+          : (el.tagName === 'SELECT' || el.type === 'color' ? el.value : parseFloat(el.value));
         if (out && fmt) $(out).textContent = fmt(s[key]);
         saveSettings(s);
         this.game.applySettings();
@@ -219,6 +221,7 @@ class HUD {
       el.addEventListener('input', apply);
       if (out && fmt) $(out).textContent = fmt(s[key]);
     };
+    bind('setControls', 'controlMode');
     bind('setSens', 'sens', 'outSens', v => v.toFixed(2));
     bind('setFov', 'fov', 'outFov', v => String(v));
     bind('setVol', 'volume', 'outVol', v => Math.round(v * 100) + '%');
