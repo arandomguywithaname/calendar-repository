@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "web": "tsc && node dist/server.js",
-    "web:start": "node dist/server.js"
+    "web:start": "node dist/server.js",
+    "game": "node scripts/serve-game.js"
   },
   "repository": {
     "type": "git",

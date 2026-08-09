@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>OPERATION: DUNE — Tactical FPS</title>
+<link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+
+<canvas id="view"></canvas>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="damageFlash"></div>
+<div id="scopeOverlay"><div class="scope-circle"></div><div class="scope-v"></div><div class="scope-h"></div></div>
+
+<!-- ============================ HUD ============================ -->
+<div id="hud" class="hidden">
+  <canvas id="crosshair" width="200" height="200"></canvas>
+  <div id="hitmarker"></div>
+
+  <div id="topBar">
+    <div class="team-score t"><span class="tag">T</span><span id="scoreT">0</span></div>
+    <div id="roundTimer">1:55</div>
+    <div class="team-score ct"><span class="tag">CT</span><span id="scoreCT">0</span></div>
+    <div id="roundLabel">Round 1</div>
+  </div>
+
+  <div id="alivePips">
+    <div id="pipsT" class="pips"></div>
+    <div id="pipsCT" class="pips"></div>
+  </div>
+
+  <div id="killfeed"></div>
+
+  <div id="radarWrap">
+    <canvas id="radar" width="320" height="320"></canvas>
+  </div>
+
+  <div id="bottomLeft">
+    <div id="healthRow">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-8-5.2-8-11a4.6 4.6 0 0 1 8-3 4.6 4.6 0 0 1 8 3c0 5.8-8 11-8 11z"/></svg>
+      <span id="healthVal">100</span>
+      <div class="divider"></div>
+      <svg class="ico armor" viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3z"/></svg>
+      <span id="armorVal">0</span>
+    </div>
+    <div id="moneyRow"><span id="moneyVal">$800</span><span id="moneyDelta"></span></div>
+  </div>
+
+  <div id="bottomRight">
+    <div id="ammoRow"><span id="ammoMag">30</span><span id="ammoReserve">/ 90</span></div>
+    <div id="weaponName">AK-47</div>
+    <div id="inventoryRow"></div>
+  </div>
+
+  <div id="centerMsg"></div>
+  <div id="subMsg"></div>
+  <div id="progressWrap"><div id="progressLabel">PLANTING</div><div id="progressBar"><i></i></div></div>
+  <div id="bombHud" class="hidden"><span class="lbl">BOMB</span><span id="bombTimer">40.0</span></div>
+  <div id="spectatorBar" class="hidden">Spectating <b id="specName">—</b> · <span class="dim">[Space] next player</span></div>
+  <div id="damageDirs"></div>
+  <div id="buyHint" class="hidden">Press <b>B</b> to buy</div>
+</div>
+
+<!-- ========================== SCOREBOARD ========================== -->
+<div id="scoreboard" class="overlay hidden">
+  <div class="sb-panel">
+    <div class="sb-head">
+      <div class="sb-map">OPERATION: DUNE <span class="dim">— Competitive</span></div>
+      <div class="sb-score"><span class="t" id="sbScoreT">0</span><span class="sep">:</span><span class="ct" id="sbScoreCT">0</span></div>
+    </div>
+    <div class="sb-team">
+      <div class="sb-team-head t">TERRORISTS</div>
+      <table class="sb-table"><thead><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>ADR</th><th>$</th></tr></thead><tbody id="sbBodyT"></tbody></table>
+    </div>
+    <div class="sb-team">
+      <div class="sb-team-head ct">COUNTER-TERRORISTS</div>
+      <table class="sb-table"><thead><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>ADR</th><th>$</th></tr></thead><tbody id="sbBodyCT"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ SHOP ============================ -->
+<div id="shop" class="overlay hidden">
+  <div class="shop-panel">
+    <header class="shop-head">
+      <div class="shop-title">BUY MENU<span class="dim" id="shopTeamLabel"> — TERRORISTS</span></div>
+      <div class="shop-timer">BUY TIME <b id="shopTimer">0:20</b></div>
+      <div class="shop-money">$<span id="shopMoney">800</span></div>
+    </header>
+    <div class="shop-body">
+      <nav class="shop-cats" id="shopCats"></nav>
+      <div class="shop-grid" id="shopGrid"></div>
+      <aside class="shop-preview">
+        <canvas id="previewCanvas" width="520" height="300"></canvas>
+        <div class="pv-name" id="pvName">Select an item</div>
+        <div class="pv-price" id="pvPrice"></div>
+        <div class="pv-desc" id="pvDesc">Use the number keys or click to buy. Everything you buy this round is yours until you die.</div>
+        <div class="pv-stats" id="pvStats"></div>
+        <button class="pv-buy" id="pvBuy" disabled>BUY</button>
+      </aside>
+    </div>
+    <footer class="shop-foot">
+      <span><b>1-6</b> category</span><span><b>1-9</b> item</span>
+      <span><b>Mouse</b> click to buy</span><span><b>B</b> / <b>Esc</b> close</span>
+      <span class="right" id="shopLoadout"></span>
+    </footer>
+  </div>
+</div>
+
+<!-- ========================== MAIN MENU ========================== -->
+<div id="mainMenu" class="overlay">
+  <div class="menu-bg"></div>
+  <div class="menu-inner">
+    <h1 class="game-title">OPERATION<span>DUNE</span></h1>
+    <p class="game-sub">A tactical 5v5 bomb-defusal shooter</p>
+    <div class="menu-buttons">
+      <button class="btn primary" id="btnFindMatch">
+        <span class="btn-main">FIND MATCH</span>
+        <span class="btn-sub">Competitive · 5v5 · MR12</span>
+      </button>
+      <button class="btn" id="btnHostPvp">
+        <span class="btn-main">PLAY WITH FRIENDS</span>
+        <span class="btn-sub">Player vs player over the network</span>
+      </button>
+      <button class="btn" id="btnPractice">
+        <span class="btn-main">PRACTICE</span>
+        <span class="btn-sub">Free roam · unlimited buy time</span>
+      </button>
+      <button class="btn" id="btnSettings"><span class="btn-main">SETTINGS</span></button>
+    </div>
+    <div class="menu-opts">
+      <label>Bot difficulty
+        <select id="optDifficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+          <option value="expert">Expert</option>
+        </select>
+      </label>
+      <label>Team size
+        <select id="optTeamSize">
+          <option value="2">2v2</option>
+          <option value="3">3v3</option>
+          <option value="5" selected>5v5</option>
+        </select>
+      </label>
+      <label>Your side
+        <select id="optSide">
+          <option value="T">Terrorists</option>
+          <option value="CT" selected>Counter-Terrorists</option>
+          <option value="random">Random</option>
+        </select>
+      </label>
+    </div>
+    <div class="menu-foot">WASD move · Shift walk · Ctrl crouch · Space jump · R reload · B buy · E plant/defuse · G drop grenade · Tab scores</div>
+  </div>
+</div>
+
+<!-- ========================= MATCHMAKING ========================= -->
+<div id="matchmaking" class="overlay hidden">
+  <div class="mm-panel">
+    <div class="mm-status" id="mmStatus">SEARCHING FOR PLAYERS</div>
+    <div class="mm-spinner"><i></i><i></i><i></i></div>
+    <div class="mm-elapsed">Elapsed <b id="mmElapsed">0:00</b> · Estimated wait <b id="mmEta">0:12</b></div>
+    <div class="mm-slots" id="mmSlots"></div>
+    <div class="mm-map">
+      <div class="mm-map-name">OPERATION: DUNE</div>
+      <div class="mm-map-mode">Competitive · Bomb Defusal</div>
+    </div>
+    <div class="mm-actions">
+      <button class="btn small" id="mmCancel">CANCEL</button>
+      <button class="btn primary small hidden" id="mmAccept">ACCEPT MATCH</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================== PVP LOBBY ========================== -->
+<div id="pvpLobby" class="overlay hidden">
+  <div class="mm-panel wide">
+    <div class="mm-status">PLAYER VS PLAYER</div>
+    <p class="pvp-help">
+      Everyone connects to the same server, then joins the same room code.
+      Start the server with <code>npm run game</code> and share your address.
+    </p>
+    <div class="pvp-form">
+      <label>Your name<input id="pvpName" maxlength="14" placeholder="player" /></label>
+      <label>Server<input id="pvpServer" placeholder="ws://localhost:8080" /></label>
+      <label>Room code<input id="pvpRoom" maxlength="8" placeholder="DUNE1" /></label>
+      <label>Team
+        <select id="pvpTeam"><option value="auto" selected>Auto-balance</option><option value="T">Terrorists</option><option value="CT">Counter-Terrorists</option></select>
+      </label>
+      <label class="check"><input type="checkbox" id="pvpFillBots" checked /> Fill empty slots with bots</label>
+    </div>
+    <div class="pvp-status" id="pvpStatus">Not connected.</div>
+    <div class="pvp-roster" id="pvpRoster"></div>
+    <div class="mm-actions">
+      <button class="btn small" id="pvpBack">BACK</button>
+      <button class="btn small" id="pvpConnect">CONNECT</button>
+      <button class="btn primary small" id="pvpStart" disabled>START MATCH</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================== SETTINGS ========================== -->
+<div id="settings" class="overlay hidden">
+  <div class="set-panel">
+    <h2>SETTINGS</h2>
+    <div class="set-grid">
+      <label>Mouse sensitivity <input type="range" id="setSens" min="0.4" max="8" step="0.05" value="2.2" /><output id="outSens">2.20</output></label>
+      <label>Field of view <input type="range" id="setFov" min="70" max="110" step="1" value="90" /><output id="outFov">90</output></label>
+      <label>Master volume <input type="range" id="setVol" min="0" max="1" step="0.02" value="0.7" /><output id="outVol">70%</output></label>
+      <label>Render scale <input type="range" id="setScale" min="0.5" max="1" step="0.05" value="1" /><output id="outScale">100%</output></label>
+      <label>Crosshair size <input type="range" id="setChSize" min="0" max="16" step="1" value="6" /><output id="outChSize">6</output></label>
+      <label>Crosshair gap <input type="range" id="setChGap" min="0" max="14" step="1" value="4" /><output id="outChGap">4</output></label>
+      <label>Crosshair thickness <input type="range" id="setChThick" min="1" max="6" step="1" value="2" /><output id="outChThick">2</output></label>
+      <label>Crosshair colour <input type="color" id="setChColor" value="#33ff66" /></label>
+      <label class="check"><input type="checkbox" id="setChDot" /> Centre dot</label>
+      <label class="check"><input type="checkbox" id="setChDynamic" checked /> Dynamic crosshair</label>
+      <label class="check"><input type="checkbox" id="setShadows" checked /> Shadows</label>
+      <label class="check"><input type="checkbox" id="setViewmodel" checked /> Show viewmodel</label>
+      <label class="check"><input type="checkbox" id="setInvertY" /> Invert mouse Y</label>
+    </div>
+    <div class="set-actions"><button class="btn small" id="setClose">CLOSE</button></div>
+  </div>
+</div>
+
+<!-- ============================ PAUSE ============================ -->
+<div id="pause" class="overlay hidden">
+  <div class="pause-panel">
+    <h2>PAUSED</h2>
+    <button class="btn small" id="pauseResume">RESUME</button>
+    <button class="btn small" id="pauseSettings">SETTINGS</button>
+    <button class="btn small" id="pauseQuit">LEAVE MATCH</button>
+  </div>
+</div>
+
+<!-- ========================== MATCH END ========================== -->
+<div id="matchEnd" class="overlay hidden">
+  <div class="end-panel">
+    <div class="end-result" id="endResult">VICTORY</div>
+    <div class="end-score" id="endScore">13 : 7</div>
+    <div class="end-stats" id="endStats"></div>
+    <div class="mm-actions">
+      <button class="btn primary small" id="endAgain">PLAY AGAIN</button>
+      <button class="btn small" id="endMenu">MAIN MENU</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading" class="overlay hidden"><div class="load-inner"><div class="load-bar"><i></i></div><div id="loadText">Building the map…</div></div></div>
+<div id="fatal" class="overlay hidden"><div class="fatal-inner"><h2>Cannot start</h2><p id="fatalMsg"></p></div></div>
+
+<script src="js/math.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/map.js"></script>
+<script src="js/player.js"></script>
+<script src="js/bots.js"></script>
+<script src="js/net.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
