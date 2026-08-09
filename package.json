@@ -9,7 +9,8 @@
     "dev": "tsc && node dist/index.js",
     "web": "tsc && node dist/server.js",
     "web:start": "node dist/server.js",
-    "game": "node scripts/serve-game.js"
+    "game": "node scripts/serve-game.js",
+    "game:zip": "node scripts/package-game.js"
   },
   "repository": {
     "type": "git",

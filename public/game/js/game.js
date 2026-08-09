@@ -150,6 +150,7 @@ class Game {
 
     this.localPlayer = new Character(myTeam, (s.name || 'player').slice(0, 14), false);
     this.localPlayer.isLocal = true;
+    this.localPlayer.syncId = this.mode === 'pvp' ? 'h' + this.net.id : 'L';
     this.entities.push(this.localPlayer);
 
     // Remote humans first, then bots to fill.
@@ -158,6 +159,7 @@ class Game {
         if (p.id === this.net.id) { p.entity = this.localPlayer; continue; }
         const ent = new Character(p.team, p.name, false);
         ent.netId = p.id;
+        ent.syncId = 'h' + p.id;
         ent.isRemote = true;
         p.entity = ent;
         this.entities.push(ent);
@@ -165,12 +167,22 @@ class Game {
     }
 
     if (this.mode !== 'pvp' || opts.fillBots) {
-      const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
-      let n = 0;
+      // In PvP every client must build the *same* bot list, because the host
+      // streams bot state by id — so seed the shuffle from the room code.
+      let rng = Math.random;
+      if (this.mode === 'pvp') {
+        let h = 7;
+        for (const c of (this.net.room || 'DUNE1')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+        rng = makeRng(h || 1);
+      }
+      const names = BOT_NAMES.slice().sort(() => rng() - 0.5);
+      let n = 0, botIndex = 0;
       for (const team of ['T', 'CT']) {
         const have = this.entities.filter(e => e.team === team).length;
         for (let i = have; i < this.teamSize; i++) {
-          this.entities.push(new Bot(team, names[n++ % names.length], this.difficulty));
+          const bot = new Bot(team, names[n++ % names.length], this.difficulty);
+          bot.syncId = 'b' + (botIndex++);
+          this.entities.push(bot);
         }
       }
     }
@@ -206,23 +218,26 @@ class Game {
 
   isHost() { return this.mode !== 'pvp' || this.net.host; }
 
+  /** True when this client owns health pools, rounds and the bomb. */
+  canAuthority() { return this.mode !== 'pvp' || this.net.host; }
+
+  /** Host-only broadcast of an authoritative game event. */
+  netEvent(obj) {
+    if (this.mode === 'pvp' && this.net.host && this.net.active) {
+      obj.t = 'ev';
+      this.net.send(obj);
+    }
+  }
+
+  entityBySync(sy) {
+    if (!sy) return null;
+    if (this.localPlayer && this.localPlayer.syncId === sy) return this.localPlayer;
+    return this.entities.find(e => e.syncId === sy) || null;
+  }
+
   startRound() {
     this.roundNumber++;
-    // Side swap at the halfway point, like a real competitive match.
-    if (!this.sideSwapped && this.roundNumber === this.matchTarget) {
-      this.sideSwapped = true;
-      for (const e of this.entities) e.team = e.team === 'T' ? 'CT' : 'T';
-      const t = this.score.T; this.score.T = this.score.CT; this.score.CT = t;
-      const ls = this.lossStreak.T; this.lossStreak.T = this.lossStreak.CT; this.lossStreak.CT = ls;
-      for (const e of this.entities) {
-        e.money = RULES.startMoney;
-        e.inventory.primary = null;
-        e.inventory.secondary = null;
-        e.grenades = []; e.armor = 0; e.helmet = false; e.defuser = false;
-        e.giveWeapon(e.team === 'T' ? 'glock' : 'usp');
-      }
-      this.hud.centerMessage('SIDES SWAPPED', 'Second half');
-    }
+    this._swapSidesIfNeeded();
     this.phase = PHASE.FREEZE;
     this.phaseTime = RULES.freezeTime;
     this.setupRound(false);
@@ -230,6 +245,27 @@ class Game {
     this.hud.centerMessage(`ROUND ${this.roundNumber}`, 'Buy your equipment — press B');
     setTimeout(() => this.hud.centerMessage(''), 2600);
     if (this.localPlayer.alive && this.mode !== 'practice') this.openShop(true);
+    this.netEvent({
+      k: 'round', phase: 'freeze', n: this.roundNumber, score: this.score,
+      carrier: this.bomb.carrier ? this.bomb.carrier.syncId : null,
+    });
+  }
+
+  /** Side swap at the halfway point, like a real competitive match. */
+  _swapSidesIfNeeded() {
+    if (this.sideSwapped || this.roundNumber !== this.matchTarget) return;
+    this.sideSwapped = true;
+    for (const e of this.entities) e.team = e.team === 'T' ? 'CT' : 'T';
+    const t = this.score.T; this.score.T = this.score.CT; this.score.CT = t;
+    const ls = this.lossStreak.T; this.lossStreak.T = this.lossStreak.CT; this.lossStreak.CT = ls;
+    for (const e of this.entities) {
+      e.money = RULES.startMoney;
+      e.inventory.primary = null;
+      e.inventory.secondary = null;
+      e.grenades = []; e.armor = 0; e.helmet = false; e.defuser = false;
+      e.giveWeapon(e.team === 'T' ? 'glock' : 'usp');
+    }
+    this.hud.centerMessage('SIDES SWAPPED', 'Second half');
   }
 
   setupRound(practice) {
@@ -249,7 +285,10 @@ class Game {
 
     const spawnCounts = { T: 0, CT: 0 };
     const ts = this.entities.filter(e => e.team === 'T');
-    for (const e of this.entities) {
+    // Deterministic order so every PvP client assigns the same spawn points.
+    const ordered = [...this.entities].sort((a, b) =>
+      String(a.syncId || a.id) < String(b.syncId || b.id) ? -1 : 1);
+    for (const e of ordered) {
       // Anyone who died last round loses their kit, exactly like CS.
       if (!practice && e.survived === false) {
         e.inventory.primary = null;
@@ -277,8 +316,8 @@ class Game {
       if (practice) { e.money = RULES.maxMoney; e.armor = 100; e.helmet = true; }
     }
 
-    // Give one T the bomb.
-    if (ts.length) {
+    // Give one T the bomb — the host decides and announces it in PvP.
+    if (ts.length && this.canAuthority()) {
       const carrier = pick(ts);
       carrier.hasBomb = true;
       this.bomb.carrier = carrier;
@@ -450,9 +489,12 @@ class Game {
       ent === this.localPlayer ? { refDist: 2 } : {});
     this.notifyNoise(ent.pos, w.silenced ? 0.45 : 1.35);
 
-    if (this.mode === 'pvp' && ent === this.localPlayer) {
+    // Local player: ask the host to resolve. Host's bots: replicate the bang.
+    if (this.mode === 'pvp' && this.net.active &&
+        (ent === this.localPlayer || (ent.isBot && this.net.host))) {
       this.net.send({
-        t: 'shot', o: origin.map(v => Math.round(v * 100) / 100),
+        t: 'shot', sy: ent.syncId,
+        o: origin.map(v => Math.round(v * 100) / 100),
         d: [Math.round(baseYaw * 1000) / 1000, Math.round(basePitch * 1000) / 1000],
         w: ent.weaponKey,
       });
@@ -518,6 +560,14 @@ class Game {
 
   applyDamage(victim, attacker, damage, weapon, group, point, penetrated) {
     if (!victim.alive) return;
+    // Non-host clients only predict: play the feedback, let the host decide.
+    if (!this.canAuthority()) {
+      if (attacker === this.localPlayer) {
+        this.sound.play(group === HITGROUP.HEAD ? 'headshot' : 'hitmarker');
+        this.hud.hitmarker(false);
+      }
+      return;
+    }
     const applied = victim.takeDamage(damage, weapon.armorPen, attacker, group);
     if (attacker) attacker.damageDealt += applied;
 
@@ -542,6 +592,15 @@ class Game {
         victim.investigate = [attacker.pos[0], attacker.pos[1], attacker.pos[2]];
         victim.investigateTimer = 4;
       }
+    }
+
+    // Tell the victim's client (and everyone else) what the host decided.
+    if (victim.syncId && victim.syncId[0] === 'h') {
+      this.netEvent({
+        k: 'dmg', v: victim.syncId, hp: Math.max(0, Math.round(victim.health)),
+        ar: Math.max(0, Math.round(victim.armor)), amt: applied,
+        ap: attacker ? [round2(attacker.pos[0]), round2(attacker.pos[1]), round2(attacker.pos[2])] : null,
+      });
     }
 
     if (victim.health <= 0) this.killPlayer(victim, attacker, weapon, headshot, penetrated);
@@ -606,6 +665,11 @@ class Game {
       }, 2500);
     }
     this.notifyNoise(victim.pos, 0.8);
+    this.netEvent({
+      k: 'kill', v: victim.syncId, a: attacker ? attacker.syncId : null,
+      w: weapon ? (keyOfWeapon(weapon)) : 'grenade', hs: !!headshot, pen: !!penetrated,
+      bp: this.bomb.dropped ? this.bomb.pos.slice() : null,
+    });
     this.checkRoundEnd();
   }
 
@@ -709,12 +773,22 @@ class Game {
     const dir = angleVector(ent.yaw, ent.pitch + 0.06);
     const speed = weak ? 8 : 19;
     const origin = V.mad(ent.eyePos(), dir, 0.4);
+    const vel = [
+      dir[0] * speed + ent.vel[0] * 0.5,
+      dir[1] * speed + 2 + ent.vel[1] * 0.3,
+      dir[2] * speed + ent.vel[2] * 0.5,
+    ];
     this.grenades.push({
-      key, kind: g, pos: origin,
-      vel: [dir[0] * speed + ent.vel[0] * 0.5, dir[1] * speed + 2 + ent.vel[1] * 0.3, dir[2] * speed + ent.vel[2] * 0.5],
+      key, kind: g, pos: origin, vel,
       fuse: g.fuse, owner: ent, spin: rand(4, 9), angle: 0,
     });
     this.sound.play('pin', ent === this.localPlayer ? null : ent.pos);
+    if (this.mode === 'pvp' && ent === this.localPlayer) {
+      this.net.send({
+        t: 'nade', k: key, sy: ent.syncId, f: g.fuse,
+        o: origin.map(round2), vy: vel.map(round2),
+      });
+    }
     if (!ent.grenades.length) ent.selectSlot(ent.inventory.primary ? 'primary' : 'secondary');
   }
 
@@ -770,11 +844,13 @@ class Game {
       const f = this.fires[i];
       f.life -= dt;
       if (f.life <= 0) { this.fires.splice(i, 1); continue; }
-      for (const e of this.entities) {
-        if (!e.alive) continue;
-        if (V.distXZ(e.pos, f.pos) < f.radius && Math.abs(e.pos[1] - f.pos[1]) < 2.2) {
-          this.applyDamage(e, f.owner, f.dps * dt, { armorPen: 1.0, name: 'Fire', killReward: 300 },
-            HITGROUP.LEG, e.pos, false);
+      if (this.canAuthority()) {
+        for (const e of this.entities) {
+          if (!e.alive) continue;
+          if (V.distXZ(e.pos, f.pos) < f.radius && Math.abs(e.pos[1] - f.pos[1]) < 2.2) {
+            this.applyDamage(e, f.owner, f.dps * dt, { armorPen: 1.0, name: 'Fire', killReward: 300 },
+              HITGROUP.LEG, e.pos, false);
+          }
         }
       }
       for (let k = 0; k < 3; k++) {
@@ -795,14 +871,16 @@ class Game {
     if (n.key === 'he') {
       this.sound.play('explode', pos, { refDist: 12 });
       this.explosionEffect(pos, 1);
-      for (const e of this.entities) {
-        if (!e.alive) continue;
-        const d = V.dist(e.pos, pos);
-        if (d > g.radius) continue;
-        if (!this.map.visible(V.mad(pos, [0, 1, 0], 0.2), [e.pos[0], e.pos[1] + 0.9, e.pos[2]])) continue;
-        const falloff = Math.pow(1 - d / g.radius, 1.6);
-        this.applyDamage(e, n.owner, g.maxDamage * falloff,
-          { armorPen: 0.5, name: 'HE Grenade', killReward: 300 }, HITGROUP.CHEST, e.pos, false);
+      if (this.canAuthority()) {
+        for (const e of this.entities) {
+          if (!e.alive) continue;
+          const d = V.dist(e.pos, pos);
+          if (d > g.radius) continue;
+          if (!this.map.visible(V.mad(pos, [0, 1, 0], 0.2), [e.pos[0], e.pos[1] + 0.9, e.pos[2]])) continue;
+          const falloff = Math.pow(1 - d / g.radius, 1.6);
+          this.applyDamage(e, n.owner, g.maxDamage * falloff,
+            { armorPen: 0.5, name: 'HE Grenade', killReward: 300 }, HITGROUP.CHEST, e.pos, false);
+        }
       }
       this.shake(0.6 / Math.max(1, V.dist(this.localPlayer.pos, pos) * 0.25));
       this.notifyNoise(pos, 2.5);
@@ -859,6 +937,7 @@ class Game {
   }
 
   updateBomb(dt) {
+    if (!this.canAuthority()) { this._updateBombClient(dt); return; }
     // planting
     for (const e of this.entities) {
       if (!e.alive) { e.planting = false; e.defusing = false; e.plantProgress = 0; e.defuseProgress = 0; continue; }
@@ -910,8 +989,44 @@ class Game {
           this.bomb.carrier = e;
           e.hasBomb = true;
           if (e === this.localPlayer) this.hud.centerMessage('', 'You picked up the bomb');
+          this.netEvent({ k: 'bomb', s: 'carried', c: e.syncId });
           break;
         }
+      }
+    }
+  }
+
+  /** Non-host bomb logic: local progress bars and timers, host decides. */
+  _updateBombClient(dt) {
+    const p = this.localPlayer;
+    if (p.alive && p.planting && !this.bomb.planted &&
+        p.hasBomb && this.map.whichSite(p.pos) && Math.hypot(p.vel[0], p.vel[2]) < 0.6) {
+      // Stop a hair short of the trigger — the host makes the actual plant.
+      p.plantProgress = Math.min(p.plantProgress + dt, RULES.plantTime - 0.05);
+      if (Math.floor(p.plantProgress * 6) !== Math.floor((p.plantProgress - dt) * 6)) {
+        this.sound.play('plant_tick', p.pos);
+      }
+    } else if (!p.planting) {
+      p.plantProgress = Math.max(0, p.plantProgress - dt * 2);
+    }
+    if (p.alive && p.defusing && this.bomb.planted &&
+        V.distXZ(p.pos, this.bomb.pos) < 2.0 && Math.hypot(p.vel[0], p.vel[2]) < 0.6) {
+      const need = (p.defuser ? RULES.defuseTimeKit : RULES.defuseTime) - 0.05;
+      p.defuseProgress = Math.min(p.defuseProgress + dt, need);
+      if (Math.floor(p.defuseProgress * 4) !== Math.floor((p.defuseProgress - dt) * 4)) {
+        this.sound.play('defuse', p.pos);
+      }
+    } else if (!p.defusing) {
+      p.defuseProgress = Math.max(0, p.defuseProgress - dt * 2);
+    }
+
+    if (this.bomb.planted && !this.bomb.exploded) {
+      this.bomb.timer = Math.max(0, this.bomb.timer - dt);
+      const beepGap = this.bomb.timer < 5 ? 0.14 : (this.bomb.timer < 15 ? 0.35 : 0.75);
+      this.bomb.beep = (this.bomb.beep || 0) - dt;
+      if (this.bomb.beep <= 0) {
+        this.bomb.beep = beepGap;
+        this.sound.play('beep', this.bomb.pos, { freq: this.bomb.timer < 5 ? 3000 : 2400, refDist: 8 });
       }
     }
   }
@@ -933,6 +1048,9 @@ class Game {
     setTimeout(() => this.hud.centerMessage(''), 2400);
     this.notifyNoise(this.bomb.pos, 3);
     for (const e of this.entities) if (e.isBot) { e.holdSpot = null; e.decisionTimer = 0; e.path = null; }
+    this.netEvent({
+      k: 'bomb', s: 'planted', pos: this.bomb.pos.slice(), site: this.bomb.site, p: ent.syncId,
+    });
   }
 
   defuseBomb(ent) {
@@ -942,6 +1060,7 @@ class Game {
     ent.defuseProgress = 0;
     this.awardMoney(ent, RULES.defuseReward - RULES.winReward);
     this.sound.play('defused', this.bomb.pos);
+    this.netEvent({ k: 'bomb', s: 'defused', d: ent.syncId });
     this.endRound('CT', 'Bomb defused');
   }
 
@@ -952,6 +1071,7 @@ class Game {
     this.sound.play('explode', pos, { refDist: 40 });
     this.explosionEffect(pos, 3.5);
     this.shake(1.2);
+    this.netEvent({ k: 'bomb', s: 'exploded', pos: pos.slice() });
     for (const e of this.entities) {
       if (!e.alive) continue;
       const d = V.dist(e.pos, pos);
@@ -966,6 +1086,7 @@ class Game {
   /* ============================ round flow ============================ */
 
   checkRoundEnd() {
+    if (!this.canAuthority()) return;
     if (this.phase !== PHASE.LIVE || this.mode === 'practice') return;
     const tAlive = this.entities.filter(e => e.team === 'T' && e.alive).length;
     const ctAlive = this.entities.filter(e => e.team === 'CT' && e.alive).length;
@@ -974,7 +1095,13 @@ class Game {
   }
 
   endRound(winner, reason) {
+    if (!this.canAuthority()) return;
     if (this.phase === PHASE.END || this.phase === PHASE.MATCHEND) return;
+    this.netEvent({
+      k: 'round', phase: 'end', winner, reason,
+      score: { T: this.score.T + (winner === 'T' ? 1 : 0), CT: this.score.CT + (winner === 'CT' ? 1 : 0) },
+      planted: this.bomb.planted || this.bomb.exploded,
+    });
     this.phase = PHASE.END;
     this.phaseTime = RULES.endTime;
     this.score[winner]++;
@@ -1025,6 +1152,21 @@ class Game {
 
   updatePhase(dt) {
     if (this.mode === 'practice') return;
+    // Non-hosts tick their clocks for display; round transitions arrive as
+    // authoritative events from the host.
+    if (this.mode === 'pvp' && !this.net.host) {
+      this.phaseTime = Math.max(this.phase === PHASE.FREEZE ? -1 : 0, this.phaseTime - dt);
+      if (this.phase === PHASE.FREEZE) {
+        this.hud.setShopTimer(`0:${String(Math.max(0, Math.floor(this.phaseTime))).padStart(2, '0')}`);
+        if (this.phaseTime <= 0) {
+          this.phase = PHASE.LIVE;
+          this.phaseTime = RULES.roundTime;
+          this.openShop(false);
+          this.hud.centerMessage('');
+        }
+      }
+      return;
+    }
     this.phaseTime -= dt;
     if (this.phase === PHASE.FREEZE) {
       const buyLeft = Math.max(0, this.phaseTime);
@@ -1533,11 +1675,31 @@ class Game {
           e.think(this, dt, this.time);
           this.footsteps(e, dt);
         }
+      } else if (e.isBot && this.mode === 'pvp' && !this.net.host) {
+        this._applyBotPuppet(e, dt);
       }
       // weapon timers tick for everyone so animations stay in sync
       this.tickWeapon(e, dt);
     }
     this.tickWeapon(p, dt);
+
+    // Host streams bot state so every client sees the same match.
+    if (this.mode === 'pvp' && this.net.host && this.net.active) {
+      this.bsTimer = (this.bsTimer || 0) - dt;
+      if (this.bsTimer <= 0) {
+        this.bsTimer = 0.1;
+        const rows = [];
+        for (const e of this.entities) {
+          if (!e.isBot) continue;
+          rows.push([
+            e.syncId, round2(e.pos[0]), round2(e.pos[1]), round2(e.pos[2]),
+            round3(e.yaw), round3(e.pitch), e.ducking ? 1 : 0, e.slot, e.weaponKey || '',
+            Math.max(0, Math.round(e.health)), e.alive ? 1 : 0,
+          ]);
+        }
+        this.net.send({ t: 'bs', b: rows });
+      }
+    }
 
     this.updateGrenades(dt);
     this.updateParticles(dt);
@@ -1576,6 +1738,34 @@ class Game {
     }
 
     if (this.shopOpen && !this.canBuy(p)) this.openShop(false);
+  }
+
+  /** Non-host clients steer bots toward the host's streamed state. */
+  _applyBotPuppet(e, dt) {
+    const t = e.bsT;
+    if (!t) return;
+    const far = V.dist2(e.pos, t.p) > 9;
+    const k = far ? 1 : Math.min(1, dt * 12);
+    e.pos[0] += (t.p[0] - e.pos[0]) * k;
+    e.pos[1] += (t.p[1] - e.pos[1]) * k;
+    e.pos[2] += (t.p[2] - e.pos[2]) * k;
+    e.vel[0] = t.vel[0]; e.vel[1] = t.vel[1]; e.vel[2] = t.vel[2];
+    e.yaw += angleDiff(e.yaw, t.yaw) * Math.min(1, dt * 14);
+    e.pitch += (t.pitch - e.pitch) * Math.min(1, dt * 14);
+    e.duckAmount = approach(e.duckAmount, t.duck, dt * 6);
+    e.ducking = t.duck > 0.5;
+    e.slot = t.slot || e.slot;
+    if (t.w && WEAPONS[t.w]) {
+      if (t.slot === 'primary') e.inventory.primary = t.w;
+      else if (t.slot === 'secondary') e.inventory.secondary = t.w;
+    }
+    e.health = t.hp;
+    if (!t.alive && e.alive) {
+      e.alive = false;
+      e.deathTime = this.time;
+      e.deathSide = 1;
+    }
+    e.animTime += dt;
   }
 
   tickWeapon(ent, dt) {
@@ -1715,12 +1905,14 @@ class Game {
     const key = p.slot === 'bomb' ? 'c4' : (p.slot === 'grenade' ? 'grenade' : p.weaponKey);
     const w = WEAPONS[key];
     const kind = key === 'c4' ? 'c4' : (p.slot === 'grenade' ? 'grenade' : (w ? w.model : 'knife'));
-    if (!this.viewmodelCache[kind]) {
+    const skin = (w && this.settings.skins && this.settings.skins[key]) || 'stock';
+    const cacheKey = kind + ':' + skin;
+    if (!this.viewmodelCache[cacheKey]) {
       const b = new MeshBuilder();
-      buildGunMesh(b, kind, [1, 1, 1]);
-      this.viewmodelCache[kind] = r.createMesh(b);
+      buildGunMesh(b, kind, [1, 1, 1], skin !== 'stock' ? skin : null);
+      this.viewmodelCache[cacheKey] = r.createMesh(b);
     }
-    const mesh = this.viewmodelCache[kind];
+    const mesh = this.viewmodelCache[cacheKey];
     const pose = viewmodelPose(kind);
 
     // sway follows mouse movement, bob follows footsteps
@@ -1754,7 +1946,8 @@ class Game {
     const model = M4.compose([px, py, pz], rotY, rotX, rotZ, 1);
     r.beginViewmodelPass();
     if (this.zoomLerp < 0.85) {
-      r.drawMesh(mesh, model, w ? w.tint : [1, 1, 1]);
+      // Skinned meshes bake their colours; stock meshes take the weapon tint.
+      r.drawMesh(mesh, model, skin !== 'stock' ? [1, 1, 1] : (w ? w.tint : [1, 1, 1]));
     }
   }
 
@@ -1764,7 +1957,10 @@ class Game {
     requestAnimationFrame(this.loop);
     let dt = (now - this.lastFrame) / 1000;
     this.lastFrame = now;
+    // Clamp both ways: a stale or out-of-order timestamp must never feed the
+    // physics a negative step (friction inverts and velocities explode).
     if (dt > 0.1) dt = 0.1;
+    if (dt < 0) dt = 0;
     this.fps = lerp(this.fps || 60, 1 / Math.max(dt, 0.0001), 0.05);
 
     if (this.running && !this.paused) {
@@ -1973,18 +2169,45 @@ class Game {
     // remote state + events
     this.net.on('s', (msg) => this.net.pushSnapshot(msg.id, msg, this.time));
     this.net.on('shot', (msg) => {
-      const p = this.net.players.get(msg.id);
-      if (!p || !p.entity) return;
+      if (!this.running) return;
+      const shooter = this.entityBySync(msg.sy) ||
+        (this.net.players.get(msg.id) || {}).entity;
+      if (!shooter || shooter === this.localPlayer) return;
       const w = WEAPONS[msg.w];
       if (!w) return;
-      this.sound.play(w.sound || 'rifle', p.entity.eyePos());
-      this.spawnMuzzleFlash(p.entity, w);
-      // The host resolves damage; everyone else just plays the effects.
-      if (this.isHost()) {
+      this.sound.play(w.sound || 'rifle', shooter.eyePos());
+      this.spawnMuzzleFlash(shooter, w);
+      // The host resolves human shots; bot shots were resolved on the host
+      // already, and other clients only play the effects.
+      if (this.isHost() && !shooter.isBot) {
         const dir = angleVector(msg.d[0], msg.d[1]);
-        this.fireBullet(p.entity, msg.o, dir, w);
+        this.fireBullet(shooter, msg.o, dir, w);
       }
-      this.notifyNoise(p.entity.pos, w.silenced ? 0.45 : 1.35);
+      this.notifyNoise(shooter.pos, w.silenced ? 0.45 : 1.35);
+    });
+    this.net.on('nade', (msg) => {
+      if (!this.running) return;
+      const g = GRENADES[msg.k];
+      if (!g || !Array.isArray(msg.o) || !Array.isArray(msg.vy)) return;
+      this.grenades.push({
+        key: msg.k, kind: g, pos: msg.o.slice(0, 3), vel: msg.vy.slice(0, 3),
+        fuse: msg.f || g.fuse, owner: this.entityBySync(msg.sy), spin: 6, angle: 0,
+      });
+      this.sound.play('pin', msg.o);
+    });
+    this.net.on('bs', (msg) => {
+      if (!this.running || this.net.host || !Array.isArray(msg.b)) return;
+      for (const row of msg.b) {
+        const e = this.entityBySync(row[0]);
+        if (!e || !e.isBot) continue;
+        const np = [row[1], row[2], row[3]];
+        const op = e.bsT ? e.bsT.p : np;
+        e.bsT = {
+          p: np, yaw: row[4], pitch: row[5], duck: row[6], slot: row[7], w: row[8],
+          hp: row[9], alive: row[10] === 1,
+          vel: [(np[0] - op[0]) / 0.1, (np[1] - op[1]) / 0.1, (np[2] - op[2]) / 0.1],
+        };
+      }
     });
     this.net.on('ev', (msg) => this.applyNetEvent(msg));
     this.net.on('left', (msg) => {
@@ -1999,38 +2222,162 @@ class Game {
 
   /** Authoritative events pushed by the host. */
   applyNetEvent(msg) {
-    if (this.isHost()) return;
+    if (this.isHost() || !this.running) return;
     switch (msg.k) {
-      case 'round':
-        this.phase = msg.phase;
-        this.phaseTime = msg.time;
-        this.roundNumber = msg.n;
-        this.score = msg.score;
-        break;
-      case 'hp': {
-        const ent = this.entityByNet(msg.id);
-        if (ent) { ent.health = msg.hp; ent.armor = msg.ar; }
-        break;
-      }
-      case 'kill': {
-        const victim = this.entityByNet(msg.v);
-        const attacker = this.entityByNet(msg.a);
-        if (victim) {
-          victim.alive = false;
-          victim.deathTime = this.time;
-          this.hud.addKill(attacker, victim, msg.w, msg.hs, false, this.localPlayer);
-        }
-        break;
-      }
+      case 'round': this._clientRound(msg); break;
+      case 'dmg': this._clientDamage(msg); break;
+      case 'kill': this._clientKill(msg); break;
+      case 'bomb': this._clientBomb(msg); break;
       default: break;
     }
   }
 
-  entityByNet(id) {
-    if (id === undefined || id === null) return null;
-    if (id === this.net.id) return this.localPlayer;
-    const p = this.net.players.get(id);
-    return p ? p.entity : this.entities.find(e => e.id === id) || null;
+  _clientDamage(msg) {
+    const victim = this.entityBySync(msg.v);
+    if (!victim) return;
+    victim.health = msg.hp;
+    victim.armor = msg.ar;
+    if (victim === this.localPlayer) {
+      this.hud.damageFlash(msg.amt);
+      this.sound.play('hit', null, { refDist: 4 });
+      if (msg.ap) {
+        const a = Math.atan2(msg.ap[0] - victim.pos[0], -(msg.ap[2] - victim.pos[2]));
+        this.hud.damageDirection(-(a - victim.yaw) + Math.PI);
+      }
+      this.shakeAmount = Math.min(0.9, (this.shakeAmount || 0) + msg.amt * 0.006);
+    }
+  }
+
+  _clientKill(msg) {
+    const victim = this.entityBySync(msg.v);
+    const attacker = this.entityBySync(msg.a);
+    if (!victim || !victim.alive) return;
+    victim.alive = false;
+    victim.netDead = true;
+    victim.health = 0;
+    victim.deaths++;
+    victim.deathTime = this.time;
+    victim.deathSide = Math.random() < 0.5 ? -1 : 1;
+    victim.zoomLevel = 0;
+    victim.planting = false;
+    victim.defusing = false;
+    this.sound.play('death', victim.pos);
+    this.hud.addKill(attacker, victim, msg.w, msg.hs, msg.pen, this.localPlayer);
+    if (msg.bp) {
+      this.bomb.dropped = true;
+      this.bomb.carrier = null;
+      this.bomb.pos = msg.bp;
+      victim.hasBomb = false;
+    }
+    if (attacker === this.localPlayer && attacker !== victim) {
+      attacker.kills++;
+      const w = WEAPONS[msg.w];
+      this.awardMoney(attacker, w && w.killReward !== undefined ? w.killReward : 300);
+      this.hud.hitmarker(true);
+    } else if (attacker && attacker !== victim) {
+      attacker.kills++;
+    }
+    if (victim === this.localPlayer) {
+      this.spectateIndex = 0;
+      this.hud.centerMessage('YOU WERE ELIMINATED',
+        attacker ? `${attacker.name} · ${WEAPONS[msg.w] ? WEAPONS[msg.w].name : msg.w}` : '');
+      setTimeout(() => this.hud.centerMessage(''), 2600);
+      this.openShop(false);
+    }
+  }
+
+  _clientRound(msg) {
+    if (msg.phase === 'end') {
+      if (this.phase === PHASE.END || this.phase === PHASE.MATCHEND) return;
+      this.phase = PHASE.END;
+      this.phaseTime = RULES.endTime;
+      this.score = msg.score;
+      const winner = msg.winner, loser = winner === 'T' ? 'CT' : 'T';
+      this.lossStreak[loser] = Math.min(4, this.lossStreak[loser] + 1);
+      this.lossStreak[winner] = 0;
+      for (const e of this.entities) e.survived = e.alive;
+      const p = this.localPlayer;
+      if (p.team === winner) {
+        this.awardMoney(p, RULES.winReward);
+      } else {
+        this.awardMoney(p, RULES.lossBonus[this.lossStreak[loser] - 1] || RULES.lossBonus[0]);
+        if (p.team === 'T' && msg.planted) this.awardMoney(p, RULES.bombPlantTeamBonus);
+      }
+      this.hud.centerMessage(winner === 'T' ? 'TERRORISTS WIN' : 'COUNTER-TERRORISTS WIN', msg.reason);
+      this.sound.play(p.team === winner ? 'win' : 'lose');
+      this.openShop(false);
+      if (this.score[winner] >= this.matchTarget) {
+        setTimeout(() => this.endMatch(winner), 2600);
+      }
+      return;
+    }
+    // phase === 'freeze': a new round. The very first one already ran locally
+    // in startMatch — then we only adopt the host's carrier and score. Never
+    // re-run setup for a round number we are already in.
+    this.score = msg.score;
+    if (msg.n !== this.roundNumber) {
+      this.roundNumber = msg.n;
+      this._swapSidesIfNeeded();
+      this.phase = PHASE.FREEZE;
+      this.phaseTime = RULES.freezeTime;
+      this.setupRound(false);
+      this.sound.play('roundstart');
+      this.hud.centerMessage(`ROUND ${this.roundNumber}`, 'Buy your equipment — press B');
+      setTimeout(() => this.hud.centerMessage(''), 2600);
+      if (this.localPlayer.alive) this.openShop(true);
+    }
+    for (const e of this.entities) { e.hasBomb = false; e.netDead = false; }
+    this.bomb.carrier = this.entityBySync(msg.carrier);
+    if (this.bomb.carrier) this.bomb.carrier.hasBomb = true;
+  }
+
+  _clientBomb(msg) {
+    const b = this.bomb;
+    if (msg.s === 'planted') {
+      b.planted = true;
+      b.dropped = false;
+      b.site = msg.site;
+      b.pos = msg.pos;
+      b.timer = RULES.bombTime;
+      b.carrier = null;
+      const planter = this.entityBySync(msg.p);
+      if (planter) {
+        planter.hasBomb = false;
+        planter.plantProgress = 0;
+        if (planter === this.localPlayer) {
+          planter.planting = false;
+          this.awardMoney(planter, RULES.plantBonus);
+          if (planter.slot === 'bomb') {
+            planter.selectSlot(planter.inventory.primary ? 'primary' : 'secondary');
+          }
+        }
+      }
+      this.sound.play('planted', b.pos);
+      this.hud.centerMessage('BOMB PLANTED', `Site ${b.site}`);
+      setTimeout(() => this.hud.centerMessage(''), 2400);
+    } else if (msg.s === 'defused') {
+      b.planted = false;
+      b.defused = true;
+      const defuser = this.entityBySync(msg.d);
+      if (defuser === this.localPlayer) {
+        this.awardMoney(defuser, RULES.defuseReward - RULES.winReward);
+      }
+      this.sound.play('defused', b.pos);
+    } else if (msg.s === 'exploded') {
+      b.exploded = true;
+      b.planted = false;
+      this.sound.play('explode', msg.pos, { refDist: 40 });
+      this.explosionEffect(msg.pos, 3.5);
+      this.shake(1.2);
+    } else if (msg.s === 'carried') {
+      b.dropped = false;
+      const c = this.entityBySync(msg.c);
+      if (c) {
+        c.hasBomb = true;
+        b.carrier = c;
+        if (c === this.localPlayer) this.hud.centerMessage('', 'You picked up the bomb');
+      }
+    }
   }
 }
 

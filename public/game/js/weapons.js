@@ -707,15 +707,80 @@ const TINT_PALETTE = {
   [TK.BRIGHT]: [1.3, 1.32, 1.36],
 };
 
+/* ------------------------------- skins -------------------------------
+   A skin is a set of colour multipliers per tint slot, plus an optional
+   accent applied to every third part for a two-tone finish. The same
+   table colours the viewmodel, the shop preview and the mesh tints, so
+   a skin always looks identical everywhere. Skins are cosmetic only.   */
+
+const SKINS = {
+  stock: { name: 'Stock', mult: {} },
+  desert: {
+    name: 'Desert Storm',
+    mult: { metal: [1.45, 1.22, 0.80], poly: [1.65, 1.40, 0.95], dark: [1.25, 1.05, 0.72] },
+    accent: [0.95, 0.72, 0.45],
+  },
+  woodland: {
+    name: 'Woodland Ops',
+    mult: { metal: [0.72, 1.02, 0.70], poly: [0.80, 1.28, 0.80], dark: [0.55, 0.85, 0.55] },
+    accent: [0.45, 0.68, 0.42],
+  },
+  crimson: {
+    name: 'Crimson Web',
+    mult: { metal: [2.10, 0.55, 0.50], poly: [1.65, 0.48, 0.48], dark: [1.45, 0.42, 0.42] },
+    accent: [0.55, 0.12, 0.12],
+  },
+  asiimov: {
+    name: 'Asiimov',
+    mult: { metal: [2.45, 2.45, 2.45], poly: [2.65, 1.35, 0.45], dark: [0.45, 0.46, 0.50] },
+    accent: [2.85, 1.15, 0.30],
+  },
+  vulcan: {
+    name: 'Vulcan',
+    mult: { metal: [0.55, 0.85, 2.10], poly: [2.30, 2.30, 2.40], dark: [0.42, 0.46, 0.60] },
+    accent: [0.65, 1.15, 2.55],
+  },
+  dragon: {
+    name: 'Dragon Fire',
+    mult: { metal: [2.30, 1.15, 0.35], poly: [1.85, 0.80, 0.30], dark: [1.50, 0.62, 0.30] },
+    accent: [2.70, 1.65, 0.40],
+  },
+  gold: {
+    name: 'Gold Plated',
+    mult: {
+      metal: [2.60, 2.05, 0.85], poly: [2.25, 1.72, 0.70], wood: [1.60, 1.28, 0.60],
+      dark: [2.05, 1.55, 0.62], bright: [2.85, 2.25, 1.00],
+    },
+  },
+  midnight: {
+    name: 'Midnight',
+    mult: { metal: [0.48, 0.52, 1.15], poly: [0.42, 0.44, 0.95], dark: [0.32, 0.34, 0.75] },
+    accent: [1.25, 0.42, 2.25],
+  },
+};
+const SKIN_KEYS = Object.keys(SKINS);
+
+/** Final tint for one part, given a skin. Base weapon tint applies to stock only. */
+function skinPartTint(skinKey, tk, partIndex, weaponTint) {
+  const pal = TINT_PALETTE[tk] || [1, 1, 1];
+  const skin = skinKey && skinKey !== 'stock' ? SKINS[skinKey] : null;
+  if (!skin) {
+    const base = weaponTint || [1, 1, 1];
+    return tk === TK.WOOD ? pal : [base[0] * pal[0], base[1] * pal[1], base[2] * pal[2]];
+  }
+  let m = skin.mult[tk];
+  if (skin.accent && partIndex % 3 === 2 && tk !== TK.BRIGHT) m = skin.accent;
+  if (!m) m = [1, 1, 1];
+  return [pal[0] * m[0], pal[1] * m[1], pal[2] * m[2]];
+}
+
 /** Build a gun mesh from the shared part data. */
-function buildGunMesh(builder, kind, tint) {
+function buildGunMesh(builder, kind, tint, skinKey) {
   const parts = GUN_PARTS[kind] || GUN_PARTS.pistol;
-  const base = tint || [1, 1, 1];
-  for (const [x0, y0, z0, x1, y1, z1, matKey, tk] of parts) {
-    const pal = TINT_PALETTE[tk] || [1, 1, 1];
-    const isWood = matKey === 'WOOD';
-    const t = isWood ? pal : [base[0] * pal[0], base[1] * pal[1], base[2] * pal[2]];
-    builder.box([x0, y0, z0], [x1, y1, z1], MAT[matKey], { uvScale: 6, tint: t });
+  for (let i = 0; i < parts.length; i++) {
+    const [x0, y0, z0, x1, y1, z1, matKey, tk] = parts[i];
+    builder.box([x0, y0, z0], [x1, y1, z1], MAT[matKey],
+      { uvScale: 6, tint: skinPartTint(skinKey, tk, i, tint) });
   }
   return builder;
 }

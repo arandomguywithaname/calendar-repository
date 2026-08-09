@@ -185,7 +185,8 @@ class GameMap {
         [-12, -33], [-4, -33.5], [4, -33.5], [12, -33], [0, -37],
       ].map(([x, z]) => [x, 0, z]),
     };
-    this.spawnYaw = { T: Math.PI, CT: 0 };
+    // yaw 0 looks down -Z: Ts (at +Z) face the map, CTs (at -Z) face back up it.
+    this.spawnYaw = { T: 0, CT: Math.PI };
 
     /* Hand-placed tactical positions. Bots pick from these, which reads far
        better than letting them wander to arbitrary nav nodes. */

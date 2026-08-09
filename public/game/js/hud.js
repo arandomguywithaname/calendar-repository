@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   chSize: 6, chGap: 4, chThick: 2, chColor: '#33ff66', chDot: false, chDynamic: true,
   shadows: true, viewmodel: true, invertY: false,
   name: 'player', server: '', room: 'DUNE1',
+  skins: {},                       // weapon key -> skin key
 };
 
 function loadSettings() {
@@ -70,9 +71,10 @@ function drawWeaponPreview(ctx, kind, w, h, angle, palette) {
     [[0, 1, 1], [1, 1, 1], [1, 0, 1], [0, 0, 1], [0, 0, 1]],
     [[1, 1, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0], [0, 0, -1]],
   ];
-  for (const p of parts) {
+  for (let pi = 0; pi < parts.length; pi++) {
+    const p = parts[pi];
     const bx = [p[0], p[3]], by = [p[1], p[4]], bz = [p[2], p[5]];
-    const pal = (palette && palette[p[7]]) || PREVIEW_COLORS[p[7]] || PREVIEW_COLORS.metal;
+    const pal = (palette && palette[pi]) || PREVIEW_COLORS[p[7]] || PREVIEW_COLORS.metal;
     for (const face of FACE_IDX) {
       const pts = [];
       let depth = 0;
@@ -106,6 +108,26 @@ const PREVIEW_COLORS = {
   metal: [118, 124, 133], poly: [58, 60, 66], wood: [124, 86, 48],
   dark: [38, 40, 44], bright: [188, 194, 202],
 };
+
+/** Per-part preview colours for a skinned weapon (same maths as the mesh). */
+function previewPaletteForSkin(kind, skinKey) {
+  if (!skinKey || skinKey === 'stock') return null;
+  const skin = SKINS[skinKey];
+  if (!skin) return null;
+  const parts = GUN_PARTS[kind] || GUN_PARTS.pistol;
+  return parts.map((p, i) => {
+    const tk = p[7];
+    const base = PREVIEW_COLORS[tk] || PREVIEW_COLORS.metal;
+    let m = skin.mult[tk];
+    if (skin.accent && i % 3 === 2 && tk !== 'bright') m = skin.accent;
+    if (!m) m = [1, 1, 1];
+    return [
+      Math.min(255, base[0] * m[0]),
+      Math.min(255, base[1] * m[1]),
+      Math.min(255, base[2] * m[2]),
+    ];
+  });
+}
 
 function shadeColor(rgb, light) {
   return `rgb(${Math.round(rgb[0] * light + 12)},${Math.round(rgb[1] * light + 12)},${Math.round(rgb[2] * light + 14)})`;
@@ -145,6 +167,7 @@ class HUD {
       shopLoadout: $('shopLoadout'),
       pvName: $('pvName'), pvPrice: $('pvPrice'), pvDesc: $('pvDesc'),
       pvStats: $('pvStats'), pvBuy: $('pvBuy'), previewCanvas: $('previewCanvas'),
+      pvSkinRow: $('pvSkinRow'), pvSkinName: $('pvSkinName'),
       scoreboard: $('scoreboard'), sbBodyT: $('sbBodyT'), sbBodyCT: $('sbBodyCT'),
       sbScoreT: $('sbScoreT'), sbScoreCT: $('sbScoreCT'),
     };
@@ -158,6 +181,22 @@ class HUD {
     this.el.pvBuy.addEventListener('click', () => {
       if (this.shopSelection) this.game.buyItem(this.shopSelection);
     });
+    $('pvSkinPrev').addEventListener('click', () => this.cycleSkin(-1));
+    $('pvSkinNext').addEventListener('click', () => this.cycleSkin(1));
+  }
+
+  /** Step the selected weapon's skin. Skins are free and purely cosmetic. */
+  cycleSkin(dir) {
+    const item = this.shopSelection;
+    if (!item || item.kind !== 'weapon') return;
+    const cur = this.settings.skins[item.key] || 'stock';
+    const i = SKIN_KEYS.indexOf(cur);
+    const next = SKIN_KEYS[(i + dir + SKIN_KEYS.length) % SKIN_KEYS.length];
+    this.settings.skins[item.key] = next;
+    saveSettings(this.settings);
+    this.el.pvSkinName.textContent = SKINS[next].name;
+    delete this.game.viewmodelCache[item.model + ':' + cur];  // rebuilt on demand
+    this.game.sound.play('switch');
   }
 
   /* ---------------------------- settings ---------------------------- */
@@ -664,6 +703,13 @@ class HUD {
     this.el.pvBuy.textContent = owned ? 'ALREADY OWNED'
       : (p.money < item.price ? 'NOT ENOUGH MONEY' : 'BUY  $' + item.price);
 
+    const isWeapon = item.kind === 'weapon';
+    this.el.pvSkinRow.style.display = isWeapon ? '' : 'none';
+    if (isWeapon) {
+      const skin = this.settings.skins[item.key] || 'stock';
+      this.el.pvSkinName.textContent = (SKINS[skin] || SKINS.stock).name;
+    }
+
     const w = item.weapon;
     if (!w) { this.el.pvStats.innerHTML = ''; return; }
     const stat = (label, frac, text) => `<div class="stat"><span>${label}</span>
@@ -686,8 +732,10 @@ class HUD {
     if (this.el.shop.classList.contains('hidden') || !this.shopSelection) return;
     this.previewAngle += dt * 0.55;
     const cv = this.el.previewCanvas;
-    const w = cv.width, h = cv.height;
-    drawWeaponPreview(this.pvCtx, this.shopSelection.model, w, h, this.previewAngle);
+    const skin = this.shopSelection.kind === 'weapon'
+      ? (this.settings.skins[this.shopSelection.key] || 'stock') : 'stock';
+    drawWeaponPreview(this.pvCtx, this.shopSelection.model, cv.width, cv.height,
+      this.previewAngle, previewPaletteForSkin(this.shopSelection.model, skin));
   }
 
   setShopTimer(text) { this.el.shopTimer.textContent = text; }

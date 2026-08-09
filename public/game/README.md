@@ -44,11 +44,16 @@ on node's `http`/`net`.
 3. Enter the same room code. The first player in a room is the host.
 4. The host presses **START MATCH**. Empty slots fill with bots.
 
-The room host's browser simulates the authoritative match — rounds, economy,
-the bomb and every bot — and the server relays state and events. Each client
-predicts its own movement and interpolates everyone else 100 ms in the past,
-so play stays smooth on a normal connection. If the host leaves, the server
-promotes another player.
+The room host's browser simulates the authoritative match — health, kills,
+rounds, economy, the bomb and every bot — and broadcasts events for all of
+it; other clients predict locally and then follow the host's word. Each
+client owns its own movement and interpolates everyone else 100 ms in the
+past, bots stream from the host at 10 Hz, and the bot roster is derived
+deterministically from the room code so every screen shows the same match.
+If the host leaves, the server promotes another player.
+
+To publish a copy people can play, run `npm run game:zip` and deploy the
+`dist/operation-dune.zip` contents anywhere Node runs (`node server.js`).
 
 ## What is simulated
 
@@ -67,6 +72,12 @@ decoys that fake gunfire.
 
 **Economy** — $800 pistol rounds, escalating loss bonuses, kill rewards per
 weapon, plant and defuse bonuses, and you lose your kit when you die.
+
+**Skins** — nine finishes (Desert Storm, Woodland Ops, Crimson Web, Asiimov,
+Vulcan, Dragon Fire, Gold Plated, Midnight) selectable per weapon in the buy
+menu with the ◀ ▶ arrows under the preview. One colour table drives the
+viewmodel and the rotating shop preview, and your choices persist between
+sessions. Cosmetic only.
 
 **Bots** — perception with a real FOV cone, line-of-sight and smoke occlusion;
 a reaction delay before they react to a new target; aim error that converges

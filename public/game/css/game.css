@@ -379,6 +379,18 @@ canvas#view {
 }
 .pv-name { font-size: 20px; letter-spacing: 1px; margin-top: 10px; }
 .pv-price { font-size: 16px; color: var(--good); font-weight: 700; margin-top: 2px; }
+.pv-skin {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px;
+  background: rgba(255,255,255,0.03);
+}
+.pv-skin button {
+  background: rgba(255,255,255,0.07); border: 1px solid var(--line); color: var(--text);
+  font-size: 11px; padding: 3px 9px; border-radius: 3px; cursor: pointer;
+}
+.pv-skin button:hover { background: rgba(255,255,255,0.14); }
+.pv-skin-label { font-size: 10px; letter-spacing: 2px; color: var(--dim); }
+.pv-skin #pvSkinName { flex: 1; text-align: center; font-size: 14px; color: var(--accent); }
 .pv-desc { font-size: 13px; color: var(--dim); line-height: 1.5; margin-top: 10px; min-height: 58px; }
 .pv-stats { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
 .stat { display: grid; grid-template-columns: 74px 1fr 34px; align-items: center; gap: 8px; font-size: 11px; color: var(--dim); }

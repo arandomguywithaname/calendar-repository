@@ -143,6 +143,8 @@ class NetClient {
       sl: local.slot,
       h: Math.max(0, Math.round(local.health)),
       a: local.alive ? 1 : 0,
+      pl: local.planting ? 1 : 0,
+      df: local.defusing ? 1 : 0,
     });
     if (performance.now() - this.lastPingAt > 2000) {
       this.lastPingAt = performance.now();
@@ -154,7 +156,10 @@ class NetClient {
   pushSnapshot(id, msg, now) {
     const p = this.players.get(id);
     if (!p) return;
-    p.buffer.push({ t: now, p: msg.p, v: msg.v, y: msg.y, q: msg.q, d: msg.d, w: msg.w, sl: msg.sl, h: msg.h, a: msg.a });
+    p.buffer.push({
+      t: now, p: msg.p, v: msg.v, y: msg.y, q: msg.q, d: msg.d,
+      w: msg.w, sl: msg.sl, h: msg.h, a: msg.a, pl: msg.pl, df: msg.df,
+    });
     while (p.buffer.length > 24) p.buffer.shift();
   }
 
@@ -190,9 +195,14 @@ class NetClient {
         if (a.sl === 'primary') e.inventory.primary = a.w;
         else if (a.sl === 'secondary') e.inventory.secondary = a.w;
       }
+      // The host reads plant/defuse intent from snapshots and simulates it.
+      e.planting = a.pl === 1;
+      e.defusing = a.df === 1;
       if (!this.host) {
         e.health = a.h;
-        e.alive = a.a === 1;
+        // A stale snapshot must never revive someone the host declared dead.
+        if (a.a === 0) e.alive = false;
+        else if (!e.netDead) e.alive = true;
       }
     }
   }
