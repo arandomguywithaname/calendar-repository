@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS = {
 
 function loadSettings() {
   let s = Object.assign({}, DEFAULT_SETTINGS);
+  // Phones default to a lighter render load; a saved choice still wins.
+  if (typeof IS_TOUCH_DEVICE !== 'undefined' && IS_TOUCH_DEVICE) s.renderScale = 0.7;
   try {
     const raw = localStorage.getItem('dune.settings');
     if (raw) s = Object.assign(s, JSON.parse(raw));

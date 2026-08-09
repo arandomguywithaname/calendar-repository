@@ -554,8 +554,106 @@ input[type="color"] { width: 52px; height: 26px; background: none; border: 1px s
 .fatal-inner h2 { color: var(--bad); letter-spacing: 3px; margin-bottom: 12px; }
 .fatal-inner p { color: var(--dim); line-height: 1.6; font-size: 14px; }
 
+/* ========================== touch controls ========================== */
+
+body.mobile { touch-action: none; overscroll-behavior: none; }
+body.mobile * { -webkit-tap-highlight-color: transparent; }
+
+#touchUI {
+  position: fixed; inset: 0; z-index: 20;
+  user-select: none; -webkit-user-select: none;
+}
+#touchLook { position: absolute; inset: 0; }          /* whole screen looks */
+#stickZone { position: absolute; left: 0; top: 25%; width: 42%; height: 75%; }
+#stickBase {
+  position: absolute; width: 116px; height: 116px; margin: -58px 0 0 -58px;
+  border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06); display: none;
+  pointer-events: none;
+}
+#stickBase.on { display: block; }
+#stickNub {
+  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
+  margin: -26px 0 0 -26px; border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+}
+#touchUI button {
+  position: absolute; border: 1.5px solid rgba(255,255,255,0.30);
+  background: rgba(14,17,22,0.45); color: rgba(255,255,255,0.85);
+  font-family: var(--font); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto;
+}
+#touchUI button.latched { border-color: var(--accent); color: var(--accent); }
+#btnFire {
+  right: max(18px, env(safe-area-inset-right)); bottom: 84px;
+  width: 108px; height: 108px; border-width: 2px;
+}
+#btnFire i {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(224,80,60,0.75); display: block;
+}
+#btnFire:active i { background: rgba(255,110,90,1); }
+#btnZoomT { right: 140px; bottom: 66px; width: 62px; height: 62px; font-size: 26px; }
+#btnJumpT { right: 34px; bottom: 208px; width: 66px; height: 66px; font-size: 18px; }
+#btnCrouchT { right: 116px; bottom: 176px; width: 56px; height: 56px; font-size: 16px; }
+#btnReloadT { right: 186px; bottom: 130px; width: 52px; height: 52px; font-size: 17px; }
+#btnSwapT { right: 246px; bottom: 76px; width: 52px; height: 52px; font-size: 19px; }
+#btnNadeT { right: 250px; bottom: 140px; width: 46px; height: 46px; font-size: 13px; }
+#btnUseT {
+  left: 50%; bottom: 148px; transform: translateX(-50%);
+  min-width: 132px; height: 52px; border-radius: 26px !important;
+  font-size: 15px; letter-spacing: 2px; color: var(--accent);
+  border-color: var(--accent) !important; padding: 0 22px;
+}
+#touchTop {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); right: 12px;
+  display: flex; gap: 8px;
+}
+#touchTop button {
+  position: static; width: auto; min-width: 58px; height: 34px;
+  border-radius: 17px; font-size: 11px; letter-spacing: 1.5px; padding: 0 14px;
+}
+
+#rotateHint { display: none; }
+@media (orientation: portrait) {
+  body.mobile.ingame #rotateHint {
+    display: flex; position: fixed; inset: 0; z-index: 70;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(6,8,11,0.94); font-size: 20px; letter-spacing: 1px;
+    line-height: 2.2;
+  }
+}
+body.mobile #buyHint { display: none; }
+body.mobile #spectatorBar { bottom: 150px; }
+
+/* ------------------------- small screens -------------------------- */
+
 @media (max-width: 900px) {
   .shop-body { grid-template-columns: 150px 1fr; }
   .shop-preview { display: none; }
   #radarWrap { width: 140px; height: 140px; }
+}
+@media (max-height: 520px) {
+  #radarWrap { width: 110px; height: 110px; top: 10px; left: 10px; }
+  #topBar { grid-template-columns: 70px 88px 70px; }
+  .team-score { font-size: 19px; padding: 5px 8px; }
+  #roundTimer { font-size: 17px; padding: 6px 0; }
+  #alivePips { top: 70px; }
+  #healthRow { font-size: 24px; }
+  #moneyRow { font-size: 15px; }
+  #ammoRow { font-size: 26px; }
+  #weaponName { font-size: 11px; }
+  #inventoryRow .slot { font-size: 9px; }
+  #centerMsg { font-size: 26px; }
+  #subMsg { font-size: 13px; }
+  .kf { font-size: 11px; padding: 3px 7px; }
+  #bottomLeft { left: 12px; bottom: 10px; }
+  #bottomRight { right: 12px; bottom: 10px; }
+  .shop-panel { height: 96vh; }
+  .shop-cats button { padding: 8px 12px; font-size: 13px; }
+  .shop-foot { display: none; }
+  .menu-buttons { gap: 6px; margin-top: 20px; }
+  .btn { padding: 10px 14px; }
+  .game-title { font-size: clamp(30px, 7vw, 54px); letter-spacing: 6px; }
 }

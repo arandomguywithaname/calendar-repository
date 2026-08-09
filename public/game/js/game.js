@@ -67,6 +67,7 @@ class Game {
     this.frameCount = 0;
     this.fps = 0;
     this.matchTarget = 13;
+    this.mobile = IS_TOUCH_DEVICE;
   }
 
   /* ============================== boot ============================== */
@@ -108,6 +109,8 @@ class Game {
 
     this.hud = new HUD(this);
     this.hud.buildRadarMap(this.map);
+    this.touch = new TouchControls(this);
+    if (this.mobile) document.body.classList.add('mobile');
     this.applySettings();
     this.bindInput();
     this.bindMenus();
@@ -214,6 +217,17 @@ class Game {
     }
     // The buy menu grabs the cursor first; only lock the mouse when it is closed.
     if (!this.shopOpen) this.requestPointerLock();
+
+    // Phones: go fullscreen in landscape — both calls are best-effort.
+    if (this.mobile) {
+      const el = document.documentElement;
+      if (el.requestFullscreen && !document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {});
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    }
   }
 
   isHost() { return this.mode !== 'pvp' || this.net.host; }
@@ -1405,7 +1419,8 @@ class Game {
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked && this.running && !this.shopOpen && this.phase !== PHASE.MATCHEND) {
+      if (!this.locked && !this.mobile && this.running && !this.shopOpen &&
+          this.phase !== PHASE.MATCHEND) {
         this.setPaused(true);
       }
     });
@@ -1594,6 +1609,7 @@ class Game {
   }
 
   requestPointerLock() {
+    if (this.mobile) return;   // touch devices aim by dragging instead
     if (this.canvas.requestPointerLock) {
       const res = this.canvas.requestPointerLock();
       if (res && res.catch) res.catch(() => { /* user gesture required */ });
@@ -1642,6 +1658,9 @@ class Game {
       cmd.jump = this.keys.has('Space');
       cmd.duck = this.keys.has('ControlLeft') || this.keys.has('KeyC');
       cmd.walk = this.keys.has('ShiftLeft');
+      if (this.mobile && this.touch) this.touch.applyMove(cmd);
+      cmd.forward = clamp(cmd.forward, -1, 1);
+      cmd.side = clamp(cmd.side, -1, 1);
       if (this.phase === PHASE.FREEZE) { cmd.forward = 0; cmd.side = 0; cmd.jump = false; }
     }
     if (p.alive) {
@@ -1986,6 +2005,7 @@ class Game {
       this.render(dt);
     }
     if (this.hud) this.hud.tickPreview(dt);
+    if (this.touch) this.touch.tick();
   }
 
   /* ============================== menus ============================== */

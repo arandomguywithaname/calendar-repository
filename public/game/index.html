@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>OPERATION: DUNE — Tactical FPS</title>
 <link rel="stylesheet" href="css/game.css" />
 </head>
@@ -261,6 +261,28 @@
   </div>
 </div>
 
+<!-- ========================= TOUCH CONTROLS ========================= -->
+<div id="touchUI" class="hidden">
+  <div id="touchLook"></div>
+  <div id="stickZone">
+    <div id="stickBase"><div id="stickNub"></div></div>
+  </div>
+  <div id="touchTop">
+    <button id="btnBuyT">BUY</button>
+    <button id="btnScoresT">SCORES</button>
+    <button id="btnPauseT">&#10073;&#10073;</button>
+  </div>
+  <button id="btnUseT" class="hidden">USE</button>
+  <button id="btnFire"><i></i></button>
+  <button id="btnZoomT">&#8982;</button>
+  <button id="btnJumpT">&#9650;</button>
+  <button id="btnCrouchT">&#9660;</button>
+  <button id="btnReloadT">R</button>
+  <button id="btnSwapT">&#8646;</button>
+  <button id="btnNadeT">&#9679;</button>
+</div>
+<div id="rotateHint"><div>&#8635;<br/>Rotate your phone to landscape</div></div>
+
 <div id="loading" class="overlay hidden"><div class="load-inner"><div class="load-bar"><i></i></div><div id="loadText">Building the map…</div></div></div>
 <div id="fatal" class="overlay hidden"><div class="fatal-inner"><h2>Cannot start</h2><p id="fatalMsg"></p></div></div>
 
@@ -274,6 +296,7 @@
 <script src="js/bots.js"></script>
 <script src="js/net.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/mobile.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

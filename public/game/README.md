@@ -24,6 +24,12 @@ The only requirement is a browser with WebGL2 (every current desktop browser).
 | `E` | Plant the bomb, defuse it, or pick up a dropped weapon |
 | `Tab` | Scoreboard · `Esc` pause |
 
+**On phones and tablets** the same page serves a touch layout automatically:
+a floating movement stick on the left (gentle push = silent walk), drag
+anywhere to aim, a fire button with zoom/jump/crouch/reload/swap/grenade
+around it, a contextual PLANT / DEFUSE / PICK UP button, and BUY / SCORES /
+pause along the top. The match goes fullscreen in landscape.
+
 ### Modes
 
 - **Find Match** — matchmaking that fills a 5v5 lobby, then drops you into a

@@ -158,8 +158,9 @@ class GameMap {
     this.container(0, -8.6, 5.4, 2.4, 2.5, Math.PI / 2 * 0);
     this.crate(11.0, -9.2, 1.15, W.CRATE);
     this.crate(-11.0, -9.2, 1.15, W.CRATE);
-    this.crate(-8.5, -34.0, 1.15, W.CRATE);
-    this.crate(8.5, -34.0, 1.15, W.CRATE);
+    // Kept clear of the CT spawn fan so nobody spawns nose-first into a crate.
+    this.crate(-15.5, -34.0, 1.15, W.CRATE);
+    this.crate(15.5, -34.0, 1.15, W.CRATE);
 
     /* ---- T spawn dressing ---- */
     this.add(-20, 34, 20, 34.8, 0, 1.1, W.SANDSTONE, { uvScale: 0.4 });
