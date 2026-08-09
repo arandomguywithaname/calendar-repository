@@ -195,7 +195,7 @@ class HUD {
     this.settings.skins[item.key] = next;
     saveSettings(this.settings);
     this.el.pvSkinName.textContent = SKINS[next].name;
-    delete this.game.viewmodelCache[item.model + ':' + cur];  // rebuilt on demand
+    delete this.game.viewmodelCache[item.key + ':' + cur];  // rebuilt on demand
     this.game.sound.play('switch');
   }
 
@@ -544,9 +544,13 @@ class HUD {
     if (bomb.planted) this.el.bombTimer.textContent = bomb.timer.toFixed(1);
 
     // spectator
-    const spectating = !local.alive && game.phase !== 'warmup';
+    const spectating = !local.alive && game.phase !== 'warmup' && game.mode !== 'practice';
     this.el.spectatorBar.classList.toggle('hidden', !spectating);
-    if (spectating) this.el.specName.textContent = me === local ? 'free camera' : me.name;
+    if (spectating) {
+      this.el.specName.textContent = me === local
+        ? (game.time < (game.deathCamUntil || 0) ? 'death cam' : 'no teammates left')
+        : me.name;
+    }
 
     this.el.buyHint.classList.toggle('hidden', !(game.canBuy(local) && !game.shopOpen));
 

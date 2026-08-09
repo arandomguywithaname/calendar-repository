@@ -141,16 +141,21 @@ function onMessage(client, msg) {
         host: room.hostId === client.id, players: roster(room),
       });
       broadcast(room, { t: 'roster', host: room.hostId, players: roster(room) }, null);
+      // A running room pulls late joiners straight into the match.
+      if (room.started) {
+        send(client, Object.assign({ t: 'start', players: roster(room) }, room.started));
+        log(`${client.name} late-joined the running match in ${code}`);
+      }
       log(`${client.name} joined ${code} (${room.clients.size}/10)`);
       break;
     }
     case 'start': {
       const room = client.room;
       if (!room || room.hostId !== client.id) return;
-      broadcast(room, {
-        t: 'start', teamSize: msg.teamSize || 5, fillBots: room.fillBots,
-        players: roster(room),
-      }, null);
+      room.started = { teamSize: msg.teamSize || 5, fillBots: room.fillBots };
+      broadcast(room, Object.assign({
+        t: 'start', players: roster(room),
+      }, room.started), null);
       log(`room ${room.code}: match started`);
       break;
     }

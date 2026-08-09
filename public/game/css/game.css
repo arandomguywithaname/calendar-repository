@@ -248,10 +248,14 @@ canvas#view {
 @keyframes pulse { 50% { border-color: rgba(224,80,60,1); } }
 
 #spectatorBar {
-  position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%);
-  background: rgba(10,12,16,0.8); border: 1px solid var(--line);
-  padding: 8px 18px; border-radius: 4px; font-size: 15px;
+  position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(10,12,16,0.85); border: 1px solid var(--line-strong);
+  padding: 10px 22px; border-radius: 5px; font-size: 16px;
 }
+#spectatorBar .spec-label { font-size: 11px; letter-spacing: 3px; color: var(--accent); }
+#spectatorBar b { font-size: 18px; }
+#spectatorBar .dim { font-size: 12px; }
 
 #damageDirs { position: absolute; inset: 0; }
 .dmg-dir {
@@ -484,6 +488,16 @@ select, input[type="text"], input:not([type]) {
 .mm-actions { display: flex; gap: 10px; justify-content: center; }
 
 .pvp-help { font-size: 13px; color: var(--dim); line-height: 1.6; margin: 16px 0; }
+.pvp-help b { color: var(--text); }
+.pvp-form-mini { display: flex; justify-content: center; margin-bottom: 14px; }
+.pvp-form-mini label { font-size: 11px; letter-spacing: 1.5px; color: var(--dim); display: flex; align-items: center; gap: 10px; }
+.pvp-adv { margin-top: 18px; text-align: left; }
+.pvp-adv summary {
+  font-size: 12px; color: var(--dim); letter-spacing: 1px; cursor: pointer;
+  padding: 6px 0; user-select: none;
+}
+.pvp-adv summary:hover { color: var(--text); }
+.pvp-adv .pvp-form { margin-top: 12px; }
 .pvp-help code { font-family: var(--mono); background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 3px; color: var(--text); }
 .pvp-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left; margin-bottom: 16px; }
 .pvp-form label.check, .set-grid label.check { flex-direction: row; align-items: center; gap: 8px; }

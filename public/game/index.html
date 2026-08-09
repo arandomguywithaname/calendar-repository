@@ -58,7 +58,7 @@
   <div id="subMsg"></div>
   <div id="progressWrap"><div id="progressLabel">PLANTING</div><div id="progressBar"><i></i></div></div>
   <div id="bombHud" class="hidden"><span class="lbl">BOMB</span><span id="bombTimer">40.0</span></div>
-  <div id="spectatorBar" class="hidden">Spectating <b id="specName">—</b> · <span class="dim">[Space] next player</span></div>
+  <div id="spectatorBar" class="hidden"><span class="spec-label">SPECTATING</span> <b id="specName">—</b> <span class="dim">Click / Space — next player</span></div>
   <div id="damageDirs"></div>
   <div id="buyHint" class="hidden">Press <b>B</b> to buy</div>
 </div>
@@ -185,27 +185,33 @@
 <!-- ========================== PVP LOBBY ========================== -->
 <div id="pvpLobby" class="overlay hidden">
   <div class="mm-panel wide">
-    <div class="mm-status">PLAYER VS PLAYER</div>
+    <div class="mm-status">PLAY WITH FRIENDS</div>
     <p class="pvp-help">
-      Everyone connects to the same server, then joins the same room code.
-      Start the server with <code>npm run game</code> and share your address.
+      Friends who open this game from the <b>same address</b> and press
+      <b>Play with Friends</b> land in this party automatically — even if the
+      match has already started. Empty slots are filled with bots.
     </p>
-    <div class="pvp-form">
-      <label>Your name<input id="pvpName" maxlength="14" placeholder="player" /></label>
-      <label>Server<input id="pvpServer" placeholder="ws://localhost:8080" /></label>
-      <label>Room code<input id="pvpRoom" maxlength="8" placeholder="DUNE1" /></label>
-      <label>Team
-        <select id="pvpTeam"><option value="auto" selected>Auto-balance</option><option value="T">Terrorists</option><option value="CT">Counter-Terrorists</option></select>
-      </label>
-      <label class="check"><input type="checkbox" id="pvpFillBots" checked /> Fill empty slots with bots</label>
+    <div class="pvp-form-mini">
+      <label>Your name <input id="pvpName" maxlength="14" placeholder="player" /></label>
     </div>
-    <div class="pvp-status" id="pvpStatus">Not connected.</div>
+    <div class="pvp-status" id="pvpStatus">Connecting…</div>
     <div class="pvp-roster" id="pvpRoster"></div>
     <div class="mm-actions">
       <button class="btn small" id="pvpBack">BACK</button>
-      <button class="btn small" id="pvpConnect">CONNECT</button>
       <button class="btn primary small" id="pvpStart" disabled>START MATCH</button>
     </div>
+    <details class="pvp-adv" id="pvpAdv">
+      <summary>Advanced — different server or a private room</summary>
+      <div class="pvp-form">
+        <label>Server<input id="pvpServer" placeholder="wss://your-relay.example" /></label>
+        <label>Room code<input id="pvpRoom" maxlength="8" placeholder="PARTY" /></label>
+        <label>Team
+          <select id="pvpTeam"><option value="auto" selected>Auto-balance</option><option value="T">Terrorists</option><option value="CT">Counter-Terrorists</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="pvpFillBots" checked /> Fill empty slots with bots</label>
+      </div>
+      <div class="mm-actions"><button class="btn small" id="pvpConnect">CONNECT</button></div>
+    </details>
   </div>
 </div>
 

@@ -702,7 +702,7 @@ const GUN_PARTS = {
 const TINT_PALETTE = {
   [TK.METAL]: [1.0, 1.0, 1.0],
   [TK.POLY]: [0.85, 0.85, 0.88],
-  [TK.WOOD]: [1.0, 0.92, 0.8],
+  [TK.WOOD]: [0.86, 0.70, 0.52],
   [TK.DARK]: [0.55, 0.56, 0.6],
   [TK.BRIGHT]: [1.3, 1.32, 1.36],
 };
@@ -799,22 +799,77 @@ const MUZZLE_OFFSET = {
   zeus: [0, 0.018, -0.27],
 };
 
-/** Resting position/rotation of each model in view space. */
+/**
+ * Resting position/rotation/scale of each model in view space. Guns are
+ * modelled at world size, so the viewmodel draws them at roughly half
+ * scale — full-size geometry 20 cm from the camera fills the screen and
+ * reads as a wall, not a weapon.
+ */
+/* Every pose keeps the model's rear end clearly in front of the camera
+   (pz + rearExtent*scale < -0.05) — a stock touching the camera plane
+   projects to infinity and smears across the screen like a wall.        */
 const VIEWMODEL_POSE = {
-  knife: { pos: [0.145, -0.135, -0.26], rot: [0.05, -0.18, 0.10] },
-  dual: { pos: [0.075, -0.130, -0.24], rot: [0.02, 0, 0] },
-  sniper: { pos: [0.125, -0.140, -0.14], rot: [0.02, -0.035, 0] },
-  awp: { pos: [0.125, -0.140, -0.12], rot: [0.02, -0.035, 0] },
-  autosniper: { pos: [0.125, -0.140, -0.16], rot: [0.02, -0.035, 0] },
-  lmg: { pos: [0.130, -0.150, -0.18], rot: [0.02, -0.04, 0] },
-  c4: { pos: [0.10, -0.16, -0.30], rot: [0.1, -0.2, 0] },
-  grenade: { pos: [0.13, -0.16, -0.28], rot: [0.1, -0.2, 0] },
-  defuser: { pos: [0.10, -0.16, -0.30], rot: [0.1, -0.2, 0] },
-  DEFAULT: { pos: [0.120, -0.138, -0.21], rot: [0.02, -0.04, 0] },
+  knife: { pos: [0.190, -0.175, -0.33], rot: [0.10, -0.24, 0.10], scale: 0.80 },
+  dual: { pos: [0.060, -0.165, -0.34], rot: [0.07, -0.01, 0.01], scale: 0.56 },
+  sniper: { pos: [0.170, -0.190, -0.46], rot: [0.10, -0.045, 0.025], scale: 0.42 },
+  awp: { pos: [0.170, -0.195, -0.48], rot: [0.10, -0.04, 0.025], scale: 0.40 },
+  autosniper: { pos: [0.170, -0.195, -0.48], rot: [0.10, -0.045, 0.025], scale: 0.42 },
+  lmg: { pos: [0.175, -0.200, -0.44], rot: [0.10, -0.05, 0.025], scale: 0.44 },
+  shotgun: { pos: [0.170, -0.190, -0.43], rot: [0.10, -0.05, 0.025], scale: 0.46 },
+  autoshotgun: { pos: [0.170, -0.190, -0.43], rot: [0.10, -0.05, 0.025], scale: 0.46 },
+  c4: { pos: [0.120, -0.180, -0.34], rot: [0.14, -0.20, 0], scale: 0.70 },
+  grenade: { pos: [0.140, -0.180, -0.33], rot: [0.14, -0.20, 0], scale: 0.70 },
+  defuser: { pos: [0.120, -0.180, -0.34], rot: [0.14, -0.20, 0], scale: 0.70 },
+  DEFAULT: { pos: [0.170, -0.185, -0.42], rot: [0.10, -0.05, 0.025], scale: 0.46 },
 };
+// Pistol-sized weapons sit a touch closer and larger than rifles.
+for (const k of ['pistol', 'pistol_s', 'tec9', 'deagle', 'revolver', 'zeus']) {
+  VIEWMODEL_POSE[k] = { pos: [0.150, -0.160, -0.31], rot: [0.06, -0.04, 0.02], scale: 0.56 };
+}
 
 function viewmodelPose(kind) {
   return VIEWMODEL_POSE[kind] || VIEWMODEL_POSE.DEFAULT;
+}
+
+/* ------------------------- viewmodel hands ------------------------- */
+
+/** Where the gloves grip each model, in gun space. */
+const VM_HANDS = {
+  pistol: [[0, -0.095, 0.02]], pistol_s: [[0, -0.095, 0.02]], tec9: [[0, -0.095, 0.02]],
+  deagle: [[0, -0.10, 0.03]], revolver: [[0, -0.10, 0.05]], zeus: [[0, -0.09, 0.02]],
+  dual: [[-0.064, -0.085, 0.02], [0.064, -0.085, 0.02]],
+  knife: [[0, -0.012, 0.055]],
+  grenade: [[0, -0.03, 0]], c4: [[0.05, -0.05, 0.09]], defuser: [[0, -0.05, 0.02]],
+  mac10: [[0, -0.13, 0.06], [0, -0.05, -0.27]],
+  ak: [[0, -0.10, 0.07], [0, -0.055, -0.42]],
+  galil: [[0, -0.10, 0.07], [0, -0.055, -0.40]],
+  sniper: [[0, -0.095, 0.10], [0, -0.05, -0.30]],
+  awp: [[0, -0.095, 0.11], [0, -0.05, -0.34]],
+  autosniper: [[0, -0.10, 0.12], [0, -0.055, -0.44]],
+  shotgun: [[0, -0.075, 0.16], [0, -0.045, -0.50]],
+  autoshotgun: [[0, -0.09, 0.10], [0, -0.055, -0.52]],
+  sawedoff: [[0, -0.09, 0.07], [0, -0.05, -0.32]],
+  mag7: [[0, -0.09, 0.08], [0, -0.075, -0.17]],
+  lmg: [[0, -0.10, 0.10], [0, -0.06, -0.30]],
+  DEFAULT: [[0, -0.105, 0.06], [0, -0.06, -0.30]],
+};
+
+/**
+ * The first-person mesh: the gun plus gloved hands. A weapon floating in
+ * the air never reads as "held" — the hands are what sell it.
+ */
+function buildViewmodelMesh(builder, kind, tint, skinKey) {
+  buildGunMesh(builder, kind, tint, skinKey);
+  const hands = VM_HANDS[kind] || VM_HANDS.DEFAULT;
+  for (const [hx, hy, hz] of hands) {
+    // glove
+    builder.box([hx - 0.034, hy - 0.032, hz - 0.052], [hx + 0.034, hy + 0.030, hz + 0.052],
+      MAT.GUNPOLY, { uvScale: 6, tint: [0.42, 0.40, 0.38] });
+    // sleeve cuff, trailing back toward the camera
+    builder.box([hx - 0.042, hy - 0.044, hz + 0.035], [hx + 0.042, hy + 0.012, hz + 0.125],
+      MAT.CLOTH_CT, { uvScale: 4, tint: [0.78, 0.74, 0.66] });
+  }
+  return builder;
 }
 
 /* --------------------- 2D silhouette for the shop --------------------- */

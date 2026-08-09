@@ -651,6 +651,7 @@ class Game {
 
     if (victim === this.localPlayer) {
       this.spectateIndex = 0;
+      this.deathCamUntil = this.time + 2.2;   // linger on the death cam first
       this.hud.centerMessage('YOU WERE ELIMINATED',
         attacker ? `${attacker.name} · ${weapon ? weapon.name : 'explosion'}` : '');
       setTimeout(() => this.hud.centerMessage(''), 2600);
@@ -1426,7 +1427,14 @@ class Game {
     document.addEventListener('mousedown', (e) => {
       if (!this.running || this.paused) return;
       if (this.shopOpen) return;
-      if (e.button === 0) this.mouse.left = true;
+      if (e.button === 0) {
+        // Dead: clicking flips to the next teammate, CS-style.
+        if (!this.localPlayer.alive && this.phase !== PHASE.MATCHEND && this.mode !== 'practice') {
+          this.cycleSpectate();
+          return;
+        }
+        this.mouse.left = true;
+      }
       if (e.button === 2) {
         this.mouse.right = true;
         this.altFire();
@@ -1810,12 +1818,14 @@ class Game {
   viewTarget() {
     const p = this.localPlayer;
     if (p.alive || this.mode === 'practice') return p;
+    if (this.time < (this.deathCamUntil || 0)) return p;   // death cam first
     const mates = this.entities.filter(e => e.alive && e.team === p.team);
     if (!mates.length) return p;
     return mates[this.spectateIndex % mates.length];
   }
 
   cycleSpectate() {
+    this.deathCamUntil = 0;   // clicking skips the death cam
     this.spectateIndex++;
     this.sound.play('switch');
   }
@@ -1896,10 +1906,12 @@ class Game {
 
     r.flushSprites();
 
-    // viewmodel
-    if (s.viewmodel && view === this.localPlayer && view.alive) this.renderViewmodel(dt, view);
-
-    r.endViewmodelPass();
+    // Viewmodel — drawn for whoever we are looking through, so spectating a
+    // teammate shows their weapon in hand like a real first-person spectate.
+    if (s.viewmodel && view.alive) {
+      this.renderViewmodel(dt, view);
+      r.endViewmodelPass();
+    }
   }
 
   renderViewmodel(dt, p) {
@@ -1908,10 +1920,11 @@ class Game {
     const w = WEAPONS[key];
     const kind = key === 'c4' ? 'c4' : (p.slot === 'grenade' ? 'grenade' : (w ? w.model : 'knife'));
     const skin = (w && this.settings.skins && this.settings.skins[key]) || 'stock';
-    const cacheKey = kind + ':' + skin;
+    const cacheKey = key + ':' + skin;
     if (!this.viewmodelCache[cacheKey]) {
       const b = new MeshBuilder();
-      buildGunMesh(b, kind, [1, 1, 1], skin !== 'stock' ? skin : null);
+      const baseTint = w ? w.tint : (GRENADES[key] ? GRENADES[key].tint : [1, 1, 1]);
+      buildViewmodelMesh(b, kind, baseTint, skin !== 'stock' ? skin : null);
       this.viewmodelCache[cacheKey] = r.createMesh(b);
     }
     const mesh = this.viewmodelCache[cacheKey];
@@ -1945,11 +1958,11 @@ class Game {
     const rotY = pose.rot[1] - dYaw * 0.9;
     const rotZ = pose.rot[2] + reload * 0.4;
 
-    const model = M4.compose([px, py, pz], rotY, rotX, rotZ, 1);
+    const model = M4.compose([px, py, pz], rotY, rotX, rotZ, pose.scale || 0.46);
     r.beginViewmodelPass();
     if (this.zoomLerp < 0.85) {
-      // Skinned meshes bake their colours; stock meshes take the weapon tint.
-      r.drawMesh(mesh, model, skin !== 'stock' ? [1, 1, 1] : (w ? w.tint : [1, 1, 1]));
+      // Weapon tint and skin are baked into the mesh; hands stay untinted.
+      r.drawMesh(mesh, model, [1, 1, 1]);
     }
   }
 
@@ -2011,8 +2024,9 @@ class Game {
       this.sound.init();
       document.getElementById('pvpName').value = this.hud.settings.name || 'player';
       document.getElementById('pvpServer').value = this.hud.settings.server || NetClient.defaultUrl();
-      document.getElementById('pvpRoom').value = this.hud.settings.room || 'DUNE1';
+      document.getElementById('pvpRoom').value = 'PARTY';
       show('pvpLobby');
+      this.pvpAutoConnect();   // one click — no addresses, no codes
     });
 
     document.getElementById('mmCancel').addEventListener('click', () => {
@@ -2116,38 +2130,63 @@ class Game {
     const startBtn = document.getElementById('pvpStart');
 
     const renderRoster = () => {
+      if (!this.net.active) return;
       const list = [...this.net.players.values()];
       rosterEl.innerHTML = list.map(p =>
         `<span class="p ${p.team.toLowerCase()}">${escapeHtml(p.name)}${p.id === this.net.id ? ' (you)' : ''}</span>`
       ).join('');
       startBtn.disabled = !this.net.host;
+      const friends = list.length - 1;
       statusEl.textContent = this.net.host
-        ? `Connected to ${this.net.room} · you are the host · ${list.length} player(s)`
-        : `Connected to ${this.net.room} · waiting for the host to start`;
+        ? (friends > 0
+          ? `${friends} friend${friends > 1 ? 's' : ''} here — press START MATCH when ready`
+          : 'You are first in — friends who press Play with Friends join automatically')
+        : 'Connected — waiting for the host to press start';
       statusEl.className = 'pvp-status ok';
     };
+    this._pvpRender = renderRoster;
 
-    document.getElementById('pvpConnect').addEventListener('click', async () => {
+    document.getElementById('pvpName').addEventListener('change', () => {
       const name = (document.getElementById('pvpName').value || 'player').slice(0, 14);
-      const url = document.getElementById('pvpServer').value || NetClient.defaultUrl();
-      const room = (document.getElementById('pvpRoom').value || 'DUNE1').toUpperCase();
-      const team = document.getElementById('pvpTeam').value;
       this.hud.settings.name = name;
-      this.hud.settings.server = url;
-      this.hud.settings.room = room;
       saveSettings(this.hud.settings);
-      statusEl.textContent = 'Connecting…';
-      statusEl.className = 'pvp-status';
-      try {
-        await this.net.connect(url, name, room, team, document.getElementById('pvpFillBots').checked);
-        renderRoster();
-      } catch (err) {
-        statusEl.textContent = err.message + ' Start it with "npm run game" and use the address it prints.';
-        statusEl.className = 'pvp-status err';
+      if (this.net.active && !this.running) {
+        const room = this.net.room;
+        this.net.disconnect();
+        this.pvpAutoConnect(undefined, room);
       }
     });
 
-    this.net.on('roster', renderRoster);
+    document.getElementById('pvpConnect').addEventListener('click', () => {
+      const url = document.getElementById('pvpServer').value || NetClient.defaultUrl();
+      const room = (document.getElementById('pvpRoom').value || 'PARTY').toUpperCase();
+      const team = document.getElementById('pvpTeam').value;
+      this.hud.settings.server = url;
+      saveSettings(this.hud.settings);
+      this.net.disconnect();
+      this.pvpAutoConnect(url, room, team, document.getElementById('pvpFillBots').checked);
+    });
+
+    this.net.on('roster', (msg) => {
+      renderRoster();
+      // Friends joining a running match need entities created on the fly.
+      if (this.running && this.mode === 'pvp') {
+        for (const p of this.net.players.values()) {
+          if (p.id === this.net.id || p.entity) continue;
+          const ent = new Character(p.team, p.name, false);
+          ent.netId = p.id;
+          ent.syncId = 'h' + p.id;
+          ent.isRemote = true;
+          ent.money = RULES.startMoney;
+          const spawn = pick(this.map.spawns[p.team]);
+          ent.resetForRound(spawn, this.map.spawnYaw[p.team]);
+          ent.giveWeapon(p.team === 'T' ? 'glock' : 'usp');
+          p.entity = ent;
+          this.entities.push(ent);
+        }
+      }
+      void msg;
+    });
     this.net.on('close', () => {
       statusEl.textContent = 'Disconnected from the server.';
       statusEl.className = 'pvp-status err';
@@ -2159,6 +2198,7 @@ class Game {
     });
 
     this.net.on('start', (msg) => {
+      if (this.running && this.mode === 'pvp') return;   // already in the match
       this.showScreen(null);
       const me = this.net.players.get(this.net.id);
       this.startMatch({
@@ -2222,6 +2262,36 @@ class Game {
     });
   }
 
+  /**
+   * One-click party join: connect to the server this page came from and
+   * drop into the shared PARTY room. The Advanced panel is only for
+   * static-hosted copies pointing at a relay elsewhere.
+   */
+  async pvpAutoConnect(url, room, team, fillBots) {
+    const statusEl = document.getElementById('pvpStatus');
+    const name = (this.hud.settings.name || 'player').slice(0, 14);
+    url = url || NetClient.defaultUrl();
+    room = (room || 'PARTY').toUpperCase();
+    if (this.net.active && this.net.room === room) {
+      if (this._pvpRender) this._pvpRender();
+      return;
+    }
+    this.net.disconnect();
+    statusEl.textContent = 'Looking for your friends…';
+    statusEl.className = 'pvp-status';
+    try {
+      await this.net.connect(url, name, room, team || 'auto',
+        fillBots === undefined ? true : fillBots);
+      if (this._pvpRender) this._pvpRender();
+    } catch (err) {
+      statusEl.textContent = `No game server at ${url}. ` +
+        'If this copy is on a static host, open Advanced and enter your relay address — ' +
+        'or run "npm run game" and share that URL instead.';
+      statusEl.className = 'pvp-status err';
+      document.getElementById('pvpAdv').open = true;
+    }
+  }
+
   /** Authoritative events pushed by the host. */
   applyNetEvent(msg) {
     if (this.isHost() || !this.running) return;
@@ -2281,6 +2351,7 @@ class Game {
     }
     if (victim === this.localPlayer) {
       this.spectateIndex = 0;
+      this.deathCamUntil = this.time + 2.2;
       this.hud.centerMessage('YOU WERE ELIMINATED',
         attacker ? `${attacker.name} · ${WEAPONS[msg.w] ? WEAPONS[msg.w].name : msg.w}` : '');
       setTimeout(() => this.hud.centerMessage(''), 2600);

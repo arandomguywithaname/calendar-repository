@@ -39,10 +39,16 @@ no dependencies — the WebSocket handshake and framing are implemented directly
 on node's `http`/`net`.
 
 1. One person runs `npm run game`. It prints a LAN address.
-2. Everyone opens `http://<that address>:8080/game/` and picks
-   **PLAY WITH FRIENDS**.
-3. Enter the same room code. The first player in a room is the host.
-4. The host presses **START MATCH**. Empty slots fill with bots.
+2. Everyone opens `http://<that address>:8080/game/` and presses
+   **PLAY WITH FRIENDS** — that's it. The lobby connects to the server the
+   page came from and drops everyone into the same party automatically.
+3. The first player in is the host and presses **START MATCH**. Empty
+   slots fill with bots, and friends who arrive late are pulled straight
+   into the running match.
+
+The **Advanced** panel (different server address, private room codes,
+forced teams) is only needed for copies on static hosts like itch.io,
+where the relay lives at another address.
 
 The room host's browser simulates the authoritative match — health, kills,
 rounds, economy, the bomb and every bot — and broadcasts events for all of
