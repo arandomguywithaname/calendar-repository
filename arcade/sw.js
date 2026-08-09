@@ -17,7 +17,7 @@
    VERSION must be bumped with the site's ?v=N. On activation every cache with
    a different name is deleted, so a new release wipes the old one out. */
 
-var VERSION = "v17";
+var VERSION = "v18";
 var CACHE = "arcade-" + VERSION;
 
 // The game list is the real one, imported rather than copied, so this can
@@ -29,7 +29,7 @@ try { importScripts("js/registry.js?" + VERSION); } catch (e) {}
 function shellUrls() {
   var v = "?v=" + VERSION.slice(1);
   var list = [
-    "./", "index.html", "manifest.json",
+    "./", "index.html", "privacy.html", "manifest.json",
     "css/main.css" + v,
     "js/registry.js" + v, "js/i18n.js" + v, "js/common.js" + v,
     "js/friends.js" + v, "js/mods.js" + v, "js/ai.js" + v, "js/admin.js" + v,
