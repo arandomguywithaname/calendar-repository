@@ -8,6 +8,12 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
+# The service worker decides what everything else is allowed to cache, so if
+# the browser holds on to an OLD sw.js the site can never update itself again.
+# This one file must always be revalidated.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /js/*
   Cache-Control: public, max-age=300
 

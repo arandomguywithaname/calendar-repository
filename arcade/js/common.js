@@ -191,10 +191,25 @@
     mountDifficulty: mountDifficulty
   };
 
+  // Register the offline worker. It lives at the arcade root, so a game page
+  // two levels down has to point back up at it. Service workers only exist on
+  // http(s) - opening the files straight off the disk is still supported, it
+  // just does not get offline caching (it does not need it).
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    if (location.protocol !== "http:" && location.protocol !== "https:") return;
+    var depth = window.ARCADE_ROOT_DEPTH || 0;
+    var root = depth === 0 ? "./" : "../".repeat(depth);
+    try {
+      navigator.serviceWorker.register(root + "sw.js", { scope: root });
+    } catch (e) {}
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () { initTheme(); trackPlay(); });
+    document.addEventListener("DOMContentLoaded", function () { initTheme(); trackPlay(); registerServiceWorker(); });
   } else {
     initTheme();
     trackPlay();
+    registerServiceWorker();
   }
 })();

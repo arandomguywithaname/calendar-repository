@@ -34,7 +34,7 @@
     // from disk (file://), which is why translations ship as .js, not .json.
     return new Promise(function (resolve) {
       var s = document.createElement("script");
-      s.src = rootPath() + "i18n/" + lang + ".js?v=16";
+      s.src = rootPath() + "i18n/" + lang + ".js?v=17";
       s.onload = function () {
         cache[lang] = (window.ARCADE_I18N_DATA && window.ARCADE_I18N_DATA[lang]) || {};
         resolve(cache[lang]);
