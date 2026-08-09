@@ -129,6 +129,13 @@ class Character {
     else if (w.slot === SLOT.SECONDARY) this.inventory.secondary = key;
     this.ammo[key] = { mag: w.mag, reserve: w.reserve };
     this.selectSlot(w.slot === SLOT.PRIMARY ? 'primary' : 'secondary');
+    // selectSlot early-returns when the slot is already active, so clear the
+    // weapon state here too — a scoped AWP swapped for an AK must not keep
+    // its zoom level (it crashed the aim handler).
+    this.zoomLevel = 0;
+    this.reloading = 0;
+    this.sprayIndex = 0;
+    this.deploying = Math.max(this.deploying, 0.6);
   }
 
   selectSlot(slot) {

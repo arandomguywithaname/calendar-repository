@@ -1414,7 +1414,8 @@ class Game {
       const p = this.localPlayer;
       if (!p.alive) return;
       const s = this.hud.settings;
-      const zoomScale = p.zoomLevel > 0 ? (p.weapon.zoom[p.zoomLevel - 1] / s.fov) : 1;
+      const zf = zoomFovOf(p);
+      const zoomScale = zf ? zf / s.fov : 1;
       const sens = s.sens * 0.00022 * zoomScale;
       p.yaw -= e.movementX * sens;
       p.pitch -= e.movementY * sens * (s.invertY ? -1 : 1);
@@ -1769,6 +1770,8 @@ class Game {
   }
 
   tickWeapon(ent, dt) {
+    // Safety net: zoom can never outlive a weapon that has no scope.
+    if (ent.zoomLevel > 0 && (!ent.weapon || !ent.weapon.zoom)) ent.zoomLevel = 0;
     if (ent.deploying > 0) ent.deploying = Math.max(0, ent.deploying - dt);
     if (ent.reloading > 0) {
       ent.reloading -= dt;
@@ -1841,9 +1844,8 @@ class Game {
     const roll = clamp(-view.vel[0] * Math.cos(view.yaw) - view.vel[2] * -Math.sin(view.yaw), -4, 4) * 0.0035
       + (view.alive ? 0 : 0.5);
     let fov = s.fov;
-    if (view.zoomLevel > 0 && view.weapon && view.weapon.zoom) {
-      fov = view.weapon.zoom[view.zoomLevel - 1];
-    }
+    const zf = zoomFovOf(view);
+    if (zf) fov = zf;
     fov += clamp(speed / 4.8, 0, 1) * 2.5;
     r.setCamera(eye, camYaw, camPitch, roll, fov);
     this.sound.setListener(eye, angleVector(camYaw, camPitch));
@@ -2385,6 +2387,17 @@ class Game {
 
 function frame() {
   return new Promise(r => requestAnimationFrame(() => r()));
+}
+
+/**
+ * Scoped FOV for a character, or null when not (validly) zoomed.
+ * Tolerates any weapon/zoom-level combination — never throws.
+ */
+function zoomFovOf(ent) {
+  if (!ent || ent.zoomLevel <= 0) return null;
+  const w = ent.weapon;
+  if (!w || !w.zoom || !w.zoom.length) return null;
+  return w.zoom[Math.min(ent.zoomLevel, w.zoom.length) - 1];
 }
 
 /** How far a ray inside an AABB travels before it exits (wall thickness). */
