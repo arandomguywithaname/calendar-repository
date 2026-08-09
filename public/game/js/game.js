@@ -135,10 +135,32 @@ class Game {
     this.applyControlMode();
   }
 
+  /** Change the control scheme from any of the three places that offer it. */
+  setControlMode(mode) {
+    this.hud.settings.controlMode = mode;
+    saveSettings(this.hud.settings);
+    this.applyControlMode();
+    this.sound.play('switch');
+  }
+
   /** Auto / Desktop / Touch — switchable at any time, even mid-match. */
   applyControlMode() {
     const mode = (this.settings && this.settings.controlMode) || 'auto';
     const want = mode === 'auto' ? this.hasTouch : mode === 'mobile';
+
+    // Keep the menu dropdown, the settings dropdown and the pause button
+    // showing the same thing, wherever the change came from.
+    for (const id of ['optControls', 'setControls']) {
+      const el = document.getElementById(id);
+      if (el && el.value !== mode) el.value = mode;
+    }
+    const label = document.getElementById('pauseControlsVal');
+    if (label) {
+      label.textContent = mode === 'auto'
+        ? `AUTO (${want ? 'TOUCH' : 'DESKTOP'})`
+        : (want ? 'TOUCH' : 'DESKTOP');
+    }
+
     const changed = want !== this.mobile;
     this.mobile = want;
     document.body.classList.toggle('mobile', want);
@@ -2085,6 +2107,15 @@ class Game {
     });
     document.getElementById('pauseResume').addEventListener('click', () => this.setPaused(false));
     document.getElementById('pauseSettings').addEventListener('click', () => show('settings'));
+    // One-tap cycle, so switching never requires digging through a submenu.
+    document.getElementById('pauseControls').addEventListener('click', () => {
+      const order = ['auto', 'desktop', 'mobile'];
+      const cur = this.hud.settings.controlMode || 'auto';
+      this.setControlMode(order[(order.indexOf(cur) + 1) % order.length]);
+    });
+    document.getElementById('optControls').addEventListener('change', (e) => {
+      this.setControlMode(e.target.value);
+    });
     document.getElementById('pauseQuit').addEventListener('click', () => {
       this.running = false;
       this.net.disconnect();

@@ -562,9 +562,12 @@ body.mobile * { -webkit-tap-highlight-color: transparent; }
 #touchUI {
   position: fixed; inset: 0; z-index: 20;
   user-select: none; -webkit-user-select: none;
+  /* The container must never eat input: only its live children opt back in.
+     Otherwise it silently swallows mouse clicks in desktop mode. */
+  pointer-events: none;
 }
-#touchLook { position: absolute; inset: 0; }          /* whole screen looks */
-#stickZone { position: absolute; left: 0; top: 25%; width: 42%; height: 75%; }
+#touchLook { position: absolute; inset: 0; pointer-events: auto; }   /* whole screen looks */
+#stickZone { position: absolute; left: 0; top: 25%; width: 42%; height: 75%; pointer-events: auto; }
 #stickBase {
   position: absolute; width: 116px; height: 116px; margin: -58px 0 0 -58px;
   border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);

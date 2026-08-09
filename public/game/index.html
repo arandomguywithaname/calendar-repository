@@ -159,6 +159,13 @@
           <option value="random">Random</option>
         </select>
       </label>
+      <label>Controls
+        <select id="optControls">
+          <option value="auto" selected>Auto-detect</option>
+          <option value="desktop">Desktop · mouse</option>
+          <option value="mobile">Touch · on-screen</option>
+        </select>
+      </label>
     </div>
     <div class="menu-foot">WASD move · Shift walk · Ctrl crouch · Space jump · R reload · B buy · E plant/defuse · G drop grenade · Tab scores</div>
   </div>
@@ -251,6 +258,7 @@
   <div class="pause-panel">
     <h2>PAUSED</h2>
     <button class="btn small" id="pauseResume">RESUME</button>
+    <button class="btn small" id="pauseControls">CONTROLS: <b id="pauseControlsVal">AUTO</b></button>
     <button class="btn small" id="pauseSettings">SETTINGS</button>
     <button class="btn small" id="pauseQuit">LEAVE MATCH</button>
   </div>

@@ -24,10 +24,12 @@ The only requirement is a browser with WebGL2 (every current desktop browser).
 | `E` | Plant the bomb, defuse it, or pick up a dropped weapon |
 | `Tab` | Scoreboard · `Esc` pause |
 
-**Controls are switchable** in Settings — *Auto-detect*, *Desktop* or
-*Touch* — so a touchscreen laptop can use mouse and keyboard, a tablet
-with a mouse can go desktop, and anyone can force the touch layout. The
-choice applies instantly, even mid-match, and is remembered.
+**Controls are switchable** three ways — the *Controls* dropdown on the
+main menu, the same dropdown in Settings, or a one-tap **CONTROLS**
+button in the pause menu that cycles Auto → Desktop → Touch. So a
+touchscreen laptop can use mouse and keyboard, a tablet with a mouse can
+go desktop, and anyone can force the touch layout. The choice applies
+instantly, even mid-match, and is remembered.
 
 **On phones and tablets** the same page serves a touch layout automatically:
 a floating movement stick on the left (gentle push = silent walk), drag
