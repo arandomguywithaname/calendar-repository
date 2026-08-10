@@ -1,0 +1,1267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sushi Go: Teriyaki Edition</title>
+</head>
+<body>
+<style>
+/* ============================================================
+   Sushi Go: Teriyaki Edition — single-file game
+   Palette: sumi-indigo ground, washi card faces, shu (vermilion)
+   accent reserved for the hanko seal.
+   ============================================================ */
+:root{
+  --sumi:#0F131C;
+  --sumi-2:#151B27;
+  --panel:#1B2231;
+  --panel-2:#222B3D;
+  --line:#2E394F;
+  --washi:#F2E9DA;
+  --washi-2:#DCCDB4;
+  --ink:#14181F;
+  --muted:#8C99B0;
+  --dim:#5F6C84;
+  --shu:#DB4B2E;
+  --shu-soft:#F0765A;
+  --gold:#D9A441;
+  --matcha:#8FB55B;
+
+  --c-tempura:#E3A526;
+  --c-teriyaki:#A64B2A;
+  --c-dumpling:#6E8A4E;
+  --c-maki:#33558B;
+  --c-nigiri:#C96A54;
+  --c-pudding:#A9743C;
+  --c-noodle:#2E7F86;
+  --c-joker:#6D4E9C;
+
+  --display:"Helvetica Neue",Helvetica,"Segoe UI",Roboto,Arial,sans-serif;
+  --mincho:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC","Noto Serif JP",serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+
+  --r:10px;
+  --shadow:0 14px 30px -12px rgba(0,0,0,.72);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--sumi);
+  color:var(--washi);
+  font-family:var(--display);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+/* faint noren-stripe atmosphere; sits behind everything */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(120% 80% at 50% -10%,rgba(51,85,139,.28),transparent 60%),
+    radial-gradient(90% 60% at 90% 110%,rgba(219,75,46,.10),transparent 65%);
+}
+#app{position:relative;z-index:1}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+
+/* ---------- screens ---------- */
+.screen{display:none}
+.screen.is-active{display:block}
+
+/* ---------- brand ---------- */
+.brand{display:flex;flex-direction:column;align-items:center;gap:.35rem;text-align:center}
+.brand-jp{
+  font-family:var(--mincho);font-size:.95rem;letter-spacing:.55em;
+  color:var(--gold);padding-left:.55em;
+}
+.brand h1{
+  margin:0;font-size:clamp(2.6rem,9vw,4.6rem);font-weight:800;
+  letter-spacing:-.045em;line-height:.9;text-wrap:balance;
+}
+.brand h1 .excl{color:var(--shu)}
+.brand .tag{
+  margin:0;font-size:.72rem;text-transform:uppercase;letter-spacing:.34em;
+  color:var(--muted);padding-left:.34em;
+}
+
+/* ---------- menu ---------- */
+/* Scoped to .is-active: a bare '#menu{display:grid}' would outrank
+   '.screen{display:none}' on specificity and the menu would never hide. */
+#menu.is-active{min-height:100vh;display:grid;place-items:center;padding:2rem 1.1rem}
+.menu-card{
+  width:min(560px,100%);background:linear-gradient(180deg,var(--panel),var(--sumi-2));
+  border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:clamp(1.6rem,4vw,2.6rem);
+  display:flex;flex-direction:column;gap:1.6rem;
+  position:relative;overflow:hidden;
+}
+.menu-card::after{
+  content:"";position:absolute;inset:0;border-radius:var(--r);pointer-events:none;
+  border:1px solid rgba(217,164,65,.16);margin:5px;
+}
+.menu-intro{
+  margin:0;text-align:center;color:var(--muted);font-size:.95rem;line-height:1.6;
+  max-width:42ch;margin-inline:auto;
+}
+.menu-intro b{color:var(--washi);font-weight:600}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:.6rem}
+legend{
+  font-size:.66rem;text-transform:uppercase;letter-spacing:.26em;
+  color:var(--dim);padding:0;
+}
+.choices{display:flex;gap:.5rem;flex-wrap:wrap}
+.choice{
+  flex:1 1 0;min-width:64px;padding:.7rem .5rem;text-align:center;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  font-family:var(--mono);font-size:.9rem;color:var(--muted);
+  transition:background .15s ease,color .15s ease,border-color .15s ease;
+}
+.choice:hover{background:#2A3547;color:var(--washi)}
+.choice[aria-checked="true"]{
+  background:var(--washi);border-color:var(--washi);color:var(--ink);font-weight:700;
+}
+.btn{
+  padding:.85rem 1.2rem;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel-2);text-align:center;font-weight:600;font-size:.95rem;
+  transition:transform .12s ease,background .15s ease,border-color .15s ease;
+}
+.btn:hover{background:#2A3547;transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn-primary{
+  background:var(--shu);border-color:var(--shu);color:#fff;
+  letter-spacing:.02em;
+}
+.btn-primary:hover{background:var(--shu-soft);border-color:var(--shu-soft)}
+.menu-actions{display:flex;flex-direction:column;gap:.6rem}
+
+/* ---------- hud ---------- */
+.hud{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
+  padding:.7rem clamp(.8rem,3vw,1.6rem);
+  background:rgba(15,19,28,.92);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.hud-brand{display:flex;align-items:baseline;gap:.5rem;font-weight:800;letter-spacing:-.03em}
+.hud-brand .jp{font-family:var(--mincho);font-size:.8rem;color:var(--gold);letter-spacing:.2em}
+.pips{display:flex;align-items:center;gap:.4rem}
+.pip{
+  width:9px;height:9px;border-radius:50%;
+  border:1px solid var(--dim);background:transparent;
+}
+.pip.done{background:var(--dim);border-color:var(--dim)}
+.pip.now{background:var(--shu);border-color:var(--shu);box-shadow:0 0 0 3px rgba(219,75,46,.2)}
+.hud-meta{
+  display:flex;gap:1rem;align-items:center;flex-wrap:wrap;
+  font-family:var(--mono);font-size:.76rem;color:var(--muted);
+}
+.hud-meta .k{color:var(--dim);text-transform:uppercase;letter-spacing:.12em}
+.hud-meta .v{color:var(--washi)}
+.pass-arrow{display:inline-block;transition:transform .3s ease}
+.passing .pass-arrow{animation:slide .5s ease}
+@keyframes slide{0%{transform:translateX(0)}50%{transform:translateX(7px);opacity:.4}100%{transform:translateX(0)}}
+.hud-spacer{flex:1}
+.link-btn{color:var(--muted);font-size:.78rem;text-decoration:underline;text-underline-offset:3px}
+.link-btn:hover{color:var(--washi)}
+
+/* ---------- table layout ---------- */
+.board{
+  padding:clamp(.8rem,2.6vw,1.5rem);
+  display:flex;flex-direction:column;gap:clamp(.8rem,2.4vw,1.4rem);
+  /* bottom padding clears the fixed hand rail */
+  padding-bottom:clamp(11.5rem,26vw,15rem);
+  max-width:1240px;margin:0 auto;
+  /* Seats ride the top, your plate sits down by your hand, and the gap
+     between them is the counter. */
+  min-height:calc(100vh - 3.4rem);
+  justify-content:space-between;
+}
+.section-label{
+  font-size:.63rem;text-transform:uppercase;letter-spacing:.26em;color:var(--dim);
+  display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;
+}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* opponents belt */
+.seats{
+  display:grid;gap:.7rem;
+  grid-template-columns:repeat(auto-fit,minmax(215px,1fr));
+}
+.seat{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:.7rem .8rem;display:flex;flex-direction:column;gap:.55rem;
+  transition:border-color .2s ease;
+}
+.seat.is-leader{border-color:rgba(217,164,65,.5)}
+.seat-top{display:flex;align-items:center;gap:.5rem}
+.avatar{
+  width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  font-size:.78rem;font-weight:700;color:var(--ink);flex:none;
+}
+.seat-name{font-weight:600;font-size:.86rem;letter-spacing:-.01em;flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seat-score{font-family:var(--mono);font-size:.9rem;color:var(--gold)}
+.seat-cards{display:flex;flex-wrap:wrap;gap:3px;min-height:44px;align-content:flex-start}
+
+/* my tray */
+.tray-wrap{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:.85rem 1rem;
+}
+.tray-head{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.7rem}
+.tray-head .who{font-weight:700;letter-spacing:-.02em;font-size:1rem}
+.tray-head .live{
+  font-family:var(--mono);font-size:.74rem;color:var(--muted);
+  border:1px solid var(--line);border-radius:99px;padding:.18rem .6rem;
+}
+.tray-head .live b{color:var(--gold);font-weight:500}
+.tray{display:flex;flex-wrap:wrap;gap:5px;min-height:52px;align-content:flex-start}
+.tray-empty{color:var(--dim);font-size:.82rem;font-style:italic;align-self:center}
+
+/* pending teriyaki banner */
+.banner{
+  display:flex;align-items:center;gap:.6rem;margin-top:.75rem;
+  padding:.5rem .7rem;border-radius:8px;font-size:.82rem;
+  background:rgba(166,75,42,.16);border:1px solid rgba(219,75,46,.42);
+  color:#F2C0AF;
+}
+.banner .seal-mini{
+  font-family:var(--mincho);flex:none;
+  width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  border:1.5px solid var(--shu);color:var(--shu);font-size:.7rem;
+}
+
+/* ---------- cards ---------- */
+.card{
+  --band:var(--c-maki);
+  position:relative;flex:none;
+  width:var(--cw,94px);height:calc(var(--cw,94px) * 1.38);
+  background:var(--washi);color:var(--ink);
+  border:1.5px solid #0B0E14;border-radius:7px;
+  box-shadow:0 5px 14px -6px rgba(0,0,0,.75);
+  display:flex;flex-direction:column;overflow:hidden;
+  text-align:left;
+}
+.card-band{
+  background:var(--band);color:#fff;flex:none;
+  padding:.24em .45em;display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--mincho);font-size:.66rem;letter-spacing:.05em;
+}
+.card-band .pt{font-family:var(--mono);font-size:.6rem;opacity:.85;letter-spacing:0}
+.card-glyph{
+  flex:1;display:grid;place-items:center;font-size:calc(var(--cw,94px) * .40);
+  line-height:1;filter:saturate(1.05);
+}
+.card-foot{
+  flex:none;padding:.3em .45em .4em;border-top:1px solid rgba(20,24,31,.14);
+  background:rgba(220,205,180,.34);
+}
+.card-foot .en{
+  display:block;font-size:.68rem;font-weight:700;letter-spacing:-.01em;line-height:1.15;
+}
+.card-foot .rule{
+  display:block;font-family:var(--mono);font-size:.55rem;color:#5C5344;
+  line-height:1.25;margin-top:.12em;
+}
+/* hand cards are interactive */
+.card.playable{
+  transition:transform .16s cubic-bezier(.2,.7,.3,1),box-shadow .16s ease;
+}
+.card.playable:hover,.card.playable:focus-visible{
+  transform:translateY(-14px);
+  box-shadow:0 18px 28px -10px rgba(0,0,0,.8);
+}
+.card.is-chosen{transform:translateY(-22px) scale(.98);opacity:.55}
+.card[disabled]{cursor:default}
+
+/* mini chips for tableaus */
+.chip{
+  --band:var(--c-maki);
+  position:relative;flex:none;width:30px;height:40px;border-radius:5px;
+  background:var(--washi);border:1.2px solid #0B0E14;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 3px 7px -3px rgba(0,0,0,.7);
+}
+.chip .b{height:7px;background:var(--band);flex:none}
+.chip .g{flex:1;display:grid;place-items:center;font-size:.92rem;line-height:1}
+.chip.fresh{animation:drop .42s cubic-bezier(.2,.8,.3,1) backwards}
+@keyframes drop{
+  from{transform:translateY(-18px) rotate(-8deg);opacity:0}
+  to{transform:none;opacity:1}
+}
+
+/* hanko seal for doubled cards */
+.seal{
+  position:absolute;right:-4px;bottom:-4px;
+  width:22px;height:22px;border-radius:50%;
+  border:1.6px solid var(--shu);background:rgba(242,233,218,.94);
+  color:var(--shu);font-family:var(--mincho);font-size:.72rem;font-weight:700;
+  display:grid;place-items:center;transform:rotate(-12deg);
+  box-shadow:0 2px 5px rgba(0,0,0,.35);
+}
+.chip .seal{width:16px;height:16px;font-size:.55rem;right:-3px;bottom:-3px;border-width:1.2px}
+.chip.fresh .seal,.card .seal{animation:stamp .34s cubic-bezier(.2,1.5,.4,1) backwards;animation-delay:.16s}
+@keyframes stamp{
+  from{transform:rotate(-40deg) scale(2.4);opacity:0}
+  to{transform:rotate(-12deg) scale(1);opacity:1}
+}
+
+/* ---------- hand rail ---------- */
+.handbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:15;
+  background:linear-gradient(180deg,rgba(15,19,28,0),rgba(15,19,28,.94) 22%,var(--sumi) 60%);
+  padding:1.6rem clamp(.7rem,3vw,1.5rem) .9rem;
+}
+.hand-prompt{
+  text-align:center;font-size:.72rem;text-transform:uppercase;letter-spacing:.24em;
+  color:var(--muted);margin-bottom:.6rem;min-height:1.1em;
+}
+.hand-prompt.waiting{color:var(--gold)}
+.hand{
+  display:flex;gap:.4rem;justify-content:flex-start;align-items:flex-end;
+  overflow-x:auto;overflow-y:hidden;padding:1.2rem .4rem .5rem;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+}
+/* Auto margins centre the fan while it fits, then collapse to 0 once it
+   overflows. 'justify-content:center' would strand the first cards in
+   unscrollable overflow on a narrow screen. */
+.hand > .card:first-child{margin-left:auto}
+.hand > .card:last-child{margin-right:auto}
+.hand::-webkit-scrollbar{height:6px}
+.hand::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+/* 'backwards', not 'both' — a retained end frame would beat the hover lift */
+.hand .card{animation:deal .38s cubic-bezier(.2,.8,.3,1) backwards}
+@keyframes deal{
+  from{transform:translateY(46px) rotate(6deg);opacity:0}
+  to{transform:none;opacity:1}
+}
+
+/* ---------- overlay ---------- */
+.overlay{
+  position:fixed;inset:0;z-index:60;display:none;
+  background:rgba(8,11,17,.82);backdrop-filter:blur(5px);
+  padding:1.1rem;overflow-y:auto;
+}
+.overlay.is-open{display:grid;place-items:center}
+.sheet{
+  width:min(680px,100%);background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r);box-shadow:var(--shadow);padding:clamp(1.2rem,3.6vw,2rem);
+  animation:rise .28s cubic-bezier(.2,.8,.3,1) both;
+}
+@keyframes rise{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+.sheet h2{
+  margin:0 0 .2rem;font-size:1.6rem;font-weight:800;letter-spacing:-.035em;text-wrap:balance;
+}
+.sheet .sub{margin:0 0 1.2rem;color:var(--muted);font-size:.86rem}
+.sheet h3{
+  margin:1.4rem 0 .5rem;font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.24em;color:var(--dim);
+}
+.sheet p{line-height:1.65;color:var(--washi-2);font-size:.9rem;margin:.5rem 0}
+
+/* scoreboard table */
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.78rem}
+th,td{padding:.5rem .5rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left;font-family:var(--display);white-space:normal}
+thead th{
+  color:var(--dim);font-weight:500;font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+}
+tbody tr.me td{background:rgba(217,164,65,.07)}
+td.total{color:var(--gold);font-weight:700}
+tfoot td{border-bottom:0;color:var(--muted)}
+
+/* rules list */
+.rulecards{display:grid;gap:.6rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.rulecard{
+  display:flex;gap:.7rem;padding:.7rem;border:1px solid var(--line);border-radius:8px;
+  background:var(--sumi-2);
+}
+.rulecard .ic{
+  width:34px;height:34px;flex:none;border-radius:6px;display:grid;place-items:center;
+  font-size:1.1rem;background:var(--band,var(--c-maki));
+}
+.rulecard .tx{font-size:.82rem;line-height:1.5;color:var(--washi-2)}
+.rulecard .tx b{display:block;color:var(--washi);font-size:.86rem;letter-spacing:-.01em}
+.rulecard .tx .jp{font-family:var(--mincho);color:var(--gold);font-size:.7rem;letter-spacing:.1em}
+.new-tag{
+  display:inline-block;margin-left:.35rem;padding:.05rem .32rem;border-radius:3px;
+  background:var(--shu);color:#fff;font-family:var(--mono);font-size:.52rem;
+  text-transform:uppercase;letter-spacing:.1em;vertical-align:middle;
+}
+.sheet-actions{display:flex;gap:.6rem;margin-top:1.5rem;flex-wrap:wrap}
+.sheet-actions .btn{flex:1 1 160px}
+
+/* joker picker */
+.joker-grid{
+  display:grid;gap:.5rem;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));
+  margin-top:.4rem;
+}
+.joker-grid .card{--cw:76px;width:100%;height:auto;aspect-ratio:1/1.38;cursor:pointer}
+
+/* winner */
+.winner{display:flex;align-items:center;gap:1rem;margin-bottom:.4rem}
+.seal-big{
+  width:74px;height:74px;flex:none;border-radius:50%;
+  border:3px solid var(--shu);color:var(--shu);
+  font-family:var(--mincho);font-size:2.1rem;
+  display:grid;place-items:center;transform:rotate(-11deg);
+  animation:stamp .45s cubic-bezier(.2,1.5,.4,1) both;
+}
+.winner h2{font-size:clamp(1.5rem,5vw,2.2rem)}
+
+@media (max-width:640px){
+  .card{--cw:78px}
+  .hud-brand .full{display:none}
+  .board{padding-bottom:12rem}
+  /* keep the whole HUD on one line instead of wrapping 'Quit' below */
+  .hud{gap:.55rem;padding-inline:.7rem}
+  .hud-meta{gap:.6rem;font-size:.68rem}
+  .seat-cards{min-height:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+}
+</style>
+
+<div id="app">
+
+  <!-- ============ MENU ============ -->
+  <section id="menu" class="screen is-active">
+    <div class="menu-card">
+      <div class="brand">
+        <span class="brand-jp">照り焼き</span>
+        <h1>SUSHI GO<span class="excl">!</span></h1>
+        <p class="tag">Teriyaki Edition</p>
+      </div>
+      <p class="menu-intro">
+        The drafting game you know — pick one card, pass the rest — with three
+        courses off the standard menu: <b>Teriyaki</b>, <b>Noodles</b> and the <b>Joker</b>.
+      </p>
+      <fieldset>
+        <legend>Players</legend>
+        <div class="choices" id="playerChoices" role="radiogroup" aria-label="Number of players"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Opponents</legend>
+        <div class="choices" id="diffChoices" role="radiogroup" aria-label="Difficulty"></div>
+      </fieldset>
+      <div class="menu-actions">
+        <button class="btn btn-primary" id="startBtn">Start the belt</button>
+        <button class="btn" id="rulesBtn">How to play</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="game" class="screen">
+    <header class="hud" id="hud">
+      <div class="hud-brand"><span class="jp">照</span><span class="full">Sushi Go!</span></div>
+      <div class="pips" id="pips" aria-label="Round progress"></div>
+      <div class="hud-meta">
+        <span><span class="k">Turn</span> <span class="v" id="turnLabel">1</span></span>
+        <span><span class="k">Pass</span> <span class="v"><span class="pass-arrow">→</span> left</span></span>
+      </div>
+      <div class="hud-spacer"></div>
+      <button class="link-btn" id="hudRules">Rules</button>
+      <button class="link-btn" id="hudQuit">Quit</button>
+    </header>
+
+    <div class="board">
+      <section>
+        <div class="section-label">At the counter</div>
+        <div class="seats" id="seats"></div>
+      </section>
+      <section class="board-plate">
+        <div class="section-label">Your plate</div>
+        <div class="tray-wrap">
+          <div class="tray-head">
+            <span class="who">You</span>
+            <span class="live">round <b id="liveRound">0</b> pts</span>
+            <span class="live">total <b id="liveTotal">0</b></span>
+            <span class="live">🍮 <b id="livePudding">0</b></span>
+          </div>
+          <div class="tray" id="tray"></div>
+          <div id="pendingBanner"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="handbar">
+      <div class="hand-prompt" id="handPrompt"></div>
+      <div class="hand" id="hand"></div>
+    </footer>
+  </section>
+
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ==================== ENGINE START ==================== *
+ * Pure game logic — no DOM access below this line until
+ * ENGINE END. Kept side-effect free so it can be unit tested.
+ * ====================================================== */
+
+var CARDS = {
+  tempura:      {name:"Tempura",       jp:"天ぷら", icon:"🍤", band:"tempura",  rule:"5 pts per pair"},
+  teriyaki:     {name:"Teriyaki",      jp:"照り焼き", icon:"🍗", band:"teriyaki", rule:"next card counts x2"},
+  dumpling:     {name:"Gyoza",         jp:"餃子",   icon:"🥟", band:"dumpling", rule:"1/3/6/10/15"},
+  maki1:        {name:"Maki x1",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
+  maki2:        {name:"Maki x2",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
+  maki3:        {name:"Maki x3",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
+  nigiri_egg:   {name:"Egg Nigiri",    jp:"玉子",   icon:"🍳", band:"nigiri",   rule:"1 pt"},
+  nigiri_salmon:{name:"Salmon Nigiri", jp:"鮭",     icon:"🍣", band:"nigiri",   rule:"2 pts"},
+  nigiri_squid: {name:"Squid Nigiri",  jp:"烏賊",   icon:"🦑", band:"nigiri",   rule:"3 pts"},
+  pudding:      {name:"Pudding",       jp:"プリン", icon:"🍮", band:"pudding",  rule:"most +6 / least -6"},
+  noodle:       {name:"Noodles",       jp:"麺",     icon:"🍜", band:"noodle",   rule:"maki +50% each"},
+  joker:        {name:"Joker",         jp:"化札",   icon:"🃏", band:"joker",    rule:"becomes any card"}
+};
+
+var DECK_COUNTS = {
+  tempura:14, teriyaki:14, dumpling:14,
+  maki2:12, maki3:8, maki1:6,
+  nigiri_salmon:10, nigiri_squid:5, nigiri_egg:5,
+  pudding:10, joker:6, noodle:4
+};
+
+var NIGIRI_PTS = {nigiri_egg:1, nigiri_salmon:2, nigiri_squid:3};
+var MAKI_ICONS = {maki1:1, maki2:2, maki3:3};
+var DUMPLING_PTS = [0,1,3,6,10,15];
+var HAND_SIZE = {2:10, 3:9, 4:8, 5:7};
+var BOT_NAMES = ["Kenji","Aiko","Haru","Yuki","Sora","Ren","Mika"];
+
+/* Every card a Joker may copy (a Joker cannot copy another Joker). */
+var JOKER_OPTIONS = Object.keys(CARDS).filter(function(k){ return k !== "joker"; });
+
+function shuffle(list, rnd){
+  var a = list.slice();
+  for(var i=a.length-1;i>0;i--){
+    var j = Math.floor((rnd?rnd():Math.random())*(i+1));
+    var t=a[i]; a[i]=a[j]; a[j]=t;
+  }
+  return a;
+}
+
+function buildDeck(rnd){
+  var deck=[];
+  for(var id in DECK_COUNTS){
+    for(var i=0;i<DECK_COUNTS[id];i++) deck.push(id);
+  }
+  return shuffle(deck, rnd);
+}
+
+function createGame(numPlayers, difficulty, rnd){
+  var names = shuffle(BOT_NAMES, rnd).slice(0, numPlayers-1);
+  var players = [{name:"You", human:true}];
+  for(var i=0;i<numPlayers-1;i++) players.push({name:names[i], human:false});
+  players = players.map(function(p,i){
+    return {
+      name:p.name, human:p.human, seat:i,
+      hand:[], tableau:[], pending:0,
+      score:0, puddings:0, roundScores:[]
+    };
+  });
+  var state = {
+    players:players, numPlayers:numPlayers,
+    difficulty:difficulty || "normal",
+    deck:buildDeck(rnd), handSize:HAND_SIZE[numPlayers],
+    round:0, turn:0, phase:"idle", rnd:rnd || Math.random
+  };
+  return state;
+}
+
+function dealRound(state){
+  state.round += 1;
+  state.turn = 1;
+  for(var i=0;i<state.players.length;i++){
+    var p = state.players[i];
+    p.tableau = [];
+    p.pending = 0;
+    p.hand = state.deck.splice(0, state.handSize);
+  }
+  state.phase = "playing";
+  return state;
+}
+
+/* Resolve one simultaneous turn.
+   choices[i] = {index:<hand index>, jokerAs:<card id or null>}  */
+function playTurn(state, choices){
+  var reveals = [];
+  for(var i=0;i<state.players.length;i++){
+    var p = state.players[i];
+    var choice = choices[i];
+    var card = p.hand.splice(choice.index, 1)[0];
+    var eff = (card === "joker") ? (choice.jokerAs || "nigiri_egg") : card;
+    var entry = {card:card, eff:eff, x2:false, joker:(card === "joker"), turn:state.turn};
+
+    if(eff === "teriyaki"){
+      /* A Teriyaki never doubles another Teriyaki — it just queues up. */
+      p.pending += 1;
+    } else if(p.pending > 0){
+      entry.x2 = true;
+      p.pending -= 1;
+    }
+    p.tableau.push(entry);
+    reveals.push({seat:i, entry:entry});
+  }
+
+  /* Hands travel to the left: seat i hands its cards to seat i+1. */
+  var hands = state.players.map(function(p){ return p.hand; });
+  for(var j=0;j<state.players.length;j++){
+    state.players[(j+1) % state.players.length].hand = hands[j];
+  }
+  state.turn += 1;
+  return reveals;
+}
+
+function roundOver(state){
+  return state.players[0].hand.length === 0;
+}
+
+/* Count a tableau. An x2 card counts as two copies of itself. */
+function tally(tableau){
+  var t = {tempura:0, dumpling:0, nigiriPts:0, makiBase:0,
+           noodles:0, puddings:0, teriyaki:0, unusedTeriyaki:0};
+  for(var i=0;i<tableau.length;i++){
+    var e = tableau[i];
+    var n = e.x2 ? 2 : 1;
+    var eff = e.eff;
+    if(eff === "tempura") t.tempura += n;
+    else if(eff === "dumpling") t.dumpling += n;
+    else if(NIGIRI_PTS[eff]) t.nigiriPts += NIGIRI_PTS[eff] * n;
+    else if(MAKI_ICONS[eff]) t.makiBase += MAKI_ICONS[eff] * n;
+    else if(eff === "noodle") t.noodles += n;
+    else if(eff === "pudding") t.puddings += n;
+    else if(eff === "teriyaki") t.teriyaki += n;
+  }
+  /* Noodles: each one adds half of your base maki count back on top. */
+  t.makiTotal = t.makiBase * (1 + 0.5 * t.noodles);
+  t.tempuraPts = Math.floor(t.tempura / 2) * 5;
+  t.dumplingPts = DUMPLING_PTS[Math.min(t.dumpling, 5)];
+  return t;
+}
+
+/* Split a prize between tied players, remainder discarded. */
+function splitPrize(points, count){ return Math.trunc(points / count); }
+
+function scoreRound(state){
+  var rows = state.players.map(function(p){ return tally(p.tableau); });
+
+  rows.forEach(function(r){ r.makiPts = 0; });
+  var totals = rows.map(function(r){ return r.makiTotal; });
+  var ranked = totals.filter(function(v){ return v > 0; })
+                     .sort(function(a,b){ return b - a; });
+  if(ranked.length){
+    var top = ranked[0];
+    var firstIdx = [];
+    totals.forEach(function(v,i){ if(v === top) firstIdx.push(i); });
+    var firstPts = splitPrize(6, firstIdx.length);
+    firstIdx.forEach(function(i){ rows[i].makiPts = firstPts; });
+
+    /* Second place is only awarded when first place is not tied. */
+    if(firstIdx.length === 1){
+      var second = null;
+      for(var k=0;k<ranked.length;k++){ if(ranked[k] < top){ second = ranked[k]; break; } }
+      if(second !== null){
+        var secondIdx = [];
+        totals.forEach(function(v,i){ if(v === second) secondIdx.push(i); });
+        var secondPts = splitPrize(3, secondIdx.length);
+        secondIdx.forEach(function(i){ rows[i].makiPts = secondPts; });
+      }
+    }
+  }
+
+  rows.forEach(function(r,i){
+    r.total = r.tempuraPts + r.dumplingPts + r.nigiriPts + r.makiPts;
+    var p = state.players[i];
+    p.score += r.total;
+    p.puddings += r.puddings;
+    p.roundScores.push(r.total);
+    r.unusedTeriyaki = p.pending;
+  });
+  return rows;
+}
+
+/* End-of-game pudding contest. 2-player games skip the penalty. */
+function scorePuddings(state){
+  var counts = state.players.map(function(p){ return p.puddings; });
+  var out = state.players.map(function(){ return 0; });
+  var max = Math.max.apply(null, counts);
+  var min = Math.min.apply(null, counts);
+
+  var winners = [];
+  counts.forEach(function(c,i){ if(c === max) winners.push(i); });
+  if(winners.length < state.players.length){
+    var wp = splitPrize(6, winners.length);
+    winners.forEach(function(i){ out[i] += wp; });
+
+    if(state.players.length > 2){
+      var losers = [];
+      counts.forEach(function(c,i){ if(c === min) losers.push(i); });
+      var lp = splitPrize(-6, losers.length);
+      losers.forEach(function(i){ out[i] += lp; });
+    }
+  }
+  out.forEach(function(v,i){ state.players[i].score += v; });
+  return out;
+}
+
+function standings(state){
+  return state.players.map(function(p,i){ return {i:i, p:p}; })
+    .sort(function(a,b){
+      if(b.p.score !== a.p.score) return b.p.score - a.p.score;
+      return b.p.puddings - a.p.puddings;
+    });
+}
+
+/* ---------- opponent brain ---------- */
+
+function makiPressure(state, seat){
+  var mine = tally(state.players[seat].tableau).makiTotal;
+  var best = 0;
+  state.players.forEach(function(p,i){
+    if(i === seat) return;
+    var m = tally(p.tableau).makiTotal;
+    if(m > best) best = m;
+  });
+  if(mine >= best) return 1.25;
+  if(best - mine <= 3) return 1.1;
+  return 0.75;
+}
+
+function cardValue(state, seat, eff){
+  var me = state.players[seat];
+  var t = tally(me.tableau);
+  var turnsLeft = me.hand.length;      /* this turn included */
+  var v = 0;
+
+  if(eff === "tempura"){
+    v = (t.tempura % 2 === 1) ? 5 : (turnsLeft >= 3 ? 2.7 : 0.5);
+  } else if(eff === "dumpling"){
+    v = DUMPLING_PTS[Math.min(t.dumpling + 1, 5)] - DUMPLING_PTS[Math.min(t.dumpling, 5)];
+  } else if(NIGIRI_PTS[eff]){
+    v = NIGIRI_PTS[eff];
+  } else if(eff === "teriyaki"){
+    v = turnsLeft >= 2 ? 3.4 : 0;
+  } else if(MAKI_ICONS[eff]){
+    v = MAKI_ICONS[eff] * (1 + 0.5 * t.noodles) * makiPressure(state, seat);
+  } else if(eff === "noodle"){
+    var future = Math.min(turnsLeft - 1, 3) * 1.4;
+    v = 0.5 * (t.makiBase + future) * makiPressure(state, seat);
+  } else if(eff === "pudding"){
+    var lead = state.players.filter(function(p,i){
+      return i !== seat && p.puddings >= me.puddings;
+    }).length;
+    v = (state.round === 3 ? 3.0 : 2.3) + (lead > 0 ? 0.6 : 0);
+  }
+
+  /* A pending Teriyaki makes whatever comes next worth roughly double. */
+  if(me.pending > 0 && eff !== "teriyaki") v *= 2;
+  return v;
+}
+
+function aiChoose(state, seat){
+  var me = state.players[seat];
+  var noise = state.difficulty === "easy" ? 3.2
+            : state.difficulty === "hard" ? 0.35 : 1.3;
+  var best = null;
+  for(var i=0;i<me.hand.length;i++){
+    var card = me.hand[i];
+    var pick = {index:i, jokerAs:null};
+    var v;
+    if(card === "joker"){
+      var bestOpt = null, bestVal = -Infinity;
+      for(var k=0;k<JOKER_OPTIONS.length;k++){
+        var ov = cardValue(state, seat, JOKER_OPTIONS[k]);
+        if(ov > bestVal){ bestVal = ov; bestOpt = JOKER_OPTIONS[k]; }
+      }
+      pick.jokerAs = bestOpt;
+      v = bestVal + 0.4;               /* flexibility bonus */
+    } else {
+      v = cardValue(state, seat, card);
+    }
+    v += state.rnd() * noise;
+    if(!best || v > best.v){ best = {v:v, pick:pick}; }
+  }
+  return best.pick;
+}
+
+/* ===================== ENGINE END ===================== */
+
+/* ---------------------- interface --------------------- */
+
+var $ = function(id){ return document.getElementById(id); };
+var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var wait = function(ms){ return new Promise(function(r){ setTimeout(r, reduced ? 0 : ms); }); };
+
+var SEAT_COLORS = ["#D9A441","#6E8A4E","#33558B","#A64B2A","#2E7F86"];
+var setup = {players:4, difficulty:"normal"};
+var game = null;
+var awaitingHuman = null;
+
+/* ---- card rendering ---- */
+
+function cardEl(id, opts){
+  opts = opts || {};
+  var c = CARDS[id];
+  var tag = opts.clickable ? "button" : "div";
+  var el = document.createElement(tag);
+  el.className = "card" + (opts.clickable ? " playable" : "");
+  el.style.setProperty("--band", "var(--c-" + c.band + ")");
+  if(opts.clickable) el.type = "button";
+
+  var pts = "";
+  if(NIGIRI_PTS[id]) pts = NIGIRI_PTS[id] + "pt";
+  else if(MAKI_ICONS[id]) pts = "x" + MAKI_ICONS[id];
+
+  var band = document.createElement("div");
+  band.className = "card-band";
+  band.innerHTML = "<span>" + c.jp + "</span><span class=\"pt\">" + pts + "</span>";
+
+  var glyph = document.createElement("div");
+  glyph.className = "card-glyph";
+  glyph.textContent = c.icon;
+
+  var foot = document.createElement("div");
+  foot.className = "card-foot";
+  foot.innerHTML = "<span class=\"en\">" + c.name + "</span>" +
+                   "<span class=\"rule\">" + c.rule + "</span>";
+
+  el.appendChild(band); el.appendChild(glyph); el.appendChild(foot);
+  if(opts.x2) el.appendChild(sealEl());
+  el.setAttribute("aria-label", c.name + " — " + c.rule);
+  return el;
+}
+
+function sealEl(){
+  var s = document.createElement("span");
+  s.className = "seal";
+  s.textContent = "倍";
+  s.title = "Doubled by Teriyaki — counts twice";
+  return s;
+}
+
+function chipEl(entry, fresh){
+  var c = CARDS[entry.eff];
+  var el = document.createElement("div");
+  el.className = "chip" + (fresh ? " fresh" : "");
+  el.style.setProperty("--band", "var(--c-" + c.band + ")");
+  el.innerHTML = "<div class=\"b\"></div><div class=\"g\">" + c.icon + "</div>";
+  if(entry.x2) el.appendChild(sealEl());
+  var label = c.name + (entry.joker ? " (Joker)" : "") + (entry.x2 ? " x2" : "");
+  el.title = label;
+  el.setAttribute("aria-label", label);
+  return el;
+}
+
+/* ---- menu ---- */
+
+function buildChoices(host, values, labels, key){
+  host.innerHTML = "";
+  values.forEach(function(v, i){
+    var b = document.createElement("button");
+    b.className = "choice";
+    b.type = "button";
+    b.setAttribute("role","radio");
+    b.textContent = labels[i];
+    b.setAttribute("aria-checked", setup[key] === v ? "true" : "false");
+    b.addEventListener("click", function(){
+      setup[key] = v;
+      Array.prototype.forEach.call(host.children, function(child){
+        child.setAttribute("aria-checked", child === b ? "true" : "false");
+      });
+    });
+    host.appendChild(b);
+  });
+}
+
+/* ---- board ---- */
+
+function renderSeats(){
+  var host = $("seats");
+  host.innerHTML = "";
+  var lead = Math.max.apply(null, game.players.map(function(p){ return p.score; }));
+  for(var i=1;i<game.players.length;i++){
+    var p = game.players[i];
+    var seat = document.createElement("div");
+    seat.className = "seat" + (p.score === lead && lead > 0 ? " is-leader" : "");
+
+    var top = document.createElement("div");
+    top.className = "seat-top";
+    top.innerHTML =
+      "<span class=\"avatar\" style=\"background:" + SEAT_COLORS[i % SEAT_COLORS.length] + "\">" +
+        p.name.charAt(0) + "</span>" +
+      "<span class=\"seat-name\">" + p.name + "</span>" +
+      (p.pending > 0 ? "<span class=\"seal-mini\" title=\"Teriyaki ready\">倍</span>" : "") +
+      "<span class=\"seat-score\">" + p.score + "</span>";
+
+    var cards = document.createElement("div");
+    cards.className = "seat-cards";
+    p.tableau.forEach(function(e){ cards.appendChild(chipEl(e, false)); });
+
+    seat.appendChild(top); seat.appendChild(cards);
+    host.appendChild(seat);
+  }
+}
+
+function renderTray(){
+  var me = game.players[0];
+  var tray = $("tray");
+  tray.innerHTML = "";
+  if(!me.tableau.length){
+    tray.innerHTML = "<span class=\"tray-empty\">Nothing plated yet.</span>";
+  } else {
+    me.tableau.forEach(function(e){ tray.appendChild(chipEl(e, false)); });
+  }
+  var t = tally(me.tableau);
+  $("liveRound").textContent = t.tempuraPts + t.dumplingPts + t.nigiriPts;
+  $("liveTotal").textContent = me.score;
+  $("livePudding").textContent = me.puddings + t.puddings;
+
+  var banner = $("pendingBanner");
+  banner.innerHTML = me.pending > 0
+    ? "<div class=\"banner\"><span class=\"seal-mini\">倍</span>" +
+      "<span>Teriyaki is on" + (me.pending > 1 ? " (x" + me.pending + ")" : "") +
+      " — your next card counts twice.</span></div>"
+    : "";
+}
+
+function renderHud(){
+  var pips = $("pips");
+  pips.innerHTML = "";
+  for(var r=1;r<=3;r++){
+    var pip = document.createElement("span");
+    pip.className = "pip" + (r < game.round ? " done" : r === game.round ? " now" : "");
+    pip.title = "Round " + r;
+    pips.appendChild(pip);
+  }
+  $("turnLabel").textContent = game.turn + " / " + game.handSize;
+}
+
+function renderHand(interactive){
+  var hand = $("hand");
+  hand.innerHTML = "";
+  var me = game.players[0];
+  me.hand.forEach(function(id, idx){
+    var el = cardEl(id, {clickable:interactive});
+    if(interactive){
+      el.addEventListener("click", function(){ humanPick(idx, el); });
+    }
+    hand.appendChild(el);
+  });
+}
+
+function render(interactive){
+  renderHud();
+  renderSeats();
+  renderTray();
+  renderHand(interactive);
+}
+
+function prompt(text, waiting){
+  var el = $("handPrompt");
+  el.textContent = text;
+  el.className = "hand-prompt" + (waiting ? " waiting" : "");
+}
+
+/* ---- overlay plumbing ---- */
+
+function openSheet(html, wire){
+  var ov = $("overlay");
+  ov.innerHTML = "<div class=\"sheet\">" + html + "</div>";
+  ov.classList.add("is-open");
+  if(wire) wire(ov);
+  var first = ov.querySelector("button");
+  if(first) first.focus();
+}
+function closeSheet(){
+  var ov = $("overlay");
+  ov.classList.remove("is-open");
+  ov.innerHTML = "";
+}
+
+/* ---- human turn ---- */
+
+function humanPick(index, el){
+  if(!awaitingHuman) return;
+  var me = game.players[0];
+  var card = me.hand[index];
+  if(card === "joker"){
+    openJokerPicker(function(choice){
+      closeSheet();
+      commitHuman({index:index, jokerAs:choice}, el);
+    });
+    return;
+  }
+  commitHuman({index:index, jokerAs:null}, el);
+}
+
+function commitHuman(choice, el){
+  var resolve = awaitingHuman;
+  awaitingHuman = null;
+  if(el) el.classList.add("is-chosen");
+  renderHand(false);
+  resolve(choice);
+}
+
+function openJokerPicker(done){
+  var cards = JOKER_OPTIONS.map(function(id){
+    return "<button class=\"jk\" data-id=\"" + id + "\" type=\"button\"></button>";
+  }).join("");
+  openSheet(
+    "<h2>Joker <span class=\"new-tag\">new</span></h2>" +
+    "<p class=\"sub\">Name the card it becomes. It scores exactly as that card for the rest of the round.</p>" +
+    "<div class=\"joker-grid\" id=\"jokerGrid\"></div>" +
+    "<div class=\"sheet-actions\"><button class=\"btn\" id=\"jokerCancel\" type=\"button\">Pick a different card</button></div>",
+    function(ov){
+      var grid = ov.querySelector("#jokerGrid");
+      JOKER_OPTIONS.forEach(function(id){
+        var el = cardEl(id, {clickable:true});
+        el.addEventListener("click", function(){ done(id); });
+        grid.appendChild(el);
+      });
+      ov.querySelector("#jokerCancel").addEventListener("click", function(){
+        closeSheet();
+        renderHand(true);
+      });
+    }
+  );
+}
+
+/* ---- the loop ---- */
+
+async function runRound(){
+  dealRound(game);
+  render(false);
+  await wait(320);
+
+  while(!roundOver(game)){
+    render(true);
+    prompt("Choose a card to plate", true);
+
+    var humanChoice = await new Promise(function(resolve){ awaitingHuman = resolve; });
+    if(humanChoice === null) throw new Abort();   /* player quit mid-turn */
+
+    var choices = [humanChoice];
+    for(var i=1;i<game.players.length;i++) choices.push(aiChoose(game, i));
+
+    prompt("Revealing…", false);
+    var reveals = playTurn(game, choices);
+    await animateReveals(reveals);
+
+    $("hud").classList.add("passing");
+    prompt("Hands pass to the left", false);
+    await wait(430);
+    $("hud").classList.remove("passing");
+    renderHud();
+  }
+
+  var rows = scoreRound(game);
+  render(false);
+  prompt("", false);
+  await wait(280);
+  await showRoundSheet(rows);
+}
+
+function animateReveals(reveals){
+  renderHud();
+  renderTray();
+  var seatHosts = Array.prototype.slice.call(document.querySelectorAll(".seat .seat-cards"));
+  reveals.forEach(function(r){
+    if(r.seat === 0) return;
+    var host = seatHosts[r.seat - 1];
+    if(host) host.appendChild(chipEl(r.entry, true));
+  });
+  /* my own newest chip re-rendered with the drop animation */
+  var tray = $("tray");
+  if(tray.lastElementChild && tray.lastElementChild.classList.contains("chip")){
+    tray.lastElementChild.classList.add("fresh");
+  }
+  return wait(560).then(function(){ renderSeats(); });
+}
+
+function scoreTable(rows, opts){
+  opts = opts || {};
+  var head = "<tr><th>Player</th><th>🍤</th><th>🥟</th><th>🍣</th>" +
+             "<th>🍥 maki</th><th>maki pts</th>" + (opts.pudding ? "<th>🍮</th>" : "") +
+             "<th>Round</th><th>Total</th></tr>";
+  var body = game.players.map(function(p, i){
+    var r = rows[i];
+    var maki = r.makiBase + (r.noodles ? " → " + fmt(r.makiTotal) : "");
+    return "<tr class=\"" + (i === 0 ? "me" : "") + "\">" +
+      "<td>" + p.name + (r.unusedTeriyaki ? " <span title=\"unused Teriyaki\">·倍" + r.unusedTeriyaki + "</span>" : "") + "</td>" +
+      "<td>" + r.tempuraPts + "</td>" +
+      "<td>" + r.dumplingPts + "</td>" +
+      "<td>" + r.nigiriPts + "</td>" +
+      "<td>" + maki + "</td>" +
+      "<td>" + r.makiPts + "</td>" +
+      (opts.pudding ? "<td>" + p.puddings + "</td>" : "") +
+      "<td>" + r.total + "</td>" +
+      "<td class=\"total\">" + p.score + "</td></tr>";
+  }).join("");
+  return "<div class=\"table-wrap\"><table><thead>" + head + "</thead><tbody>" + body + "</tbody></table></div>";
+}
+
+function fmt(n){ return (Math.round(n * 100) / 100).toString(); }
+
+function showRoundSheet(rows){
+  return new Promise(function(resolve){
+    var noodlers = game.players.map(function(p,i){
+      return rows[i].noodles ? p.name + " " + rows[i].makiBase + " → " + fmt(rows[i].makiTotal) : null;
+    }).filter(Boolean);
+
+    openSheet(
+      "<h2>Round " + game.round + " scored</h2>" +
+      "<p class=\"sub\">Puddings stay on the table until the very end.</p>" +
+      scoreTable(rows, {pudding:true}) +
+      (noodlers.length
+        ? "<h3>Noodle boost</h3><p>" + noodlers.join(" &nbsp;·&nbsp; ") + "</p>"
+        : "") +
+      "<div class=\"sheet-actions\"><button class=\"btn btn-primary\" id=\"nextBtn\" type=\"button\">" +
+        (game.round === 3 ? "Final scoring" : "Deal round " + (game.round + 1)) +
+      "</button></div>",
+      function(ov){
+        ov.querySelector("#nextBtn").addEventListener("click", function(){
+          closeSheet(); resolve();
+        });
+      }
+    );
+  });
+}
+
+function showFinal(puddingPts){
+  var order = standings(game);
+  var win = order[0];
+  var tied = order.filter(function(o){ return o.p.score === win.p.score; });
+  var headline = tied.length > 1
+    ? "Dead heat at " + win.p.score
+    : (win.i === 0 ? "You win" : win.p.name + " wins");
+
+  var body = order.map(function(o, rank){
+    return "<tr class=\"" + (o.i === 0 ? "me" : "") + "\">" +
+      "<td>" + (rank + 1) + ". " + o.p.name + "</td>" +
+      "<td>" + o.p.roundScores.join(" · ") + "</td>" +
+      "<td>" + o.p.puddings + "</td>" +
+      "<td>" + (puddingPts[o.i] > 0 ? "+" : "") + puddingPts[o.i] + "</td>" +
+      "<td class=\"total\">" + o.p.score + "</td></tr>";
+  }).join("");
+
+  openSheet(
+    "<div class=\"winner\"><div class=\"seal-big\">勝</div><div>" +
+      "<h2>" + headline + "</h2>" +
+      "<p class=\"sub\">Three rounds, " + game.handSize + " cards a hand, one belt.</p>" +
+    "</div></div>" +
+    "<div class=\"table-wrap\"><table><thead><tr><th>Player</th><th>Rounds</th>" +
+    "<th>🍮</th><th>Pudding pts</th><th>Total</th></tr></thead><tbody>" + body +
+    "</tbody></table></div>" +
+    "<div class=\"sheet-actions\">" +
+      "<button class=\"btn btn-primary\" id=\"againBtn\" type=\"button\">Play again</button>" +
+      "<button class=\"btn\" id=\"menuBtn\" type=\"button\">Change table</button>" +
+    "</div>",
+    function(ov){
+      ov.querySelector("#againBtn").addEventListener("click", function(){
+        closeSheet(); startGame();
+      });
+      ov.querySelector("#menuBtn").addEventListener("click", function(){
+        closeSheet(); showScreen("menu");
+      });
+    }
+  );
+}
+
+function Abort(){}
+
+async function startGame(){
+  game = createGame(setup.players, setup.difficulty);
+  showScreen("game");
+  try {
+    for(var r=0;r<3;r++){
+      await runRound();
+    }
+  } catch(err){
+    if(err instanceof Abort) return;   /* quit — drop this game quietly */
+    throw err;
+  }
+  var puddingPts = scorePuddings(game);
+  render(false);
+  prompt("", false);
+  showFinal(puddingPts);
+}
+
+function showScreen(id){
+  ["menu","game"].forEach(function(s){
+    $(s).classList.toggle("is-active", s === id);
+  });
+  window.scrollTo(0, 0);
+}
+
+/* ---- rules ---- */
+
+function ruleCard(id, text){
+  var c = CARDS[id];
+  return "<div class=\"rulecard\"><div class=\"ic\" style=\"--band:var(--c-" + c.band + ")\">" +
+    c.icon + "</div><div class=\"tx\"><b>" + c.name + "</b>" +
+    "<span class=\"jp\">" + c.jp + "</span>" + text + "</div></div>";
+}
+
+function showRules(){
+  openSheet(
+    "<h2>How to play</h2>" +
+    "<p class=\"sub\">Sushi Go with three courses swapped off the menu.</p>" +
+    "<p>Everyone is dealt a hand. Each turn you all plate <b>one</b> card face up at the " +
+    "same time, then hand your remaining cards to the player on your left. " +
+    "Three rounds, then the highest score wins.</p>" +
+    "<h3>The new menu</h3><div class=\"rulecards\">" +
+      ruleCard("teriyaki", "Scores nothing by itself. The next card you plate " +
+        "<b>counts twice</b> — two gyoza from one, double maki icons, double nigiri points. " +
+        "Teriyaki never doubles another Teriyaki; it waits its turn.") +
+      ruleCard("noodle", "At the end of the round it boosts your maki count by " +
+        "<b>half again</b>. 6 maki becomes 9. Two bowls of noodles add half each.") +
+      ruleCard("joker", "Plate it and name any other card. It <b>becomes</b> that card " +
+        "for scoring, for the rest of the round.") +
+    "</div>" +
+    "<h3>The regulars</h3><div class=\"rulecards\">" +
+      ruleCard("tempura", "Two make 5 points. One alone is worth nothing.") +
+      ruleCard("dumpling", "1, 3, 6, 10 or 15 points for 1–5 gyoza.") +
+      ruleCard("maki1", "Most maki icons at the end of the round scores 6, " +
+        "second most scores 3. Ties split the points and drop the remainder.") +
+      ruleCard("nigiri_squid", "Straight points: squid 3, salmon 2, egg 1.") +
+      ruleCard("pudding", "Saved until the end of the whole game: most puddings +6, " +
+        "fewest -6. In a two-player game nobody loses points for pudding.") +
+    "</div>" +
+    "<div class=\"sheet-actions\"><button class=\"btn btn-primary\" id=\"rulesClose\" type=\"button\">Got it</button></div>",
+    function(ov){
+      ov.querySelector("#rulesClose").addEventListener("click", closeSheet);
+    }
+  );
+}
+
+/* ---- boot ---- */
+
+buildChoices($("playerChoices"), [2,3,4,5], ["2","3","4","5"], "players");
+buildChoices($("diffChoices"), ["easy","normal","hard"], ["Easy","Normal","Hard"], "difficulty");
+$("startBtn").addEventListener("click", startGame);
+$("rulesBtn").addEventListener("click", showRules);
+$("hudRules").addEventListener("click", showRules);
+$("hudQuit").addEventListener("click", function(){
+  var pending = awaitingHuman;
+  awaitingHuman = null;
+  closeSheet();
+  showScreen("menu");
+  if(pending) pending(null);   /* unblock the round loop so it can abort */
+});
+$("overlay").addEventListener("click", function(e){
+  if(e.target === this && this.querySelector("#rulesClose")) closeSheet();
+});
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape" && $("overlay").querySelector("#rulesClose")) closeSheet();
+});
+</script>
+</body>
+</html>
