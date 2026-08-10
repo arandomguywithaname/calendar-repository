@@ -80,7 +80,7 @@ class Game {
     await frame();
 
     try {
-      this.renderer = new Renderer(this.canvas);
+      this.renderer = new Renderer(this.canvas, { lowSpec: IS_TOUCH_DEVICE });
     } catch (err) {
       loading.classList.add('hidden');
       this.fatal(err.message);
@@ -90,23 +90,22 @@ class Game {
     document.getElementById('loadText').textContent = 'Building the map…';
     await frame();
     this.map = new GameMap();
-    const mb = new MeshBuilder();
-    this.map.buildMesh(mb);
-    this.worldMesh = this.renderer.createMesh(mb);
 
     document.getElementById('loadText').textContent = 'Preparing models…';
     await frame();
-    this.assets.parts.T = buildCharacterParts(this.renderer, 'T');
-    this.assets.parts.CT = buildCharacterParts(this.renderer, 'CT');
-    for (const kind of Object.keys(GUN_PARTS)) {
-      const b = new MeshBuilder();
-      buildGunMesh(b, kind, [1, 1, 1]);
-      this.assets.worldGuns[kind] = this.renderer.createMesh(b);
-    }
-    const bombBuilder = new MeshBuilder();
-    bombBuilder.box([-0.16, 0, -0.11], [0.16, 0.1, 0.11], MAT.BOMB, { uvScale: 3 });
-    bombBuilder.box([-0.07, 0.1, -0.05], [0.07, 0.16, 0.05], MAT.GUNMETAL, { uvScale: 6, tint: [0.5, 0.5, 0.5] });
-    this.bombMesh = this.renderer.createMesh(bombBuilder);
+    this.buildGraphics();
+
+    // A lost GPU context (backgrounding a phone, a driver reset) otherwise
+    // leaves a permanently black canvas.
+    this.renderer.onContextLost = () => {
+      this.hud.centerMessage('GRAPHICS PAUSED', 'Restoring…');
+    };
+    this.renderer.onContextRestored = () => {
+      this.buildGraphics();
+      this.hud.buildRadarMap(this.map);
+      this.hud.centerMessage('');
+    };
+    console.log('[dune] ' + this.renderer.report());
 
     this.hud = new HUD(this);
     this.hud.buildRadarMap(this.map);
@@ -121,14 +120,40 @@ class Game {
     requestAnimationFrame(this.loop);
   }
 
+  /** (Re)build every GPU mesh. Safe to call again after a context restore. */
+  buildGraphics() {
+    const r = this.renderer;
+    const mb = new MeshBuilder();
+    this.map.buildMesh(mb);
+    this.worldMesh = r.createMesh(mb);
+
+    this.assets.parts.T = buildCharacterParts(r, 'T');
+    this.assets.parts.CT = buildCharacterParts(r, 'CT');
+    this.assets.worldGuns = {};
+    for (const kind of Object.keys(GUN_PARTS)) {
+      const b = new MeshBuilder();
+      buildGunMesh(b, kind, [1, 1, 1]);
+      this.assets.worldGuns[kind] = r.createMesh(b);
+    }
+    this.viewmodelCache = {};   // rebuilt lazily against the new context
+
+    const bomb = new MeshBuilder();
+    bomb.box([-0.16, 0, -0.11], [0.16, 0.1, 0.11], MAT.BOMB, { uvScale: 3 });
+    bomb.box([-0.07, 0.1, -0.05], [0.07, 0.16, 0.05], MAT.GUNMETAL,
+      { uvScale: 6, tint: [0.5, 0.5, 0.5] });
+    this.bombMesh = r.createMesh(bomb);
+  }
+
   fatal(msg) {
     document.getElementById('fatalMsg').textContent = msg;
     document.getElementById('fatal').classList.remove('hidden');
+    document.getElementById('loading').classList.add('hidden');
   }
 
   applySettings() {
     const s = this.hud ? this.hud.settings : DEFAULT_SETTINGS;
     this.renderer.renderScale = s.renderScale;
+    this.renderer.shadowsOn = s.shadows && this.renderer.shadowSupported;
     this.renderer.resize();
     this.sound.setVolume(s.volume);
     this.settings = s;
@@ -1928,19 +1953,16 @@ class Game {
     this.sound.setListener(eye, angleVector(camYaw, camPitch));
 
     // shadow pass
-    if (s.shadows) {
-      r.updateSun([eye[0], 0, eye[2]], 34);
-      r.beginShadowPass();
-      r.drawShadow(this.worldMesh, null);
-      for (const e of this.entities) {
-        if (!e.alive && this.time - e.deathTime > 6) continue;
-        if (V.distXZ(e.pos, eye) > 45) continue;
-        drawCharacter(r, e, this.assets, 'shadow', this.time);
+    r.updateSun([eye[0], 0, eye[2]], 34);
+    if (r.beginShadowPass()) {
+      if (s.shadows) {
+        r.drawShadow(this.worldMesh, null);
+        for (const e of this.entities) {
+          if (!e.alive && this.time - e.deathTime > 6) continue;
+          if (V.distXZ(e.pos, eye) > 45) continue;
+          drawCharacter(r, e, this.assets, 'shadow', this.time);
+        }
       }
-      r.endShadowPass();
-    } else {
-      r.updateSun([eye[0], 0, eye[2]], 34);
-      r.beginShadowPass();
       r.endShadowPass();
     }
 
@@ -2045,6 +2067,8 @@ class Game {
     if (dt < 0) dt = 0;
     this.fps = lerp(this.fps || 60, 1 / Math.max(dt, 0.0001), 0.05);
 
+    if (this.renderer.contextLost) return;   // nothing to draw into
+
     if (this.running && !this.paused) {
       this.update(dt);
       this.render(dt);
@@ -2085,7 +2109,12 @@ class Game {
         team: document.getElementById('optSide').value,
       });
     });
-    document.getElementById('btnSettings').addEventListener('click', () => show('settings'));
+    const showSettings = () => {
+      const el = document.getElementById('setDiag');
+      if (el) el.textContent = this.renderer.report();
+      show('settings');
+    };
+    document.getElementById('btnSettings').addEventListener('click', showSettings);
     document.getElementById('setClose').addEventListener('click', () =>
       show(this.running ? 'pause' : 'mainMenu'));
     document.getElementById('btnHostPvp').addEventListener('click', () => {
@@ -2106,7 +2135,7 @@ class Game {
       show('mainMenu');
     });
     document.getElementById('pauseResume').addEventListener('click', () => this.setPaused(false));
-    document.getElementById('pauseSettings').addEventListener('click', () => show('settings'));
+    document.getElementById('pauseSettings').addEventListener('click', showSettings);
     // One-tap cycle, so switching never requires digging through a submenu.
     document.getElementById('pauseControls').addEventListener('click', () => {
       const order = ['auto', 'desktop', 'mobile'];

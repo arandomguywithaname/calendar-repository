@@ -524,6 +524,11 @@ select, input[type="text"], input:not([type]) {
 .set-grid output { text-align: right; color: var(--text); font-family: var(--mono); font-size: 12px; }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 input[type="color"] { width: 52px; height: 26px; background: none; border: 1px solid var(--line); border-radius: 3px; }
+.set-diag {
+  margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 10px; color: var(--dim);
+  line-height: 1.6; word-break: break-word;
+}
 .set-actions { margin-top: 22px; text-align: center; }
 
 .pause-panel {

@@ -66,16 +66,34 @@ class MeshBuilder {
 }
 
 class Renderer {
-  constructor(canvas) {
+  constructor(canvas, opts = {}) {
     const gl = canvas.getContext('webgl2', {
-      antialias: true, alpha: false, depth: true, stencil: false,
+      antialias: !opts.lowSpec, alpha: false, depth: true, stencil: false,
       powerPreference: 'high-performance',
     });
-    if (!gl) throw new Error('WebGL2 is required to play this game.');
+    if (!gl) {
+      throw new Error('This browser cannot start WebGL 2, which the game needs.\n\n' +
+        Renderer.diagnostics(canvas));
+    }
     this.gl = gl;
     this.canvas = canvas;
     this.renderScale = 1;
-    this.shadowSize = 2048;
+    // Big shadow maps are a common source of out-of-memory on phones.
+    this.shadowSize = opts.lowSpec ? 1024 : 2048;
+    this.shadowsOn = true;
+    this.contextLost = false;
+
+    canvas.addEventListener('webglcontextlost', (e) => {
+      // Without preventDefault the context is never restored at all.
+      e.preventDefault();
+      this.contextLost = true;
+      if (this.onContextLost) this.onContextLost();
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.restore();
+      this.contextLost = false;
+      if (this.onContextRestored) this.onContextRestored();
+    });
     this.fov = 90 * DEG;
     this.viewmodelFov = 68 * DEG;
     this.sunDir = V.norm([-0.42, -0.78, 0.32]);
@@ -108,6 +126,52 @@ class Renderer {
   }
 
   /* ------------------------------ setup ------------------------------ */
+
+  /** Rebuild every GPU resource after the driver hands the context back. */
+  restore() {
+    this._initPrograms();
+    this._initTextures();
+    this._initShadowMap();
+    this._initSpriteBuffers();
+    this.resize();
+    this.decals.length = 0;
+    this.sprites.length = 0;
+  }
+
+  /** Human-readable graphics report, shown when startup fails. */
+  static diagnostics(canvas) {
+    const lines = [];
+    try {
+      const probe = canvas.getContext('webgl2');
+      lines.push('WebGL 2: ' + (probe ? 'yes' : 'no'));
+      const one = probe || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      lines.push('WebGL 1: ' + (one ? 'yes' : 'no'));
+      if (one) {
+        const dbg = one.getExtension('WEBGL_debug_renderer_info');
+        if (dbg) {
+          lines.push('GPU: ' + one.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
+          lines.push('Vendor: ' + one.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
+        }
+        lines.push('Max texture: ' + one.getParameter(one.MAX_TEXTURE_SIZE));
+      }
+    } catch (e) {
+      lines.push('Probe failed: ' + e.message);
+    }
+    lines.push('UA: ' + navigator.userAgent);
+    return lines.join('\n');
+  }
+
+  /** One-line summary of what the renderer actually ended up using. */
+  report() {
+    const gl = this.gl;
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    return [
+      'WebGL2 ok',
+      'GPU: ' + (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'unknown'),
+      'shadows: ' + (this.shadowSupported ? this.shadowFormat + ' @' + this.shadowSize : 'DISABLED — ' + this.shadowFormat),
+      'buffer: ' + this.canvas.width + 'x' + this.canvas.height,
+    ].join(' | ');
+  }
 
   _compile(type, src) {
     const gl = this.gl;
@@ -170,6 +234,7 @@ class Renderer {
       uniform sampler2DShadow uShadow;
       uniform vec3 uSunDir, uSunColor, uSkyColor, uGroundColor, uTint, uCamPos, uFogColor;
       uniform float uFogDensity, uShadowTexel, uAmbient, uAlpha, uEmissive, uExposure;
+      uniform float uShadowOn;
       out vec4 fragColor;
 
       // ACES-style filmic curve: keeps highlights in check without washing
@@ -179,6 +244,9 @@ class Renderer {
       }
 
       float shadowFactor(vec3 n){
+        // Never sample a shadow map we could not build — an unwritten depth
+        // texture reads as garbage and would plunge the whole scene into dark.
+        if (uShadowOn < 0.5) return 1.0;
         vec3 pc = vLightPos.xyz / vLightPos.w * 0.5 + 0.5;
         if (pc.z > 1.0 || pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0) return 1.0;
         float ndl = max(dot(n, -uSunDir), 0.0);
@@ -310,26 +378,45 @@ class Renderer {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
+  /**
+   * Depth-only framebuffers are the most driver-sensitive thing here, so try
+   * 24-bit, then 16-bit, and if neither is complete give up on shadows
+   * rather than sampling an undefined texture.
+   */
   _initShadowMap() {
     const gl = this.gl;
-    const s = this.shadowSize;
-    this.shadowTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, s, s, 0,
-      gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    this.shadowSupported = false;
+    for (const [fmt, type, name] of [
+      [gl.DEPTH_COMPONENT24, gl.UNSIGNED_INT, 'DEPTH_COMPONENT24'],
+      [gl.DEPTH_COMPONENT16, gl.UNSIGNED_SHORT, 'DEPTH_COMPONENT16'],
+    ]) {
+      if (this.shadowTex) gl.deleteTexture(this.shadowTex);
+      if (this.shadowFbo) gl.deleteFramebuffer(this.shadowFbo);
+      const s = this.shadowSize;
+      this.shadowTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, fmt, s, s, 0, gl.DEPTH_COMPONENT, type, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
 
-    this.shadowFbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
-    gl.drawBuffers([gl.NONE]);
-    gl.readBuffer(gl.NONE);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this.shadowFbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
+      gl.drawBuffers([gl.NONE]);
+      gl.readBuffer(gl.NONE);
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (status === gl.FRAMEBUFFER_COMPLETE) {
+        this.shadowSupported = true;
+        this.shadowFormat = name;
+        break;
+      }
+      this.shadowFormat = 'unsupported (status 0x' + status.toString(16) + ')';
+    }
   }
 
   _initSpriteBuffers() {
@@ -463,6 +550,7 @@ class Renderer {
 
   beginShadowPass() {
     const gl = this.gl;
+    if (!this.shadowSupported) return false;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
     gl.viewport(0, 0, this.shadowSize, this.shadowSize);
     gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -473,11 +561,12 @@ class Renderer {
     gl.cullFace(gl.FRONT); // front-face culling trims peter-panning
     gl.useProgram(this.depth.p);
     gl.uniformMatrix4fv(this.depth.u.uLightVP, false, this.lightVP);
+    return true;
   }
 
   drawShadow(mesh, model) {
     const gl = this.gl;
-    if (!mesh || !mesh.indexCount) return;
+    if (!this.shadowSupported || !mesh || !mesh.indexCount) return;
     gl.uniformMatrix4fv(this.depth.u.uModel, false, model || IDENTITY);
     gl.bindVertexArray(mesh.vao);
     gl.drawElements(gl.TRIANGLES, mesh.indexCount, mesh.indexType, 0);
@@ -485,6 +574,7 @@ class Renderer {
 
   endShadowPass() {
     const gl = this.gl;
+    if (!this.shadowSupported) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.cullFace(gl.BACK);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -533,6 +623,7 @@ class Renderer {
     gl.uniform3fv(u.uFogColor, this.fogColor);
     gl.uniform1f(u.uFogDensity, this.fogDensity);
     gl.uniform1f(u.uShadowTexel, 1 / this.shadowSize);
+    gl.uniform1f(u.uShadowOn, this.shadowSupported && this.shadowsOn !== false ? 1 : 0);
     gl.uniform1f(u.uAmbient, this.ambient);
     gl.uniform1f(u.uAlpha, 1);
     gl.uniform1f(u.uEmissive, 0);
@@ -675,6 +766,7 @@ class Renderer {
     gl.uniform3fv(u.uGroundColor, [0.3, 0.28, 0.25]);
     // The viewmodel is in view space, so light it from a fixed view-space angle.
     gl.uniform3fv(u.uSunDir, V.norm([-0.4, -0.75, -0.5]));
+    gl.uniform1f(u.uShadowOn, 0);
     gl.uniformMatrix4fv(u.uLightVP, false, VM_LIGHT_MAT);
     gl.enable(gl.DEPTH_TEST);
     gl.depthMask(true);
@@ -684,6 +776,7 @@ class Renderer {
     const gl = this.gl;
     const u = this.world.u;
     gl.uniform1f(u.uFogDensity, this.fogDensity);
+    gl.uniform1f(u.uShadowOn, this.shadowSupported && this.shadowsOn !== false ? 1 : 0);
     gl.uniform1f(u.uAmbient, this.ambient);
     gl.uniform3fv(u.uSunDir, this.sunDir);
     gl.uniform3fv(u.uSkyColor, this.skyColor);
