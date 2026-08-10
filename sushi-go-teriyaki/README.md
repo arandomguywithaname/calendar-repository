@@ -4,15 +4,21 @@ A browser version of the card-drafting game — pick one card, pass the rest —
 with three cards swapped off the standard menu. Play the bots, or pass the
 device around a table.
 
-Everything ships in a single self-contained `index.html`. No build step, no
-dependencies, no network. **Double-click it, or open it in any browser.**
+Everything ships in a single self-contained `index.html` — no build step and no
+CDN. **Double-click it, or drop the folder on any static host.**
 
 ```
 sushi-go-teriyaki/
-  index.html      the whole game — markup, styles, engine, UI
+  index.html      the whole game — markup, styles, engine, UI, PeerJS
   test-engine.js  node test-engine.js   (42 checks, no dependencies)
   README.md
 ```
+
+Three ways to play:
+
+- **Solo** against bots
+- **Pass and play** — 2–5 people sharing one device
+- **Online** — 2–5 people on separate devices, by quick match or table code
 
 ## The three new cards
 
@@ -109,6 +115,53 @@ stay on show throughout.
 
 Mixing works too: three people and two bots at a five-player table, for
 instance. The difficulty picker disappears when every seat is taken by a person.
+
+## Playing online, on separate devices
+
+Open **Online**, type a name, and either:
+
+- **Quick match** — you're dropped into the first table with room, with
+  whoever else is looking right now. If nobody is, you hold a table until
+  someone arrives, or start against bots.
+- **Start a private table** — you get a four-letter code (like `NIGI`) to send
+  your friends, who type it into **Join**.
+
+Up to five at a table. The host can start whenever a second player arrives;
+any seats still empty are simply not dealt in, or filled with bots.
+
+### How it connects
+
+Peer-to-peer, with no server of ours anywhere. Players are introduced by the
+free public [PeerJS](https://peerjs.com) signalling service, then the game
+data flows directly between browsers over WebRTC. That means the whole thing
+is still a static site — this folder on any static host is the entire
+deployment.
+
+The player who opens the table hosts it: their browser runs the rules and is
+the single source of truth, and sends every other player a personalised view
+of the table. **A view only ever contains that player's own hand** — nobody's
+cards are broadcast, so another player's browser cannot show what you are
+holding even if they went looking.
+
+What happens when things go wrong:
+
+- **Someone takes too long** — after 45 seconds the host plates a card for
+  them so the table isn't held up. Three misses in a row and a bot takes the
+  seat.
+- **Someone leaves** — a bot finishes the game in their seat.
+- **The host leaves** — the table closes and everyone is told. There is no
+  handover to a new host.
+
+Because it leans on a free public signalling service, this is built for
+playing with friends rather than as a service with uptime promises. If the
+service is unreachable the game says so plainly, and everything on your own
+device still works.
+
+### Testing it on one machine
+
+Add `?net=local` to the URL and the game swaps the peer connection for a
+`BroadcastChannel`, so several tabs in the same browser can share a table with
+no network at all. `?turnlimit=<seconds>` shortens the slow-player timeout.
 
 ## Tests
 
