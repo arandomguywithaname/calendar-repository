@@ -26,7 +26,7 @@ const EXPORTS = [
   "CARDS", "DECK_COUNTS", "JOKER_OPTIONS", "NIGIRI_PTS", "MAKI_ICONS",
   "DUMPLING_PTS", "HAND_SIZE", "buildDeck", "createGame", "dealRound",
   "playTurn", "roundOver", "tally", "scoreRound", "scorePuddings",
-  "standings", "aiChoose", "cardValue"
+  "standings", "aiChoose", "cardValue", "humanSeats"
 ];
 const E = vm.runInNewContext(source + "\n({" + EXPORTS.join(",") + "})", {});
 
@@ -79,6 +79,69 @@ check("deck keeps Sushi Go's distribution with the three swaps", () => {
 check("a joker cannot copy another joker", () => {
   eq(E.JOKER_OPTIONS.includes("joker"), false, "joker in its own option list");
   eq(E.JOKER_OPTIONS.length, Object.keys(E.CARDS).length - 1, "option count");
+});
+
+/* ---------------- seats: bots and people ---------------- */
+
+check("one human is the default, and they are called You", () => {
+  const s = E.createGame(4, "normal");
+  eq(s.humanCount, 1, "human count");
+  eq(s.players[0].human, true, "seat 0 is human");
+  eq(s.players[0].name, "You", "solo player name");
+  eq(s.players.filter(p => p.human).length, 1, "humans at the table");
+  eq(E.humanSeats(s).join(","), "0", "human seats");
+});
+
+check("pass-and-play seats every human before the bots", () => {
+  const s = E.createGame(5, "normal", null, 3);
+  eq(s.humanCount, 3, "human count");
+  eq(E.humanSeats(s).join(","), "0,1,2", "human seats");
+  eq(s.players.filter(p => !p.human).length, 2, "bots");
+  eq(s.players[0].name, "Player 1", "default name");
+  eq(s.players[2].name, "Player 3", "default name");
+});
+
+check("a full table of humans leaves no bots", () => {
+  const s = E.createGame(4, "normal", null, 4);
+  eq(s.players.every(p => p.human), true, "all human");
+  eq(E.humanSeats(s).length, 4, "human seats");
+});
+
+check("typed names are used, trimmed and length-capped", () => {
+  const s = E.createGame(3, "normal", null, 2, ["  Tim  ", "A".repeat(40)]);
+  eq(s.players[0].name, "Tim", "trimmed");
+  eq(s.players[1].name.length, 14, "capped");
+  eq(s.players[2].human, false, "third seat is a bot");
+});
+
+check("blank names fall back to Player N", () => {
+  const s = E.createGame(3, "normal", null, 3, ["Tim", "   ", ""]);
+  eq(s.players[0].name, "Tim", "given name");
+  eq(s.players[1].name, "Player 2", "blank falls back");
+  eq(s.players[2].name, "Player 3", "empty falls back");
+});
+
+check("human count cannot exceed or undercut the table", () => {
+  eq(E.createGame(3, "normal", null, 9).humanCount, 3, "clamped down to the table size");
+  eq(E.createGame(3, "normal", null, 0).humanCount, 1, "clamped up to one");
+});
+
+check("a pass-and-play game plays out and scores like any other", () => {
+  const s = E.createGame(4, "normal", null, 3, ["Tim", "Ana", "Bo"]);
+  for (let round = 1; round <= 3; round++) {
+    E.dealRound(s);
+    while (!E.roundOver(s)) {
+      E.playTurn(s, s.players.map((_, seat) => E.aiChoose(s, seat)));
+    }
+    const plated = s.players.reduce((sum, p) => sum + p.tableau.length, 0);
+    eq(plated, 4 * s.handSize, "cards plated in round " + round);
+    E.scoreRound(s);
+  }
+  E.scorePuddings(s);
+  s.players.forEach((p, i) => {
+    if (!Number.isFinite(p.score)) throw new Error("seat " + i + " scored " + p.score);
+  });
+  eq(E.standings(s).length, 4, "standings");
 });
 
 /* ---------------- classic scoring ---------------- */

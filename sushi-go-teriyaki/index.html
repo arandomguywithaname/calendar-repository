@@ -120,6 +120,32 @@ legend{
 .choice[aria-checked="true"]{
   background:var(--washi);border-color:var(--washi);color:var(--ink);font-weight:700;
 }
+.field-note{
+  margin:0;font-size:.75rem;line-height:1.5;color:var(--dim);
+}
+.names{
+  display:grid;gap:.4rem;margin-top:.3rem;
+  grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+}
+.name-input{
+  width:100%;padding:.6rem .7rem;border-radius:8px;
+  background:var(--panel-2);border:1px solid var(--line);
+  color:var(--washi);font-family:var(--display);font-size:.85rem;
+}
+.name-input::placeholder{color:var(--dim)}
+.name-input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+[hidden]{display:none !important}
+
+/* device hand-off */
+.curtain{display:flex;flex-direction:column;align-items:center;text-align:center}
+.curtain-jp{
+  font-family:var(--mincho);font-size:.95rem;letter-spacing:.5em;
+  color:var(--gold);padding-left:.5em;
+}
+.curtain h2{margin-top:.6rem}
+.curtain .sub{margin-bottom:.4rem}
+.curtain .sheet-actions{width:100%;max-width:340px}
+
 .btn{
   padding:.85rem 1.2rem;border-radius:8px;border:1px solid var(--line);
   background:var(--panel-2);text-align:center;font-weight:600;font-size:.95rem;
@@ -441,12 +467,19 @@ tfoot td{border-bottom:0;color:var(--muted)}
       <p class="menu-intro">
         The drafting game you know — pick one card, pass the rest — with three
         courses off the standard menu: <b>Teriyaki</b>, <b>Noodles</b> and the <b>Joker</b>.
+        Play the bots, or pass the device around a table.
       </p>
       <fieldset>
         <legend>Players</legend>
         <div class="choices" id="playerChoices" role="radiogroup" aria-label="Number of players"></div>
       </fieldset>
       <fieldset>
+        <legend>Playing in person</legend>
+        <div class="choices" id="humanChoices" role="radiogroup" aria-label="Number of human players"></div>
+        <p class="field-note" id="humanNote"></p>
+        <div class="names" id="nameInputs"></div>
+      </fieldset>
+      <fieldset id="diffField">
         <legend>Opponents</legend>
         <div class="choices" id="diffChoices" role="radiogroup" aria-label="Difficulty"></div>
       </fieldset>
@@ -476,11 +509,11 @@ tfoot td{border-bottom:0;color:var(--muted)}
         <div class="section-label">At the counter</div>
         <div class="seats" id="seats"></div>
       </section>
-      <section class="board-plate">
-        <div class="section-label">Your plate</div>
+      <section class="board-plate" id="plateSection">
+        <div class="section-label" id="plateLabel">Your plate</div>
         <div class="tray-wrap">
           <div class="tray-head">
-            <span class="who">You</span>
+            <span class="who" id="trayWho">You</span>
             <span class="live">round <b id="liveRound">0</b> pts</span>
             <span class="live">total <b id="liveTotal">0</b></span>
             <span class="live">🍮 <b id="livePudding">0</b></span>
@@ -556,24 +589,40 @@ function buildDeck(rnd){
   return shuffle(deck, rnd);
 }
 
-function createGame(numPlayers, difficulty, rnd){
-  var names = shuffle(BOT_NAMES, rnd).slice(0, numPlayers-1);
-  var players = [{name:"You", human:true}];
-  for(var i=0;i<numPlayers-1;i++) players.push({name:names[i], human:false});
-  players = players.map(function(p,i){
-    return {
-      name:p.name, human:p.human, seat:i,
+/* Seats 0..humanCount-1 are people sharing the device; the rest are bots. */
+function createGame(numPlayers, difficulty, rnd, humanCount, humanNames){
+  humanCount = Math.max(1, Math.min(humanCount || 1, numPlayers));
+  var botNames = shuffle(BOT_NAMES, rnd).slice(0, numPlayers - humanCount);
+  var players = [];
+  for(var i=0;i<numPlayers;i++){
+    var human = i < humanCount;
+    var name;
+    if(human){
+      name = (humanNames && humanNames[i] && String(humanNames[i]).trim())
+        ? String(humanNames[i]).trim().slice(0, 14)
+        : (humanCount === 1 ? "You" : "Player " + (i + 1));
+    } else {
+      name = botNames[i - humanCount];
+    }
+    players.push({
+      name:name, human:human, seat:i,
       hand:[], tableau:[], pending:0,
       score:0, puddings:0, roundScores:[]
-    };
-  });
+    });
+  }
   var state = {
-    players:players, numPlayers:numPlayers,
+    players:players, numPlayers:numPlayers, humanCount:humanCount,
     difficulty:difficulty || "normal",
     deck:buildDeck(rnd), handSize:HAND_SIZE[numPlayers],
     round:0, turn:0, phase:"idle", rnd:rnd || Math.random
   };
   return state;
+}
+
+function humanSeats(state){
+  var seats = [];
+  state.players.forEach(function(p, i){ if(p.human) seats.push(i); });
+  return seats;
 }
 
 function dealRound(state){
@@ -801,9 +850,18 @@ var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: r
 var wait = function(ms){ return new Promise(function(r){ setTimeout(r, reduced ? 0 : ms); }); };
 
 var SEAT_COLORS = ["#D9A441","#6E8A4E","#33558B","#A64B2A","#2E7F86"];
-var setup = {players:4, difficulty:"normal"};
+var setup = {players:4, humans:1, difficulty:"normal", names:[]};
 var game = null;
 var awaitingHuman = null;
+/* Whose eyes the board is drawn for. null = the neutral, hand-free view
+   everyone can look at (reveals, and while the device changes hands). */
+var viewSeat = 0;
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];
+  });
+}
 
 /* ---- card rendering ---- */
 
@@ -862,7 +920,7 @@ function chipEl(entry, fresh){
 
 /* ---- menu ---- */
 
-function buildChoices(host, values, labels, key){
+function buildChoices(host, values, labels, key, onChange){
   host.innerHTML = "";
   values.forEach(function(v, i){
     var b = document.createElement("button");
@@ -876,28 +934,68 @@ function buildChoices(host, values, labels, key){
       Array.prototype.forEach.call(host.children, function(child){
         child.setAttribute("aria-checked", child === b ? "true" : "false");
       });
+      if(onChange) onChange(v);
     });
     host.appendChild(b);
   });
 }
 
+/* The human-count row depends on the player count, so it is rebuilt
+   whenever either changes — along with the name fields and the bot
+   difficulty picker, which is pointless once every seat is taken. */
+function syncSetup(){
+  if(setup.humans > setup.players) setup.humans = setup.players;
+
+  var counts = [], labels = [];
+  for(var n=1;n<=setup.players;n++){ counts.push(n); labels.push(String(n)); }
+  buildChoices($("humanChoices"), counts, labels, "humans", syncSetup);
+
+  var bots = setup.players - setup.humans;
+  $("humanNote").textContent = setup.humans === 1
+    ? "One player, " + bots + " bot" + (bots === 1 ? "" : "s") + "."
+    : setup.humans + " people sharing this device" +
+      (bots > 0 ? " plus " + bots + " bot" + (bots === 1 ? "" : "s") : "") +
+      " — it passes around, hands stay hidden.";
+
+  var names = $("nameInputs");
+  names.innerHTML = "";
+  if(setup.humans > 1){
+    for(var i=0;i<setup.humans;i++){
+      (function(seat){
+        var input = document.createElement("input");
+        input.className = "name-input";
+        input.type = "text";
+        input.maxLength = 14;
+        input.placeholder = "Player " + (seat + 1);
+        input.value = setup.names[seat] || "";
+        input.setAttribute("aria-label", "Name for player " + (seat + 1));
+        input.addEventListener("input", function(){ setup.names[seat] = input.value; });
+        names.appendChild(input);
+      })(i);
+    }
+  }
+
+  $("diffField").hidden = bots === 0;
+}
+
 /* ---- board ---- */
 
-function renderSeats(){
+function renderSeats(view){
   var host = $("seats");
   host.innerHTML = "";
   var lead = Math.max.apply(null, game.players.map(function(p){ return p.score; }));
-  for(var i=1;i<game.players.length;i++){
-    var p = game.players[i];
+  game.players.forEach(function(p, i){
+    if(i === view) return;                 /* their own plate is shown below */
     var seat = document.createElement("div");
     seat.className = "seat" + (p.score === lead && lead > 0 ? " is-leader" : "");
+    seat.setAttribute("data-seat", i);
 
     var top = document.createElement("div");
     top.className = "seat-top";
     top.innerHTML =
       "<span class=\"avatar\" style=\"background:" + SEAT_COLORS[i % SEAT_COLORS.length] + "\">" +
-        p.name.charAt(0) + "</span>" +
-      "<span class=\"seat-name\">" + p.name + "</span>" +
+        esc(p.name.charAt(0)) + "</span>" +
+      "<span class=\"seat-name\">" + esc(p.name) + "</span>" +
       (p.pending > 0 ? "<span class=\"seal-mini\" title=\"Teriyaki ready\">倍</span>" : "") +
       "<span class=\"seat-score\">" + p.score + "</span>";
 
@@ -907,11 +1005,17 @@ function renderSeats(){
 
     seat.appendChild(top); seat.appendChild(cards);
     host.appendChild(seat);
-  }
+  });
 }
 
-function renderTray(){
-  var me = game.players[0];
+function renderTray(view){
+  var section = $("plateSection");
+  if(view === null){ section.hidden = true; return; }
+  section.hidden = false;
+
+  var me = game.players[view];
+  $("trayWho").textContent = me.name;
+  $("plateLabel").textContent = game.humanCount > 1 ? me.name + "'s plate" : "Your plate";
   var tray = $("tray");
   tray.innerHTML = "";
   if(!me.tableau.length){
@@ -932,6 +1036,11 @@ function renderTray(){
     : "";
 }
 
+function hideHand(){
+  $("hand").innerHTML = "";
+  prompt("", false);
+}
+
 function renderHud(){
   var pips = $("pips");
   pips.innerHTML = "";
@@ -947,8 +1056,8 @@ function renderHud(){
 function renderHand(interactive){
   var hand = $("hand");
   hand.innerHTML = "";
-  var me = game.players[0];
-  me.hand.forEach(function(id, idx){
+  if(viewSeat === null) return;
+  game.players[viewSeat].hand.forEach(function(id, idx){
     var el = cardEl(id, {clickable:interactive});
     if(interactive){
       el.addEventListener("click", function(){ humanPick(idx, el); });
@@ -957,11 +1066,12 @@ function renderHand(interactive){
   });
 }
 
-function render(interactive){
+/* Draw the whole board from one seat's point of view (null = neutral). */
+function renderBoard(view){
+  viewSeat = view;
   renderHud();
-  renderSeats();
-  renderTray();
-  renderHand(interactive);
+  renderSeats(view);
+  renderTray(view);
 }
 
 function prompt(text, waiting){
@@ -989,9 +1099,8 @@ function closeSheet(){
 /* ---- human turn ---- */
 
 function humanPick(index, el){
-  if(!awaitingHuman) return;
-  var me = game.players[0];
-  var card = me.hand[index];
+  if(!awaitingHuman || viewSeat === null) return;
+  var card = game.players[viewSeat].hand[index];
   if(card === "joker"){
     openJokerPicker(function(choice){
       closeSheet();
@@ -1036,24 +1145,70 @@ function openJokerPicker(done){
 
 /* ---- the loop ---- */
 
+/* Hand the device over without leaking the last player's cards. */
+function curtain(seat){
+  return new Promise(function(resolve){
+    var name = esc(game.players[seat].name);
+    openSheet(
+      "<div class=\"curtain\">" +
+        "<span class=\"curtain-jp\">交代</span>" +
+        "<h2>Pass the device to " + name + "</h2>" +
+        "<p class=\"sub\">Everyone else, eyes up — " + name + "'s hand is about to show.</p>" +
+        "<div class=\"sheet-actions\">" +
+          "<button class=\"btn btn-primary\" id=\"readyBtn\" type=\"button\">I'm " + name + " — show my hand</button>" +
+        "</div>" +
+      "</div>",
+      function(ov){
+        ov.querySelector("#readyBtn").addEventListener("click", function(){
+          closeSheet();
+          resolve();
+        });
+      }
+    );
+  });
+}
+
 async function runRound(){
   dealRound(game);
-  render(false);
+  var seats = humanSeats(game);
+  var hotSeat = seats.length > 1;          /* more than one person on this device */
+  var neutral = hotSeat ? null : 0;        /* the between-turns view */
+
+  renderBoard(neutral);
+  hideHand();
   await wait(320);
 
   while(!roundOver(game)){
-    render(true);
-    prompt("Choose a card to plate", true);
+    var choices = new Array(game.players.length);
 
-    var humanChoice = await new Promise(function(resolve){ awaitingHuman = resolve; });
-    if(humanChoice === null) throw new Abort();   /* player quit mid-turn */
+    for(var k=0;k<seats.length;k++){
+      var seat = seats[k];
+      if(hotSeat){
+        renderBoard(null);
+        hideHand();
+        await curtain(seat);
+      }
+      renderBoard(seat);
+      renderHand(true);
+      prompt(hotSeat ? game.players[seat].name + " — choose a card"
+                     : "Choose a card to plate", true);
 
-    var choices = [humanChoice];
-    for(var i=1;i<game.players.length;i++) choices.push(aiChoose(game, i));
+      var choice = await new Promise(function(resolve){ awaitingHuman = resolve; });
+      if(choice === null) throw new Abort();   /* player quit mid-turn */
+      choices[seat] = choice;
+    }
+
+    if(hotSeat){
+      renderBoard(null);
+      hideHand();
+    }
+    for(var i=0;i<game.players.length;i++){
+      if(!game.players[i].human) choices[i] = aiChoose(game, i);
+    }
 
     prompt("Revealing…", false);
     var reveals = playTurn(game, choices);
-    await animateReveals(reveals);
+    await animateReveals(reveals, neutral);
 
     $("hud").classList.add("passing");
     prompt("Hands pass to the left", false);
@@ -1063,27 +1218,27 @@ async function runRound(){
   }
 
   var rows = scoreRound(game);
-  render(false);
-  prompt("", false);
+  renderBoard(neutral);
+  hideHand();
   await wait(280);
   await showRoundSheet(rows);
 }
 
-function animateReveals(reveals){
+function animateReveals(reveals, view){
   renderHud();
-  renderTray();
-  var seatHosts = Array.prototype.slice.call(document.querySelectorAll(".seat .seat-cards"));
+  renderTray(view);
   reveals.forEach(function(r){
-    if(r.seat === 0) return;
-    var host = seatHosts[r.seat - 1];
+    if(r.seat === view) return;            /* that one lands in the tray below */
+    var host = document.querySelector(".seat[data-seat=\"" + r.seat + "\"] .seat-cards");
     if(host) host.appendChild(chipEl(r.entry, true));
   });
-  /* my own newest chip re-rendered with the drop animation */
-  var tray = $("tray");
-  if(tray.lastElementChild && tray.lastElementChild.classList.contains("chip")){
-    tray.lastElementChild.classList.add("fresh");
+  if(view !== null){
+    var tray = $("tray");
+    if(tray.lastElementChild && tray.lastElementChild.classList.contains("chip")){
+      tray.lastElementChild.classList.add("fresh");
+    }
   }
-  return wait(560).then(function(){ renderSeats(); });
+  return wait(560).then(function(){ renderSeats(view); });
 }
 
 function scoreTable(rows, opts){
@@ -1094,8 +1249,8 @@ function scoreTable(rows, opts){
   var body = game.players.map(function(p, i){
     var r = rows[i];
     var maki = r.makiBase + (r.noodles ? " → " + fmt(r.makiTotal) : "");
-    return "<tr class=\"" + (i === 0 ? "me" : "") + "\">" +
-      "<td>" + p.name + (r.unusedTeriyaki ? " <span title=\"unused Teriyaki\">·倍" + r.unusedTeriyaki + "</span>" : "") + "</td>" +
+    return "<tr class=\"" + (p.human ? "me" : "") + "\">" +
+      "<td>" + esc(p.name) + (r.unusedTeriyaki ? " <span title=\"unused Teriyaki\">·倍" + r.unusedTeriyaki + "</span>" : "") + "</td>" +
       "<td>" + r.tempuraPts + "</td>" +
       "<td>" + r.dumplingPts + "</td>" +
       "<td>" + r.nigiriPts + "</td>" +
@@ -1113,7 +1268,7 @@ function fmt(n){ return (Math.round(n * 100) / 100).toString(); }
 function showRoundSheet(rows){
   return new Promise(function(resolve){
     var noodlers = game.players.map(function(p,i){
-      return rows[i].noodles ? p.name + " " + rows[i].makiBase + " → " + fmt(rows[i].makiTotal) : null;
+      return rows[i].noodles ? esc(p.name) + " " + rows[i].makiBase + " → " + fmt(rows[i].makiTotal) : null;
     }).filter(Boolean);
 
     openSheet(
@@ -1141,11 +1296,11 @@ function showFinal(puddingPts){
   var tied = order.filter(function(o){ return o.p.score === win.p.score; });
   var headline = tied.length > 1
     ? "Dead heat at " + win.p.score
-    : (win.i === 0 ? "You win" : win.p.name + " wins");
+    : ((win.p.human && game.humanCount === 1) ? "You win" : esc(win.p.name) + " wins");
 
   var body = order.map(function(o, rank){
-    return "<tr class=\"" + (o.i === 0 ? "me" : "") + "\">" +
-      "<td>" + (rank + 1) + ". " + o.p.name + "</td>" +
+    return "<tr class=\"" + (o.p.human ? "me" : "") + "\">" +
+      "<td>" + (rank + 1) + ". " + esc(o.p.name) + "</td>" +
       "<td>" + o.p.roundScores.join(" · ") + "</td>" +
       "<td>" + o.p.puddings + "</td>" +
       "<td>" + (puddingPts[o.i] > 0 ? "+" : "") + puddingPts[o.i] + "</td>" +
@@ -1178,7 +1333,7 @@ function showFinal(puddingPts){
 function Abort(){}
 
 async function startGame(){
-  game = createGame(setup.players, setup.difficulty);
+  game = createGame(setup.players, setup.difficulty, null, setup.humans, setup.names);
   showScreen("game");
   try {
     for(var r=0;r<3;r++){
@@ -1189,8 +1344,8 @@ async function startGame(){
     throw err;
   }
   var puddingPts = scorePuddings(game);
-  render(false);
-  prompt("", false);
+  renderBoard(game.humanCount > 1 ? null : 0);
+  hideHand();
   showFinal(puddingPts);
 }
 
@@ -1217,6 +1372,9 @@ function showRules(){
     "<p>Everyone is dealt a hand. Each turn you all plate <b>one</b> card face up at the " +
     "same time, then hand your remaining cards to the player on your left. " +
     "Three rounds, then the highest score wins.</p>" +
+    "<p><b>Playing in person:</b> set how many of you are sharing the device. " +
+    "It asks for each player in turn behind a hand-off screen, so nobody sees " +
+    "anyone else's cards, then reveals every plate at once.</p>" +
     "<h3>The new menu</h3><div class=\"rulecards\">" +
       ruleCard("teriyaki", "Scores nothing by itself. The next card you plate " +
         "<b>counts twice</b> — two gyoza from one, double maki icons, double nigiri points. " +
@@ -1244,8 +1402,9 @@ function showRules(){
 
 /* ---- boot ---- */
 
-buildChoices($("playerChoices"), [2,3,4,5], ["2","3","4","5"], "players");
+buildChoices($("playerChoices"), [2,3,4,5], ["2","3","4","5"], "players", syncSetup);
 buildChoices($("diffChoices"), ["easy","normal","hard"], ["Easy","Normal","Hard"], "difficulty");
+syncSetup();
 $("startBtn").addEventListener("click", startGame);
 $("rulesBtn").addEventListener("click", showRules);
 $("hudRules").addEventListener("click", showRules);

@@ -1,7 +1,8 @@
 # Sushi Go: Teriyaki Edition
 
 A browser version of the card-drafting game — pick one card, pass the rest —
-with three cards swapped off the standard menu.
+with three cards swapped off the standard menu. Play the bots, or pass the
+device around a table.
 
 Everything ships in a single self-contained `index.html`. No build step, no
 dependencies, no network. **Double-click it, or open it in any browser.**
@@ -9,7 +10,7 @@ dependencies, no network. **Double-click it, or open it in any browser.**
 ```
 sushi-go-teriyaki/
   index.html      the whole game — markup, styles, engine, UI
-  test-engine.js  node test-engine.js   (28 checks, no dependencies)
+  test-engine.js  node test-engine.js   (35 checks, no dependencies)
   README.md
 ```
 
@@ -73,14 +74,34 @@ Unchanged from the game you know:
 
 ## How a game runs
 
-2–5 players (you plus bots), three rounds, hands of 10 / 9 / 8 / 7 cards
-depending on the count. Every turn all players plate one card at the same time,
-then hands pass to the left. Highest score after three rounds and the pudding
-contest wins.
+2–5 players, three rounds, hands of 10 / 9 / 8 / 7 cards depending on the
+count. Every turn all players plate one card at the same time, then hands pass
+to the left. Highest score after three rounds and the pudding contest wins.
 
 Opponents come in Easy, Normal and Hard — the difficulty sets how much noise is
 added to their card evaluation, and all three know to save a big card for a
 pending Teriyaki.
+
+## Playing against people
+
+Set **Playing in person** to however many of you are sharing the device — up to
+a full table with no bots at all. Name everyone, or leave the fields blank for
+Player 1, Player 2 and so on.
+
+Each turn the game asks every person in seat order, one at a time:
+
+1. a hand-off screen says **"Pass the device to <name>"** and nothing else is
+   on screen — the previous player's cards are already cleared
+2. that player taps to reveal, and sees only their own hand and their own plate
+3. once everyone has chosen, every plate is revealed at once and the hands pass
+
+Because the whole point of drafting is not knowing what your neighbour holds,
+the hand rail is emptied before each hand-off, and a player is only ever
+rendered their own cards — never another seat's. Played cards are public and
+stay on show throughout.
+
+Mixing works too: three people and two bots at a five-player table, for
+instance. The difficulty picker disappears when every seat is taken by a person.
 
 ## Tests
 
@@ -92,4 +113,5 @@ The engine is written as a pure, DOM-free section of `index.html` marked by
 `ENGINE START` / `ENGINE END`. The test file extracts that section and runs it
 in a bare VM, so the rules are covered without a browser: card doubling,
 noodle arithmetic, joker substitution, the maki and pudding contests, hand
-passing, and 300 complete simulated games across 2–5 players.
+passing, seat composition for pass-and-play, and 300 complete simulated games
+across 2–5 players.
