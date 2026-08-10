@@ -813,7 +813,10 @@ function dealRound(state){
   for(var i=0;i<state.players.length;i++){
     var p = state.players[i];
     p.tableau = [];
-    p.pending = 0;
+    /* p.pending deliberately survives the deal: a double waits for that
+       player's next card even when it falls in the next round. Wiping it
+       here would mean a Teriyaki plated on the last turn could never land,
+       and holding one back to the last turn would be a way to deny it. */
     p.hand = state.deck.splice(0, state.handSize);
   }
   state.phase = "playing";
@@ -1456,7 +1459,7 @@ function scoreTable(rows, opts){
     var r = rows[i];
     var maki = r.makiBase + (r.noodles ? " → " + fmt(r.makiTotal) : "");
     return "<tr class=\"" + (p.human ? "me" : "") + "\">" +
-      "<td>" + esc(p.name) + (r.unusedTeriyaki ? " <span title=\"unused Teriyaki\">·倍" + r.unusedTeriyaki + "</span>" : "") + "</td>" +
+      "<td>" + esc(p.name) + (r.unusedTeriyaki ? " <span title=\"Teriyaki double still waiting for their next card\">·倍" + r.unusedTeriyaki + "</span>" : "") + "</td>" +
       "<td>" + r.tempuraPts + "</td>" +
       "<td>" + r.dumplingPts + "</td>" +
       "<td>" + r.nigiriPts + "</td>" +
@@ -1590,7 +1593,9 @@ function showRules(){
         "It travels with the hand you pass, and doubles the next card played by " +
         "the player on your left — two gyoza from one, double maki icons, double " +
         "nigiri points. It can't double a card played on the same turn, and a " +
-        "Teriyaki card is never itself doubled.") +
+        "Teriyaki card is never itself doubled. The double waits for their next " +
+        "card however long that takes, carrying into the next round, so plating " +
+        "one late doesn't waste it.") +
       ruleCard("noodle", "At the end of the round it boosts your maki count by " +
         "<b>half again</b>. 6 maki becomes 9. Two bowls of noodles add half each.") +
       ruleCard("joker", "Plate it and name any other card. It <b>becomes</b> that card " +

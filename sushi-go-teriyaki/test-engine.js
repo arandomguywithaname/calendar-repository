@@ -296,6 +296,51 @@ check("any scoring card spends a waiting double, so they do not pile up", () => 
   eq(E.tally(s.players[1].tableau).puddings, 3, "one plain pudding, one doubled");
 });
 
+check("a double waits across the round boundary for their next card", () => {
+  const s = freshGame(3);
+  // Served on the very last card of the round: there is no next card in this
+  // round, so it has to survive the deal or the Teriyaki was wasted.
+  s.players.forEach(p => { p.hand = ["pudding"]; });
+  s.players[0].hand = ["teriyaki"];
+  turn(s, [0, 0, 0]);
+  eq(E.roundOver(s), true, "round is over");
+  eq(s.players[1].pending, 1, "double served on the last turn");
+
+  E.scoreRound(s);
+  E.dealRound(s);
+  eq(s.players[1].pending, 1, "double survived the deal");
+
+  s.players.forEach(p => { p.hand = ["dumpling"]; });
+  turn(s, [0, 0, 0]);
+  eq(E.tally(s.players[1].tableau).dumpling, 2, "it landed on their first card of the new round");
+  eq(s.players[1].pending, 0, "and is spent");
+});
+
+check("holding teriyaki to the last turn cannot deny the double", () => {
+  // The bug this guards: while pending was wiped on the deal, plating a
+  // Teriyaki last meant nobody ever got the double, which made dumping it
+  // last the correct play and the card dead.
+  const s = freshGame(4);
+  let served = 0;
+  for (let round = 1; round <= 3; round++) {
+    if (round > 1) E.dealRound(s);
+    while (!E.roundOver(s)) {
+      const picks = s.players.map((p, seat) =>
+        ({ index: Math.max(0, p.hand.indexOf("teriyaki")), jokerAs: "pudding" }));
+      // seat 0 always holds its teriyaki back to the very last turn
+      picks[0] = { index: s.players[0].hand.length - 1, jokerAs: "pudding" };
+      const plated = s.players[0].hand[picks[0].index];
+      E.playTurn(s, picks);
+      if (plated === "teriyaki") served++;
+    }
+    E.scoreRound(s);
+  }
+  const landed = s.players.reduce((sum, p) => sum + p.tableau.filter(e => e.x2).length, 0);
+  if (served > 0 && landed === 0) {
+    throw new Error(served + " teriyaki served but not one double ever landed");
+  }
+});
+
 check("teriyaki alone is worth nothing", () => {
   const t = E.tally(plate(["teriyaki", "teriyaki"]));
   eq(t.tempuraPts + t.dumplingPts + t.nigiriPts, 0, "points from bare teriyaki");

@@ -43,11 +43,18 @@ Because every plate is revealed at the same time, a Teriyaki can never double a
 card played on the turn it was served — it waits for the receiving player's
 next card. A Teriyaki card is never itself doubled, so a player holding a
 waiting double who plates a Teriyaki keeps it for later; that is the only way
-doubles stack up. A double nobody spent before the round ends is worth nothing.
+doubles stack up.
 
-It is a card you give away, so it is usually one you plate when nothing else in
-your hand is worth taking — and worth thinking about, since it feeds the player
-you are already handing your best leftovers to.
+**A waiting double keeps waiting**, across the end of a round and into the
+next, until that player plates a card it can land on. Only the very end of the
+game strands one.
+
+That last part matters more than it looks. While a double expired with the
+round, plating your Teriyaki on the final turn meant nobody ever got it — so
+holding it back was simply the right play, and the card did nothing in 96% of
+games. Carrying the double removes the dodge: it will land sooner or later
+whatever you do, so the question becomes *when* it helps your neighbour least,
+not whether you can waste it entirely.
 
 ### Noodles
 
