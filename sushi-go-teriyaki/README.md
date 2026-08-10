@@ -10,7 +10,7 @@ dependencies, no network. **Double-click it, or open it in any browser.**
 ```
 sushi-go-teriyaki/
   index.html      the whole game — markup, styles, engine, UI
-  test-engine.js  node test-engine.js   (35 checks, no dependencies)
+  test-engine.js  node test-engine.js   (42 checks, no dependencies)
   README.md
 ```
 
@@ -18,23 +18,30 @@ sushi-go-teriyaki/
 
 | Replaces | New card | What it does |
 |---|---|---|
-| Sashimi | **Teriyaki** 照り焼き | Scores nothing itself. The **next card you plate counts twice**. |
+| Sashimi | **Teriyaki** 照り焼き | Scores nothing, and never works on yourself. It doubles a card for **the player you pass your hand to**. |
 | Chopsticks | **Noodles** 麺 | At the end of the round, your **maki count goes up by half**. |
 | Wasabi | **Joker** 化札 | **Becomes any other card** you name when you plate it. |
 
 ### Teriyaki
 
-Plate it, pass your hand on as usual, and the next card you plate counts as two
-copies of itself:
+**Teriyaki never works on yourself.** Plate it and it travels with the hand you
+pass, serving a double to the player on your left — the one who receives your
+cards. The next card *they* plate counts as two copies of itself:
 
-- a gyoza after Teriyaki counts as **two gyoza** (so 1 gyoza scores 3, not 1)
+- a gyoza counts as **two gyoza** (so 1 gyoza scores 3, not 1)
 - a Maki x3 counts as **6 maki icons**
 - a squid nigiri scores **6** instead of 3
 - a lone tempura becomes **a complete pair** — 5 points from one card
 
-A Teriyaki never doubles another Teriyaki. Plate two in a row and they simply
-queue up, doubling your next two scoring cards. An unused Teriyaki is worth
-nothing at the end of the round.
+Because every plate is revealed at the same time, a Teriyaki can never double a
+card played on the turn it was served — it waits for the receiving player's
+next card. A Teriyaki card is never itself doubled, so a player holding a
+waiting double who plates a Teriyaki keeps it for later; that is the only way
+doubles stack up. A double nobody spent before the round ends is worth nothing.
+
+It is a card you give away, so it is usually one you plate when nothing else in
+your hand is worth taking — and worth thinking about, since it feeds the player
+you are already handing your best leftovers to.
 
 ### Noodles
 
@@ -56,8 +63,8 @@ Noodles with no maki behind them do nothing.
 
 Plate the Joker and name any other card in the game. It *is* that card for the
 rest of the round — name Maki x3 and your noodles boost it, name gyoza and it
-counts toward your gyoza run. A Joker can't copy another Joker, and a Teriyaki
-will happily double it.
+counts toward your gyoza run. A Joker can't copy another Joker, and a double
+served to you by a Teriyaki will happily double it.
 
 ## The rest of the menu
 
