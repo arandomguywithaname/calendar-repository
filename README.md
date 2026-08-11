@@ -1,79 +1,161 @@
-# Calendar Planning Agent
+# Inbox Reader
 
-An AI-powered agent that parses natural language (or images) into Google Calendar events using Claude.
+Reads your Telegram, WhatsApp and Slack chats, and gives you one page that says
+what you missed — plus an AI you can just talk to about your messages.
 
-## Example
+Powered by Claude (`claude-opus-5`).
 
 ```
-Event description: Schedule an event called meeting 1, on Saturday March 15, 2026,
-also add a conference link with contacts @leo and @mia,
-also add a location called 12311 Templeton Street
+Sign in  →  pick your apps and chats  →  read the summary  →  ask follow-ups
 ```
 
-The agent extracts:
-- **Title:** meeting 1
-- **Date:** 2026-03-15T09:00:00
-- **Location:** 12311 Templeton Street
-- **Attendees:** @leo, @mia (resolved via `contacts.json`)
-- **Conference link:** Google Meet auto-generated
+## What it does
+
+- **One dashboard for everything.** A single "What you missed" summary across
+  every app you've connected, with the things that actually need you pulled to
+  the top and the group-chat noise pushed down.
+- **You choose the sources.** Per-app and per-chat checkboxes, plus an
+  unread-only switch. Your selection is saved to your account.
+- **Ask in your own words.** Not menu commands — real sentences:
+  *"hey uhhh can you give me a summary of my unread chats pls?"*,
+  *"anything from Lena today or nah"*,
+  *"what did I miss in the incidents channel while I was out"*.
+  The assistant answers from your actual messages and follows the thread across
+  questions.
+- **Runs with no credentials.** Every connector falls back to a realistic demo
+  inbox, so the whole app works before you've configured anything.
 
 ## Setup
 
-### 1. Install dependencies
-
 ```bash
 npm install
+cp .env.example .env    # fill in ANTHROPIC_API_KEY at minimum
+npm run web             # http://localhost:3000
 ```
 
-### 2. Configure environment
+`ANTHROPIC_API_KEY` is the only variable required for the summary and the
+ask box to work. Everything else is optional and degrades to demo data.
 
-Copy `.env.example` to `.env` and fill in your keys:
+## Sign-in
 
-```bash
-cp .env.example .env
+Sign-in is **Google OAuth**: the button sends you to Google's own consent
+screen, you type your password on `accounts.google.com`, and the app gets back
+a code it exchanges for your name and email. Your account is created on first
+sign-in.
+
+The app never asks for, receives, or stores your Gmail password. A page that
+collected one directly would be a phishing form — and Google blocks sign-ins
+made that way, so it wouldn't work even if it were built.
+
+To enable it, create an OAuth client at
+[console.cloud.google.com](https://console.cloud.google.com), then set:
+
+```
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
 ```
 
-**Required:**
-- `ANTHROPIC_API_KEY` — your Claude API key
+The same redirect URI must be listed on the OAuth client.
 
-**Google Calendar (OAuth2):**
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_REFRESH_TOKEN`
+**Without Google configured**, a local sign-in form stands in: enter an email,
+get an account, no password involved. It's labelled as such in the UI and turns
+itself off as soon as Google credentials are present (`ALLOW_DEMO_SIGNIN=true`
+keeps it on alongside Google; `false` disables it entirely).
 
-### 3. Configure contacts
+Sessions are signed cookies — set `SESSION_SECRET` or they reset on restart.
 
-Edit `contacts.json` to map @mentions to email addresses:
+## Connecting your apps
 
-```json
-{
-  "leo": "leo@company.com",
-  "mia": "mia@company.com"
-}
-```
+Each app is independent. Configure the ones you want; the rest stay on demo data.
 
-### 4. Run
+### Telegram — `TELEGRAM_BOT_TOKEN`
 
-```bash
-npm run dev
-```
+Create a bot with [@BotFather](https://t.me/botfather), then add it to the
+groups and channels you want summarised. The reader polls `getUpdates` and
+buffers what arrives.
 
-## Features
+> The Bot API only shows a bot what it can see: chats it was added to, and
+> channels where it's an admin. **It cannot read your personal DM history** —
+> that requires an MTProto user client (Telethon/TDLib) signed in as you, which
+> is a different auth model and isn't implemented here.
 
-- **Natural language parsing** — describe events in plain English
-- **Image support** — upload a screenshot of an event and the agent extracts details
-- **Google Meet** — automatically creates conference links when requested
-- **Attendees** — resolves @mentions to emails via contacts.json
-- **Location** — sets event location
-- **Recurrence** — supports recurring events (e.g., "every Tuesday")
-- **Reminders** — configurable email/popup reminders
+### Slack — `SLACK_BOT_TOKEN` (or `SLACK_USER_TOKEN`)
+
+A bot token reads the conversations the app has been invited to. A user token
+(`xoxp-`) also exposes `last_read`, which is what makes unread counts accurate —
+with a bot token everything in the fetch window counts as unread.
+
+Scopes: `channels:read`, `groups:read`, `im:read`, `channels:history`,
+`groups:history`, `im:history`, `users:read`.
+
+### WhatsApp — `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`
+
+WhatsApp has no read API for a personal account — nothing can enumerate your
+existing chats. What exists is the Business Cloud API, which **pushes** messages
+to a webhook as they arrive, so this connector is push-based: point Meta's
+webhook at `POST /webhooks/whatsapp` and the reader accumulates conversations
+from that point forward. Setting `WHATSAPP_APP_SECRET` turns on signature
+verification of inbound deliveries.
+
+## API
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/session` | Who's signed in, and which sign-in methods exist |
+| `GET` | `/auth/google` → `/auth/google/callback` | Google OAuth sign-in |
+| `POST` | `/auth/demo` · `/auth/signout` | Local sign-in · sign out |
+| `GET` | `/api/sources` | Apps and chats available to pick from |
+| `PUT` | `/api/preferences` | Save selected apps, chats, unread-only |
+| `GET` | `/api/digest` | The AI summary on the dashboard |
+| `GET` | `/api/messages` | The raw feed behind the summary |
+| `POST` | `/api/ask` | Ask a question; `GET` for history, `DELETE` to clear |
+| `POST` | `/api/mark-read` | Clear unread flags (Telegram/WhatsApp) |
+| `GET`/`POST` | `/webhooks/whatsapp` | Cloud API verification and delivery |
+
+## How the AI part works
+
+`src/reader/ai.ts` makes two kinds of call, both to `claude-opus-5`:
+
+- **The digest** uses structured outputs (`output_config.format` with a JSON
+  schema), so the dashboard gets a guaranteed shape: headline, "needs you" list,
+  and a per-chat summary with an urgency and action items.
+- **The ask box** is conversational, with the message transcript supplied in an
+  `<inbox>` block each turn and the last few turns of history replayed.
+
+Both send `fallbacks: "default"`, so if Claude's safety classifiers decline a
+request the API retries it server-side on the recommended fallback model instead
+of returning nothing.
+
+Messages are grouped by chat before being sent, so the model sees conversations
+rather than a flat feed.
 
 ## Architecture
 
 ```
 src/
-  types.ts     — TypeScript interfaces for events, contacts, input
-  parser.ts    — Claude API integration for NL/image → structured event
-  calendar.ts  — Google Calendar API integration
-  index.ts     — CLI entrypoint
+  auth.ts                    Google OAuth, signed-cookie sessions
+  server.ts                  Express app: pages, API, webhooks
+  reader/
+    types.ts                 Chat, Message, Connector, User, Digest
+    store.ts                 File-backed accounts, preferences, message buffer
+    ai.ts                    Claude calls: digest + ask
+    connectors/
+      index.ts               Registry, source listing, selection → messages
+      telegram.ts            Bot API polling
+      slack.ts               Web API
+      whatsapp.ts            Cloud API webhook ingest
+      demo.ts                Sample inbox used when an app has no credentials
+public/
+  reader.html                The whole front end
 ```
+
+Accounts and buffered messages live in `data/reader-store.json` (gitignored).
+
+## Also in this repo: the calendar agent
+
+The original natural-language → Google Calendar agent still lives here, now at
+[`/calendar`](http://localhost:3000/calendar) (CLI: `npm run dev`). It turns
+"meeting 1 on Saturday March 15 with @leo and @mia at 12311 Templeton Street"
+into a real calendar event, with attendees resolved via `contacts.json` and a
+Google Meet link when asked. See `src/parser.ts` and `src/calendar.ts`.
