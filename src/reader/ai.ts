@@ -116,9 +116,7 @@ async function createMessage(params: Record<string, unknown>): Promise<MessageRe
     });
   } catch (err: any) {
     if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
-      throw new Error(
-        "No Claude API credentials found. Set ANTHROPIC_API_KEY in your .env to turn on summaries and questions."
-      );
+      throw new Error("Unable to process request right now. Try again later.");
     }
     if (err instanceof Anthropic.RateLimitError) {
       throw new Error("Claude is rate limited right now — try again in a moment.");
