@@ -134,6 +134,47 @@ async function createMessage(params: Record<string, unknown>): Promise<MessageRe
   return { text: textBlock?.text ?? "", refused: false };
 }
 
+function createDemoDigest(messages: Message[]): Digest {
+  if (messages.length === 0) {
+    return {
+      headline: "Nothing new in the sources you've selected.",
+      needsYouNow: [],
+      chats: [],
+    };
+  }
+
+  const byChat = new Map<string, Message[]>();
+  for (const msg of messages) {
+    const key = `${msg.app}:${msg.chatId}`;
+    if (!byChat.has(key)) byChat.set(key, []);
+    byChat.get(key)!.push(msg);
+  }
+
+  const chats: Array<{ key: string; app: string; title: string; summary: string; urgency: "high" | "normal" | "low"; actionItems: string[] }> = Array.from(byChat.entries()).map(([key, msgs]) => {
+    const [app, chatId] = key.split(":");
+    const title = msgs[0]?.chatTitle || chatId;
+    const msgCount = msgs.length;
+    const hasQuestion = msgs.some((m) => m.text.includes("?"));
+
+    const urgency: "high" | "normal" | "low" = msgCount > 5 ? "high" : msgCount > 2 ? "normal" : "low";
+
+    return {
+      key,
+      app,
+      title,
+      summary: `${msgCount} message${msgCount !== 1 ? "s" : ""} in this chat. ${hasQuestion ? "Includes questions." : ""}`,
+      urgency,
+      actionItems: hasQuestion ? ["Review questions from group"] : [],
+    };
+  });
+
+  return {
+    headline: `${messages.length} new messages across ${new Set(messages.map((m) => m.app)).size} apps.`,
+    needsYouNow: [],
+    chats,
+  };
+}
+
 /** The dashboard's main-page summary. */
 export async function buildDigest(messages: Message[], now: Date): Promise<Digest> {
   if (messages.length === 0) {
@@ -144,24 +185,31 @@ export async function buildDigest(messages: Message[], now: Date): Promise<Diges
     };
   }
 
-  const { text, refused } = await createMessage({
-    system: DIGEST_SYSTEM,
-    output_config: {
-      effort: "medium",
-      format: { type: "json_schema", schema: DIGEST_SCHEMA },
-    },
-    messages: [
-      {
-        role: "user",
-        content: `The current time is ${now.toISOString()}.\n\nHere is the transcript:\n\n${renderTranscript(
-          messages
-        )}`,
+  try {
+    const { text, refused } = await createMessage({
+      system: DIGEST_SYSTEM,
+      output_config: {
+        effort: "medium",
+        format: { type: "json_schema", schema: DIGEST_SCHEMA },
       },
-    ],
-  });
+      messages: [
+        {
+          role: "user",
+          content: `The current time is ${now.toISOString()}.\n\nHere is the transcript:\n\n${renderTranscript(
+            messages
+          )}`,
+        },
+      ],
+    });
 
-  if (refused) throw new Error("The model declined to summarise this content.");
-  return JSON.parse(text) as Digest;
+    if (refused) throw new Error("The model declined to summarise this content.");
+    return JSON.parse(text) as Digest;
+  } catch (err: any) {
+    if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
+      return createDemoDigest(messages);
+    }
+    throw err;
+  }
 }
 
 /** The ask-the-AI box. Free-form questions about the same message set. */
@@ -173,18 +221,29 @@ export async function askAboutInbox(
 ): Promise<string> {
   const turns = history.map((turn) => ({ role: turn.role, content: turn.content }));
 
-  const { text, refused } = await createMessage({
-    system: ASK_SYSTEM,
-    output_config: { effort: "medium" },
-    messages: [
-      ...turns,
-      {
-        role: "user",
-        content: `<inbox time="${now.toISOString()}">\n${renderTranscript(messages)}\n</inbox>\n\n${question}`,
-      },
-    ],
-  });
+  try {
+    const { text, refused } = await createMessage({
+      system: ASK_SYSTEM,
+      output_config: { effort: "medium" },
+      messages: [
+        ...turns,
+        {
+          role: "user",
+          content: `<inbox time="${now.toISOString()}">\n${renderTranscript(messages)}\n</inbox>\n\n${question}`,
+        },
+      ],
+    });
 
-  if (refused) return "I wasn't able to answer that one. Try asking a different way.";
-  return text;
+    if (refused) return "I wasn't able to answer that one. Try asking a different way.";
+    return text;
+  } catch (err: any) {
+    if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
+      const mentionedIn = messages.filter((m) => m.text.toLowerCase().includes(question.toLowerCase())).length;
+      if (mentionedIn > 0) {
+        return `I found ${mentionedIn} message${mentionedIn !== 1 ? "s" : ""} mentioning that in your chats. Set ANTHROPIC_API_KEY for AI-powered answers.`;
+      }
+      return "I couldn't find that in your messages. Set ANTHROPIC_API_KEY for AI-powered analysis.";
+    }
+    throw err;
+  }
 }

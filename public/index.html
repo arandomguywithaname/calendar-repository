@@ -302,14 +302,6 @@ async function boot() {
 
   const session = await api("/api/session");
 
-  // Deployment problems the server can see but the browser can't infer.
-  if ((session.serverWarnings || []).length) {
-    const html = session.serverWarnings.map((w) => `<p class="warn">${escapeHtml(w)}</p>`).join("");
-    $("signinError").insertAdjacentHTML("beforebegin", html);
-    $("serverWarnings").innerHTML = html;
-    $("serverWarnings").classList.remove("hidden");
-  }
-
   if (session.googleEnabled) $("googleBtn").classList.remove("hidden");
   if (session.demoEnabled) {
     $("demoWrap").classList.remove("hidden");

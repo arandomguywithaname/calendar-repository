@@ -97,13 +97,7 @@ export async function initializeSessionSecret(): Promise<void> {
 
 /** Deployment problems worth showing in the UI rather than leaving to the logs. */
 export function serverWarnings(): string[] {
-  const warnings = [...configWarnings];
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
-    warnings.push(
-      "ANTHROPIC_API_KEY is not set — sign-in works, but summaries and questions will fail."
-    );
-  }
-  return warnings;
+  return [...configWarnings];
 }
 
 export function googleConfigured(): boolean {
