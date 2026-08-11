@@ -35,7 +35,7 @@ interface CloudApiPayload {
 }
 
 /** Store the messages in one webhook delivery. Returns how many were kept. */
-export function ingestWebhook(payload: CloudApiPayload): number {
+export async function ingestWebhook(payload: CloudApiPayload): Promise<number> {
   const chats: Chat[] = [];
   const messages: Message[] = [];
 
@@ -79,7 +79,7 @@ export function ingestWebhook(payload: CloudApiPayload): number {
     }
   }
 
-  if (messages.length > 0) recordMessages("whatsapp", chats, messages);
+  if (messages.length > 0) await recordMessages("whatsapp", chats, messages);
   return messages.length;
 }
 
@@ -100,7 +100,7 @@ export const whatsappConnector: Connector = {
   },
 
   async fetchMessages(chatIds: string[], limit: number): Promise<Message[]> {
-    const all = isConfigured() ? bufferedMessages("whatsapp") : demoMessages("whatsapp");
+    const all = isConfigured() ? await bufferedMessages("whatsapp") : demoMessages("whatsapp");
     const wanted = new Set(chatIds);
     const scoped = wanted.size > 0 ? all.filter((m) => wanted.has(m.chatId)) : all;
     return scoped.slice(-limit);

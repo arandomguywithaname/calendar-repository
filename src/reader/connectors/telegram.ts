@@ -76,7 +76,7 @@ export async function poll(): Promise<number> {
   const botToken = token();
   if (!botToken) return 0;
 
-  const offset = getTelegramOffset();
+  const offset = await getTelegramOffset();
   const url = `${API}/bot${botToken}/getUpdates?timeout=0&limit=100${offset ? `&offset=${offset}` : ""}`;
   const response = await fetch(url);
   if (!response.ok) {
@@ -122,8 +122,8 @@ export async function poll(): Promise<number> {
   }
 
   if (messages.length > 0 || highest !== offset) {
-    recordMessages("telegram", chats, messages);
-    setTelegramOffset(highest);
+    await recordMessages("telegram", chats, messages);
+    await setTelegramOffset(highest);
   }
   return messages.length;
 }
@@ -148,7 +148,7 @@ export const telegramConnector: Connector = {
   async fetchMessages(chatIds: string[], limit: number): Promise<Message[]> {
     if (!token()) return filter(demoMessages("telegram"), chatIds, limit);
     await poll();
-    return filter(bufferedMessages("telegram"), chatIds, limit);
+    return filter(await bufferedMessages("telegram"), chatIds, limit);
   },
 };
 

@@ -36,6 +36,49 @@ npm run web             # http://localhost:3000
 `ANTHROPIC_API_KEY` is the only variable required for the summary and the
 ask box to work. Everything else is optional and degrades to demo data.
 
+## Deploying
+
+This is a Node server, not a static site. The summaries and the ask box call
+Claude with your API key, sign-in exchanges an OAuth code for a profile, and
+WhatsApp needs a real webhook endpoint — none of which can happen in a browser.
+Dropping `public/` on static hosting gets you the front end and nothing behind
+it (the page will say so).
+
+### Netlify
+
+`netlify.toml` and `netlify/functions/api.ts` are set up: the Express app is
+wrapped with `serverless-http`, `public/` is published as static assets, and
+`/api/*`, `/auth/*` and `/webhooks/*` are redirected into the function.
+
+Because serverless filesystems are per-invocation, the store swaps to
+**Netlify Blobs** automatically when `NETLIFY` is set — no configuration.
+Locally it stays a JSON file.
+
+Set these under **Site configuration → Environment variables**:
+
+| Variable | Why |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Required — no summaries or answers without it |
+| `SESSION_SECRET` | **Required here.** Without it each cold start mints a new secret and signs everyone out at random |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google sign-in |
+| `GOOGLE_REDIRECT_URI` | `https://<your-site>.netlify.app/auth/google/callback`, and add the same URI to the OAuth client |
+
+Both are checked at runtime and surfaced in the UI if missing, so a
+misconfigured deploy says what's wrong instead of failing quietly.
+
+Telegram polls on demand when the dashboard loads — `getUpdates` holds
+messages for 24 hours, so nothing is lost between visits and no scheduled
+function is needed.
+
+One caveat: the store is a single blob read-modify-written per request, so
+concurrent writes are last-write-wins. Fine for one person; if this grows
+users, move the store to a real database.
+
+### Anywhere that runs Node
+
+Render, Railway, Fly.io and friends need no changes: set the env vars and run
+`npm run web`.
+
 ## Sign-in
 
 Sign-in is **Google OAuth**: the button sends you to Google's own consent
@@ -133,9 +176,12 @@ rather than a flat feed.
 ## Architecture
 
 ```
+netlify.toml                 Publish dir, function bundling, route redirects
+netlify/functions/api.ts     Wraps the Express app for Netlify Functions
 src/
   auth.ts                    Google OAuth, signed-cookie sessions
-  server.ts                  Express app: pages, API, webhooks
+  app.ts                     Express app: pages, API, webhooks
+  server.ts                  Local entry point (app.listen)
   reader/
     types.ts                 Chat, Message, Connector, User, Digest
     store.ts                 File-backed accounts, preferences, message buffer

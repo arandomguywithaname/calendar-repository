@@ -23,10 +23,30 @@ const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 const pendingStates = new Map<string, number>();
 
+const configWarnings: string[] = [];
+
 let sessionSecret = process.env.SESSION_SECRET || "";
 if (!sessionSecret) {
   sessionSecret = crypto.randomBytes(32).toString("hex");
-  console.warn("SESSION_SECRET is not set — using a random secret. Sessions end on restart.");
+  // On a long-lived server this just means sessions end on restart. On
+  // serverless it means every cold start signs everyone out, which is
+  // near-impossible to diagnose from the browser — so say so out loud.
+  const message = process.env.NETLIFY
+    ? "SESSION_SECRET is not set. Each cold start generates a new one, so you will be signed out at random. Set it in Site configuration → Environment variables."
+    : "SESSION_SECRET is not set — using a random secret. Sessions end on restart.";
+  console.warn(message);
+  configWarnings.push(message);
+}
+
+/** Deployment problems worth showing in the UI rather than leaving to the logs. */
+export function serverWarnings(): string[] {
+  const warnings = [...configWarnings];
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+    warnings.push(
+      "ANTHROPIC_API_KEY is not set — sign-in works, but summaries and questions will fail."
+    );
+  }
+  return warnings;
 }
 
 export function googleConfigured(): boolean {
@@ -87,7 +107,7 @@ function readCookie(req: Request, name: string): string | undefined {
   return undefined;
 }
 
-export function currentUser(req: Request): User | undefined {
+export async function currentUser(req: Request): Promise<User | undefined> {
   const cookie = readCookie(req, SESSION_COOKIE);
   if (!cookie) return undefined;
 
@@ -102,21 +122,29 @@ export function currentUser(req: Request): User | undefined {
   try {
     const { uid, exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
     if (!uid || typeof exp !== "number" || exp < Date.now()) return undefined;
-    return getUser(uid);
+    return await getUser(uid);
   } catch {
     return undefined;
   }
 }
 
 /** Express guard for the /api routes that need an account. */
-export function requireUser(req: Request, res: Response, next: NextFunction): void {
-  const user = currentUser(req);
-  if (!user) {
-    res.status(401).json({ error: "Sign in to continue." });
-    return;
+export async function requireUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const user = await currentUser(req);
+    if (!user) {
+      res.status(401).json({ error: "Sign in to continue." });
+      return;
+    }
+    (req as Request & { user: User }).user = user;
+    next();
+  } catch (err) {
+    next(err);
   }
-  (req as Request & { user: User }).user = user;
-  next();
 }
 
 export function userOf(req: Request): User {
@@ -161,7 +189,7 @@ export async function completeGoogleSignIn(
   const email = profile.data.email;
   if (!email) throw new Error("Google did not return an email address for this account.");
 
-  const user = upsertUser({
+  const user = await upsertUser({
     email,
     name: profile.data.name || email.split("@")[0],
     picture: profile.data.picture || undefined,
@@ -172,11 +200,15 @@ export async function completeGoogleSignIn(
 }
 
 /** Local sign-in for when Google isn't configured. No password, no pretence. */
-export function completeDemoSignIn(email: string, name: string, res: Response): User {
+export async function completeDemoSignIn(
+  email: string,
+  name: string,
+  res: Response
+): Promise<User> {
   if (!demoSignInAllowed()) throw new Error("Demo sign-in is disabled.");
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("That doesn't look like an email address.");
 
-  const user = upsertUser({ email, name, provider: "demo" });
+  const user = await upsertUser({ email, name, provider: "demo" });
   issueSession(res, user.id);
   return user;
 }
