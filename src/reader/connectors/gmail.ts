@@ -43,6 +43,90 @@ function threadKey(threadId: string): string {
   return threadId;
 }
 
+
+/** Run `fn` over `items` with a bounded number in flight. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * One dashboard load hits /api/sources, /api/digest and /api/messages, and each
+ * of those wants the same mail. Without this they would each re-fetch it,
+ * tripling both the latency and the API quota for one page view.
+ */
+const recentCache = new Map<string, { at: number; messages: Message[] }>();
+const CACHE_TTL_MS = 30_000;
+
+/**
+ * Gmail has no endpoint that returns message bodies in bulk: `messages.list`
+ * gives ids only, so each one needs its own `get`. Issued serially that is a
+ * round trip per message and a dashboard that hangs for seconds; these run
+ * concurrently, capped so a load stays inside Gmail's per-user rate limit.
+ */
+async function loadRecent(c: Connections, max: number): Promise<Message[]> {
+  const key = c.googleRefreshToken || "";
+  const cached = recentCache.get(key);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.messages;
+
+  const gmail = google.gmail({ version: "v1", auth: oauthClient(key) });
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    maxResults: Math.min(max, 50),
+    q: "in:inbox newer_than:7d",
+  });
+
+  const refs = (list.data.messages || []).filter(
+    (m): m is { id: string; threadId: string } => Boolean(m.id && m.threadId)
+  );
+
+  const loaded = await mapWithConcurrency(refs, 8, async (ref) => {
+    const full = await gmail.users.messages.get({
+      userId: "me",
+      id: ref.id,
+      format: "metadata",
+      metadataHeaders: ["From", "Subject", "Date"],
+    });
+    const headers = full.data.payload?.headers || [];
+    const message: Message = {
+      id: `gmail:${ref.id}`,
+      app: "gmail",
+      chatId: ref.threadId,
+      chatTitle: header(headers, "Subject") || "(no subject)",
+      sender: displayName(header(headers, "From")),
+      // The snippet is the summary line Gmail itself shows; fetching full
+      // bodies would mean parsing MIME for every message on every load.
+      text: (full.data.snippet || "")
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, "&"),
+      timestamp: new Date(Number(full.data.internalDate || Date.now())).toISOString(),
+      unread: (full.data.labelIds || []).includes("UNREAD"),
+    };
+    return message;
+  });
+
+  const messages = loaded.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  // Keep the cache small; this is a per-process nicety, not a store.
+  if (recentCache.size > 50) recentCache.clear();
+  recentCache.set(key, { at: Date.now(), messages });
+  return messages;
+}
+
 export const gmailConnector: Connector = {
   app: "gmail",
   label: "Gmail",
@@ -61,37 +145,24 @@ export const gmailConnector: Connector = {
   async listChats(c): Promise<Chat[]> {
     if (!c.googleRefreshToken) return demoChats("gmail");
 
-    const gmail = google.gmail({ version: "v1", auth: oauthClient(c.googleRefreshToken) });
-    const list = await gmail.users.messages.list({
-      userId: "me",
-      maxResults: 40,
-      q: "in:inbox newer_than:7d",
-    });
-
+    const messages = await loadRecent(c, 50);
     const byThread = new Map<string, Chat>();
-    for (const ref of list.data.messages || []) {
-      if (!ref.id || !ref.threadId) continue;
-      if (byThread.has(ref.threadId)) continue;
-
-      const full = await gmail.users.messages.get({
-        userId: "me",
-        id: ref.id,
-        format: "metadata",
-        metadataHeaders: ["From", "Subject", "Date"],
-      });
-      const headers = full.data.payload?.headers || [];
-      const unread = (full.data.labelIds || []).includes("UNREAD");
-
-      byThread.set(ref.threadId, {
-        id: threadKey(ref.threadId),
+    for (const m of messages) {
+      const existing = byThread.get(m.chatId);
+      if (existing) {
+        if (m.unread) existing.unreadCount += 1;
+        if (m.timestamp > existing.lastActivity) existing.lastActivity = m.timestamp;
+        continue;
+      }
+      byThread.set(m.chatId, {
+        id: threadKey(m.chatId),
         app: "gmail",
-        title: header(headers, "Subject") || "(no subject)",
+        title: m.chatTitle,
         kind: "dm",
-        unreadCount: unread ? 1 : 0,
-        lastActivity: new Date(Number(full.data.internalDate || Date.now())).toISOString(),
+        unreadCount: m.unread ? 1 : 0,
+        lastActivity: m.timestamp,
       });
     }
-
     return [...byThread.values()];
   },
 
@@ -102,40 +173,8 @@ export const gmailConnector: Connector = {
       return scoped.slice(-limit);
     }
 
-    const gmail = google.gmail({ version: "v1", auth: oauthClient(c.googleRefreshToken) });
-    const list = await gmail.users.messages.list({
-      userId: "me",
-      maxResults: Math.min(limit, 50),
-      q: "in:inbox newer_than:7d",
-    });
-
-    const messages: Message[] = [];
-    for (const ref of list.data.messages || []) {
-      if (!ref.id || !ref.threadId) continue;
-      if (chatIds.length && !chatIds.includes(ref.threadId)) continue;
-
-      const full = await gmail.users.messages.get({
-        userId: "me",
-        id: ref.id,
-        format: "metadata",
-        metadataHeaders: ["From", "Subject", "Date"],
-      });
-      const headers = full.data.payload?.headers || [];
-
-      messages.push({
-        id: `gmail:${ref.id}`,
-        app: "gmail",
-        chatId: ref.threadId,
-        chatTitle: header(headers, "Subject") || "(no subject)",
-        sender: displayName(header(headers, "From")),
-        // The snippet is the summary line Gmail itself shows; fetching full
-        // bodies would mean parsing MIME for every message on every load.
-        text: (full.data.snippet || "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&"),
-        timestamp: new Date(Number(full.data.internalDate || Date.now())).toISOString(),
-        unread: (full.data.labelIds || []).includes("UNREAD"),
-      });
-    }
-
-    return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const messages = await loadRecent(c, limit);
+    const scoped = chatIds.length ? messages.filter((m) => chatIds.includes(m.chatId)) : messages;
+    return scoped.slice(-limit);
   },
 };
