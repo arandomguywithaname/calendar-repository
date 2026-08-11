@@ -1,7 +1,7 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { AppId, AskTurn, Chat, Message, Preferences, User } from "./types";
+import { AppId, AskTurn, Chat, Connections, Message, Preferences, User } from "./types";
 
 /**
  * Everything the reader needs to survive a restart: accounts, per-account
@@ -28,7 +28,7 @@ const MAX_MESSAGES_PER_APP = 2000;
 const MAX_ASK_TURNS = 20;
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  apps: ["telegram", "whatsapp", "slack"],
+  apps: ["telegram", "whatsapp", "slack", "gmail"],
   chatIds: [],
   unreadOnly: false,
 };
@@ -182,6 +182,27 @@ export async function upsertUser(input: {
     };
     store.users[user.id] = user;
     store.emailIndex[key] = user.id;
+    return user;
+  });
+}
+
+/**
+ * Merge credentials into an account. Passing a key as undefined clears it,
+ * which is what disconnecting does.
+ */
+export async function setConnections(
+  userId: string,
+  patch: Partial<Connections>
+): Promise<User | undefined> {
+  return mutate((store) => {
+    const user = store.users[userId];
+    if (!user) return undefined;
+    const next: Connections = { ...(user.connections || {}) };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete (next as Record<string, unknown>)[key];
+      else (next as Record<string, unknown>)[key] = value;
+    }
+    user.connections = next;
     return user;
   });
 }

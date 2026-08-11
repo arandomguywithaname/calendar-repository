@@ -15,8 +15,11 @@ import {
   demoSignInAllowed,
   googleAuthUrl,
   googleConfigured,
+  consumeConnectState,
+  issueConnectState,
   refreshSession,
   requireUser,
+  slackRedirectUri,
   serverWarnings,
   userOf,
 } from "./auth";
@@ -28,6 +31,7 @@ import {
   clearConversation,
   getConversation,
   markRead,
+  setConnections,
   setPreferences,
 } from "./reader/store";
 import { AppId, Preferences } from "./reader/types";
@@ -142,9 +146,9 @@ app.post("/auth/signout", (_req: Request, res: Response) => {
 /* ------------------------------- reader ---------------------------------- */
 
 /** GET /api/sources — apps and chats the user can choose from */
-app.get("/api/sources", requireUser, async (_req: Request, res: Response) => {
+app.get("/api/sources", requireUser, async (req: Request, res: Response) => {
   try {
-    res.json({ sources: await listSources() });
+    res.json({ sources: await listSources(userOf(req).connections || {}) });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Could not load sources." });
   }
@@ -170,7 +174,7 @@ app.put("/api/preferences", requireUser, async (req: Request, res: Response) => 
 app.get("/api/digest", requireUser, async (req: Request, res: Response) => {
   try {
     const user = userOf(req);
-    const { messages, errors } = await collectMessages(user.preferences);
+    const { messages, errors } = await collectMessages(user.preferences, user.connections || {});
     const digest = await buildDigest(messages, new Date());
     res.json({
       digest,
@@ -189,7 +193,10 @@ app.get("/api/digest", requireUser, async (req: Request, res: Response) => {
 /** GET /api/messages — the raw feed behind the summary */
 app.get("/api/messages", requireUser, async (req: Request, res: Response) => {
   try {
-    const { messages, errors } = await collectMessages(userOf(req).preferences);
+    const { messages, errors } = await collectMessages(
+      userOf(req).preferences,
+      userOf(req).connections || {}
+    );
     res.json({ messages: messages.slice(-200).reverse(), warnings: errors });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Could not load messages." });
@@ -206,7 +213,7 @@ app.post("/api/ask", requireUser, async (req: Request, res: Response) => {
     }
 
     const user = userOf(req);
-    const { messages } = await collectMessages(user.preferences);
+    const { messages } = await collectMessages(user.preferences, user.connections || {});
     const history = await getConversation(user.id);
     const answer = await askAboutInbox(question, messages, history, new Date());
 
@@ -280,6 +287,105 @@ app.post("/webhooks/whatsapp", async (req: Request, res: Response) => {
   }
   // Always 200 — Meta retries and disables endpoints that return errors.
   res.sendStatus(200);
+});
+
+
+/* ---------------------------- connecting apps ----------------------------- */
+
+/**
+ * Slack sign-in for one account.
+ *
+ * The site is registered once at api.slack.com (SLACK_CLIENT_ID / SECRET); each
+ * person then clicks Connect and approves it for their own workspace. The token
+ * that comes back is stored against their account — nobody pastes a token, and
+ * one person connecting does not expose their Slack to anyone else.
+ */
+const SLACK_SCOPES = [
+  "channels:read", "groups:read", "im:read", "mpim:read",
+  "channels:history", "groups:history", "im:history", "mpim:history",
+  "users:read",
+].join(",");
+
+app.get("/auth/slack", requireUser, (req: Request, res: Response) => {
+  const clientId = process.env.SLACK_CLIENT_ID;
+  if (!clientId) {
+    res.redirect("/?connectError=" + encodeURIComponent("Slack is not set up for this site yet."));
+    return;
+  }
+  const state = issueConnectState(userOf(req).id, "slack");
+  const url = new URL("https://slack.com/oauth/v2/authorize");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("user_scope", SLACK_SCOPES);
+  url.searchParams.set("state", state);
+  url.searchParams.set("redirect_uri", slackRedirectUri());
+  res.redirect(url.toString());
+});
+
+app.get("/auth/slack/callback", async (req: Request, res: Response) => {
+  const { code, state, error } = req.query as Record<string, string | undefined>;
+  if (error || !code || !state) {
+    res.redirect("/?connectError=" + encodeURIComponent(error || "slack_cancelled"));
+    return;
+  }
+
+  const claim = consumeConnectState(state, "slack");
+  if (!claim) {
+    res.redirect("/?connectError=" + encodeURIComponent("That Slack link expired — try again."));
+    return;
+  }
+
+  try {
+    const body = new URLSearchParams({
+      code,
+      client_id: process.env.SLACK_CLIENT_ID || "",
+      client_secret: process.env.SLACK_CLIENT_SECRET || "",
+      redirect_uri: slackRedirectUri(),
+    });
+    const response = await fetch("https://slack.com/api/oauth.v2.access", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const payload: any = await response.json();
+    if (!payload.ok) throw new Error(payload.error || "slack_oauth_failed");
+
+    // A user token reads what the person can see; unread counts need it.
+    const token = payload.authed_user?.access_token || payload.access_token;
+    if (!token) throw new Error("Slack returned no usable token.");
+
+    await setConnections(claim.userId, {
+      slackToken: token,
+      slackTeam: payload.team?.name || undefined,
+    });
+    res.redirect("/?connected=slack");
+  } catch (err: any) {
+    res.redirect("/?connectError=" + encodeURIComponent(err.message || "slack_oauth_failed"));
+  }
+});
+
+/** GET /api/connections — which apps this account has connected */
+app.get("/api/connections", requireUser, (req: Request, res: Response) => {
+  const c = userOf(req).connections || {};
+  res.json({
+    slack: { connected: Boolean(c.slackToken), detail: c.slackTeam },
+    gmail: { connected: Boolean(c.googleRefreshToken), detail: c.googleEmail },
+  });
+});
+
+/** DELETE /api/connections/:app — forget one account's credentials */
+app.delete("/api/connections/:app", requireUser, async (req: Request, res: Response) => {
+  const which = req.params.app;
+  if (which !== "slack" && which !== "gmail") {
+    res.status(400).json({ error: "Nothing to disconnect for that app." });
+    return;
+  }
+  await setConnections(
+    userOf(req).id,
+    which === "slack"
+      ? { slackToken: undefined, slackTeam: undefined }
+      : { googleRefreshToken: undefined, googleEmail: undefined }
+  );
+  res.json({ ok: true });
 });
 
 /* ------------------------- calendar agent (existing) ---------------------- */

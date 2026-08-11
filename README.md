@@ -119,7 +119,20 @@ Sessions are signed cookies — set `SESSION_SECRET` or they reset on restart.
 
 ## Connecting your apps
 
-Each app is independent. Configure the ones you want; the rest stay on demo data.
+Two of the four connect per-account: a person clicks **Connect** on the
+dashboard and approves it for their own account. Nobody pastes a token, and one
+person connecting exposes nothing to anyone else. The site has to be registered
+once with each provider so the OAuth handshake has a client to identify —
+that's the one piece an operator does, not each user.
+
+| App | How it connects | What it can read |
+| --- | --- | --- |
+| **Gmail** | Click Connect (same Google sign-in, plus read-only inbox scope). Needs `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. | Your inbox, read-only — the app cannot send or delete |
+| **Slack** | Click Connect. Needs `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` and `SLACK_REDIRECT_URI`. | The conversations your Slack account can see, with real unread counts |
+| **Telegram** | Bot token only (`TELEGRAM_BOT_TOKEN`) | Groups and channels the bot is added to. **Not your personal DMs** — those need an MTProto user client, which the Bot API cannot do |
+| **WhatsApp** | Business Cloud API webhook | Messages sent to a *business* number after the webhook is connected. **A personal WhatsApp account cannot be read by anything** — it is end-to-end encrypted with no read API |
+
+Anything not connected shows sample chats so the dashboard still works.
 
 ### Telegram — `TELEGRAM_BOT_TOKEN`
 

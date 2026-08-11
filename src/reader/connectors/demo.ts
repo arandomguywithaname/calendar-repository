@@ -106,6 +106,34 @@ const SEEDS: Record<AppId, Seed[]> = {
       ],
     },
   ],
+
+  gmail: [
+    {
+      chatId: "thread-invoice",
+      title: "Invoice 2291 — payment due Friday",
+      kind: "dm",
+      lines: [
+        [190, "Accounts, Baseline Studio", "Reminder that invoice 2291 is due Friday. Let us know if you need the PO reference again.", true],
+      ],
+    },
+    {
+      chatId: "thread-landlord",
+      title: "Re: boiler service visit",
+      kind: "dm",
+      lines: [
+        [420, "Ines Whitfield", "The engineer can come Tuesday morning or Thursday afternoon — can you confirm which suits?", true],
+        [95, "Ines Whitfield", "Need to book by tomorrow to keep the Tuesday slot.", true],
+      ],
+    },
+    {
+      chatId: "thread-newsletter",
+      title: "This week in frontend",
+      kind: "channel",
+      lines: [
+        [610, "Frontend Weekly", "Issue 214: view transitions ship in Safari, plus a deep dive on container queries.", false],
+      ],
+    },
+  ],
 };
 
 function isoMinutesAgo(minutes: number): string {

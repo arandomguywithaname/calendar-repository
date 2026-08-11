@@ -1,4 +1,4 @@
-import { Chat, Connector, Message } from "../types";
+import { Chat, Connections, Connector, Message } from "../types";
 import { demoChats, demoMessages } from "./demo";
 
 /**
@@ -16,8 +16,12 @@ import { demoChats, demoMessages } from "./demo";
 const API = "https://slack.com/api";
 const userNames = new Map<string, string>();
 
-function token(): string | undefined {
-  return process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN;
+/**
+ * The account's own token wins. Environment tokens remain as a shared fallback
+ * so an operator-configured workspace still works for everyone.
+ */
+function token(c: Connections = {}): string | undefined {
+  return c.slackToken || process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN;
 }
 
 async function slack<T>(method: string, params: Record<string, string> = {}): Promise<T> {
@@ -81,15 +85,21 @@ export const slackConnector: Connector = {
   app: "slack",
   label: "Slack",
 
-  isLive: () => Boolean(token()),
+  isLive: (c) => Boolean(token(c)),
 
-  status: () =>
-    token()
-      ? "Live via the Slack Web API. The app reads conversations it has been invited to; a user token (SLACK_USER_TOKEN) also gives accurate unread counts."
-      : "Not connected — showing a sample workspace. Connecting Slack needs an app registered at api.slack.com; its token goes in SLACK_BOT_TOKEN (or SLACK_USER_TOKEN).",
+  connectable: () => Boolean(process.env.SLACK_CLIENT_ID && process.env.SLACK_CLIENT_SECRET),
 
-  async listChats(): Promise<Chat[]> {
-    if (!token()) return demoChats("slack");
+  status: (c) =>
+    c.slackToken
+      ? `Connected${c.slackTeam ? ` to ${c.slackTeam}` : ""}. Reading the conversations your Slack account can see, with accurate unread counts.`
+      : token(c)
+        ? "Live via a workspace token configured for this site. Unread counts are accurate only with a user token."
+        : process.env.SLACK_CLIENT_ID
+          ? "Not connected — click Connect to sign in with Slack and read your own conversations."
+          : "Not connected — showing a sample workspace. Slack needs an app registered at api.slack.com (SLACK_CLIENT_ID / SLACK_CLIENT_SECRET) once for this site.",
+
+  async listChats(c: Connections = {}): Promise<Chat[]> {
+    if (!token(c)) return demoChats("slack");
 
     const body = await slack<{ channels: SlackConversation[] }>("conversations.list", {
       types: "public_channel,private_channel,im,mpim",
@@ -111,14 +121,14 @@ export const slackConnector: Connector = {
     return chats;
   },
 
-  async fetchMessages(chatIds: string[], limit: number): Promise<Message[]> {
-    if (!token()) {
+  async fetchMessages(chatIds: string[], limit: number, c: Connections = {}): Promise<Message[]> {
+    if (!token(c)) {
       const wanted = new Set(chatIds);
       const all = demoMessages("slack");
       return (wanted.size > 0 ? all.filter((m) => wanted.has(m.chatId)) : all).slice(-limit);
     }
 
-    const targets = chatIds.length > 0 ? chatIds : (await this.listChats()).map((chat) => chat.id);
+    const targets = chatIds.length > 0 ? chatIds : (await this.listChats(c)).map((chat) => chat.id);
     const perChat = Math.max(5, Math.floor(limit / Math.max(1, targets.length)));
     const messages: Message[] = [];
 

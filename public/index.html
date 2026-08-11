@@ -120,6 +120,13 @@
     border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-soft);
   }
   .badge.live { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  .connect {
+    margin-left: auto; font-size: 12.5px; font-weight: 560; text-decoration: none;
+    padding: 4px 11px; border-radius: 999px; border: 1px solid var(--accent);
+    color: var(--accent); background: transparent; cursor: pointer;
+  }
+  .connect:hover { background: var(--accent-soft); }
+  .connect.ghost { border-color: var(--line); color: var(--ink-soft); }
   .chatlist { margin: 8px 0 0 4px; display: flex; flex-direction: column; gap: 5px; }
   .chatlist label {
     display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-soft);
@@ -300,6 +307,15 @@ async function boot() {
     history.replaceState({}, "", "/");
   }
 
+  const params = new URLSearchParams(location.search);
+  if (params.get("connected") || params.get("connectError")) {
+    const note = params.get("connectError")
+      ? `Could not connect: ${params.get("connectError")}`
+      : `${params.get("connected")} connected.`;
+    setTimeout(() => { $("saveNote").textContent = note; }, 0);
+    history.replaceState({}, "", "/");
+  }
+
   const session = await api("/api/session");
 
   if (session.googleEnabled) $("googleBtn").classList.remove("hidden");
@@ -386,12 +402,21 @@ function renderSources() {
         })
         .join("");
 
+      // Only apps with a real per-account sign-in flow get a Connect button;
+      // the rest would send people to a dead end.
+      const connect = !source.live && source.connectable
+        ? `<a class="connect" href="/auth/${source.app === "gmail" ? "google" : source.app}">Connect</a>`
+        : source.live && source.connectable
+          ? `<button class="connect ghost" data-disconnect="${escapeHtml(source.app)}">Disconnect</button>`
+          : "";
+
       return `<div class="app-block">
         <div class="app-head">
-          <label><input type="checkbox" class="app" data-app="${source.app}" ${
+          <label><input type="checkbox" class="app" data-app="${escapeHtml(source.app)}" ${
             state.apps.has(source.app) ? "checked" : ""
           }/> ${escapeHtml(source.label)}</label>
           <span class="badge ${source.live ? "live" : ""}">${source.live ? "connected" : "not connected"}</span>
+          ${connect}
         </div>
         <div class="source-status">${escapeHtml(source.status)}</div>
         ${source.error ? `<div class="warn">${escapeHtml(source.error)}</div>` : ""}
@@ -405,6 +430,19 @@ function renderSources() {
       input.checked ? state.apps.add(input.dataset.app) : state.apps.delete(input.dataset.app);
     });
   });
+  document.querySelectorAll("button[data-disconnect]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await api(`/api/connections/${button.dataset.disconnect}`, { method: "DELETE" });
+        await loadSources();
+      } catch (err) {
+        button.disabled = false;
+        $("saveNote").textContent = err.message;
+      }
+    });
+  });
+
   document.querySelectorAll("input.chat").forEach((input) => {
     input.addEventListener("change", () => {
       input.checked ? state.selection.add(input.dataset.key) : state.selection.delete(input.dataset.key);

@@ -1,5 +1,5 @@
 /** Supported messaging apps the reader can pull from */
-export type AppId = "telegram" | "whatsapp" | "slack";
+export type AppId = "telegram" | "whatsapp" | "slack" | "gmail";
 
 export interface Chat {
   id: string; // unique within the app
@@ -21,16 +21,35 @@ export interface Message {
   unread: boolean;
 }
 
+/**
+ * Credentials belonging to one signed-in account.
+ *
+ * These live on the user record rather than in the environment, so connecting
+ * an app is something a person does by clicking "Connect" — not something the
+ * operator does by pasting a token into a deploy. Environment tokens still
+ * work and act as a shared fallback for accounts with no connection of their own.
+ */
+export interface Connections {
+  /** Slack user token (xoxp-) obtained through the OAuth flow. */
+  slackToken?: string;
+  slackTeam?: string;
+  /** Google refresh token, granted when the account allowed Gmail access. */
+  googleRefreshToken?: string;
+  googleEmail?: string;
+}
+
 /** A source of chats and messages — one per app */
 export interface Connector {
   app: AppId;
   label: string;
-  /** True when real credentials are configured; false means demo data */
-  isLive(): boolean;
-  /** Why the connector is in demo mode, or how it gets its data */
-  status(): string;
-  listChats(): Promise<Chat[]>;
-  fetchMessages(chatIds: string[], limit: number): Promise<Message[]>;
+  /** True when this account (or the environment) can reach the real service. */
+  isLive(connections: Connections): boolean;
+  /** How this connector gets its data, or what connecting it would take. */
+  status(connections: Connections): string;
+  /** Whether a person can connect this app themselves from the dashboard. */
+  connectable(): boolean;
+  listChats(connections: Connections): Promise<Chat[]>;
+  fetchMessages(chatIds: string[], limit: number, connections: Connections): Promise<Message[]>;
 }
 
 /** What the user picked on the dashboard */
@@ -48,6 +67,7 @@ export interface User {
   createdAt: string;
   provider: "google" | "demo";
   preferences: Preferences;
+  connections?: Connections;
 }
 
 /** One chat's slice of the AI digest */

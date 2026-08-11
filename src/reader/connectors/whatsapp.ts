@@ -104,6 +104,8 @@ export const whatsappConnector: Connector = {
 
   isLive: () => isConfigured(),
 
+  connectable: () => false,
+
   status: () =>
     isConfigured()
       ? "Live via the WhatsApp Business Cloud API webhook (POST /webhooks/whatsapp). Only messages received after the webhook was connected are available — WhatsApp exposes no history API."

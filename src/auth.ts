@@ -3,8 +3,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { Request, Response, NextFunction } from "express";
 import { google } from "googleapis";
-import { DEFAULT_PREFERENCES, getUser, upsertUser } from "./reader/store";
+import { DEFAULT_PREFERENCES, getUser, setConnections, upsertUser } from "./reader/store";
 import { Preferences, User } from "./reader/types";
+import { GMAIL_SCOPE } from "./reader/connectors/gmail";
 
 /**
  * Sign-in for the reader.
@@ -267,6 +268,41 @@ export function userOf(req: Request): User {
   return (req as Request & { user: User }).user;
 }
 
+/* --------------------------- connecting apps ------------------------------ */
+
+/**
+ * Short-lived state for a "Connect <app>" round trip. It binds the callback to
+ * the account that started it, so a returning code can't attach someone else's
+ * workspace to your inbox.
+ */
+const connectStates = new Map<string, { userId: string; app: string; at: number }>();
+
+export function slackRedirectUri(): string {
+  return (
+    process.env.SLACK_REDIRECT_URI ||
+    (process.env.URL ? `${process.env.URL}/auth/slack/callback` : "http://localhost:3000/auth/slack/callback")
+  );
+}
+
+export function issueConnectState(userId: string, app: string): string {
+  const state = crypto.randomBytes(16).toString("hex");
+  const now = Date.now();
+  for (const [key, entry] of connectStates) {
+    if (now - entry.at > OAUTH_STATE_TTL_MS) connectStates.delete(key);
+  }
+  connectStates.set(state, { userId, app, at: now });
+  return state;
+}
+
+export function consumeConnectState(state: string, app: string): { userId: string } | undefined {
+  const entry = connectStates.get(state);
+  if (!entry) return undefined;
+  connectStates.delete(state);
+  if (entry.app !== app) return undefined;
+  if (Date.now() - entry.at > OAUTH_STATE_TTL_MS) return undefined;
+  return { userId: entry.userId };
+}
+
 /* ----------------------------- google oauth ------------------------------ */
 
 export function googleAuthUrl(): string {
@@ -277,11 +313,19 @@ export function googleAuthUrl(): string {
   }
   pendingStates.set(state, now);
 
+  /*
+   * Ask for read-only Gmail alongside identity, so signing in and connecting the
+   * inbox are one consent screen rather than two. `offline` is what yields a
+   * refresh token — without it the grant dies in an hour and Gmail silently
+   * stops loading. Consent is re-prompted because Google only re-issues a
+   * refresh token when the user is asked again.
+   */
   return oauthClient().generateAuthUrl({
-    access_type: "online",
-    scope: ["openid", "email", "profile"],
+    access_type: "offline",
+    scope: ["openid", "email", "profile", GMAIL_SCOPE],
     state,
-    prompt: "select_account",
+    prompt: "consent select_account",
+    include_granted_scopes: true,
   });
 }
 

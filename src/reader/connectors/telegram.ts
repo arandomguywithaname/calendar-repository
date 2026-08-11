@@ -134,6 +134,8 @@ export const telegramConnector: Connector = {
 
   isLive: () => Boolean(token()),
 
+  connectable: () => false,
+
   status: () =>
     token()
       ? "Live via the Telegram Bot API. The bot only sees chats it has been added to (and channels where it is an admin) — personal DMs need an MTProto user client."
