@@ -55,6 +55,21 @@ it (the page will say so).
 
 ### Netlify
 
+**Deploy from Git, not by dropping a folder.** Drag-and-drop deploys run no
+build step, and `netlify/functions/api.ts` is TypeScript whose imports resolve
+from `node_modules` — neither of which exists in a dropped archive. Netlify
+then fails to bundle the function, the deploy fails, and the site keeps serving
+whatever was published before. A stale site after an apparently successful
+upload almost always means this; the deploy log will say so.
+
+Connect the repository instead (**Add new site → Import an existing project**)
+and Netlify runs `npm install` and the build command from `netlify.toml`,
+bundling the function properly.
+
+The sign-in card prints a build stamp. If it does not match the commit you
+expect, the deploy did not land — no amount of code changes will alter what you
+are looking at.
+
 `netlify.toml` and `netlify/functions/api.ts` are set up: the Express app is
 wrapped with `serverless-http`, `public/` is published as static assets, and
 `/api/*`, `/auth/*` and `/webhooks/*` are redirected into the function.

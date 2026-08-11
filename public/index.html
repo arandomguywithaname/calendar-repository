@@ -195,7 +195,7 @@
       Sign in with Google
     </a>
 
-    <div id="demoWrap" class="hidden">
+    <div id="demoWrap">
       <div id="demoDivider" class="divider hidden">or</div>
       <form id="demoForm" style="display:flex;flex-direction:column;gap:10px;text-align:left">
         <label class="note" for="demoEmail">Email</label>
@@ -212,6 +212,7 @@
     </div>
 
     <p id="signinError" class="error" style="margin-top:14px"></p>
+    <p class="note" style="margin-top:10px;opacity:.6">build 2026-08-11 · a464acd</p>
   </div>
 </section>
 
@@ -325,8 +326,9 @@ async function boot() {
 
   if (session.googleEnabled) $("googleBtn").classList.remove("hidden");
   if (session.demoEnabled) {
-    $("demoWrap").classList.remove("hidden");
     if (session.googleEnabled) $("demoDivider").classList.remove("hidden");
+  } else {
+    $("demoWrap").classList.add("hidden");
   }
 
   if (!session.authenticated) {
