@@ -176,19 +176,19 @@ check("hands travel to the left after every turn", () => {
   eq(s.players[0].hand[0], "maki3", "seat 2's leftovers wrapped to seat 0");
 });
 
-check("teriyaki never works on yourself — the double goes to your left", () => {
+check("teriyaki doubles your own next card, nobody else's", () => {
   const s = freshGame(3);
   s.players[0].hand = ["teriyaki"];
   s.players[1].hand = ["pudding"];
   s.players[2].hand = ["pudding"];
   const reveals = turn(s, [0, 0, 0]);
-  eq(s.players[0].pending, 0, "the player who plated it gets nothing");
-  eq(s.players[1].pending, 1, "the player they pass to is served");
+  eq(s.players[0].pending, 1, "the player who plated it holds the double");
+  eq(s.players[1].pending, 0, "the player on their left gets nothing");
   eq(s.players[2].pending, 0, "nobody else is touched");
-  eq(reveals[0].gift, 1, "reveal names the seat served");
+  eq(reveals[0].gift, 0, "the reveal names their own seat");
 });
 
-check("the served player's next card counts twice, the server's does not", () => {
+check("the next card they plate counts twice, other players unaffected", () => {
   const s = freshGame(3);
   s.players[0].hand = ["teriyaki"];
   s.players[1].hand = ["pudding"];
@@ -201,56 +201,26 @@ check("the served player's next card counts twice, the server's does not", () =>
   s.players[2].hand = ["pudding"];
   turn(s, [0, 0, 0]);
 
-  eq(E.tally(s.players[1].tableau).dumpling, 2, "served player's gyoza counted twice");
-  eq(E.tally(s.players[1].tableau).dumplingPts, 3, "points for a doubled gyoza");
-  eq(E.tally(s.players[0].tableau).dumpling, 1, "server's own gyoza counted once");
-  eq(s.players[1].pending, 0, "the double is spent");
+  eq(E.tally(s.players[0].tableau).dumpling, 2, "their own gyoza counted twice");
+  eq(E.tally(s.players[0].tableau).dumplingPts, 3, "points for a doubled gyoza");
+  eq(E.tally(s.players[1].tableau).dumpling, 1, "the neighbour's gyoza counted once");
+  eq(s.players[0].pending, 0, "the double is spent");
 
   // Spent means spent — the card after it is plated normally.
-  s.players[0].hand = ["pudding"];
-  s.players[1].hand = ["dumpling"];
+  s.players[0].hand = ["dumpling"];
+  s.players[1].hand = ["pudding"];
   s.players[2].hand = ["pudding"];
   turn(s, [0, 0, 0]);
-  eq(E.tally(s.players[1].tableau).dumpling, 3, "third gyoza counted once");
+  eq(E.tally(s.players[0].tableau).dumpling, 3, "third gyoza counted once");
 });
 
-check("teriyaki cannot double a card played on the same turn", () => {
+check("a teriyaki cannot double itself, even the turn it is plated", () => {
   const s = freshGame(2);
   s.players[0].hand = ["teriyaki"];
   s.players[1].hand = ["dumpling"];
-  turn(s, [0, 0]);
-  eq(E.tally(s.players[1].tableau).dumpling, 1, "same-turn gyoza counted once");
-  eq(s.players[1].pending, 1, "the double waits for their next card");
-});
-
-check("at two players the double lands on the only opponent", () => {
-  const s = freshGame(2);
-  s.players[0].hand = ["teriyaki"];
-  s.players[1].hand = ["pudding"];
-  turn(s, [0, 0]);
-  eq(s.players[1].pending, 1, "opponent served");
-  eq(s.players[0].pending, 0, "server unserved");
-});
-
-check("the last seat serves the first — passing wraps around", () => {
-  const s = freshGame(5);
-  s.players.forEach(p => { p.hand = ["pudding"]; });
-  s.players[4].hand = ["teriyaki"];
-  turn(s, [0, 0, 0, 0, 0]);
-  eq(s.players[0].pending, 1, "seat 4 served seat 0");
-  eq(s.players[4].pending, 0, "seat 4 served nobody at home");
-});
-
-check("two players can serve the same seat, stacking doubles", () => {
-  const s = freshGame(3);
-  // seat 1 and seat 2 both hand off into... seat 2 and seat 0 respectively.
-  s.players[0].hand = ["pudding"];
-  s.players[1].hand = ["teriyaki"];
-  s.players[2].hand = ["teriyaki"];
-  turn(s, [0, 0, 0]);
-  eq(s.players[2].pending, 1, "seat 1 served seat 2");
-  eq(s.players[0].pending, 1, "seat 2 served seat 0");
-  eq(s.players[1].pending, 0, "seat 1 served nobody at home");
+  const reveals = turn(s, [0, 0]);
+  eq(reveals[0].entry.x2, false, "the teriyaki itself is not stamped");
+  eq(s.players[0].pending, 1, "it waits for the next card instead");
 });
 
 check("teriyaki doubles maki icons and nigiri points too", () => {
@@ -259,25 +229,21 @@ check("teriyaki doubles maki icons and nigiri points too", () => {
   eq(E.tally(plate(["teriyaki", { eff: "tempura", x2: true }])).tempuraPts, 5, "doubled tempura is a pair");
 });
 
-check("a teriyaki card is never itself doubled, so doubles can stack", () => {
+check("plating two teriyaki in a row queues two doubles", () => {
   const s = freshGame(2);
-  // Both seats plate Teriyaki twice: each serves the other, and because a
-  // Teriyaki never consumes a double, both end up holding two.
   for (let i = 0; i < 2; i++) {
     s.players[0].hand = ["teriyaki"];
-    s.players[1].hand = ["teriyaki"];
+    s.players[1].hand = ["pudding"];
     turn(s, [0, 0]);
   }
-  eq(s.players[0].pending, 2, "seat 0 holding two doubles");
-  eq(s.players[1].pending, 2, "seat 1 holding two doubles");
-  eq(s.players[1].tableau.every(e => !e.x2), true, "no teriyaki got stamped");
+  eq(s.players[0].pending, 2, "two doubles waiting");
+  eq(s.players[0].tableau.every(e => !e.x2), true, "no teriyaki got stamped");
 
-  s.players[0].hand = ["pudding"];
-  s.players[1].hand = ["nigiri_squid"];
+  s.players[0].hand = ["nigiri_squid"];
+  s.players[1].hand = ["pudding"];
   turn(s, [0, 0]);
-  eq(E.tally(s.players[1].tableau).nigiriPts, 6, "squid doubled once");
-  eq(s.players[1].pending, 1, "second double still waiting");
-  eq(E.tally(s.players[0].tableau).puddings, 2, "pudding doubled too");
+  eq(E.tally(s.players[0].tableau).nigiriPts, 6, "squid doubled once");
+  eq(s.players[0].pending, 1, "second double still waiting");
 });
 
 check("any scoring card spends a waiting double, so they do not pile up", () => {
@@ -285,60 +251,33 @@ check("any scoring card spends a waiting double, so they do not pile up", () => 
   s.players[0].hand = ["teriyaki"];
   s.players[1].hand = ["pudding"];
   turn(s, [0, 0]);
-  eq(s.players[1].pending, 1, "one double served");
+  eq(s.players[0].pending, 1, "one double waiting");
 
-  // Seat 1 plates an ordinary card, which eats the double it was holding
-  // before seat 0's second Teriyaki serves another.
-  s.players[0].hand = ["teriyaki"];
+  s.players[0].hand = ["pudding"];
   s.players[1].hand = ["pudding"];
   turn(s, [0, 0]);
-  eq(s.players[1].pending, 1, "spent one, served one");
-  eq(E.tally(s.players[1].tableau).puddings, 3, "one plain pudding, one doubled");
+  eq(s.players[0].pending, 0, "spent on the next card");
+  eq(E.tally(s.players[0].tableau).puddings, 2, "that pudding counted twice");
 });
 
-check("a double waits across the round boundary for their next card", () => {
+check("a double waits across the round boundary for your next card", () => {
   const s = freshGame(3);
-  // Served on the very last card of the round: there is no next card in this
+  // Plated on the very last card of the round: there is no next card in this
   // round, so it has to survive the deal or the Teriyaki was wasted.
   s.players.forEach(p => { p.hand = ["pudding"]; });
   s.players[0].hand = ["teriyaki"];
   turn(s, [0, 0, 0]);
   eq(E.roundOver(s), true, "round is over");
-  eq(s.players[1].pending, 1, "double served on the last turn");
+  eq(s.players[0].pending, 1, "double armed on the last turn");
 
   E.scoreRound(s);
   E.dealRound(s);
-  eq(s.players[1].pending, 1, "double survived the deal");
+  eq(s.players[0].pending, 1, "double survived the deal");
 
   s.players.forEach(p => { p.hand = ["dumpling"]; });
   turn(s, [0, 0, 0]);
-  eq(E.tally(s.players[1].tableau).dumpling, 2, "it landed on their first card of the new round");
-  eq(s.players[1].pending, 0, "and is spent");
-});
-
-check("holding teriyaki to the last turn cannot deny the double", () => {
-  // The bug this guards: while pending was wiped on the deal, plating a
-  // Teriyaki last meant nobody ever got the double, which made dumping it
-  // last the correct play and the card dead.
-  const s = freshGame(4);
-  let served = 0;
-  for (let round = 1; round <= 3; round++) {
-    if (round > 1) E.dealRound(s);
-    while (!E.roundOver(s)) {
-      const picks = s.players.map((p, seat) =>
-        ({ index: Math.max(0, p.hand.indexOf("teriyaki")), jokerAs: "pudding" }));
-      // seat 0 always holds its teriyaki back to the very last turn
-      picks[0] = { index: s.players[0].hand.length - 1, jokerAs: "pudding" };
-      const plated = s.players[0].hand[picks[0].index];
-      E.playTurn(s, picks);
-      if (plated === "teriyaki") served++;
-    }
-    E.scoreRound(s);
-  }
-  const landed = s.players.reduce((sum, p) => sum + p.tableau.filter(e => e.x2).length, 0);
-  if (served > 0 && landed === 0) {
-    throw new Error(served + " teriyaki served but not one double ever landed");
-  }
+  eq(E.tally(s.players[0].tableau).dumpling, 2, "it landed on their first card of the new round");
+  eq(s.players[0].pending, 0, "and is spent");
 });
 
 check("teriyaki alone is worth nothing", () => {
@@ -391,15 +330,15 @@ check("a joker scores as the card it names", () => {
   eq(s.players[0].tableau[0].joker, true, "flagged as a joker");
 });
 
-check("a joker can be doubled by a teriyaki served to you", () => {
+check("a joker can be doubled by your own teriyaki", () => {
   const s = freshGame(2);
   s.players[0].hand = ["teriyaki"];
   s.players[1].hand = ["pudding"];
   turn(s, [0, 0]);
-  s.players[0].hand = ["pudding"];
-  s.players[1].hand = ["joker"];
-  turn(s, [0, { index: 0, jokerAs: "nigiri_squid" }]);
-  eq(E.tally(s.players[1].tableau).nigiriPts, 6, "doubled joker-squid");
+  s.players[0].hand = ["joker"];
+  s.players[1].hand = ["pudding"];
+  turn(s, [{ index: 0, jokerAs: "nigiri_squid" }, 0]);
+  eq(E.tally(s.players[0].tableau).nigiriPts, 6, "doubled joker-squid");
 });
 
 check("a joker can name maki, and noodles then boost it", () => {
@@ -548,16 +487,25 @@ check("the brain reaches for a big card while holding a served double", () => {
   if (doubled <= plain) throw new Error("a served double did not raise the card's value");
 });
 
-check("the brain treats teriyaki as a card to dump, not to want", () => {
-  const s = freshGame(3);
+check("the brain wants a teriyaki while there are cards left to double", () => {
+  const s = freshGame(4);
   const seat = 1;
   s.players[seat].tableau = [];
   const teriyaki = E.cardValue(s, seat, "teriyaki");
-  if (teriyaki >= 0) throw new Error("teriyaki should cost the player, valued " + teriyaki);
-  ["nigiri_egg", "dumpling", "pudding", "maki1"].forEach(id => {
-    if (E.cardValue(s, seat, id) <= teriyaki) {
-      throw new Error(id + " ranked no better than teriyaki");
-    }
+  if (teriyaki <= 0) throw new Error("teriyaki should be worth having, valued " + teriyaki);
+  if (teriyaki <= E.cardValue(s, seat, "nigiri_egg")) {
+    throw new Error("teriyaki ranked below an egg nigiri");
+  }
+});
+
+check("every table deals seven cards a hand", () => {
+  [2, 3, 4, 5].forEach(n => {
+    const s = E.createGame(n, "normal");
+    eq(s.handSize, 7, n + "-player hand size");
+    E.dealRound(s);
+    s.players.forEach((p, i) => eq(p.hand.length, 7, "seat " + i + " hand"));
+    // Three rounds must still fit in the 108-card deck.
+    if (n * 7 * 3 > 108) throw new Error("deck too small for " + n + " players");
   });
 });
 

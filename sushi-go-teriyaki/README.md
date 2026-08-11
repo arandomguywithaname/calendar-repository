@@ -10,7 +10,7 @@ CDN. **Double-click it, or drop the folder on any static host.**
 ```
 sushi-go-teriyaki/
   index.html      the whole game — markup, styles, engine, UI, PeerJS
-  test-engine.js  node test-engine.js   (42 checks, no dependencies)
+  test-engine.js  node test-engine.js   (41 checks, no dependencies)
   README.md
 ```
 
@@ -24,37 +24,27 @@ Three ways to play:
 
 | Replaces | New card | What it does |
 |---|---|---|
-| Sashimi | **Teriyaki** 照り焼き | Scores nothing, and never works on yourself. It doubles a card for **the player you pass your hand to**. |
+| Sashimi | **Teriyaki** 照り焼き | Scores nothing itself. **The next card you plate counts twice.** |
 | Chopsticks | **Noodles** 麺 | At the end of the round, your **maki count goes up by half**. |
 | Wasabi | **Joker** 化札 | **Becomes any other card** you name when you plate it. |
 
 ### Teriyaki
 
-**Teriyaki never works on yourself.** Plate it and it travels with the hand you
-pass, serving a double to the player on your left — the one who receives your
-cards. The next card *they* plate counts as two copies of itself:
+Plate it, and **the next card you plate counts as two copies of itself**:
 
 - a gyoza counts as **two gyoza** (so 1 gyoza scores 3, not 1)
 - a Maki x3 counts as **6 maki icons**
 - a squid nigiri scores **6** instead of 3
 - a lone tempura becomes **a complete pair** — 5 points from one card
 
-Because every plate is revealed at the same time, a Teriyaki can never double a
-card played on the turn it was served — it waits for the receiving player's
-next card. A Teriyaki card is never itself doubled, so a player holding a
-waiting double who plates a Teriyaki keeps it for later; that is the only way
-doubles stack up.
+The double is always your own — it never lands on another player. A Teriyaki
+is never doubled by another Teriyaki, so plating two in a row simply queues two
+doubles for your next two scoring cards.
 
 **A waiting double keeps waiting**, across the end of a round and into the
-next, until that player plates a card it can land on. Only the very end of the
-game strands one.
-
-That last part matters more than it looks. While a double expired with the
-round, plating your Teriyaki on the final turn meant nobody ever got it — so
-holding it back was simply the right play, and the card did nothing in 96% of
-games. Carrying the double removes the dodge: it will land sooner or later
-whatever you do, so the question becomes *when* it helps your neighbour least,
-not whether you can waste it entirely.
+next, until you plate a card it can land on. So spending your last card of a
+round on a Teriyaki isn't wasted — it doubles your first card of the next
+round. Only the end of the whole game strands one.
 
 ### Noodles
 
@@ -76,8 +66,8 @@ Noodles with no maki behind them do nothing.
 
 Plate the Joker and name any other card in the game. It *is* that card for the
 rest of the round — name Maki x3 and your noodles boost it, name gyoza and it
-counts toward your gyoza run. A Joker can't copy another Joker, and a double
-served to you by a Teriyaki will happily double it.
+counts toward your gyoza run. A Joker can't copy another Joker, and a waiting
+Teriyaki double will happily double it.
 
 ## The rest of the menu
 
@@ -94,13 +84,14 @@ Unchanged from the game you know:
 
 ## How a game runs
 
-2–5 players, three rounds, hands of 10 / 9 / 8 / 7 cards depending on the
-count. Every turn all players plate one card at the same time, then hands pass
-to the left. Highest score after three rounds and the pudding contest wins.
+2–5 players, three rounds, **seven cards a hand** whatever the player count —
+so seven turns a round, and 21 cards plated over a game. Every turn all players
+plate one card at the same time, then hands pass to the left. Highest score
+after three rounds and the pudding contest wins.
 
 Opponents come in Easy, Normal and Hard — the difficulty sets how much noise is
 added to their card evaluation, and all three know to save a big card for a
-pending Teriyaki.
+waiting Teriyaki double.
 
 ## Playing against people
 

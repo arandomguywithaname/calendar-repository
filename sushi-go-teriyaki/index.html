@@ -668,7 +668,7 @@ tfoot td{border-bottom:0;color:var(--muted)}
 
 var CARDS = {
   tempura:      {name:"Tempura",       jp:"天ぷら", icon:"🍤", band:"tempura",  rule:"5 pts per pair"},
-  teriyaki:     {name:"Teriyaki",      jp:"照り焼き", icon:"🍗", band:"teriyaki", rule:"serves x2 to your left"},
+  teriyaki:     {name:"Teriyaki",      jp:"照り焼き", icon:"🍗", band:"teriyaki", rule:"your next card x2"},
   dumpling:     {name:"Gyoza",         jp:"餃子",   icon:"🥟", band:"dumpling", rule:"1/3/6/10/15"},
   maki1:        {name:"Maki x1",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
   maki2:        {name:"Maki x2",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
@@ -691,7 +691,7 @@ var DECK_COUNTS = {
 var NIGIRI_PTS = {nigiri_egg:1, nigiri_salmon:2, nigiri_squid:3};
 var MAKI_ICONS = {maki1:1, maki2:2, maki3:3};
 var DUMPLING_PTS = [0,1,3,6,10,15];
-var HAND_SIZE = {2:10, 3:9, 4:8, 5:7};
+var HAND_SIZE = {2:7, 3:7, 4:7, 5:7};
 var BOT_NAMES = ["Kenji","Aiko","Haru","Yuki","Sora","Ren","Mika"];
 
 /* Every card a Joker may copy (a Joker cannot copy another Joker). */
@@ -846,10 +846,8 @@ function playTurn(state, choices){
 
     var gift = null;
     if(eff === "teriyaki"){
-      /* Teriyaki never works on yourself: it rides along with the hand
-         you are about to pass, and doubles a card for the player who
-         receives it. */
-      gift = (i + 1) % n;
+      /* The double is your own: it waits for the next card you plate. */
+      gift = i;
       served.push(gift);
     }
 
@@ -857,8 +855,8 @@ function playTurn(state, choices){
     reveals.push({seat:i, entry:entry, gift:gift});
   }
 
-  /* Applied after every plate is resolved, so a Teriyaki can never
-     double a card played on the same turn it was served. */
+  /* Applied after every plate is resolved, so the Teriyaki you just
+     plated cannot double itself — it waits for your next card. */
   served.forEach(function(seat){ state.players[seat].pending += 1; });
 
   /* Hands travel to the left: seat i hands its cards to seat i+1. */
@@ -998,9 +996,9 @@ function cardValue(state, seat, eff){
   } else if(NIGIRI_PTS[eff]){
     v = NIGIRI_PTS[eff];
   } else if(eff === "teriyaki"){
-    /* Scores nothing and hands a double to the player on your left, so
-       it is a card you dump when there is nothing better to plate. */
-    v = -0.8;
+    /* Worth having: it doubles whatever you plate next. On your last card
+       of a round it only pays if there is another round to carry into. */
+    v = turnsLeft >= 2 ? 3.4 : (state.round < 3 ? 1.5 : 0);
   } else if(MAKI_ICONS[eff]){
     v = MAKI_ICONS[eff] * (1 + 0.5 * t.noodles) * makiPressure(state, seat);
   } else if(eff === "noodle"){
@@ -1234,7 +1232,7 @@ function renderTray(view){
   var banner = $("pendingBanner");
   banner.innerHTML = me.pending > 0
     ? "<div class=\"banner\"><span class=\"seal-mini\">倍</span>" +
-      "<span>Teriyaki was served to you" + (me.pending > 1 ? " (x" + me.pending + ")" : "") +
+      "<span>Teriyaki is on" + (me.pending > 1 ? " (x" + me.pending + ")" : "") +
       " — your next card counts twice.</span></div>"
     : "";
 }
@@ -1411,10 +1409,10 @@ async function runRound(){
 
     var reveals = playTurn(game, choices);
     var served = reveals.filter(function(r){ return r.gift !== null; })
-      .map(function(r){
-        return game.players[r.seat].name + " → " + game.players[r.gift].name;
-      });
-    prompt(served.length ? "Teriyaki served: " + served.join(",  ") : "Revealing…", false);
+      .map(function(r){ return game.players[r.seat].name; });
+    prompt(served.length
+      ? "Teriyaki on: " + served.join(", ") + " — next card counts twice"
+      : "Revealing…", false);
     await animateReveals(reveals, neutral);
     /* give the hand-off a beat longer to be read */
     if(served.length) await wait(620);
@@ -1589,13 +1587,11 @@ function showRules(){
     "It asks for each player in turn behind a hand-off screen, so nobody sees " +
     "anyone else's cards, then reveals every plate at once.</p>" +
     "<h3>The new menu</h3><div class=\"rulecards\">" +
-      ruleCard("teriyaki", "Scores nothing, and <b>never works on yourself</b>. " +
-        "It travels with the hand you pass, and doubles the next card played by " +
-        "the player on your left — two gyoza from one, double maki icons, double " +
-        "nigiri points. It can't double a card played on the same turn, and a " +
-        "Teriyaki card is never itself doubled. The double waits for their next " +
-        "card however long that takes, carrying into the next round, so plating " +
-        "one late doesn't waste it.") +
+      ruleCard("teriyaki", "Scores nothing by itself. <b>The next card you plate " +
+        "counts twice</b> — two gyoza from one, double maki icons, double nigiri " +
+        "points, and a lone tempura becomes a whole pair. It never doubles itself, " +
+        "so plating two in a row just queues them up. The double waits for your " +
+        "next card however long that takes, carrying into the next round.") +
       ruleCard("noodle", "At the end of the round it boosts your maki count by " +
         "<b>half again</b>. 6 maki becomes 9. Two bowls of noodles add half each.") +
       ruleCard("joker", "Plate it and name any other card. It <b>becomes</b> that card " +
@@ -2171,12 +2167,14 @@ async function hostedRound(table){
 
     var reveals = playTurn(game, picks);
     var served = reveals.filter(function(x){ return x.gift !== null; })
-      .map(function(x){ return game.players[x.seat].name + " → " + game.players[x.gift].name; });
+      .map(function(x){ return game.players[x.seat].name; });
 
     table.broadcast(function(seat){
       return {t:"turn", view:viewFor(game, seat), served:served};
     });
-    prompt(served.length ? "Teriyaki served: " + served.join(",  ") : "Revealing…", false);
+    prompt(served.length
+      ? "Teriyaki on: " + served.join(", ") + " — next card counts twice"
+      : "Revealing…", false);
     await animateReveals(reveals, 0);
     if(served.length) await wait(620);
 
@@ -2314,7 +2312,8 @@ function startGuest(conn, seated){
       if(msg.t === "turn"){
         markFreshChips();
         prompt(msg.served && msg.served.length
-          ? "Teriyaki served: " + msg.served.join(",  ") : "Revealing…", false);
+          ? "Teriyaki on: " + msg.served.join(", ") + " — next card counts twice"
+          : "Revealing…", false);
         hideHandCards();
       } else if(msg.t === "choose"){
         renderHand(true);
