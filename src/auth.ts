@@ -71,11 +71,17 @@ async function getOrCreateSessionSecret(): Promise<string> {
       const { getStore } = await import("@netlify/blobs");
       await getStore("inbox-reader").set("session-secret", sessionSecret);
     } catch (err: any) {
-      console.warn(`Could not save session secret to Blobs: ${err.message}`);
+      // On Netlify, if Blobs fails, we still have the in-memory sessionSecret.
+      // Don't try to fall back to file system — it won't be writable.
+      console.warn(`Could not persist session secret to Blobs: ${err.message}`);
     }
   } else {
+    // Only use file system if definitely not on Netlify
     try {
-      fs.mkdirSync(path.dirname(SESSION_SECRET_PATH), { recursive: true });
+      const dir = path.dirname(SESSION_SECRET_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
       fs.writeFileSync(SESSION_SECRET_PATH, sessionSecret);
     } catch (err: any) {
       console.warn(`Could not save session secret to ${SESSION_SECRET_PATH}: ${err.message}`);

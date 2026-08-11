@@ -59,8 +59,16 @@ const fileBackend: Backend = {
     }
   },
   async write(store) {
-    fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
-    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+    try {
+      const dir = path.dirname(STORE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+    } catch (err: any) {
+      console.warn(`Could not write to ${STORE_PATH} (${err.message})`);
+      // On Netlify this is expected — data is in Blobs, not the file system
+    }
   },
 };
 
