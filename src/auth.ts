@@ -1,4 +1,6 @@
 import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 import { Request, Response, NextFunction } from "express";
 import { google } from "googleapis";
 import { getUser, upsertUser } from "./reader/store";
@@ -20,22 +22,71 @@ import { User } from "./reader/types";
 const SESSION_COOKIE = "reader_session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const SESSION_SECRET_PATH = path.resolve(__dirname, "../data/session-secret.txt");
 
 const pendingStates = new Map<string, number>();
 
 const configWarnings: string[] = [];
 
-let sessionSecret = process.env.SESSION_SECRET || "";
-if (!sessionSecret) {
+let sessionSecret: string | null = null;
+
+async function getOrCreateSessionSecret(): Promise<string> {
+  if (sessionSecret) return sessionSecret;
+
+  if (process.env.SESSION_SECRET) {
+    sessionSecret = process.env.SESSION_SECRET;
+    return sessionSecret;
+  }
+
+  // Try to load from persistent storage.
+  if (process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT) {
+    // On Netlify, store in Blobs alongside other app data.
+    try {
+      const { getStore } = await import("@netlify/blobs");
+      const stored = await getStore("inbox-reader").get("session-secret", { type: "text" });
+      if (stored) {
+        sessionSecret = stored as string;
+        return sessionSecret;
+      }
+    } catch (err: any) {
+      console.warn(`Could not read session secret from Blobs: ${err.message}`);
+    }
+  } else {
+    // Locally, store in data/session-secret.txt.
+    if (fs.existsSync(SESSION_SECRET_PATH)) {
+      try {
+        sessionSecret = fs.readFileSync(SESSION_SECRET_PATH, "utf-8").trim();
+        return sessionSecret;
+      } catch (err: any) {
+        console.warn(`Could not read ${SESSION_SECRET_PATH}: ${err.message}`);
+      }
+    }
+  }
+
+  // Generate new secret and persist it.
   sessionSecret = crypto.randomBytes(32).toString("hex");
-  // On a long-lived server this just means sessions end on restart. On
-  // serverless it means every cold start signs everyone out, which is
-  // near-impossible to diagnose from the browser — so say so out loud.
-  const message = process.env.NETLIFY
-    ? "SESSION_SECRET is not set. Each cold start generates a new one, so you will be signed out at random. Set it in Site configuration → Environment variables."
-    : "SESSION_SECRET is not set — using a random secret. Sessions end on restart.";
-  console.warn(message);
-  configWarnings.push(message);
+
+  if (process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT) {
+    try {
+      const { getStore } = await import("@netlify/blobs");
+      await getStore("inbox-reader").set("session-secret", sessionSecret);
+    } catch (err: any) {
+      console.warn(`Could not save session secret to Blobs: ${err.message}`);
+    }
+  } else {
+    try {
+      fs.mkdirSync(path.dirname(SESSION_SECRET_PATH), { recursive: true });
+      fs.writeFileSync(SESSION_SECRET_PATH, sessionSecret);
+    } catch (err: any) {
+      console.warn(`Could not save session secret to ${SESSION_SECRET_PATH}: ${err.message}`);
+    }
+  }
+
+  return sessionSecret;
+}
+
+export async function initializeSessionSecret(): Promise<void> {
+  await getOrCreateSessionSecret();
 }
 
 /** Deployment problems worth showing in the UI rather than leaving to the logs. */
@@ -73,6 +124,7 @@ function oauthClient() {
 /* ------------------------------- sessions -------------------------------- */
 
 function sign(payload: string): string {
+  if (!sessionSecret) throw new Error("Session secret not initialized");
   return crypto.createHmac("sha256", sessionSecret).update(payload).digest("base64url");
 }
 

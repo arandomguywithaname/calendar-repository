@@ -1,4 +1,5 @@
 import serverless from "serverless-http";
+import { initializeSessionSecret } from "../../src/auth";
 import app from "../../src/app";
 
 /**
@@ -10,6 +11,17 @@ import app from "../../src/app";
  * `basePath` strips the function prefix so Express sees "/api/session" and the
  * routes in src/app.ts match unchanged.
  */
-export const handler = serverless(app, {
+
+let initialized = false;
+
+const httpHandler = serverless(app, {
   basePath: "/.netlify/functions/api",
 });
+
+export const handler = async (event: any, context: any) => {
+  if (!initialized) {
+    await initializeSessionSecret();
+    initialized = true;
+  }
+  return httpHandler(event, context);
+};
