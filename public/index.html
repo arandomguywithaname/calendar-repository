@@ -307,7 +307,6 @@ async function boot() {
     history.replaceState({}, "", "/");
   }
 
-  const params = new URLSearchParams(location.search);
   if (params.get("connected") || params.get("connectError")) {
     const note = params.get("connectError")
       ? `Could not connect: ${params.get("connectError")}`
