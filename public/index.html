@@ -376,8 +376,12 @@ function renderSources() {
         .map((chat) => {
           const key = `${source.app}:${chat.id}`;
           const checked = state.selection.has(key) ? "checked" : "";
-          const unread = chat.unreadCount > 0 ? `<span class="unread-dot">${chat.unreadCount}</span>` : "";
-          return `<label><input type="checkbox" class="chat" data-key="${key}" ${checked}/>
+          // Chat ids come from external APIs and, for WhatsApp, straight off an
+          // unauthenticated webhook — escape them like any other untrusted text.
+          const unread = chat.unreadCount > 0
+            ? `<span class="unread-dot">${escapeHtml(String(chat.unreadCount))}</span>`
+            : "";
+          return `<label><input type="checkbox" class="chat" data-key="${escapeHtml(key)}" ${checked}/>
                     <span>${escapeHtml(chat.title)}</span>${unread}</label>`;
         })
         .join("");

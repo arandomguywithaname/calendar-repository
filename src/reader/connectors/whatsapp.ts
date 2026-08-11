@@ -12,6 +12,15 @@ import { demoChats, demoMessages } from "./demo";
  * conversations from that point forward.
  */
 
+/**
+ * Identifiers are used as DOM attribute values and as preference keys, so they
+ * are restricted to a conservative charset rather than escaped at each use.
+ * Returns "" when nothing usable survives, and the caller drops the message.
+ */
+function safeId(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9._@+-]/g, "").slice(0, 64);
+}
+
 export function isConfigured(): boolean {
   return Boolean(process.env.WHATSAPP_VERIFY_TOKEN);
 }
@@ -53,11 +62,17 @@ export async function ingestWebhook(payload: CloudApiPayload): Promise<number> {
         const text = message.text?.body;
         if (!text || !message.from || !message.id) continue;
 
-        const title = names.get(message.from) || message.from;
+        // The webhook is unauthenticated unless WHATSAPP_APP_SECRET is set, so
+        // treat identifiers as hostile: they end up in DOM attributes and in
+        // preference keys. A wa_id is a phone number; anything else is junk.
+        const from = safeId(message.from);
+        if (!from) continue;
+
+        const title = names.get(message.from) || from;
         const timestamp = new Date(Number(message.timestamp || Date.now() / 1000) * 1000).toISOString();
 
         chats.push({
-          id: message.from,
+          id: from,
           app: "whatsapp",
           title,
           kind: "dm",
@@ -66,9 +81,9 @@ export async function ingestWebhook(payload: CloudApiPayload): Promise<number> {
         });
 
         messages.push({
-          id: `whatsapp:${message.id}`,
+          id: `whatsapp:${safeId(message.id)}`,
           app: "whatsapp",
-          chatId: message.from,
+          chatId: from,
           chatTitle: title,
           sender: title,
           text,
