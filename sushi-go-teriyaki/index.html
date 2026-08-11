@@ -324,26 +324,40 @@ legend{
   display:flex;flex-direction:column;overflow:hidden;
   text-align:left;
 }
+/* The name reads first: it sits in the coloured band across the top, with
+   the scoring shorthand beside it. Fixed height so every card lines up
+   whether the name wraps to one line or two. */
 .card-band{
   background:var(--band);color:#fff;flex:none;
-  padding:.24em .45em;display:flex;align-items:center;justify-content:space-between;
-  font-family:var(--mincho);font-size:.66rem;letter-spacing:.05em;
+  /* font-size here sets the em that min-height is measured in, so the band
+     is two lines of its own type — not 2.7x the inherited 16px. */
+  font-size:.64rem;
+  padding:.4em .55em .34em;display:flex;align-items:flex-start;
+  justify-content:space-between;gap:.35em;min-height:2.9em;
 }
-.card-band .pt{font-family:var(--mono);font-size:.6rem;opacity:.85;letter-spacing:0}
+.card-band .en{
+  font-family:var(--display);font-weight:700;font-size:1em;line-height:1.14;
+  letter-spacing:-.012em;text-shadow:0 1px 1px rgba(0,0,0,.22);
+}
+.card-band .pt{
+  font-family:var(--mono);font-size:.85em;opacity:.92;letter-spacing:0;
+  flex:none;padding-top:.1em;
+}
 .card-glyph{
-  flex:1;display:grid;place-items:center;font-size:calc(var(--cw,94px) * .40);
+  flex:1;display:grid;place-items:center;font-size:calc(var(--cw,94px) * .34);
   line-height:1;filter:saturate(1.05);
 }
 .card-foot{
-  flex:none;padding:.3em .45em .4em;border-top:1px solid rgba(20,24,31,.14);
+  flex:none;padding:.28em .45em .34em;border-top:1px solid rgba(20,24,31,.14);
   background:rgba(220,205,180,.34);
 }
-.card-foot .en{
-  display:block;font-size:.68rem;font-weight:700;letter-spacing:-.01em;line-height:1.15;
+.card-foot .jp{
+  display:block;font-family:var(--mincho);font-size:.58rem;color:#6B6152;
+  letter-spacing:.1em;line-height:1.2;
 }
 .card-foot .rule{
-  display:block;font-family:var(--mono);font-size:.55rem;color:#5C5344;
-  line-height:1.25;margin-top:.12em;
+  display:block;font-family:var(--mono);font-size:.53rem;color:#5C5344;
+  line-height:1.25;margin-top:.1em;
 }
 /* hand cards are interactive */
 .card.playable{
@@ -357,15 +371,21 @@ legend{
 .card[disabled]{cursor:default}
 
 /* mini chips for tableaus */
+/* Plated cards are read at a glance, so each carries its name in short —
+   the picture alone is not enough to tell one from another this small. */
 .chip{
   --band:var(--c-maki);
-  position:relative;flex:none;width:30px;height:40px;border-radius:5px;
+  position:relative;flex:none;width:42px;height:48px;border-radius:5px;
   background:var(--washi);border:1.2px solid #0B0E14;
   display:flex;flex-direction:column;overflow:hidden;
   box-shadow:0 3px 7px -3px rgba(0,0,0,.7);
 }
-.chip .b{height:7px;background:var(--band);flex:none}
-.chip .g{flex:1;display:grid;place-items:center;font-size:.92rem;line-height:1}
+.chip .b{
+  flex:none;background:var(--band);color:#fff;
+  font-family:var(--mono);font-size:7px;line-height:1;letter-spacing:.02em;
+  padding:2.5px 1px 2.5px;text-align:center;
+}
+.chip .g{flex:1;display:grid;place-items:center;font-size:1.05rem;line-height:1}
 .chip.fresh{animation:drop .42s cubic-bezier(.2,.8,.3,1) backwards}
 @keyframes drop{
   from{transform:translateY(-18px) rotate(-8deg);opacity:0}
@@ -476,10 +496,10 @@ tfoot td{border-bottom:0;color:var(--muted)}
 
 /* joker picker */
 .joker-grid{
-  display:grid;gap:.5rem;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));
+  display:grid;gap:.5rem;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
   margin-top:.4rem;
 }
-.joker-grid .card{--cw:76px;width:100%;height:auto;aspect-ratio:1/1.38;cursor:pointer}
+.joker-grid .card{--cw:90px;width:100%;height:auto;aspect-ratio:1/1.46;cursor:pointer}
 
 /* winner */
 .winner{display:flex;align-items:center;gap:1rem;margin-bottom:.4rem}
@@ -667,18 +687,18 @@ tfoot td{border-bottom:0;color:var(--muted)}
  * ====================================================== */
 
 var CARDS = {
-  tempura:      {name:"Tempura",       jp:"天ぷら", icon:"🍤", band:"tempura",  rule:"5 pts per pair"},
-  teriyaki:     {name:"Teriyaki",      jp:"照り焼き", icon:"🍗", band:"teriyaki", rule:"your next card x2"},
-  dumpling:     {name:"Gyoza",         jp:"餃子",   icon:"🥟", band:"dumpling", rule:"1/3/6/10/15"},
-  maki1:        {name:"Maki x1",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
-  maki2:        {name:"Maki x2",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
-  maki3:        {name:"Maki x3",       jp:"巻物",   icon:"🍥", band:"maki",     rule:"most: 6  2nd: 3"},
-  nigiri_egg:   {name:"Egg Nigiri",    jp:"玉子",   icon:"🍳", band:"nigiri",   rule:"1 pt"},
-  nigiri_salmon:{name:"Salmon Nigiri", jp:"鮭",     icon:"🍣", band:"nigiri",   rule:"2 pts"},
-  nigiri_squid: {name:"Squid Nigiri",  jp:"烏賊",   icon:"🦑", band:"nigiri",   rule:"3 pts"},
-  pudding:      {name:"Pudding",       jp:"プリン", icon:"🍮", band:"pudding",  rule:"most +6 / least -6"},
-  noodle:       {name:"Noodles",       jp:"麺",     icon:"🍜", band:"noodle",   rule:"maki +50% each"},
-  joker:        {name:"Joker",         jp:"化札",   icon:"🃏", band:"joker",    rule:"becomes any card"}
+  tempura:      {name:"Tempura",       jp:"天ぷら", icon:"🍤", band:"tempura", short:"TEMPURA",  rule:"5 pts per pair"},
+  teriyaki:     {name:"Teriyaki",      jp:"照り焼き", icon:"🍗", band:"teriyaki", short:"TERIYAKI", rule:"your next card x2"},
+  dumpling:     {name:"Gyoza",         jp:"餃子",   icon:"🥟", band:"dumpling", short:"GYOZA", rule:"1/3/6/10/15"},
+  maki1:        {name:"Maki x1",       jp:"巻物",   icon:"🍥", band:"maki", short:"MAKI1",     rule:"most: 6  2nd: 3"},
+  maki2:        {name:"Maki x2",       jp:"巻物",   icon:"🍥", band:"maki", short:"MAKI2",     rule:"most: 6  2nd: 3"},
+  maki3:        {name:"Maki x3",       jp:"巻物",   icon:"🍥", band:"maki", short:"MAKI3",     rule:"most: 6  2nd: 3"},
+  nigiri_egg:   {name:"Egg Nigiri",    jp:"玉子",   icon:"🍳", band:"nigiri", short:"EGG",   rule:"1 pt"},
+  nigiri_salmon:{name:"Salmon Nigiri", jp:"鮭",     icon:"🍣", band:"nigiri", short:"SALMON",   rule:"2 pts"},
+  nigiri_squid: {name:"Squid Nigiri",  jp:"烏賊",   icon:"🦑", band:"nigiri", short:"SQUID",   rule:"3 pts"},
+  pudding:      {name:"Pudding",       jp:"プリン", icon:"🍮", band:"pudding", short:"PUDDING",  rule:"most +6 / least -6"},
+  noodle:       {name:"Noodles",       jp:"麺",     icon:"🍜", band:"noodle", short:"NOODLE",   rule:"maki +50% each"},
+  joker:        {name:"Joker",         jp:"化札",   icon:"🃏", band:"joker", short:"JOKER",    rule:"becomes any card"}
 };
 
 var DECK_COUNTS = {
@@ -1077,11 +1097,13 @@ function cardEl(id, opts){
 
   var pts = "";
   if(NIGIRI_PTS[id]) pts = NIGIRI_PTS[id] + "pt";
-  else if(MAKI_ICONS[id]) pts = "x" + MAKI_ICONS[id];
 
+  /* Name across the top, so a card is identifiable without decoding the
+     picture. The Japanese name moves down beside the scoring line. */
   var band = document.createElement("div");
   band.className = "card-band";
-  band.innerHTML = "<span>" + c.jp + "</span><span class=\"pt\">" + pts + "</span>";
+  band.innerHTML = "<span class=\"en\">" + c.name + "</span>" +
+                   (pts ? "<span class=\"pt\">" + pts + "</span>" : "");
 
   var glyph = document.createElement("div");
   glyph.className = "card-glyph";
@@ -1089,7 +1111,7 @@ function cardEl(id, opts){
 
   var foot = document.createElement("div");
   foot.className = "card-foot";
-  foot.innerHTML = "<span class=\"en\">" + c.name + "</span>" +
+  foot.innerHTML = "<span class=\"jp\">" + c.jp + "</span>" +
                    "<span class=\"rule\">" + c.rule + "</span>";
 
   el.appendChild(band); el.appendChild(glyph); el.appendChild(foot);
@@ -1111,7 +1133,7 @@ function chipEl(entry, fresh){
   var el = document.createElement("div");
   el.className = "chip" + (fresh ? " fresh" : "");
   el.style.setProperty("--band", "var(--c-" + c.band + ")");
-  el.innerHTML = "<div class=\"b\"></div><div class=\"g\">" + c.icon + "</div>";
+  el.innerHTML = "<div class=\"b\">" + c.short + "</div><div class=\"g\">" + c.icon + "</div>";
   if(entry.x2) el.appendChild(sealEl());
   var label = c.name + (entry.joker ? " (Joker)" : "") + (entry.x2 ? " x2" : "");
   el.title = label;
