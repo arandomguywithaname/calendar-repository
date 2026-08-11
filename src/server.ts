@@ -61,11 +61,11 @@ function loadContacts(): ContactsMap {
 /* ------------------------------- pages ----------------------------------- */
 
 app.get("/", (_req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, "../public/reader.html"));
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 app.get("/calendar", (_req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  res.sendFile(path.join(__dirname, "../public/calendar.html"));
 });
 
 /* -------------------------------- auth ----------------------------------- */

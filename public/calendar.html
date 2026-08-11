@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calendar Planning Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px;
+      width: 100%;
+      max-width: 600px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 15px;
+      resize: vertical;
+      min-height: 100px;
+      transition: border-color 0.2s;
+      outline: none;
+      font-family: inherit;
+    }
+
+    textarea:focus { border-color: #6366f1; }
+
+    .file-input-wrapper {
+      margin-top: 20px;
+    }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1.5px dashed #d1d5db;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #6b7280;
+      font-size: 14px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .file-label:hover { border-color: #6366f1; background: #f5f3ff; }
+    .file-label .icon { font-size: 20px; }
+    #imageInput { display: none; }
+    #fileName { font-size: 13px; color: #6366f1; margin-top: 6px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary {
+      background: #6366f1;
+      color: white;
+      width: 100%;
+      justify-content: center;
+      margin-top: 24px;
+    }
+
+    .btn-primary:hover:not(:disabled) { background: #4f46e5; }
+
+    .btn-success {
+      background: #10b981;
+      color: white;
+      width: 100%;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    .btn-success:hover:not(:disabled) { background: #059669; }
+
+    .btn-ghost {
+      background: #f3f4f6;
+      color: #374151;
+      width: 100%;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    .btn-ghost:hover:not(:disabled) { background: #e5e7eb; }
+
+    /* Result section */
+    #result { margin-top: 32px; display: none; }
+
+    .result-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 12px;
+    }
+
+    .event-card {
+      background: #f9fafb;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .event-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      align-items: flex-start;
+    }
+
+    .event-row:last-child { margin-bottom: 0; }
+
+    .event-icon { font-size: 16px; min-width: 20px; }
+
+    .event-field {
+      font-size: 13px;
+      color: #6b7280;
+      font-weight: 500;
+      min-width: 80px;
+    }
+
+    .event-value {
+      font-size: 14px;
+      color: #111827;
+      flex: 1;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #ede9fe;
+      color: #6366f1;
+      margin-right: 4px;
+    }
+
+    .error-box {
+      background: #fef2f2;
+      border: 1.5px solid #fecaca;
+      color: #dc2626;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      margin-top: 16px;
+      display: none;
+    }
+
+    .success-box {
+      background: #f0fdf4;
+      border: 1.5px solid #86efac;
+      color: #16a34a;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 14px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .success-box a { color: #16a34a; font-weight: 600; }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📅 Calendar Planning Agent</h1>
+    <p class="subtitle">Describe your event in plain English and it'll be added to Google Calendar.</p>
+
+    <label for="eventText">Event description</label>
+    <textarea id="eventText" placeholder='e.g. "Team standup every Monday at 9am with @alice and @bob, add a Google Meet link"'></textarea>
+
+    <div class="file-input-wrapper">
+      <label>Image (optional)</label>
+      <label class="file-label" for="imageInput">
+        <span class="icon">🖼️</span>
+        <span>Click to upload an image with event details</span>
+      </label>
+      <input type="file" id="imageInput" accept="image/*" />
+      <div id="fileName"></div>
+    </div>
+
+    <button class="btn btn-primary" id="parseBtn" onclick="parseEvent()">
+      ✨ Parse Event
+    </button>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <!-- Result -->
+    <div id="result">
+      <div class="result-title">Extracted event details</div>
+      <div class="event-card" id="eventCard"></div>
+
+      <button class="btn btn-success" id="createBtn" onclick="createEvent()">
+        📆 Add to Google Calendar
+      </button>
+      <button class="btn btn-ghost" onclick="reset()">
+        ↩ Start over
+      </button>
+
+      <div class="success-box" id="successBox"></div>
+    </div>
+  </div>
+
+  <script>
+    let parsedEvent = null;
+
+    document.getElementById("imageInput").addEventListener("change", function () {
+      const file = this.files[0];
+      document.getElementById("fileName").textContent = file ? `Selected: ${file.name}` : "";
+    });
+
+    function showError(msg) {
+      const box = document.getElementById("errorBox");
+      box.textContent = msg;
+      box.style.display = "block";
+    }
+
+    function hideError() {
+      document.getElementById("errorBox").style.display = "none";
+    }
+
+    function formatDateTime(iso) {
+      if (!iso) return "—";
+      return new Date(iso).toLocaleString(undefined, {
+        weekday: "short", year: "numeric", month: "short",
+        day: "numeric", hour: "2-digit", minute: "2-digit"
+      });
+    }
+
+    function renderEvent(event) {
+      const card = document.getElementById("eventCard");
+      const attendees = (event.attendees || []).map(a =>
+        `<span class="badge">${a.displayName || a.tag || a.email}</span>`
+      ).join("") || "None";
+
+      card.innerHTML = `
+        <div class="event-row">
+          <span class="event-icon">📌</span>
+          <span class="event-field">Title</span>
+          <span class="event-value">${event.title || "—"}</span>
+        </div>
+        ${event.description ? `
+        <div class="event-row">
+          <span class="event-icon">📝</span>
+          <span class="event-field">Notes</span>
+          <span class="event-value">${event.description}</span>
+        </div>` : ""}
+        <div class="event-row">
+          <span class="event-icon">🕐</span>
+          <span class="event-field">Start</span>
+          <span class="event-value">${formatDateTime(event.startDateTime)}</span>
+        </div>
+        <div class="event-row">
+          <span class="event-icon">🕑</span>
+          <span class="event-field">End</span>
+          <span class="event-value">${formatDateTime(event.endDateTime)}</span>
+        </div>
+        ${event.location ? `
+        <div class="event-row">
+          <span class="event-icon">📍</span>
+          <span class="event-field">Location</span>
+          <span class="event-value">${event.location}</span>
+        </div>` : ""}
+        <div class="event-row">
+          <span class="event-icon">👥</span>
+          <span class="event-field">Attendees</span>
+          <span class="event-value">${attendees}</span>
+        </div>
+        ${event.conferenceLink ? `
+        <div class="event-row">
+          <span class="event-icon">🎥</span>
+          <span class="event-field">Meet</span>
+          <span class="event-value">Google Meet link will be generated</span>
+        </div>` : ""}
+        ${event.recurrence && event.recurrence.length ? `
+        <div class="event-row">
+          <span class="event-icon">🔁</span>
+          <span class="event-field">Repeats</span>
+          <span class="event-value">${event.recurrence.join(", ")}</span>
+        </div>` : ""}
+        <div class="event-row">
+          <span class="event-icon">🌍</span>
+          <span class="event-field">Time Zone</span>
+          <span class="event-value">${event.timeZone || "America/New_York"}</span>
+        </div>
+      `;
+    }
+
+    async function parseEvent() {
+      hideError();
+      parsedEvent = null;
+      document.getElementById("result").style.display = "none";
+      document.getElementById("successBox").style.display = "none";
+
+      const text = document.getElementById("eventText").value.trim();
+      const imageFile = document.getElementById("imageInput").files[0];
+
+      if (!text && !imageFile) {
+        showError("Please enter an event description or upload an image.");
+        return;
+      }
+
+      const btn = document.getElementById("parseBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Parsing...';
+
+      try {
+        const formData = new FormData();
+        if (text) formData.append("text", text);
+        if (imageFile) formData.append("image", imageFile);
+
+        const res = await fetch("/api/parse", { method: "POST", body: formData });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Failed to parse.");
+
+        parsedEvent = data.event;
+        renderEvent(parsedEvent);
+        document.getElementById("result").style.display = "block";
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "✨ Parse Event";
+      }
+    }
+
+    async function createEvent() {
+      if (!parsedEvent) return;
+      document.getElementById("successBox").style.display = "none";
+      hideError();
+
+      const btn = document.getElementById("createBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Creating...';
+
+      try {
+        const res = await fetch("/api/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event: parsedEvent })
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Failed to create event.");
+
+        const box = document.getElementById("successBox");
+        box.innerHTML = `Event created! <a href="${data.link}" target="_blank">Open in Google Calendar →</a>`;
+        box.style.display = "block";
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "📆 Add to Google Calendar";
+      }
+    }
+
+    function reset() {
+      document.getElementById("eventText").value = "";
+      document.getElementById("imageInput").value = "";
+      document.getElementById("fileName").textContent = "";
+      document.getElementById("result").style.display = "none";
+      document.getElementById("successBox").style.display = "none";
+      hideError();
+      parsedEvent = null;
+    }
+  </script>
+</body>
+</html>

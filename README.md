@@ -147,7 +147,8 @@ src/
       whatsapp.ts            Cloud API webhook ingest
       demo.ts                Sample inbox used when an app has no credentials
 public/
-  reader.html                The whole front end
+  index.html                 The reader front end (served at /)
+  calendar.html              The older calendar agent UI (served at /calendar)
 ```
 
 Accounts and buffered messages live in `data/reader-store.json` (gitignored).
