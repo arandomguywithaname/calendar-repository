@@ -176,9 +176,15 @@
 </style>
 </head>
 <body>
+<noscript>
+  <div style="max-width:520px;margin:60px auto;padding:24px;border:1px solid #e2e0dc;border-radius:14px;font:15px/1.55 system-ui,sans-serif">
+    <strong>Inbox Reader needs JavaScript.</strong>
+    <p>The dashboard reads your messages in the browser, so it can't run with scripting turned off.</p>
+  </div>
+</noscript>
 
 <!-- ============================= sign in ============================= -->
-<section id="signin" class="signin hidden">
+<section id="signin" class="signin">
   <div class="signin-card">
     <div class="logo">📬</div>
     <h1>Inbox Reader</h1>
@@ -329,6 +335,7 @@ async function boot() {
   }
 
   state.user = session.user;
+  $("signin").classList.add("hidden");
   $("dashboard").classList.remove("hidden");
   $("greeting").textContent = "Signed in as " + session.user.email;
   const avatar = $("avatar");
