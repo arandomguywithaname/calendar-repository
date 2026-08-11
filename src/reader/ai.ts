@@ -116,7 +116,12 @@ async function createMessage(params: Record<string, unknown>): Promise<MessageRe
     });
   } catch (err: any) {
     if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
-      throw new Error("Unable to process request right now. Try again later.");
+      // Naming the cause here is the whole point: without it a missing key is
+      // indistinguishable from a network blip, and the deploy can't be fixed.
+      throw new Error(
+        "The summaries need a Claude API key, which this deployment doesn't have. " +
+          "Add ANTHROPIC_API_KEY under Site configuration → Environment variables and redeploy."
+      );
     }
     if (err instanceof Anthropic.RateLimitError) {
       throw new Error("Claude is rate limited right now — try again in a moment.");
@@ -126,6 +131,12 @@ async function createMessage(params: Record<string, unknown>): Promise<MessageRe
 
   if (response.stop_reason === "refusal") {
     return { text: "", refused: true };
+  }
+
+  // Thinking and response text share max_tokens, so a large inbox can run out
+  // mid-JSON. Say so, rather than failing later on an unparseable fragment.
+  if (response.stop_reason === "max_tokens") {
+    throw new Error("That inbox was too large to summarise in one go — try selecting fewer chats.");
   }
 
   const textBlock = response.content.find((block: any) => block.type === "text");
