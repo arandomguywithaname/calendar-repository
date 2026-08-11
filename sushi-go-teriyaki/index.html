@@ -36,6 +36,7 @@
   --c-pudding:#A9743C;
   --c-noodle:#2E7F86;
   --c-joker:#6D4E9C;
+  --c-plate:#5E6B7E;
 
   --display:"Helvetica Neue",Helvetica,"Segoe UI",Roboto,Arial,sans-serif;
   --mincho:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC","Noto Serif JP",serif;
@@ -375,7 +376,8 @@ legend{
    the picture alone is not enough to tell one from another this small. */
 .chip{
   --band:var(--c-maki);
-  position:relative;flex:none;width:42px;height:48px;border-radius:5px;
+  --chip-w:42px;
+  position:relative;flex:none;width:var(--chip-w);height:48px;border-radius:5px;
   background:var(--washi);border:1.2px solid #0B0E14;
   display:flex;flex-direction:column;overflow:hidden;
   box-shadow:0 3px 7px -3px rgba(0,0,0,.7);
@@ -386,6 +388,26 @@ legend{
   padding:2.5px 1px 2.5px;text-align:center;
 }
 .chip .g{flex:1;display:grid;place-items:center;font-size:1.05rem;line-height:1}
+
+/* A plate is a single card that spans the nigiri it carries. */
+.chip-plate{
+  width:calc(var(--chip-w) * var(--span, 1) + 3px * (var(--span, 1) - 1));
+}
+.chip-plate .plate-holds{
+  display:flex;align-items:center;justify-content:center;gap:1px;padding:0 2px;
+}
+.chip-plate .held{position:relative;font-size:1rem;line-height:1}
+.chip-plate .held.empty{opacity:.4}
+.chip-plate .held-x2{
+  position:absolute;right:-3px;bottom:-2px;font-family:var(--mincho);font-style:normal;
+  font-size:.42rem;color:var(--shu);
+}
+/* chosen for combining, in the plate picker */
+.card.is-picked{
+  outline:3px solid var(--gold);outline-offset:2px;
+  transform:translateY(-8px);
+}
+.card[disabled]{opacity:.42}
 .chip.fresh{animation:drop .42s cubic-bezier(.2,.8,.3,1) backwards}
 @keyframes drop{
   from{transform:translateY(-18px) rotate(-8deg);opacity:0}
@@ -698,14 +720,17 @@ var CARDS = {
   nigiri_squid: {name:"Squid Nigiri",  jp:"烏賊",   icon:"🦑", band:"nigiri", short:"SQUID",   rule:"3 pts"},
   pudding:      {name:"Pudding",       jp:"プリン", icon:"🍮", band:"pudding", short:"PUDDING",  rule:"most +6 / least -6"},
   noodle:       {name:"Noodles",       jp:"麺",     icon:"🍜", band:"noodle", short:"NOODLE",   rule:"maki +50% each"},
-  joker:        {name:"Joker",         jp:"化札",   icon:"🃏", band:"joker", short:"JOKER",    rule:"becomes any card"}
+  joker:        {name:"Joker",         jp:"化札",   icon:"🃏", band:"joker", short:"JOKER",    rule:"becomes any card"},
+  plate:        {name:"Plate",         jp:"皿",     icon:"🍽️", band:"plate", short:"PLATE",    rule:"combine up to 3 nigiri"}
 };
+
+var PLATE_CAPACITY = 3;
 
 var DECK_COUNTS = {
   tempura:14, teriyaki:14, dumpling:14,
   maki2:12, maki3:8, maki1:6,
   nigiri_salmon:10, nigiri_squid:5, nigiri_egg:5,
-  pudding:10, joker:6, noodle:4
+  pudding:10, joker:6, noodle:4, plate:6
 };
 
 var NIGIRI_PTS = {nigiri_egg:1, nigiri_salmon:2, nigiri_squid:3};
@@ -714,8 +739,46 @@ var DUMPLING_PTS = [0,1,3,6,10,15];
 var HAND_SIZE = {2:7, 3:7, 4:7, 5:7};
 var BOT_NAMES = ["Kenji","Aiko","Haru","Yuki","Sora","Ren","Mika"];
 
-/* Every card a Joker may copy (a Joker cannot copy another Joker). */
-var JOKER_OPTIONS = Object.keys(CARDS).filter(function(k){ return k !== "joker"; });
+/* Every card a Joker may copy. It cannot copy another Joker, nor a Plate —
+   a Plate scores nothing on its own, it only rearranges nigiri you already
+   plated, so copying one would be a card that does nothing. */
+var JOKER_OPTIONS = Object.keys(CARDS).filter(function(k){
+  return k !== "joker" && k !== "plate";
+});
+
+/* Which entries on a plate are loose nigiri, i.e. still combinable. */
+function looseNigiri(tableau){
+  var out = [];
+  tableau.forEach(function(e, i){ if(NIGIRI_PTS[e.eff]) out.push(i); });
+  return out;
+}
+
+/* What a plate's worth of nigiri comes to. */
+function plateValue(holds){
+  var sum = 0;
+  (holds || []).forEach(function(h){ sum += (NIGIRI_PTS[h.eff] || 0) * (h.x2 ? 2 : 1); });
+  return sum;
+}
+
+/* Lift up to three loose nigiri off a player's tableau onto a new Plate.
+   Each keeps whatever it was worth, doubling included. */
+function absorbNigiri(player, take){
+  var seen = {}, chosen = [];
+  (take || []).forEach(function(i){
+    if(chosen.length >= PLATE_CAPACITY) return;
+    var e = player.tableau[i];
+    if(!e || !NIGIRI_PTS[e.eff] || seen[i]) return;
+    seen[i] = true;
+    chosen.push(i);
+  });
+  var held = chosen.map(function(i){
+    var e = player.tableau[i];
+    return {eff:e.eff, x2:e.x2};
+  });
+  chosen.slice().sort(function(a, b){ return b - a; })
+        .forEach(function(i){ player.tableau.splice(i, 1); });
+  return held;
+}
 
 function shuffle(list, rnd){
   var a = list.slice();
@@ -783,7 +846,7 @@ function viewFor(state, seat){
       return {
         name:p.name, human:p.human,
         tableau:p.tableau.map(function(e){
-          return {card:e.card, eff:e.eff, x2:e.x2, joker:e.joker};
+          return {card:e.card, eff:e.eff, x2:e.x2, joker:e.joker, holds:e.holds};
         }),
         pending:p.pending, score:p.score, puddings:p.puddings,
         roundScores:p.roundScores.slice(),
@@ -824,6 +887,20 @@ function validPick(state, seat, pick){
   if(Math.floor(pick.index) !== pick.index) return false;
   if(pick.index < 0 || pick.index >= hand.length) return false;
   if(hand[pick.index] === "joker" && JOKER_OPTIONS.indexOf(pick.jokerAs) < 0) return false;
+  if(hand[pick.index] === "plate"){
+    var take = pick.take;
+    if(take != null && !Array.isArray(take)) return false;
+    if(take && take.length > PLATE_CAPACITY) return false;
+    var loose = looseNigiri(state.players[seat].tableau);
+    var seen = {};
+    for(var k=0;k<(take || []).length;k++){
+      var idx = take[k];
+      if(typeof idx !== "number" || Math.floor(idx) !== idx) return false;
+      if(loose.indexOf(idx) < 0) return false;   /* not a loose nigiri of theirs */
+      if(seen[idx]) return false;                /* the same card twice */
+      seen[idx] = true;
+    }
+  }
   return true;
 }
 
@@ -856,6 +933,11 @@ function playTurn(state, choices){
     var card = p.hand.splice(choice.index, 1)[0];
     var eff = (card === "joker") ? (choice.jokerAs || "nigiri_egg") : card;
     var entry = {card:card, eff:eff, x2:false, joker:(card === "joker"), turn:state.turn};
+
+    /* A Plate lifts nigiri you already plated onto itself, so from here on
+       they score as this one card — which is what lets a single Teriyaki
+       double reach all of them at once. */
+    if(eff === "plate") entry.holds = absorbNigiri(p, choice.take);
 
     /* Spend a double served to you earlier. A Teriyaki card is never
        itself doubled — it waits for a scoring card. */
@@ -895,7 +977,7 @@ function roundOver(state){
 /* Count a tableau. An x2 card counts as two copies of itself. */
 function tally(tableau){
   var t = {tempura:0, dumpling:0, nigiriPts:0, makiBase:0,
-           noodles:0, puddings:0, teriyaki:0, unusedTeriyaki:0};
+           noodles:0, puddings:0, teriyaki:0, unusedTeriyaki:0, plated:0};
   for(var i=0;i<tableau.length;i++){
     var e = tableau[i];
     var n = e.x2 ? 2 : 1;
@@ -903,6 +985,12 @@ function tally(tableau){
     if(eff === "tempura") t.tempura += n;
     else if(eff === "dumpling") t.dumpling += n;
     else if(NIGIRI_PTS[eff]) t.nigiriPts += NIGIRI_PTS[eff] * n;
+    else if(eff === "plate"){
+      /* One card holding the combined nigiri: doubling the plate doubles
+         everything on it. */
+      t.nigiriPts += plateValue(e.holds) * n;
+      t.plated += (e.holds || []).length;
+    }
     else if(MAKI_ICONS[eff]) t.makiBase += MAKI_ICONS[eff] * n;
     else if(eff === "noodle") t.noodles += n;
     else if(eff === "pudding") t.puddings += n;
@@ -1024,6 +1112,10 @@ function cardValue(state, seat, eff){
   } else if(eff === "noodle"){
     var future = Math.min(turnsLeft - 1, 3) * 1.4;
     v = 0.5 * (t.makiBase + future) * makiPressure(state, seat);
+  } else if(eff === "plate"){
+    /* Combining changes no totals by itself; it pays when a Teriyaki double
+       is waiting, because then the whole plate doubles instead of one card. */
+    v = me.pending > 0 ? bestNigiriHaul(me.tableau) : 0.3;
   } else if(eff === "pudding"){
     var lead = state.players.filter(function(p,i){
       return i !== seat && p.puddings >= me.puddings;
@@ -1031,9 +1123,33 @@ function cardValue(state, seat, eff){
     v = (state.round === 3 ? 3.0 : 2.3) + (lead > 0 ? 0.6 : 0);
   }
 
-  /* A pending Teriyaki makes whatever comes next worth roughly double. */
-  if(me.pending > 0 && eff !== "teriyaki") v *= 2;
+  /* A pending Teriyaki makes whatever comes next worth roughly double.
+     A Plate is already priced as the extra points doubling would win. */
+  if(me.pending > 0 && eff !== "teriyaki" && eff !== "plate") v *= 2;
   return v;
+}
+
+/* The best three loose nigiri a plate could pick up, by points. */
+function bestNigiriHaul(tableau){
+  var vals = [];
+  looseNigiri(tableau).forEach(function(i){
+    var e = tableau[i];
+    vals.push(NIGIRI_PTS[e.eff] * (e.x2 ? 2 : 1));
+  });
+  vals.sort(function(a, b){ return b - a; });
+  return vals.slice(0, PLATE_CAPACITY).reduce(function(a, b){ return a + b; }, 0);
+}
+
+/* Which loose nigiri a bot would put on a plate: the most valuable ones. */
+function bestNigiriPicks(tableau){
+  return looseNigiri(tableau)
+    .map(function(i){
+      var e = tableau[i];
+      return {i:i, v:NIGIRI_PTS[e.eff] * (e.x2 ? 2 : 1)};
+    })
+    .sort(function(a, b){ return b.v - a.v; })
+    .slice(0, PLATE_CAPACITY)
+    .map(function(x){ return x.i; });
 }
 
 function aiChoose(state, seat){
@@ -1044,6 +1160,7 @@ function aiChoose(state, seat){
   for(var i=0;i<me.hand.length;i++){
     var card = me.hand[i];
     var pick = {index:i, jokerAs:null};
+    if(card === "plate") pick.take = bestNigiriPicks(me.tableau);
     var v;
     if(card === "joker"){
       var bestOpt = null, bestVal = -Infinity;
@@ -1133,6 +1250,34 @@ function chipEl(entry, fresh){
   var el = document.createElement("div");
   el.className = "chip" + (fresh ? " fresh" : "");
   el.style.setProperty("--band", "var(--c-" + c.band + ")");
+
+  if(entry.eff === "plate"){
+    /* A plate is one card, drawn as wide as the nigiri it carries. */
+    var holds = entry.holds || [];
+    var span = Math.max(1, holds.length);
+    var total = plateValue(holds);
+    el.classList.add("chip-plate");
+    el.style.setProperty("--span", span);
+    el.innerHTML =
+      "<div class=\"b\">" + c.short + (holds.length ? " · " + total : "") + "</div>" +
+      "<div class=\"g plate-holds\">" +
+        (holds.length
+          ? holds.map(function(h){
+              return "<span class=\"held\">" + CARDS[h.eff].icon +
+                     (h.x2 ? "<i class=\"held-x2\">倍</i>" : "") + "</span>";
+            }).join("")
+          : "<span class=\"held empty\">" + c.icon + "</span>") +
+      "</div>";
+    if(entry.x2) el.appendChild(sealEl());
+    var plateLabel = holds.length
+      ? "Plate of " + holds.length + " nigiri worth " + (entry.x2 ? total * 2 : total) +
+        (entry.x2 ? " (doubled)" : "")
+      : "Empty plate";
+    el.title = plateLabel;
+    el.setAttribute("aria-label", plateLabel);
+    return el;
+  }
+
   el.innerHTML = "<div class=\"b\">" + c.short + "</div><div class=\"g\">" + c.icon + "</div>";
   if(entry.x2) el.appendChild(sealEl());
   var label = c.name + (entry.joker ? " (Joker)" : "") + (entry.x2 ? " x2" : "");
@@ -1331,7 +1476,89 @@ function humanPick(index, el){
     });
     return;
   }
+  if(card === "plate"){
+    openPlatePicker(function(take){
+      closeSheet();
+      commitHuman({index:index, jokerAs:null, take:take}, el);
+    });
+    return;
+  }
   commitHuman({index:index, jokerAs:null}, el);
+}
+
+function openPlatePicker(done){
+  var me = game.players[viewSeat];
+  var loose = looseNigiri(me.tableau);
+  if(!loose.length){
+    openSheet(
+      "<h2>Plate <span class=\"new-tag\">new</span></h2>" +
+      "<p class=\"sub\">You have no nigiri on the table yet, so there is nothing to " +
+      "combine. Plate it now and it sits empty, or keep it for later.</p>" +
+      "<div class=\"sheet-actions\">" +
+        "<button class=\"btn\" id=\"plateEmpty\" type=\"button\">Plate it empty</button>" +
+        "<button class=\"btn btn-primary\" id=\"plateCancel\" type=\"button\">Pick a different card</button>" +
+      "</div>",
+      function(ov){
+        ov.querySelector("#plateEmpty").addEventListener("click", function(){ done([]); });
+        ov.querySelector("#plateCancel").addEventListener("click", function(){
+          closeSheet(); renderHand(true);
+        });
+      }
+    );
+    return;
+  }
+
+  var chosen = [];
+  openSheet(
+    "<h2>Plate <span class=\"new-tag\">new</span></h2>" +
+    "<p class=\"sub\">Choose up to " + PLATE_CAPACITY + " nigiri to combine. They come off " +
+    "the table and become one card worth their total — so a Teriyaki double lands " +
+    "on all of it at once.</p>" +
+    "<div class=\"joker-grid\" id=\"plateGrid\"></div>" +
+    "<p class=\"field-note\" id=\"plateSum\"></p>" +
+    "<div class=\"sheet-actions\">" +
+      "<button class=\"btn btn-primary\" id=\"plateGo\" type=\"button\">Combine</button>" +
+      "<button class=\"btn\" id=\"plateCancel\" type=\"button\">Pick a different card</button>" +
+    "</div>",
+    function(ov){
+      var grid = ov.querySelector("#plateGrid");
+      var sum = ov.querySelector("#plateSum");
+      var go = ov.querySelector("#plateGo");
+
+      var paint = function(){
+        var total = chosen.reduce(function(a, i){
+          var e = me.tableau[i];
+          return a + NIGIRI_PTS[e.eff] * (e.x2 ? 2 : 1);
+        }, 0);
+        sum.textContent = chosen.length
+          ? chosen.length + " nigiri on the plate, worth " + total + " as one card."
+          : "Nothing chosen — the plate will sit empty.";
+        go.textContent = chosen.length ? "Combine " + chosen.length : "Plate it empty";
+      };
+
+      loose.forEach(function(i){
+        var e = me.tableau[i];
+        var el = cardEl(e.eff, {clickable:true, x2:e.x2});
+        el.addEventListener("click", function(){
+          var at = chosen.indexOf(i);
+          if(at >= 0) chosen.splice(at, 1);
+          else if(chosen.length < PLATE_CAPACITY) chosen.push(i);
+          el.classList.toggle("is-picked", chosen.indexOf(i) >= 0);
+          Array.prototype.forEach.call(grid.children, function(c){
+            c.disabled = chosen.length >= PLATE_CAPACITY && !c.classList.contains("is-picked");
+          });
+          paint();
+        });
+        grid.appendChild(el);
+      });
+      paint();
+
+      go.addEventListener("click", function(){ done(chosen.slice()); });
+      ov.querySelector("#plateCancel").addEventListener("click", function(){
+        closeSheet(); renderHand(true);
+      });
+    }
+  );
 }
 
 function commitHuman(choice, el){
@@ -1618,6 +1845,10 @@ function showRules(){
         "<b>half again</b>. 6 maki becomes 9. Two bowls of noodles add half each.") +
       ruleCard("joker", "Plate it and name any other card. It <b>becomes</b> that card " +
         "for scoring, for the rest of the round.") +
+      ruleCard("plate", "Take up to three nigiri you have already plated and " +
+        "<b>combine them into one card</b> worth their total. The total doesn't " +
+        "change — but it is one card now, so a Teriyaki double lands on all of it " +
+        "at once. Three squid on a plate is 9; doubled, 18.") +
     "</div>" +
     "<h3>The regulars</h3><div class=\"rulecards\">" +
       ruleCard("tempura", "Two make 5 points. One alone is worth nothing.") +

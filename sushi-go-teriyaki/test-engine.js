@@ -26,7 +26,8 @@ const EXPORTS = [
   "CARDS", "DECK_COUNTS", "JOKER_OPTIONS", "NIGIRI_PTS", "MAKI_ICONS",
   "DUMPLING_PTS", "HAND_SIZE", "buildDeck", "createGame", "dealRound",
   "playTurn", "roundOver", "tally", "scoreRound", "scorePuddings",
-  "standings", "aiChoose", "cardValue", "humanSeats"
+  "standings", "aiChoose", "cardValue", "humanSeats",
+  "PLATE_CAPACITY", "looseNigiri", "plateValue", "validPick"
 ];
 const E = vm.runInNewContext(source + "\n({" + EXPORTS.join(",") + "})", {});
 
@@ -54,6 +55,11 @@ function plate(cards) {
 function turn(state, picks) {
   return E.playTurn(state, picks.map(p => (typeof p === "number" ? { index: p, jokerAs: null } : p)));
 }
+// Every card a seat has played: entries on the table, plus any nigiri a
+// Plate has folded into itself.
+function cardsOnTable(player) {
+  return player.tableau.reduce((sum, e) => sum + 1 + ((e.holds || []).length), 0);
+}
 function freshGame(n) {
   const state = E.createGame(n, "normal");
   E.dealRound(state);
@@ -62,8 +68,14 @@ function freshGame(n) {
 
 /* ---------------- deck ---------------- */
 
-check("deck holds 108 cards", () => {
-  eq(E.buildDeck().length, 108, "deck size");
+check("deck holds 114 cards — the original 108 plus six Plates", () => {
+  eq(E.buildDeck().length, 114, "deck size");
+  eq(E.buildDeck().filter(c => c === "plate").length, 6, "plates");
+});
+
+check("the deck still covers three rounds at a full table", () => {
+  const s = E.createGame(5, "normal");
+  if (5 * s.handSize * 3 > E.buildDeck().length) throw new Error("deck too small");
 });
 
 check("deck keeps Sushi Go's distribution with the three swaps", () => {
@@ -76,9 +88,104 @@ check("deck keeps Sushi Go's distribution with the three swaps", () => {
   eq(count("pudding"), 10, "pudding");
 });
 
-check("a joker cannot copy another joker", () => {
+check("a joker cannot copy another joker, nor a plate", () => {
   eq(E.JOKER_OPTIONS.includes("joker"), false, "joker in its own option list");
-  eq(E.JOKER_OPTIONS.length, Object.keys(E.CARDS).length - 1, "option count");
+  eq(E.JOKER_OPTIONS.includes("plate"), false, "plate in the option list");
+  eq(E.JOKER_OPTIONS.length, Object.keys(E.CARDS).length - 2, "option count");
+});
+
+/* ---------------- plate ---------------- */
+
+// Give a seat some nigiri already on the table, then plate a Plate over them.
+function withNigiri(cards) {
+  const s = freshGame(2);
+  s.players[0].tableau = plate(cards);
+  s.players[1].tableau = [];
+  return s;
+}
+function platePlay(s, take) {
+  s.players[0].hand = ["plate"];
+  s.players[1].hand = ["pudding"];
+  return E.playTurn(s, [{ index: 0, jokerAs: null, take: take }, { index: 0, jokerAs: null }]);
+}
+
+check("a plate lifts nigiri off the table and holds them as one card", () => {
+  const s = withNigiri(["nigiri_squid", "nigiri_squid"]);
+  platePlay(s, [0, 1]);
+  const board = s.players[0].tableau;
+  eq(board.length, 1, "cards left on the table");
+  eq(board[0].eff, "plate", "the one card is the plate");
+  eq(board[0].holds.length, 2, "nigiri on the plate");
+  eq(E.plateValue(board[0].holds), 6, "worth 3 + 3");
+  eq(E.tally(board).nigiriPts, 6, "and scores the same total as before");
+});
+
+check("combining changes no totals on its own", () => {
+  const loose = E.tally(plate(["nigiri_squid", "nigiri_salmon", "nigiri_egg"]));
+  const s = withNigiri(["nigiri_squid", "nigiri_salmon", "nigiri_egg"]);
+  platePlay(s, [0, 1, 2]);
+  eq(E.tally(s.players[0].tableau).nigiriPts, loose.nigiriPts, "points before and after");
+  eq(loose.nigiriPts, 6, "3 + 2 + 1");
+});
+
+check("a teriyaki double on the plate doubles everything on it", () => {
+  const s = withNigiri(["nigiri_squid", "nigiri_squid", "nigiri_squid"]);
+  s.players[0].pending = 1;                 // a double is waiting
+  platePlay(s, [0, 1, 2]);
+  const board = s.players[0].tableau;
+  eq(board[0].x2, true, "the plate took the double");
+  eq(E.tally(board).nigiriPts, 18, "9 on the plate, doubled");
+  eq(s.players[0].pending, 0, "double spent");
+});
+
+check("a plate takes at most three nigiri", () => {
+  const s = withNigiri(["nigiri_squid", "nigiri_squid", "nigiri_squid", "nigiri_squid"]);
+  platePlay(s, [0, 1, 2, 3]);
+  const board = s.players[0].tableau;
+  eq(E.PLATE_CAPACITY, 3, "capacity");
+  eq(board.filter(e => e.eff === "plate")[0].holds.length, 3, "held");
+  eq(board.filter(e => NIGIRI_PTS_SQUID(e)).length, 1, "one squid left loose");
+  eq(E.tally(board).nigiriPts, 12, "9 on the plate plus the loose 3");
+});
+function NIGIRI_PTS_SQUID(e) { return e.eff === "nigiri_squid"; }
+
+check("an empty plate is worth nothing and takes nothing", () => {
+  const s = withNigiri([]);
+  platePlay(s, []);
+  eq(s.players[0].tableau.length, 1, "just the plate");
+  eq(E.tally(s.players[0].tableau).nigiriPts, 0, "no points");
+});
+
+check("a plate carries each nigiri's own doubling with it", () => {
+  const s = withNigiri([{ eff: "nigiri_squid", x2: true }, "nigiri_egg"]);
+  platePlay(s, [0, 1]);
+  eq(E.plateValue(s.players[0].tableau[0].holds), 7, "6 for the doubled squid, 1 for the egg");
+});
+
+check("a plate cannot pick up nigiri already on another plate", () => {
+  const s = withNigiri(["nigiri_squid", "nigiri_squid"]);
+  platePlay(s, [0, 1]);
+  eq(E.looseNigiri(s.players[0].tableau).length, 0, "nothing loose is left");
+  // A second plate finds nothing to take.
+  platePlay(s, [0]);
+  const plates = s.players[0].tableau.filter(e => e.eff === "plate");
+  eq(plates.length, 2, "two plates");
+  eq(plates[1].holds.length, 0, "the second one is empty");
+  eq(E.tally(s.players[0].tableau).nigiriPts, 6, "points unchanged");
+});
+
+check("only your own loose nigiri are offered, and only once each", () => {
+  const s = withNigiri(["nigiri_squid", "tempura", "nigiri_egg"]);
+  eq(E.looseNigiri(s.players[0].tableau).join(","), "0,2", "indices of loose nigiri");
+  s.players[0].hand = ["plate"];
+  const ok = t => E.validPick(s, 0, { index: 0, take: t });
+  eq(ok([0, 2]), true, "two of their nigiri");
+  eq(ok([]), true, "none at all");
+  eq(ok([1]), false, "a tempura is not a nigiri");
+  eq(ok([0, 0]), false, "the same card twice");
+  eq(ok([0, 2, 0, 2]), false, "over capacity");
+  eq(ok([9]), false, "an index they do not have");
+  eq(ok("all"), false, "not even an array");
 });
 
 /* ---------------- seats: bots and people ---------------- */
@@ -133,7 +240,7 @@ check("a pass-and-play game plays out and scores like any other", () => {
     while (!E.roundOver(s)) {
       E.playTurn(s, s.players.map((_, seat) => E.aiChoose(s, seat)));
     }
-    const plated = s.players.reduce((sum, p) => sum + p.tableau.length, 0);
+    const plated = s.players.reduce((sum, p) => sum + cardsOnTable(p), 0);
     eq(plated, 4 * s.handSize, "cards plated in round " + round);
     E.scoreRound(s);
   }
@@ -438,7 +545,7 @@ check("300 full games run clean, conserving every card", () => {
       }
 
       eq(turns, state.handSize, "turns per round");
-      const plated = state.players.reduce((sum, p) => sum + p.tableau.length, 0);
+      const plated = state.players.reduce((sum, p) => sum + cardsOnTable(p), 0);
       eq(plated, n * state.handSize, "cards plated this round");
       state.players.forEach(p => eq(p.hand.length, 0, "cards left in hand"));
 

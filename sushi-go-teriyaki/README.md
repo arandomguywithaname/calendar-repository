@@ -1,8 +1,8 @@
 # Sushi Go: Teriyaki Edition
 
 A browser version of the card-drafting game — pick one card, pass the rest —
-with three cards swapped off the standard menu. Play the bots, or pass the
-device around a table.
+with three cards swapped off the standard menu and a fourth added. Play the
+bots, pass the device around a table, or play people online.
 
 Everything ships in a single self-contained `index.html` — no build step and no
 CDN. **Double-click it, or drop the folder on any static host.**
@@ -10,7 +10,7 @@ CDN. **Double-click it, or drop the folder on any static host.**
 ```
 sushi-go-teriyaki/
   index.html      the whole game — markup, styles, engine, UI, PeerJS
-  test-engine.js  node test-engine.js   (41 checks, no dependencies)
+  test-engine.js  node test-engine.js   (50 checks, no dependencies)
   README.md
 ```
 
@@ -20,13 +20,14 @@ Three ways to play:
 - **Pass and play** — 2–5 people sharing one device
 - **Online** — 2–5 people on separate devices, by quick match or table code
 
-## The three new cards
+## The new cards
 
 | Replaces | New card | What it does |
 |---|---|---|
 | Sashimi | **Teriyaki** 照り焼き | Scores nothing itself. **The next card you plate counts twice.** |
 | Chopsticks | **Noodles** 麺 | At the end of the round, your **maki count goes up by half**. |
 | Wasabi | **Joker** 化札 | **Becomes any other card** you name when you plate it. |
+| *(new card)* | **Plate** 皿 | **Combines up to 3 of your nigiri into one card** worth their total. |
 
 ### Teriyaki
 
@@ -68,6 +69,30 @@ Plate the Joker and name any other card in the game. It *is* that card for the
 rest of the round — name Maki x3 and your noodles boost it, name gyoza and it
 counts toward your gyoza run. A Joker can't copy another Joker, and a waiting
 Teriyaki double will happily double it.
+
+### Plate
+
+Plate it and choose up to **three nigiri you have already plated**. They come
+off the table and sit on the plate as a single card worth their total — three
+squid become one 9-point card, drawn as wide as the three cards it replaced.
+
+The total doesn't change by combining. What changes is that it is now **one
+card**, and that is the whole point: a Teriyaki double lands on a single card,
+so a doubled plate of three squid is **18** rather than the 6 you'd get from
+doubling one loose squid. Arm a Teriyaki, then plate the Plate.
+
+The details:
+
+- it only takes **loose** nigiri — once they are on a plate they stay there,
+  and a second Plate can't scoop them up again
+- each nigiri keeps whatever it was worth, so a squid already doubled by an
+  earlier Teriyaki brings 6 onto the plate, not 3
+- plating one with no nigiri on the table is allowed; it just sits there
+  empty and scores nothing
+- a Joker can't copy a Plate — a Plate scores nothing by itself, so copying
+  one would be a card that does nothing
+
+There are 6 Plates in the deck, which is now 114 cards.
 
 ## The rest of the menu
 
