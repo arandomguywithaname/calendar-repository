@@ -3,8 +3,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { Request, Response, NextFunction } from "express";
 import { google } from "googleapis";
-import { getUser, upsertUser } from "./reader/store";
-import { User } from "./reader/types";
+import { DEFAULT_PREFERENCES, getUser, upsertUser } from "./reader/store";
+import { Preferences, User } from "./reader/types";
 
 /**
  * Sign-in for the reader.
@@ -38,56 +38,69 @@ async function getOrCreateSessionSecret(): Promise<string> {
     return sessionSecret;
   }
 
-  // Try to load from persistent storage.
-  if (process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT) {
-    // On Netlify, store in Blobs alongside other app data.
+  // Netlify Blobs, when the functions runtime has a blobs context.
+  if (process.env.NETLIFY_BLOBS_CONTEXT) {
     try {
       const { getStore } = await import("@netlify/blobs");
-      const stored = await getStore("inbox-reader").get("session-secret", { type: "text" });
+      const store = getStore("inbox-reader");
+      const stored = await store.get("session-secret", { type: "text" });
       if (stored) {
         sessionSecret = stored as string;
         return sessionSecret;
       }
+      const minted = crypto.randomBytes(32).toString("hex");
+      await store.set("session-secret", minted);
+      sessionSecret = minted;
+      return sessionSecret;
     } catch (err: any) {
-      console.warn(`Could not read session secret from Blobs: ${err.message}`);
+      console.warn(`Blobs unavailable for the session secret: ${err.message}`);
     }
-  } else {
-    // Locally, store in data/session-secret.txt.
+  }
+
+  // A writable disk (local dev, or anywhere that runs a normal Node process).
+  try {
     if (fs.existsSync(SESSION_SECRET_PATH)) {
-      try {
-        sessionSecret = fs.readFileSync(SESSION_SECRET_PATH, "utf-8").trim();
+      const fromDisk = fs.readFileSync(SESSION_SECRET_PATH, "utf-8").trim();
+      if (fromDisk) {
+        sessionSecret = fromDisk;
         return sessionSecret;
-      } catch (err: any) {
-        console.warn(`Could not read ${SESSION_SECRET_PATH}: ${err.message}`);
       }
     }
+    const minted = crypto.randomBytes(32).toString("hex");
+    fs.mkdirSync(path.dirname(SESSION_SECRET_PATH), { recursive: true });
+    fs.writeFileSync(SESSION_SECRET_PATH, minted);
+    sessionSecret = minted;
+    return sessionSecret;
+  } catch {
+    // Read-only filesystem — expected on serverless. Fall through.
   }
 
-  // Generate new secret and persist it.
+  /*
+   * Nothing durable to write to. Derive the secret instead, so every container
+   * for this site computes the *same* value and cookies signed by one are
+   * accepted by the next. A random secret here is what signed people straight
+   * back out: each cold start minted its own and rejected every existing cookie.
+   *
+   * SITE_ID is stable per site and not published, so prefer it. URL is a public
+   * value and only a last resort — with it, a forged cookie is possible, which
+   * matters only if you enable Google sign-in. Set SESSION_SECRET to close that.
+   */
+  const material =
+    process.env.SITE_ID ||
+    process.env.NETLIFY_SITE_ID ||
+    process.env.URL ||
+    process.env.DEPLOY_PRIME_URL;
+
+  if (material) {
+    sessionSecret = crypto
+      .createHmac("sha256", material)
+      .update("inbox-reader/session-secret/v1")
+      .digest("hex");
+    return sessionSecret;
+  }
+
   sessionSecret = crypto.randomBytes(32).toString("hex");
-
-  if (process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT) {
-    try {
-      const { getStore } = await import("@netlify/blobs");
-      await getStore("inbox-reader").set("session-secret", sessionSecret);
-    } catch (err: any) {
-      // On Netlify, if Blobs fails, we still have the in-memory sessionSecret.
-      // Don't try to fall back to file system — it won't be writable.
-      console.warn(`Could not persist session secret to Blobs: ${err.message}`);
-    }
-  } else {
-    // Only use file system if definitely not on Netlify
-    try {
-      const dir = path.dirname(SESSION_SECRET_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(SESSION_SECRET_PATH, sessionSecret);
-    } catch (err: any) {
-      console.warn(`Could not save session secret to ${SESSION_SECRET_PATH}: ${err.message}`);
-    }
-  }
-
+  console.warn("No durable session secret available — sessions end when this instance does.");
   return sessionSecret;
 }
 
@@ -128,10 +141,36 @@ function sign(payload: string): string {
   return crypto.createHmac("sha256", sessionSecret).update(payload).digest("base64url");
 }
 
-function issueSession(res: Response, userId: string): void {
-  const payload = Buffer.from(
-    JSON.stringify({ uid: userId, exp: Date.now() + SESSION_MAX_AGE_MS })
-  ).toString("base64url");
+/**
+ * The session cookie carries the account itself, not just an id.
+ *
+ * It used to hold a bare uid that every request looked up in the store. Where
+ * the store can't persist — a serverless container with no Blobs and no
+ * writable disk — that lookup found nothing, so signing in appeared to work and
+ * the very next request bounced back to the sign-in page. A self-contained,
+ * signed cookie keeps sign-in working no matter what storage is available.
+ */
+interface SessionPayload {
+  uid: string;
+  email: string;
+  name: string;
+  picture?: string;
+  provider: "google" | "demo";
+  prefs: Preferences;
+  exp: number;
+}
+
+function issueSession(res: Response, user: User): void {
+  const claims: SessionPayload = {
+    uid: user.id,
+    email: user.email,
+    name: user.name,
+    picture: user.picture,
+    provider: user.provider,
+    prefs: user.preferences || DEFAULT_PREFERENCES,
+    exp: Date.now() + SESSION_MAX_AGE_MS,
+  };
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
   const cookie = `${payload}.${sign(payload)}`;
 
   const attributes = [
@@ -141,10 +180,12 @@ function issueSession(res: Response, userId: string): void {
     "SameSite=Lax",
     `Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}`,
   ];
-  // Always use Secure on Netlify and in production
-  if (process.env.NODE_ENV === "production" || process.env.NETLIFY) {
-    attributes.push("Secure");
-  }
+  // Mark Secure whenever the request actually arrived over HTTPS, rather than
+  // trusting an env flag that may not be set in the functions runtime.
+  const forwarded = String(res.req?.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const https = forwarded === "https" || res.req?.protocol === "https";
+  if (https || process.env.NODE_ENV === "production") attributes.push("Secure");
+
   res.setHeader("Set-Cookie", attributes.join("; "));
 }
 
@@ -174,13 +215,33 @@ export async function currentUser(req: Request): Promise<User | undefined> {
   const want = Buffer.from(expected);
   if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) return undefined;
 
+  let claims: SessionPayload;
   try {
-    const { uid, exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
-    if (!uid || typeof exp !== "number" || exp < Date.now()) return undefined;
-    return await getUser(uid);
+    claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
   } catch {
     return undefined;
   }
+  if (!claims?.uid || typeof claims.exp !== "number" || claims.exp < Date.now()) return undefined;
+
+  // A stored record is richer and more current when storage works; the cookie
+  // is the fallback that keeps the session alive when it doesn't.
+  const stored = await getUser(claims.uid).catch(() => undefined);
+  if (stored) return stored;
+
+  return {
+    id: claims.uid,
+    email: claims.email,
+    name: claims.name || claims.email.split("@")[0],
+    picture: claims.picture,
+    createdAt: new Date().toISOString(),
+    provider: claims.provider,
+    preferences: claims.prefs || DEFAULT_PREFERENCES,
+  };
+}
+
+/** Re-sign the cookie after preferences change, so they survive without a store. */
+export function refreshSession(res: Response, user: User): void {
+  issueSession(res, user);
 }
 
 /** Express guard for the /api routes that need an account. */
@@ -250,7 +311,7 @@ export async function completeGoogleSignIn(
     picture: profile.data.picture || undefined,
     provider: "google",
   });
-  issueSession(res, user.id);
+  issueSession(res, user);
   return user;
 }
 
@@ -264,6 +325,6 @@ export async function completeDemoSignIn(
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("That doesn't look like an email address.");
 
   const user = await upsertUser({ email, name, provider: "demo" });
-  issueSession(res, user.id);
+  issueSession(res, user);
   return user;
 }

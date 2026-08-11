@@ -27,7 +27,7 @@ const BLOB_KEY = "store";
 const MAX_MESSAGES_PER_APP = 2000;
 const MAX_ASK_TURNS = 20;
 
-const DEFAULT_PREFERENCES: Preferences = {
+export const DEFAULT_PREFERENCES: Preferences = {
   apps: ["telegram", "whatsapp", "slack"],
   chatIds: [],
   unreadOnly: false,
@@ -59,16 +59,23 @@ const fileBackend: Backend = {
     }
   },
   async write(store) {
-    try {
-      const dir = path.dirname(STORE_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
-    } catch (err: any) {
-      console.warn(`Could not write to ${STORE_PATH} (${err.message})`);
-      // On Netlify this is expected — data is in Blobs, not the file system
-    }
+    fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+  },
+};
+
+/**
+ * Last resort: a serverless container with no Blobs and no writable disk. State
+ * lives only as long as the container, which is why sessions are self-contained
+ * in the cookie rather than looked up here.
+ */
+let memory: StoreShape | null = null;
+const memoryBackend: Backend = {
+  async read() {
+    return memory;
+  },
+  async write(store) {
+    memory = store;
   },
 };
 
@@ -83,18 +90,59 @@ const blobBackend: Backend = {
   },
 };
 
-/** Netlify sets NETLIFY in the functions runtime; the blobs context follows it. */
+/**
+ * Which backend to use.
+ *
+ * `NETLIFY` is set during builds but is *not* reliably present in the function
+ * runtime, so keying off it sent production straight at the file backend, where
+ * every write failed against a read-only disk. Ask the environment what it can
+ * actually do instead of what it claims to be.
+ */
+let writableDisk: boolean | null = null;
+function diskIsWritable(): boolean {
+  if (writableDisk !== null) return writableDisk;
+  try {
+    fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+    fs.accessSync(path.dirname(STORE_PATH), fs.constants.W_OK);
+    writableDisk = true;
+  } catch {
+    writableDisk = false;
+  }
+  return writableDisk;
+}
+
+export function backendName(): "blobs" | "file" | "memory" {
+  if (process.env.NETLIFY_BLOBS_CONTEXT) return "blobs";
+  return diskIsWritable() ? "file" : "memory";
+}
+
 function backend(): Backend {
-  return process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT ? blobBackend : fileBackend;
+  const name = backendName();
+  return name === "blobs" ? blobBackend : name === "file" ? fileBackend : memoryBackend;
 }
 
 async function load(): Promise<StoreShape> {
-  const stored = await backend().read();
-  return stored ? { ...emptyStore(), ...stored } : emptyStore();
+  try {
+    const stored = await backend().read();
+    return stored ? { ...emptyStore(), ...stored } : emptyStore();
+  } catch (err: any) {
+    console.warn(`Store read failed (${err.message}) — continuing with an empty store.`);
+    return emptyStore();
+  }
 }
 
+/**
+ * Persistence is best-effort. A failed write must never break the request: the
+ * signed-in user is carried by the session cookie, and messages fall back to
+ * demo data, so a read-only environment degrades instead of erroring.
+ */
 async function save(store: StoreShape): Promise<void> {
-  await backend().write(store);
+  try {
+    await backend().write(store);
+  } catch (err: any) {
+    memory = store;
+    console.warn(`Store write failed (${err.message}) — keeping state in memory only.`);
+  }
 }
 
 /** Read, mutate, write. Note this is last-write-wins across concurrent calls. */

@@ -15,6 +15,7 @@ import {
   demoSignInAllowed,
   googleAuthUrl,
   googleConfigured,
+  refreshSession,
   requireUser,
   serverWarnings,
   userOf,
@@ -158,8 +159,11 @@ app.put("/api/preferences", requireUser, async (req: Request, res: Response) => 
   const chatIds: string[] = Array.isArray(body.chatIds) ? body.chatIds.map(String) : [];
 
   const preferences: Preferences = { apps, chatIds, unreadOnly: Boolean(body.unreadOnly) };
-  const user = await setPreferences(userOf(req).id, preferences);
-  res.json({ preferences: user?.preferences });
+  const stored = await setPreferences(userOf(req).id, preferences);
+
+  // Re-sign the cookie too, so the choice sticks even where the store can't persist.
+  refreshSession(res, { ...userOf(req), preferences });
+  res.json({ preferences: stored?.preferences || preferences });
 });
 
 /** GET /api/digest — the AI summary shown on the dashboard */
