@@ -32,9 +32,18 @@ npm install
 npm start               # http://localhost:3000
 ```
 
-That's it. No configuration needed — sign in with your email and the app works with demo data.
+That's it. No configuration, no environment variables — sign in with your email
+and the dashboard works.
 
-Optionally set `ANTHROPIC_API_KEY` in `.env` for real Claude summaries instead of demo data. Everything else is auto-configured.
+**Summaries without an API key.** Calling a model needs credentials, so with none
+configured the reader analyses your messages on the server instead: it groups
+them by chat, finds the ones that put a question or request to you, ranks them
+by urgency and unread count, and quotes them back. The ask box does real
+retrieval over the same messages. Everything it says is drawn from messages that
+exist — it just can't paraphrase the way Claude can.
+
+Set `ANTHROPIC_API_KEY` and the same screens switch to Claude, which reads for
+nuance rather than keywords. Nothing else changes.
 
 ## Deploying
 

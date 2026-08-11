@@ -1,5 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AskTurn, Digest, Message } from "./types";
+import { answerLocally, summariseLocally } from "./local-summary";
+
+/**
+ * Two ways to read the inbox. Claude does it well when credentials exist;
+ * `local-summary.ts` does it without any when they don't. Calling a model
+ * needs an API key — that isn't something the app can opt out of — so the
+ * fallback is real analysis of the real messages rather than an error.
+ */
+function haveCredentials(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+}
 
 const MODEL = "claude-opus-5";
 
@@ -102,6 +113,9 @@ interface MessageResult {
   refused: boolean;
 }
 
+/** Raised when Claude can't be reached for auth reasons; callers read locally. */
+class CredentialsUnavailable extends Error {}
+
 async function createMessage(params: Record<string, unknown>): Promise<MessageResult> {
   let response: any;
   try {
@@ -116,12 +130,9 @@ async function createMessage(params: Record<string, unknown>): Promise<MessageRe
     });
   } catch (err: any) {
     if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
-      // Naming the cause here is the whole point: without it a missing key is
-      // indistinguishable from a network blip, and the deploy can't be fixed.
-      throw new Error(
-        "The summaries need a Claude API key, which this deployment doesn't have. " +
-          "Add ANTHROPIC_API_KEY under Site configuration → Environment variables and redeploy."
-      );
+      // A key that is present but rejected: fall back rather than fail, same as
+      // when no key is configured at all.
+      throw new CredentialsUnavailable();
     }
     if (err instanceof Anthropic.RateLimitError) {
       throw new Error("Claude is rate limited right now — try again in a moment.");
@@ -153,24 +164,31 @@ export async function buildDigest(messages: Message[], now: Date): Promise<Diges
     };
   }
 
-  const { text, refused } = await createMessage({
-    system: DIGEST_SYSTEM,
-    output_config: {
-      effort: "medium",
-      format: { type: "json_schema", schema: DIGEST_SCHEMA },
-    },
-    messages: [
-      {
-        role: "user",
-        content: `The current time is ${now.toISOString()}.\n\nHere is the transcript:\n\n${renderTranscript(
-          messages
-        )}`,
-      },
-    ],
-  });
+  if (!haveCredentials()) return summariseLocally(messages, now);
 
-  if (refused) throw new Error("The model declined to summarise this content.");
-  return JSON.parse(text) as Digest;
+  try {
+    const { text, refused } = await createMessage({
+      system: DIGEST_SYSTEM,
+      output_config: {
+        effort: "medium",
+        format: { type: "json_schema", schema: DIGEST_SCHEMA },
+      },
+      messages: [
+        {
+          role: "user",
+          content: `The current time is ${now.toISOString()}.\n\nHere is the transcript:\n\n${renderTranscript(
+            messages
+          )}`,
+        },
+      ],
+    });
+
+    if (refused) return summariseLocally(messages, now);
+    return JSON.parse(text) as Digest;
+  } catch (err) {
+    if (err instanceof CredentialsUnavailable) return summariseLocally(messages, now);
+    throw err;
+  }
 }
 
 /** The ask-the-AI box. Free-form questions about the same message set. */
@@ -180,20 +198,29 @@ export async function askAboutInbox(
   history: AskTurn[],
   now: Date
 ): Promise<string> {
+  if (!haveCredentials()) return answerLocally(question, messages, history, now);
+
   const turns = history.map((turn) => ({ role: turn.role, content: turn.content }));
 
-  const { text, refused } = await createMessage({
-    system: ASK_SYSTEM,
-    output_config: { effort: "medium" },
-    messages: [
-      ...turns,
-      {
-        role: "user",
-        content: `<inbox time="${now.toISOString()}">\n${renderTranscript(messages)}\n</inbox>\n\n${question}`,
-      },
-    ],
-  });
+  try {
+    const { text, refused } = await createMessage({
+      system: ASK_SYSTEM,
+      output_config: { effort: "medium" },
+      messages: [
+        ...turns,
+        {
+          role: "user",
+          content: `<inbox time="${now.toISOString()}">\n${renderTranscript(messages)}\n</inbox>\n\n${question}`,
+        },
+      ],
+    });
 
-  if (refused) return "I wasn't able to answer that one. Try asking a different way.";
-  return text;
+    if (refused) return "I wasn't able to answer that one. Try asking a different way.";
+    return text;
+  } catch (err) {
+    if (err instanceof CredentialsUnavailable) {
+      return answerLocally(question, messages, history, now);
+    }
+    throw err;
+  }
 }
