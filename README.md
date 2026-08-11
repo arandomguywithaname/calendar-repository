@@ -29,12 +29,12 @@ Sign in  →  pick your apps and chats  →  read the summary  →  ask follow-u
 
 ```bash
 npm install
-cp .env.example .env    # fill in ANTHROPIC_API_KEY at minimum
-npm run web             # http://localhost:3000
+npm start               # http://localhost:3000
 ```
 
-`ANTHROPIC_API_KEY` is the only variable required for the summary and the
-ask box to work. Everything else is optional and degrades to demo data.
+That's it. No configuration needed — sign in with your email and the app works with demo data.
+
+Optionally set `ANTHROPIC_API_KEY` in `.env` for real Claude summaries instead of demo data. Everything else is auto-configured.
 
 ## Deploying
 

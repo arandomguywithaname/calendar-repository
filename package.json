@@ -5,10 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js",
-    "web": "tsc && node dist/server.js",
-    "web:start": "node dist/server.js"
+    "start": "tsc && node dist/server.js",
+    "web": "tsc && node dist/server.js"
   },
   "repository": {
     "type": "git",
