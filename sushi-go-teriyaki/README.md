@@ -10,7 +10,7 @@ CDN. **Double-click it, or drop the folder on any static host.**
 ```
 sushi-go-teriyaki/
   index.html      the whole game — markup, styles, engine, UI, PeerJS
-  test-engine.js  node test-engine.js   (50 checks, no dependencies)
+  test-engine.js  node test-engine.js   (52 checks, no dependencies)
   README.md
 ```
 
@@ -151,6 +151,26 @@ Open **Online**, type a name, and either:
 
 Up to five at a table. The host can start whenever a second player arrives;
 any seats still empty are simply not dealt in, or filled with bots.
+
+### Chat
+
+Online tables have a chat. A **Chat** button appears in the bar once play
+starts, with a badge counting messages you haven't read; the panel opens beside
+the board and the board steps aside to make room. Names are coloured to match
+each player's seat, and the table's own events — someone dropping out, a bot
+taking a seat — appear in the same log so there is one shared record of what
+happened.
+
+There is no chat in solo or pass-and-play, where there is nobody on the other
+end to read it.
+
+Messages get the same distrust as everything else arriving from another
+device: control characters stripped, whitespace collapsed, capped at 140
+characters, and escaped on the way into the page, so markup in a message shows
+as the text someone typed rather than running as HTML. One message per player
+per 600ms — the host enforces it against anything hostile, and your own client
+stops you first so a throttled message stays in the box with a note instead of
+vanishing.
 
 ### How it connects
 

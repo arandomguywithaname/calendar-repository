@@ -27,7 +27,8 @@ const EXPORTS = [
   "DUMPLING_PTS", "HAND_SIZE", "buildDeck", "createGame", "dealRound",
   "playTurn", "roundOver", "tally", "scoreRound", "scorePuddings",
   "standings", "aiChoose", "cardValue", "humanSeats",
-  "PLATE_CAPACITY", "looseNigiri", "plateValue", "validPick"
+  "PLATE_CAPACITY", "looseNigiri", "plateValue", "validPick",
+  "cleanChat", "CHAT_MAX"
 ];
 const E = vm.runInNewContext(source + "\n({" + EXPORTS.join(",") + "})", {});
 
@@ -92,6 +93,24 @@ check("a joker cannot copy another joker, nor a plate", () => {
   eq(E.JOKER_OPTIONS.includes("joker"), false, "joker in its own option list");
   eq(E.JOKER_OPTIONS.includes("plate"), false, "plate in the option list");
   eq(E.JOKER_OPTIONS.length, Object.keys(E.CARDS).length - 2, "option count");
+});
+
+/* ---------------- chat ---------------- */
+
+check("chat text is stripped of control characters and runaway length", () => {
+  const ctl = "hi" + String.fromCharCode(0) + String.fromCharCode(7) + "there";
+  eq(E.cleanChat(ctl), "hithere", "control characters removed");
+  eq(E.cleanChat("  lots   of    space  "), "lots of space", "whitespace collapsed");
+  eq(E.cleanChat("x".repeat(500)).length, E.CHAT_MAX, "capped");
+  eq(E.cleanChat("   "), "", "blank becomes empty");
+  eq(E.cleanChat(null), "", "null becomes empty");
+  eq(E.cleanChat(undefined), "", "undefined becomes empty");
+});
+
+check("chat keeps ordinary punctuation and markup as plain text", () => {
+  eq(E.cleanChat("nice one! 3 squid -> 18?"), "nice one! 3 squid -> 18?", "punctuation");
+  // Markup survives sanitising as text; escaping happens at render time.
+  eq(E.cleanChat("<b>hi</b>"), "<b>hi</b>", "kept verbatim for the renderer to escape");
 });
 
 /* ---------------- plate ---------------- */
