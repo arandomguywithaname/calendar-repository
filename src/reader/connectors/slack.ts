@@ -86,7 +86,7 @@ export const slackConnector: Connector = {
   status: () =>
     token()
       ? "Live via the Slack Web API. The app reads conversations it has been invited to; a user token (SLACK_USER_TOKEN) also gives accurate unread counts."
-      : "Demo data. Set SLACK_BOT_TOKEN (or SLACK_USER_TOKEN) to read real conversations.",
+      : "Not connected — showing a sample workspace. Connecting Slack needs an app registered at api.slack.com; its token goes in SLACK_BOT_TOKEN (or SLACK_USER_TOKEN).",
 
   async listChats(): Promise<Chat[]> {
     if (!token()) return demoChats("slack");

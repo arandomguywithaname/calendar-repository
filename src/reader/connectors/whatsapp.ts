@@ -92,7 +92,7 @@ export const whatsappConnector: Connector = {
   status: () =>
     isConfigured()
       ? "Live via the WhatsApp Business Cloud API webhook (POST /webhooks/whatsapp). Only messages received after the webhook was connected are available — WhatsApp exposes no history API."
-      : "Demo data. Set WHATSAPP_VERIFY_TOKEN and point the Cloud API webhook at /webhooks/whatsapp.",
+      : "Not connected — showing sample chats. WhatsApp has no API for reading a personal account; only the Business Cloud API can deliver messages, by pushing them to /webhooks/whatsapp.",
 
   async listChats(): Promise<Chat[]> {
     if (!isConfigured()) return demoChats("whatsapp");

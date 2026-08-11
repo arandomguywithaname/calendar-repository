@@ -137,7 +137,7 @@ export const telegramConnector: Connector = {
   status: () =>
     token()
       ? "Live via the Telegram Bot API. The bot only sees chats it has been added to (and channels where it is an admin) — personal DMs need an MTProto user client."
-      : "Demo data. Set TELEGRAM_BOT_TOKEN to read real chats.",
+      : "Not connected — showing sample chats. A bot token (TELEGRAM_BOT_TOKEN) reads groups and channels the bot is added to. Personal DMs need an MTProto user client, which the Bot API cannot do.",
 
   async listChats(): Promise<Chat[]> {
     if (!token()) return demoChats("telegram");

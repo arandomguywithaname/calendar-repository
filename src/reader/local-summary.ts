@@ -46,12 +46,30 @@ const STOPWORDS = new Set(
 
 /* ------------------------------- helpers --------------------------------- */
 
-function tokens(text: string): string[] {
+/**
+ * Words, not substrings. Matching on substrings made "Ines" match "lines" and
+ * "car" match "carousel", so questions picked up messages that had nothing to
+ * do with them. Splitting into whole words also sidesteps regex-escaping —
+ * senders and chat titles are user data and may contain metacharacters.
+ */
+function words(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9\s']/g, " ")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
+    .filter(Boolean);
+}
+
+function tokens(text: string): string[] {
+  return words(text).filter((t) => t.length > 2 && !STOPWORDS.has(t));
+}
+
+/** Whole-word match, tolerating a short inflectional tail (deploy/deploys/deploying). */
+function looseMatch(candidate: string, term: string): boolean {
+  if (candidate === term) return true;
+  const [longer, shorter] = candidate.length >= term.length ? [candidate, term] : [term, candidate];
+  return longer.startsWith(shorter) && longer.length - shorter.length <= 3;
 }
 
 function clock(iso: string): string {
@@ -70,13 +88,28 @@ function whenLabel(iso: string, now: Date): string {
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
+/** " (14:02)" or "" — so a message with an unparseable timestamp reads cleanly. */
+function whenSuffix(iso: string, now: Date): string {
+  const label = whenLabel(iso, now);
+  return label ? ` (${label})` : "";
+}
+
 /** One line of a message, short enough to scan, never cut mid-word. */
 function quote(text: string, max = 120): string {
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = (text || "").replace(/\s+/g, " ").trim();
   if (clean.length <= max) return clean;
   const cut = clean.slice(0, max);
   const lastSpace = cut.lastIndexOf(" ");
   return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut) + "…";
+}
+
+/**
+ * Quoted text, or a plain note when there is none. Photos, stickers and voice
+ * notes arrive with an empty body, and “” reads like the summariser failed.
+ */
+function renderQuote(text: string, max = 120): string {
+  const q = quote(text, max);
+  return q ? `“${q}”` : "(no text — attachment or sticker)";
 }
 
 /** Does this message put a request or question to the reader? */
@@ -164,9 +197,14 @@ function describe(g: ChatGroup, now: Date): string {
 
   if (g.asks.length > 0) {
     const ask = g.asks[g.asks.length - 1];
-    parts.push(`${ask.sender} asked (${whenLabel(ask.timestamp, now)}): “${quote(ask.text)}”`);
+    parts.push(`${ask.sender} asked${whenSuffix(ask.timestamp, now)}: ${renderQuote(ask.text)}`);
   } else {
-    parts.push(`Latest ${whenLabel(g.latest.timestamp, now)} — ${g.latest.sender}: “${quote(g.latest.text)}”`);
+    const label = whenLabel(g.latest.timestamp, now);
+    parts.push(
+      label
+        ? `Latest ${label} — ${g.latest.sender}: ${renderQuote(g.latest.text)}`
+        : `Latest from ${g.latest.sender}: ${renderQuote(g.latest.text)}`
+    );
   }
 
   if (g.urgent) parts.push("Flagged as urgent.");
@@ -190,7 +228,8 @@ export function summariseLocally(messages: Message[], now: Date): Digest {
     .slice(0, 5)
     .map((g) => {
       const ask = g.asks[g.asks.length - 1];
-      return `${ask.sender} in ${g.title} (${g.app}) — “${quote(ask.text, 100)}” · ${whenLabel(ask.timestamp, now)}`;
+      const when = whenLabel(ask.timestamp, now);
+      return `${ask.sender} in ${g.title} (${g.app}) — ${renderQuote(ask.text, 100)}` + (when ? ` · ${when}` : "");
     });
 
   const apps = new Set(messages.map((m) => m.app)).size;
@@ -217,23 +256,21 @@ export function summariseLocally(messages: Message[], now: Date): Digest {
       title: g.title,
       summary: describe(g, now),
       urgency: urgencyOf(g),
-      actionItems: g.asks.slice(-3).map((m) => `${m.sender}: “${quote(m.text, 100)}”`),
+      actionItems: g.asks.slice(-3).map((m) => `${m.sender}: ${renderQuote(m.text, 100)}`),
     })),
   };
 }
 
 /* ------------------------------- ask box --------------------------------- */
 
-function matchesName(question: string, name: string): boolean {
-  const q = question.toLowerCase();
-  return name
-    .toLowerCase()
-    .split(/\s+/)
-    .some((part) => part.length > 2 && q.includes(part));
+function matchesName(questionWords: Set<string>, name: string): boolean {
+  return words(name).some((part) => part.length > 2 && questionWords.has(part));
 }
 
 function cite(m: Message, now: Date): string {
-  return `· ${m.sender} in ${m.chatTitle} (${m.app}, ${whenLabel(m.timestamp, now)}): “${quote(m.text, 160)}”`;
+  const when = whenLabel(m.timestamp, now);
+  const where = when ? `${m.app}, ${when}` : m.app;
+  return `· ${m.sender} in ${m.chatTitle} (${where}): ${renderQuote(m.text, 160)}`;
 }
 
 export function answerLocally(
@@ -265,8 +302,9 @@ export function answerLocally(
   }
 
   // Scope by person or by chat when the question names one.
-  const people = [...new Set(messages.map((m) => m.sender))].filter((s) => matchesName(q, s));
-  const chats = groups.filter((g) => matchesName(q, g.title));
+  const qWords = new Set(words(question));
+  const people = [...new Set(messages.map((m) => m.sender))].filter((s) => matchesName(qWords, s));
+  const chats = groups.filter((g) => matchesName(qWords, g.title));
 
   if (people.length || chats.length) {
     const scoped = messages.filter(
@@ -291,10 +329,10 @@ export function answerLocally(
     if (asks.length) {
       lines.push(
         "",
-        `${asks.length === 1 ? "One of them is" : `${asks.length} of them are`} addressed to you — the latest: “${quote(
+        `${asks.length === 1 ? "One of them is" : `${asks.length} of them are`} addressed to you — the latest: ${renderQuote(
           asks[asks.length - 1].text,
           140
-        )}”`
+        )}`
       );
     }
     return lines.join("\n");
@@ -320,9 +358,9 @@ export function answerLocally(
 
   const scored = messages
     .map((m) => {
-      const hay = `${m.text} ${m.sender} ${m.chatTitle}`.toLowerCase();
+      const hay = words(`${m.text} ${m.sender} ${m.chatTitle}`);
       let score = 0;
-      for (const t of terms) if (hay.includes(t)) score += 1;
+      for (const t of terms) if (hay.some((w) => looseMatch(w, t))) score += 1;
       if (score === 0) return null;
       if (m.unread) score += 0.5;
       return { m, score };

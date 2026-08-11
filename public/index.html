@@ -387,7 +387,7 @@ function renderSources() {
           <label><input type="checkbox" class="app" data-app="${source.app}" ${
             state.apps.has(source.app) ? "checked" : ""
           }/> ${escapeHtml(source.label)}</label>
-          <span class="badge ${source.live ? "live" : ""}">${source.live ? "live" : "demo"}</span>
+          <span class="badge ${source.live ? "live" : ""}">${source.live ? "connected" : "not connected"}</span>
         </div>
         <div class="source-status">${escapeHtml(source.status)}</div>
         ${source.error ? `<div class="warn">${escapeHtml(source.error)}</div>` : ""}
