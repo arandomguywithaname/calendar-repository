@@ -272,6 +272,18 @@ async function api(path, options) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+
+  // Static hosting answers /api/* with an HTML 404 page rather than JSON.
+  // Say so plainly instead of surfacing a bare "404".
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      `No backend here: ${path} returned ${res.status} (${contentType.split(";")[0] || "no content type"}). ` +
+        `This page is the front end of a Node server — sign-in, summaries and questions all run server-side. ` +
+        `Run "npm run web" locally, or deploy somewhere that runs the server.`
+    );
+  }
+
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
   return body;
