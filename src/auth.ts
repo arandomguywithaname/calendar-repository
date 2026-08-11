@@ -141,7 +141,10 @@ function issueSession(res: Response, userId: string): void {
     "SameSite=Lax",
     `Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}`,
   ];
-  if (process.env.NODE_ENV === "production") attributes.push("Secure");
+  // Always use Secure on Netlify and in production
+  if (process.env.NODE_ENV === "production" || process.env.NETLIFY) {
+    attributes.push("Secure");
+  }
   res.setHeader("Set-Cookie", attributes.join("; "));
 }
 
