@@ -33,49 +33,49 @@ You'll only be asked once.
 WHAT HAPPENS NEXT
 -----------------
 
-A black window opens and asks you two questions. It tells you exactly where to
-get each answer. It takes about a minute, and it only happens the first time —
-your answers are saved next to the .exe in a file called .env
+A black window opens and walks you through it. There are two parts.
 
-Then it says:  Bot @yourbotname listening.
+FIRST, it needs permission to talk to Telegram at all.
+
+    Go to  https://my.telegram.org
+    Log in with your phone number
+    Click "API development tools" and create an app (any name)
+    It shows an  api_id  (a number) and an  api_hash  (a long string)
+
+Paste those in when asked. This is the one part nobody can do for you —
+Telegram only issues these to a logged-in account, and only you have yours.
+
+SECOND, it signs you in: your phone number, then the code Telegram sends you.
+Type the code in plainly — no dashes, no tricks. You're typing into this
+window, not into a Telegram chat, so Telegram has no reason to cancel it.
+
+If your account has two-step verification it asks for that password too.
+
+THEN IT MAKES THE BOT FOR YOU. You do not need to visit @BotFather. Now that
+it's signed in as you, it holds that conversation itself and takes the token.
+
+It finishes with:  Bot @yourbotname listening.
 
 Leave that window open. That window IS the bot. Closing it stops it.
 
-Now open your bot in Telegram and send:  /connect
+Open the bot it just named and send  /digest  — you're already signed in, so
+there's no /connect step for you.
 
 
-WHY IT ASKS FOR TWO THINGS
---------------------------
-
-Because Telegram won't let one credential do both jobs.
+WHY IT NEEDS THE api_id AT ALL
+------------------------------
 
 A bot can only see channels where it has been made an administrator. It cannot
 see a channel you merely follow — which is exactly what you want it to read.
-Reading your subscriptions means signing in as you, and that uses a different
-part of Telegram with its own credentials.
+Reading your subscriptions means signing in as you, and that is what the
+api_id and api_hash are for: they identify this program to Telegram.
 
-So: the bot token is how you talk to it. The api_id and api_hash are how it
-reads your channels. Both are free and the setup tells you where to click.
+There is no way around that one. The bot token, on the other hand, it now
+gets for itself.
 
-
-SIGNING IN
-----------
-
-Send /connect and it asks for your phone number, then the code Telegram sends
-you.
-
-Send the code WITH DASHES, like  1-2-3-4-5
-
-This matters. Telegram scans chats for login codes and cancels any code it
-finds posted in one. The dashes get it past that check. The bot removes them
-before using the code.
-
-If your account has two-step verification, put the password after the code:
-
-    1-2-3-4-5 mypassword
-
-The bot deletes that message as soon as it has read it. If Telegram won't let
-it, it says so and asks you to delete it yourself.
+If making the bot automatically fails for any reason, it shows you exactly
+what BotFather said and falls back to asking you to make one by hand — send
+/newbot to @BotFather and paste the token it gives you.
 
 
 USING IT
@@ -152,8 +152,12 @@ The window closes instantly
     The bot is already running in another window. Close that one.
 
 "PHONE_CODE_INVALID"
-    Telegram cancelled the code because it saw it in a chat. Send /connect
-    again and use dashes this time.
+    The code was mistyped, or it expired. It just asks again.
+
+"BotFather didn't reply" / "it limits how many you can have"
+    Telegram is rate-limiting the account, or you already have 20 bots. It
+    falls back to asking you for a token — send /newbot to @BotFather and
+    paste what it gives you.
 
 Telegram invalidated my session
     Someone ended the session from your account's device list. Send /connect.

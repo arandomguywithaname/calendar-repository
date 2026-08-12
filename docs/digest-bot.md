@@ -33,33 +33,37 @@ happened today?".
 
 ## Setup
 
-Two credentials, both one-time.
+```bash
+npm install
+npm run bot
+```
 
-**1. A bot token.** Open [@BotFather](https://t.me/BotFather), send `/newbot`,
-follow the prompts.
+It asks for what it needs. Only one credential is genuinely unavoidable:
+**api_id / api_hash** from [my.telegram.org](https://my.telegram.org) →
+*API development tools*. Telegram issues those only to a logged-in account, so
+nobody can obtain them on someone else's behalf.
 
-**2. API credentials** for the MTProto side, from
-[my.telegram.org](https://my.telegram.org) → *API development tools*.
+The bot token is not asked for. After signing you in over MTProto, setup holds
+the @BotFather conversation itself — `/newbot`, a name, a username, retrying
+past the ones already taken — and reads the token out of the reply. BotFather's
+wording is not an API, so when a reply doesn't match what's expected the flow
+stops, prints what BotFather actually said, and asks for a token by hand.
 
-Put both in `.env`:
+Signing in happens in the terminal, which has a pleasant side effect: the code
+is typed into a console rather than a chat, so Telegram's rule about cancelling
+codes it sees posted in chats never applies. No dashes needed.
+
+Setup files the resulting session under your Telegram id — the same number the
+Bot API reports — so the owner never needs `/connect`. Other people still do.
+
+To configure it without prompts (a server, a container), set the environment
+directly and setup is skipped:
 
 ```
 TELEGRAM_BOT_TOKEN=123456:AA...
 TELEGRAM_API_ID=123456
 TELEGRAM_API_HASH=abc...
 ```
-
-Then:
-
-```bash
-npm install
-npm run bot
-```
-
-Message your bot and send `/connect`.
-
-If you would rather not set the API credentials in the environment, each person
-can pass their own instead: `/connect 123456 your_api_hash`.
 
 ### Optional
 
@@ -130,6 +134,8 @@ or everyone has to sign in again.
 | File | |
 | --- | --- |
 | `src/digest/collector.ts` | MTProto: listing channels, reading posts, the login conversation |
+| `src/digest/botfather.ts` | Creating the bot by talking to @BotFather as the user |
+| `src/digest/setup.ts` | First-run questions, the login, and writing `.env` |
 | `src/digest/summarise.ts` | Posts → topic digest. Model path and lexical fallback |
 | `src/digest/pipeline.ts` | Collect → summarise → store, for one window or everyone |
 | `src/digest/store.ts` | Sessions, digests, watermarks, chat history |

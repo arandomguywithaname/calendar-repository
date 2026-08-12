@@ -1,4 +1,4 @@
-import { cancelLogin, listChannels, startLogin, completeLogin, loginPending } from "./collector";
+import { cancelLogin, CompletedLogin, listChannels, startLogin, completeLogin, loginPending } from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest } from "./format";
 import { runDigest } from "./pipeline";
@@ -229,9 +229,9 @@ async function onCode(
   const scrubbed = await scrub(chatId, messageId);
 
   await typing(chatId);
-  let session: string;
+  let login: CompletedLogin;
   try {
-    session = await completeLogin(userId, code, password);
+    login = await completeLogin(userId, code, password);
   } catch (err: any) {
     const message = err?.errorMessage || err?.message || String(err);
     // Two-step verification asks for a second factor; the login is still open,
@@ -253,7 +253,7 @@ async function onCode(
   await setAccount(userId, {
     apiId: stage.apiId,
     apiHash: stage.apiHash,
-    session,
+    session: login.session,
     phone: stage.phone,
   });
   stages.set(userId, { name: "idle" });

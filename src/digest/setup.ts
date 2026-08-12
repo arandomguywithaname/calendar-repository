@@ -2,32 +2,33 @@ import * as fs from "fs";
 // The `node:` prefix is required here — a bare "readline/promises" resolves
 // under tsc but not under the bundler that produces the shipped binary.
 import * as readline from "node:readline/promises";
+import { BotFatherError, createBot } from "./botfather";
+import { cancelLogin, completeLogin, startLogin, withClient } from "./collector";
 import { envPath } from "./paths";
+import { setAccount } from "./store";
 
 /**
  * First-run setup, asked rather than configured.
  *
- * Telegram needs two credentials and there is no way around either — a bot
- * cannot exist without a token, and MTProto cannot connect without an api_id.
- * What can be removed is the part where someone opens a text file and edits it
- * correctly, so this asks for the values, checks them while the person is still
- * looking, and writes the file itself.
+ * Only one credential is genuinely unavoidable. `api_id`/`api_hash` identify
+ * the *application* to Telegram and can only be issued to someone logged in at
+ * my.telegram.org, so they have to come from the person running this — nobody
+ * else can obtain them on their behalf.
  *
- * Checking matters more than it sounds: a mistyped token would otherwise
- * surface much later as an unexplained failure, by which point the paste that
- * caused it is long out of view.
+ * The bot token is a different matter. @BotFather is an ordinary bot, and by
+ * the time we need a token the person is already signed in over MTProto, so the
+ * program can hold that conversation itself. Typing a token by hand is the
+ * fallback for when BotFather says something we don't recognise, not the path.
+ *
+ * A happy side effect of doing the login here: the code is typed into a
+ * terminal rather than into a Telegram chat, so Telegram's rule about cancelling
+ * codes it sees posted in chats never comes into play.
  */
 
 const TOKEN_SHAPE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+/** Nothing is keyed per-user during setup; there is exactly one person here. */
+const SETUP_KEY = "__setup__";
 
-interface Answers {
-  token: string;
-  apiId: string;
-  apiHash: string;
-  anthropicKey: string;
-}
-
-/** True when there is a terminal to ask questions of. */
 export function canPrompt(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
@@ -36,22 +37,10 @@ export function isConfigured(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN);
 }
 
-/** Confirms the token is real, and tells us the bot's name for the closing line. */
-async function verifyToken(token: string): Promise<{ ok: true; username: string } | { ok: false; why: string }> {
-  try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
-    const raw = await response.text();
-    let data: any;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return { ok: false, why: `couldn't reach Telegram (HTTP ${response.status})` };
-    }
-    if (data.ok) return { ok: true, username: data.result.username };
-    return { ok: false, why: data.description || `HTTP ${response.status}` };
-  } catch (err: any) {
-    return { ok: false, why: `couldn't reach api.telegram.org (${err?.message || err})` };
-  }
+/** Streams are injectable so the whole flow can be driven in a test. */
+export interface SetupIO {
+  input: NodeJS.ReadableStream;
+  output: NodeJS.WritableStream;
 }
 
 /**
@@ -82,13 +71,17 @@ function asker(rl: readline.Interface): (question: string) => Promise<string> {
   };
 }
 
-/** Streams are injectable so the whole flow can be driven in a test. */
-export interface SetupIO {
-  input: NodeJS.ReadableStream;
-  output: NodeJS.WritableStream;
+function reason(err: any): string {
+  return err?.errorMessage || err?.message || String(err);
 }
 
-export async function runSetup(io?: SetupIO): Promise<string> {
+export interface SetupResult {
+  botUsername: string;
+  /** Present when the login also ran, which is the normal path. */
+  ownerId?: string;
+}
+
+export async function runSetup(io?: SetupIO): Promise<SetupResult> {
   const { input, output } = io || { input: process.stdin, output: process.stdout };
   const rl = readline.createInterface({ input, output });
   const ask = asker(rl);
@@ -96,66 +89,143 @@ export async function runSetup(io?: SetupIO): Promise<string> {
 
   say(`
 ──────────────────────────────────────────────────────────────
-  Setting up your channel digest bot. Two values, both free,
-  about a minute. I'll save them so this only happens once.
+  Setting up your channel digest bot.
+
+  One thing to fetch, then your phone number. I'll make the
+  bot for you. Saved when it's done, so this happens once.
 ──────────────────────────────────────────────────────────────
 `);
 
-  const answers: Answers = { token: "", apiId: "", apiHash: "", anthropicKey: "" };
-  let botName = "";
+  /* ------------------------- step 1: the app itself ------------------------ */
 
-  /* ------------------------------- bot token ------------------------------ */
-
-  say("STEP 1 of 2 — the bot itself\n");
-  say("  Open Telegram, search for  @BotFather");
-  say("  Send it:  /newbot");
-  say("  Answer its two questions (a name, then a username ending in 'bot').");
-  say("  It replies with a token like  123456789:AAHxxxxxxxxxxxxxxxxxxxxx\n");
-
-  while (!answers.token) {
-    const value = await ask("  Paste the token here: ");
-    if (!value) {
-      say("  ↳ Nothing pasted. Try again, or press Ctrl+C to stop.\n");
-      continue;
-    }
-    if (!TOKEN_SHAPE.test(value)) {
-      say("  ↳ That doesn't look like a bot token — it should be digits, a colon, then letters.\n");
-      continue;
-    }
-
-    output.write("  ↳ Checking with Telegram… ");
-    const check = await verifyToken(value);
-    if (!check.ok) {
-      say(`no: ${check.why}\n`);
-      continue;
-    }
-    say(`works, that's @${check.username}.\n`);
-    answers.token = value;
-    botName = check.username;
-  }
-
-  /* ---------------------------- api credentials --------------------------- */
-
-  say("STEP 2 of 2 — permission to read your channels\n");
-  say("  A bot can only see channels it was made an admin of, so it can't read");
-  say("  the ones you follow. That needs a second set of credentials.\n");
+  say("STEP 1 of 2 — permission for this program to talk to Telegram\n");
+  say("  Telegram issues these to a logged-in account, so only you can get them.");
+  say("  I can't do this part for you.\n");
   say("  Go to  https://my.telegram.org  and log in with your phone number.");
   say("  Click 'API development tools' and create an app (any name will do).");
-  say("  It shows you an  api_id  (a number) and an  api_hash  (a long string).\n");
+  say("  It shows an  api_id  (a number) and an  api_hash  (a long string).\n");
 
-  while (!answers.apiId) {
+  let apiId = "";
+  while (!apiId) {
     const value = await ask("  api_id: ");
-    if (/^\d{4,}$/.test(value)) answers.apiId = value;
+    if (/^\d{4,}$/.test(value)) apiId = value;
     else say("  ↳ That should be just digits.\n");
   }
 
-  while (!answers.apiHash) {
+  let apiHash = "";
+  while (!apiHash) {
     const value = await ask("  api_hash: ");
-    if (/^[a-f0-9]{32}$/i.test(value)) answers.apiHash = value;
+    if (/^[a-f0-9]{32}$/i.test(value)) apiHash = value;
     else say("  ↳ That should be 32 characters of letters and numbers.\n");
   }
 
-  /* ------------------------------- optional ------------------------------- */
+  /* --------------------------- step 2: signing in -------------------------- */
+
+  say("\nSTEP 2 of 2 — signing in\n");
+  say("  This is what lets me read the channels you follow. A bot can only see");
+  say("  channels it was made an admin of, so signing in as you is the only way.\n");
+
+  let login: { session: string; userId: string; name: string } | null = null;
+
+  while (!login) {
+    let phone = "";
+    while (!phone) {
+      const value = (await ask("  Your phone number, with country code (+44...): ")).replace(/[^\d+]/g, "");
+      if (/^\+?\d{7,15}$/.test(value)) phone = value.startsWith("+") ? value : `+${value}`;
+      else say("  ↳ That doesn't look like a phone number.\n");
+    }
+
+    try {
+      output.write("  ↳ Asking Telegram to send you a code… ");
+      await startLogin(SETUP_KEY, Number(apiId), apiHash, phone);
+      say("sent.\n");
+    } catch (err) {
+      say(`no: ${reason(err)}\n`);
+      continue;
+    }
+
+    // Typed here, not into a chat — so no dashes are needed and Telegram has
+    // no reason to cancel it.
+    say("  Telegram just sent you a code. Type it in below.\n");
+
+    let password: string | undefined;
+    // The code is held across attempts: a two-step password is a second factor
+    // for the same code, so asking for the code again would be asking twice for
+    // something already given.
+    let code = "";
+
+    while (!login) {
+      if (!code) {
+        code = (await ask("  Code: ")).replace(/\D/g, "");
+        if (code.length < 4) {
+          say("  ↳ That should be the digits Telegram sent.\n");
+          code = "";
+          continue;
+        }
+      }
+
+      try {
+        login = await completeLogin(SETUP_KEY, code, password);
+      } catch (err) {
+        const why = reason(err);
+        if (/two-step/i.test(why)) {
+          say("\n  This account has two-step verification.");
+          password = await ask("  Your two-step password: ");
+          continue;
+        }
+        if (/PHONE_CODE_INVALID/i.test(why)) {
+          say("  ↳ Wrong code. Try again.\n");
+          code = "";
+          continue;
+        }
+        say(`  ↳ ${why}\n`);
+        await cancelLogin(SETUP_KEY);
+        break; // back out to the phone number
+      }
+    }
+  }
+
+  say(`\n  Signed in as ${login.name}.\n`);
+
+  /* ------------------------ the bot, made for them ------------------------- */
+
+  say("  Making your bot…\n");
+
+  let token = "";
+  let botUsername = "";
+
+  try {
+    const created = await withClient(
+      { apiId: Number(apiId), apiHash, session: login.session },
+      (client) => createBot(client, { displayName: "Channel Digest" })
+    );
+    token = created.token;
+    botUsername = created.username;
+    say(`  Made it: @${botUsername}\n`);
+  } catch (err: any) {
+    // BotFather's wording is not an API. When it surprises us, show what it
+    // actually said and let the person finish the job by hand.
+    say(`  ↳ Couldn't do that automatically: ${reason(err)}`);
+    if (err instanceof BotFatherError && err.said) {
+      say(`\n  BotFather said:\n  ${err.said.split("\n").join("\n  ")}`);
+    }
+    say(`
+  You can make one yourself in about thirty seconds:
+
+    Open Telegram, search for  @BotFather
+    Send it:  /newbot
+    Answer its two questions (a name, then a username ending in 'bot')
+    It replies with a token
+`);
+
+    while (!token) {
+      const value = await ask("  Paste the token here: ");
+      if (TOKEN_SHAPE.test(value)) token = value;
+      else say("  ↳ That should be digits, a colon, then letters.\n");
+    }
+  }
+
+  /* ------------------------------- optional -------------------------------- */
 
   say(`
   Optional: an Anthropic API key improves the summaries.
@@ -166,19 +236,19 @@ export async function runSetup(io?: SetupIO): Promise<string> {
 
   Press Enter to skip.
 `);
-  answers.anthropicKey = await ask("  Anthropic API key (optional): ");
+  const anthropicKey = await ask("  Anthropic API key (optional): ");
 
   rl.close();
 
-  /* --------------------------------- save --------------------------------- */
+  /* --------------------------------- save ---------------------------------- */
 
   const file = envPath();
   const contents = [
     "# Written by first-run setup. Delete this file to start over.",
-    `TELEGRAM_BOT_TOKEN=${answers.token}`,
-    `TELEGRAM_API_ID=${answers.apiId}`,
-    `TELEGRAM_API_HASH=${answers.apiHash}`,
-    answers.anthropicKey ? `ANTHROPIC_API_KEY=${answers.anthropicKey}` : "# ANTHROPIC_API_KEY=",
+    `TELEGRAM_BOT_TOKEN=${token}`,
+    `TELEGRAM_API_ID=${apiId}`,
+    `TELEGRAM_API_HASH=${apiHash}`,
+    anthropicKey ? `ANTHROPIC_API_KEY=${anthropicKey}` : "# ANTHROPIC_API_KEY=",
     "DIGEST_INTERVAL_HOURS=6",
     "",
   ].join("\n");
@@ -186,21 +256,32 @@ export async function runSetup(io?: SetupIO): Promise<string> {
   try {
     // 0600: this file holds a token that controls the bot.
     fs.writeFileSync(file, contents, { mode: 0o600 });
-    say(`\n  Saved to ${file}\n`);
   } catch (err: any) {
     say(`\n  Couldn't save to ${file} (${err.message}).`);
-    say("  The bot will still start, but it'll ask again next time.\n");
+    say("  The bot will still start, but it'll ask again next time.");
   }
 
-  process.env.TELEGRAM_BOT_TOKEN = answers.token;
-  process.env.TELEGRAM_API_ID = answers.apiId;
-  process.env.TELEGRAM_API_HASH = answers.apiHash;
-  if (answers.anthropicKey) process.env.ANTHROPIC_API_KEY = answers.anthropicKey;
+  process.env.TELEGRAM_BOT_TOKEN = token;
+  process.env.TELEGRAM_API_ID = apiId;
+  process.env.TELEGRAM_API_HASH = apiHash;
+  if (anthropicKey) process.env.ANTHROPIC_API_KEY = anthropicKey;
 
-  say(`──────────────────────────────────────────────────────────────
-  Done. Open @${botName} in Telegram and send /connect
+  // Filed under their Telegram id, which is the same number the Bot API will
+  // report — so the bot already knows them and /connect is not needed.
+  await setAccount(login.userId, {
+    apiId: Number(apiId),
+    apiHash,
+    session: login.session,
+    phone: undefined,
+  });
+
+  say(`
+──────────────────────────────────────────────────────────────
+  Done. You're already signed in — no /connect needed.
+
+  Open  @${botUsername}  in Telegram and send  /digest
 ──────────────────────────────────────────────────────────────
 `);
 
-  return botName;
+  return { botUsername, ownerId: login.userId };
 }

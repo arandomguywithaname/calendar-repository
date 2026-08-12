@@ -174,11 +174,24 @@ export async function startLogin(
   pending.set(userId, { client, phoneCodeHash: sent.phoneCodeHash, phone, at: Date.now() });
 }
 
+/**
+ * The account's own Telegram id travels back with the session.
+ *
+ * Telegram ids are global — the number MTProto reports here is the same one the
+ * Bot API puts in `from.id` — so this is what lets setup file the owner's
+ * session under the identity the bot will later see them as.
+ */
+export interface CompletedLogin {
+  session: string;
+  userId: string;
+  name: string;
+}
+
 export async function completeLogin(
   userId: string,
   code: string,
   password?: string
-): Promise<string> {
+): Promise<CompletedLogin> {
   sweep();
   const entry = pending.get(userId);
   if (!entry) throw new Error("That login expired — send /connect and start again.");
@@ -212,10 +225,32 @@ export async function completeLogin(
     }
   }
 
+  const me: any = await client.getMe();
   const session = String(client.session.save());
   await client.disconnect();
   pending.delete(userId);
-  return session;
+
+  return {
+    session,
+    userId: idOf(me?.id),
+    name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
+  };
+}
+
+/**
+ * Run something against a signed-in account, and always close the socket after.
+ *
+ * Exported because setup needs a client of its own — it talks to BotFather,
+ * which is not reading channels and does not belong in this module's other
+ * functions.
+ */
+export async function withClient<T>(account: TelegramAccount, fn: (client: any) => Promise<T>): Promise<T> {
+  const client = await connect(account);
+  try {
+    return await fn(client);
+  } finally {
+    await client.disconnect().catch(() => {});
+  }
 }
 
 export function loginPending(userId: string): boolean {
