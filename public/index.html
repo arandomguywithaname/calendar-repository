@@ -284,10 +284,22 @@ const $ = (id) => document.getElementById(id);
 let state = { user: null, sources: [], selection: new Set(), apps: new Set() };
 
 async function api(path, options) {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+  } catch (err) {
+    // No server answered at all: the file was opened directly, or only the
+    // static half of the site is deployed. Say which, rather than relaying a
+    // browser-internal message about parsing a URL.
+    throw new Error(
+      "This page is loaded without its backend, so sign-in and summaries can't run. " +
+      "If you deployed only the public/ folder, the server half is missing; " +
+      "deploy from Git so Netlify builds the function too."
+    );
+  }
 
   // Static hosting answers /api/* with an HTML 404 page rather than JSON.
   // Say so plainly instead of surfacing a bare "404".
