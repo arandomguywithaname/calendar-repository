@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "tsc && node dist/server.js",
-    "web": "tsc && node dist/server.js"
+    "web": "tsc && node dist/server.js",
+    "bundle": "esbuild netlify/functions/api.ts --bundle --platform=node --target=node20 --format=cjs --minify --outfile=netlify-deploy/netlify/functions/api.js"
   },
   "repository": {
     "type": "git",
@@ -27,5 +28,8 @@
     "multer": "^2.1.1",
     "serverless-http": "^4.0.0",
     "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }
