@@ -112,7 +112,7 @@ export async function collectPosts(
         const messages = await client.getMessages(entity, { limit: perChannel });
         return { channel, messages: messages as any[] };
       },
-      concurrency
+      12  // Increased from 5 to 12 for ultra-fast mode
     );
 
     // Collect posts from all fetched results

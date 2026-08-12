@@ -43,7 +43,7 @@ export async function runDigest(
     if (since < floor) since = floor;
   }
 
-  const { posts, channels } = await collectPosts(account, since);
+  const { posts, channels } = await collectPosts(account, since, { perChannel: 25, total: 500 });
   const digest = await summarisePeriod(userId, posts, channels, since, now);
 
   await saveDigest(digest);

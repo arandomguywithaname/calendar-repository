@@ -85,9 +85,9 @@ between sources — a digest that hides a contradiction is worse than one that r
 Leave out posts that carry no news: advertising, giveaways, engagement bait, pure self-promotion.`;
 
 /** A long post's opening states what happened; the rest is elaboration. */
-const MAX_POST_CHARS = 1500;
-/** Roughly 150k tokens of posts — a ceiling the window bound alone doesn't give. */
-const MAX_TOTAL_CHARS = 600_000;
+const MAX_POST_CHARS = 800;
+/** Roughly 80k tokens of posts — reduced for faster processing. */
+const MAX_TOTAL_CHARS = 300_000;
 
 /**
  * Trim a window to something a single request can hold.
@@ -187,12 +187,12 @@ export async function summarisePeriod(
   try {
     const response: any = await (anthropic().beta.messages.create as any)({
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: 4000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
       system: SYSTEM,
       output_config: {
-        effort: "medium",
+        effort: "low",
         format: { type: "json_schema", schema: DIGEST_SCHEMA },
       },
       messages: [
