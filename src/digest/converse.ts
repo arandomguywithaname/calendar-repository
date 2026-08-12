@@ -108,11 +108,63 @@ function words(text: string): string[] {
     .filter((w) => w.length > 3);
 }
 
-/** Retrieval over the digests, quoting what it finds. Honest about being search. */
+const ASKING_FOR_LATEST = /(что нового|what.?s new|дайджест|digest|итог|summar|catch me up)/i;
+/**
+ * Greetings and "what are you" — not searches, and answering them as searches is
+ * absurd. The trailing guard is written out rather than using `\b`, which is
+ * ASCII-only and so never fires after a Cyrillic word.
+ */
+const CHITCHAT =
+  /^(hi|hey|hello|yo|sup|thanks|thank you|ok|okay|cool|привет|здравствуй\w*|спасибо|ага)(?![\p{L}\p{N}])|are you (smart|there|ok|alive|real|a bot)|who are you|what (can|do) you do|как дела|ты кто/iu;
+
+function topicList(digests: PeriodDigest[], limit: number): string[] {
+  const lines: string[] = [];
+  for (const digest of digests) {
+    for (const topic of digest.topics) {
+      lines.push(`• ${topic.title}`);
+      if (lines.length >= limit) return lines;
+    }
+  }
+  return lines;
+}
+
+/**
+ * Retrieval over the digests, honest about being search.
+ *
+ * The hard part here is not matching, it is knowing which kind of nothing it is
+ * looking at. "I have digests but none mention your word" and "every digest I
+ * have is empty" produce the same zero hits and need completely different
+ * answers — the first is a real answer, the second means the collection never
+ * found anything and no amount of rephrasing will help. Saying "nothing
+ * mentions that" to someone whose digests are all empty sends them in circles.
+ */
 function answerLocally(question: string, digests: PeriodDigest[]): string {
   const latest = digests[0];
+  const totalTopics = digests.reduce((sum, d) => sum + d.topics.length, 0);
+  const searchMode = "\n\n(No API key set, so I'm searching my digests rather than really reading them. Add ANTHROPIC_API_KEY to .env and restart to change that.)";
 
-  if (/^\s*$/.test(question) || /(что нового|what.?s new|дайджест|digest|итог|summar)/i.test(question)) {
+  // Every digest empty: the problem is upstream of anything they can ask.
+  if (totalTopics === 0) {
+    return [
+      "I haven't got anything to talk about yet — every digest I've built is empty, so nothing was found in your channels.",
+      "",
+      "Two things worth trying:",
+      "• /channels — check I can actually see the channels you follow",
+      "• /digest 72 — re-read the last three days, ignoring where I'd got up to",
+      "",
+      "Plain /digest only looks at what's new since the last run, so once one run comes back empty the next ones look quiet too.",
+    ].join("\n");
+  }
+
+  if (CHITCHAT.test(question.trim())) {
+    return [
+      `I keep digests of the Telegram channels you follow — ${totalTopics} topics across ${digests.length} period(s) right now.`,
+      "",
+      "Ask me about anything in them, or say “what's new”. /history shows what I'm holding.",
+    ].join("") + searchMode;
+  }
+
+  if (/^\s*$/.test(question) || ASKING_FOR_LATEST.test(question)) {
     const lines = [latest.headline, ""];
     for (const topic of latest.topics.slice(0, 8)) {
       const sources = [...new Set(topic.sources.map((s) => s.channelTitle))].slice(0, 3).join(", ");
@@ -138,8 +190,18 @@ function answerLocally(question: string, digests: PeriodDigest[]): string {
     }
   }
 
+  // Nothing matched, but there is material — show it rather than stonewalling.
   if (hits.length === 0) {
-    return "Nothing in the digests I have mentions that. Ask about something else, or say “what's new” for the latest period.";
+    const available = topicList(digests, 8);
+    return [
+      "Nothing in my digests matches that.",
+      "",
+      "Here's what I do have:",
+      ...available,
+      available.length < totalTopics ? `…and ${totalTopics - available.length} more — /history for the rest.` : "",
+    ]
+      .filter(Boolean)
+      .join("\n") + searchMode;
   }
 
   hits.sort((a, b) => b.score - a.score);
