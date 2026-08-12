@@ -68,6 +68,19 @@ if (target) {
   // No .env is shipped: the program asks for the values on first run and
   // writes the file itself. An empty one here would only invite editing.
   pack(out, path.join(root, spec.zip));
+
+  // A compiled binary carries a whole runtime, which zip cannot squeeze under
+  // the 30 MiB this gets delivered through — xz can, at the cost of needing
+  // Windows 11 or 7-Zip to open.
+  if (process.argv.includes("--xz")) {
+    const archive = path.join(root, spec.zip.replace(/\.zip$/, ".tar.xz"));
+    fs.rmSync(archive, { force: true });
+    execFileSync("sh", ["-c", `tar -cf - ${spec.exe} README.txt | xz -9 -T0 > ${JSON.stringify(archive)}`], {
+      cwd: out,
+      stdio: "inherit",
+    });
+    console.log(`${archive}  ${(fs.statSync(archive).size / 1e6).toFixed(1)} MB`);
+  }
 } else {
   fs.copyFileSync(bundle, path.join(out, "bot.js"));
   for (const file of ["README.txt", ".env"]) {
