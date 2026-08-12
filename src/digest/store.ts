@@ -26,7 +26,17 @@ interface DigestStoreShape {
   watermarks: Record<string, string>;
 }
 
-const STORE_PATH = path.resolve(__dirname, "../../data/digest-store.json");
+/**
+ * Relative to where the bot was started, not to where this file sits.
+ *
+ * A path built from `__dirname` means something different in `dist/digest/`
+ * than it does in a single bundled file, and the bundled build is how this
+ * ships — so the working directory is the stable reference.
+ */
+const STORE_PATH =
+  process.env.DIGEST_DATA_DIR
+    ? path.resolve(process.env.DIGEST_DATA_DIR, "digest-store.json")
+    : path.resolve(process.cwd(), "data/digest-store.json");
 const BLOB_STORE = "inbox-reader";
 const BLOB_KEY = "digest-store";
 const MAX_CHAT_TURNS = 24;

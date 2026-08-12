@@ -4,3 +4,7 @@ dist/
 data/
 .netlify/
 netlify-deploy/
+
+# Built distribution — rebuild with `npm run package`
+bot-dist/
+channel-digest-bot.zip

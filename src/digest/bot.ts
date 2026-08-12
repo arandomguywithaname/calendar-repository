@@ -36,12 +36,30 @@ function botToken(): string {
 }
 
 async function call(method: string, body: Record<string, unknown>): Promise<any> {
-  const response = await fetch(`${API}/bot${botToken()}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json();
+  let response: Response;
+  try {
+    response = await fetch(`${API}/bot${botToken()}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err: any) {
+    throw new Error(`${method}: could not reach api.telegram.org (${err?.message || err})`);
+  }
+
+  // Anything between here and Telegram — a proxy, a gateway, a captive portal —
+  // can answer with HTML. Reporting that as a JSON parse error tells nobody
+  // anything, so say what actually came back.
+  const raw = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `${method}: expected JSON from api.telegram.org, got HTTP ${response.status} — ${raw.slice(0, 200).replace(/\s+/g, " ").trim()}`
+    );
+  }
+
   if (!data.ok) throw new Error(`${method}: ${data.description || response.status}`);
   return data.result;
 }
@@ -419,7 +437,20 @@ export async function handleUpdate(update: any): Promise<void> {
 let running = false;
 
 export async function startBot(): Promise<void> {
-  const me = await call("getMe", {});
+  let me: any;
+  try {
+    me = await call("getMe", {});
+  } catch (err: any) {
+    const message = err?.message || String(err);
+    // The two startup failures worth telling apart: a token that isn't a token,
+    // and a network that can't reach Telegram at all.
+    if (/401|[Uu]nauthorized/.test(message)) {
+      throw new Error(
+        "Telegram rejected the bot token. Check TELEGRAM_BOT_TOKEN in your .env — it should look like 123456789:AAH... and come from @BotFather."
+      );
+    }
+    throw new Error(`${message}\n\nThe bot needs to reach api.telegram.org. Check your connection or proxy.`);
+  }
   console.log(`Bot @${me.username} listening.`);
 
   await call("setMyCommands", {

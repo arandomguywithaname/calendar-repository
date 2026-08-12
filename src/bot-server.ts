@@ -15,6 +15,14 @@ dotenv.config();
 
 const INTERVAL_HOURS = Number(process.env.DIGEST_INTERVAL_HOURS || 6);
 
+/**
+ * Stamped in at bundle time. Its only job is to make "am I running the build I
+ * think I am?" answerable without guessing — a question that cost real time the
+ * last round, when fixes weren't reaching the thing being tested.
+ */
+declare const __BUILD_STAMP__: string;
+const BUILD = typeof __BUILD_STAMP__ === "undefined" ? "source" : __BUILD_STAMP__;
+
 async function sweepDigests(): Promise<void> {
   try {
     const results = await runDigestForAll();
@@ -40,6 +48,8 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
+
+  console.log(`Channel digest bot — build ${BUILD}`);
 
   if (INTERVAL_HOURS > 0) {
     const timer = setInterval(sweepDigests, INTERVAL_HOURS * 3600_000);
