@@ -143,11 +143,16 @@ that's the one piece an operator does, not each user.
 | App | How it connects | What it can read |
 | --- | --- | --- |
 | **Gmail** | Click Connect (same Google sign-in, plus read-only inbox scope). Needs `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. | Your inbox, read-only — the app cannot send or delete |
-| **Slack** | Click Connect. Needs `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` and `SLACK_REDIRECT_URI`. | The conversations your Slack account can see, with real unread counts |
-| **Telegram** | Bot token only (`TELEGRAM_BOT_TOKEN`) | Groups and channels the bot is added to. **Not your personal DMs** — those need an MTProto user client, which the Bot API cannot do |
+| **Slack** | Click Connect. With `SLACK_CLIENT_ID` set that is an OAuth consent screen; without it, paste a token from an app you created at api.slack.com | The conversations your Slack account can see, with real unread counts |
+| **Telegram** | **Click Connect and paste a @BotFather token.** No OAuth, no client id, no developer console — creating the bot is a chat message | Groups and channels the bot is added to. **Not your personal DMs** — those need an MTProto user client, which the Bot API cannot do |
 | **WhatsApp** | Business Cloud API webhook | Messages sent to a *business* number after the webhook is connected. **A personal WhatsApp account cannot be read by anything** — it is end-to-end encrypted with no read API |
 
-Anything not connected shows sample chats so the dashboard still works.
+Pasted tokens are checked against the provider before they are stored, so a typo
+is reported at the moment you paste it rather than leaving the dashboard quietly
+on sample data. Anything not connected shows sample chats so the page still works.
+
+Gmail is the one that genuinely cannot be connected without an OAuth client: its
+API accepts no other credential, and an app password only works over IMAP.
 
 ### Telegram — `TELEGRAM_BOT_TOKEN`
 
