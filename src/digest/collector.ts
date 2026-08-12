@@ -67,6 +67,9 @@ export async function listChannels(account: TelegramAccount): Promise<Channel[]>
  * Bounded twice — per channel and overall — because a digest window covering a
  * hundred busy channels would otherwise pull far more than any summariser needs
  * to establish what happened.
+ *
+ * Message fetching is concurrent with a limit to balance speed against rate-limiting.
+ * Sequential fetching times out badly with 50+ channels (1-2s per channel = 50-100s stall).
  */
 export async function collectPosts(
   account: TelegramAccount,
@@ -75,6 +78,7 @@ export async function collectPosts(
 ): Promise<{ posts: Post[]; channels: Channel[] }> {
   const perChannel = options.perChannel ?? 40;
   const total = options.total ?? 600;
+  const concurrency = 5; // Fetch from 5 channels at once
 
   const client = await connect(account);
   try {
@@ -83,6 +87,8 @@ export async function collectPosts(
     const channels: Channel[] = [];
     const posts: Post[] = [];
 
+    // Collect all channels first, then fetch messages concurrently
+    const channelsToFetch: Array<{ entity: any; channel: Channel }> = [];
     for (const dialog of dialogs) {
       const entity: any = dialog.entity;
       if (!entity || entity.className !== "Channel" || !entity.broadcast) continue;
@@ -96,18 +102,31 @@ export async function collectPosts(
         username: entity.username || undefined,
       };
       channels.push(channel);
+      channelsToFetch.push({ entity, channel });
+    }
 
-      const messages = await client.getMessages(entity, { limit: perChannel });
-      for (const message of messages as any[]) {
+    // Fetch messages from channels concurrently with a limit
+    const fetched = await promiseConcurrent(
+      channelsToFetch,
+      async ({ entity, channel }) => {
+        const messages = await client.getMessages(entity, { limit: perChannel });
+        return { channel, messages: messages as any[] };
+      },
+      concurrency
+    );
+
+    // Collect posts from all fetched results
+    for (const { channel, messages } of fetched) {
+      for (const message of messages) {
         const text: string = message?.message || "";
-        if (!text.trim()) continue; // media with no caption carries nothing to summarise
+        if (!text.trim()) continue;
 
         const date = new Date((message.date || 0) * 1000);
         if (date <= since) continue;
 
         posts.push({
-          id: `${channelId}:${message.id}`,
-          channelId,
+          id: `${channel.id}:${message.id}`,
+          channelId: channel.id,
           channelTitle: channel.title,
           messageId: message.id,
           text,
@@ -123,6 +142,41 @@ export async function collectPosts(
   } finally {
     await client.disconnect();
   }
+}
+
+/**
+ * Run async operations on items with concurrency limit.
+ * Processes items in batches up to the limit, in parallel.
+ */
+function promiseConcurrent<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  limit: number
+): Promise<R[]> {
+  return new Promise((resolve, reject) => {
+    const results: R[] = [];
+    let index = 0;
+    let active = 0;
+
+    const next = () => {
+      while (active < limit && index < items.length) {
+        const i = index++;
+        active++;
+        fn(items[i])
+          .then((result) => {
+            results[i] = result;
+            active--;
+            next();
+          })
+          .catch(reject);
+      }
+      if (active === 0 && index === items.length) {
+        resolve(results);
+      }
+    };
+
+    next();
+  });
 }
 
 /* --------------------------------- login --------------------------------- */
