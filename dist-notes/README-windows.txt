@@ -117,6 +117,37 @@ way you would treat a password. /forget deletes the session from it, and
 ending the session from Telegram's own device list works too.
 
 
+WHAT THE API KEY COSTS
+----------------------
+
+The bill scales with how much you read, so nobody can quote you a number --
+but the shape of it is worth knowing.
+
+Every digest sends the period's posts to the model once. Follow a handful of
+quiet channels and that is small; follow forty busy ones and each digest is
+substantially more. It runs every 6 hours by default, so that cost repeats
+four times a day whether or not you read the result.
+
+Three dials, in the order worth reaching for:
+
+  DIGEST_INTERVAL_HOURS=24     in .env -- once a day instead of four times.
+                               Straight 4x cut, and you can still type
+                               /digest whenever you actually want one.
+
+  ANTHROPIC_MODEL=claude-sonnet-5    in .env -- a cheaper model. Add the line
+  ANTHROPIC_MODEL=claude-haiku-4-5   yourself; the default is claude-opus-5,
+                               which is the most capable and the most
+                               expensive. Cheaper models merge stories less
+                               reliably, which is the one thing the model is
+                               here to do -- so try this after the interval.
+
+  Watch the real number         platform.claude.com shows your spend per day.
+                               Run it a day, look, then decide.
+
+Repeat questions about the same digests are cached, so a long conversation
+costs far less than the first question in it.
+
+
 WITHOUT AN ANTHROPIC API KEY
 ----------------------------
 

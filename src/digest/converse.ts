@@ -11,7 +11,13 @@ import { PeriodDigest } from "./types";
  * point at originals without ever having held them.
  */
 
-const MODEL = "claude-opus-5";
+/**
+ * Opus by default. `ANTHROPIC_MODEL` exists because the bill scales with how
+ * much someone reads — a person following forty busy channels pays several
+ * times what a light reader does for the same feature, and only they can judge
+ * whether that is worth it.
+ */
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 /** Enough history for "and before that?" without unbounded growth. */
 const DIGEST_WINDOW = 30;
@@ -75,14 +81,24 @@ export async function answerFromDigests(
       max_tokens: 4000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
-      system: SYSTEM,
+      // The digests belong in the system block, not the final user turn.
+      // Caching is a prefix match: here the digests sit ahead of the growing
+      // conversation and change only when a new one is built, so a whole
+      // afternoon of questions reads them from cache instead of re-paying for
+      // them every message. Inside the user turn they would be re-sent at full
+      // price on each question, and buried mid-history on the next one.
+      system: [
+        { type: "text", text: SYSTEM },
+        {
+          type: "text",
+          text: `<digests>\n${renderDigests(digests)}\n</digests>`,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       output_config: { effort: "medium" },
       messages: [
         ...history.map((t) => ({ role: t.role, content: t.content })),
-        {
-          role: "user",
-          content: `<digests>\n${renderDigests(digests)}\n</digests>\n\n${question}`,
-        },
+        { role: "user", content: question },
       ],
     });
 

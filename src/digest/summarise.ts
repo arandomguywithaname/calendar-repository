@@ -15,7 +15,8 @@ import { Channel, PeriodDigest, Post, SourceRef, TopicDigest } from "./types";
  * rather than overstate what was merged.
  */
 
-const MODEL = "claude-opus-5";
+/** Opus by default; `ANTHROPIC_MODEL` lets the person paying choose otherwise. */
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
 let client: Anthropic | null = null;
