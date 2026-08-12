@@ -1,9 +1,26 @@
 # Inbox Reader
 
-Reads your Telegram, WhatsApp and Slack chats, and gives you one page that says
-what you missed — plus an AI you can just talk to about your messages.
-
 Powered by Claude (`claude-opus-5`).
+
+## → [Channel Digest Bot](docs/digest-bot.md)
+
+A Telegram bot that reads the channels *you* follow, collapses the repetition
+between them into a digest organised by topic, and talks to you about it in
+ordinary language. Ask it "what happened this week?" months later and it answers
+from stored summaries — the raw posts were never kept.
+
+```bash
+npm run bot
+```
+
+Setup, design notes and commands: **[docs/digest-bot.md](docs/digest-bot.md)**.
+
+---
+
+## Inbox Reader (web)
+
+The earlier dashboard, still here and still working: it reads your Telegram,
+WhatsApp and Slack chats and gives you one page that says what you missed.
 
 ```
 Sign in  →  pick your apps and chats  →  read the summary  →  ask follow-ups
