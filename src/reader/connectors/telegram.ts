@@ -5,7 +5,7 @@ import {
   recordMessages,
   setTelegramOffset,
 } from "../store";
-import { Chat, Connector, Message } from "../types";
+import { Chat, Connections, Connector, Message } from "../types";
 import { demoChats, demoMessages } from "./demo";
 
 /**
@@ -46,8 +46,8 @@ interface TelegramUpdate {
   channel_post?: TelegramMessage;
 }
 
-function token(): string | undefined {
-  return process.env.TELEGRAM_BOT_TOKEN;
+function token(c: Connections = {}): string | undefined {
+  return c.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN;
 }
 
 function chatTitle(chat: TelegramChat): string {
@@ -132,23 +132,34 @@ export const telegramConnector: Connector = {
   app: "telegram",
   label: "Telegram",
 
-  isLive: () => Boolean(token()),
+  isLive: (c) => Boolean(token(c)),
 
-  connectable: () => false,
+  connectable: () => true,
 
-  status: () =>
-    token()
-      ? "Live via the Telegram Bot API. The bot only sees chats it has been added to (and channels where it is an admin) — personal DMs need an MTProto user client."
-      : "Not connected — showing sample chats. A bot token (TELEGRAM_BOT_TOKEN) reads groups and channels the bot is added to. Personal DMs need an MTProto user client, which the Bot API cannot do.",
+  connectVia: () => "token",
 
-  async listChats(): Promise<Chat[]> {
-    if (!token()) return demoChats("telegram");
+  tokenHelp: () => ({
+    label: "Telegram bot token",
+    help:
+      "Message @BotFather on Telegram, send /newbot, and paste the token it gives you. " +
+      "Then add the bot to the groups and channels you want summarised. It reads only " +
+      "those — the Bot API cannot see your personal DMs at all.",
+    placeholder: "123456789:AAE...",
+  }),
+
+  status: (c) =>
+    token(c)
+      ? "Connected. Reading the groups and channels your bot was added to. Personal DMs are not visible to any bot — that is a Telegram limit, not a setting."
+      : "Not connected — showing sample chats. Paste a @BotFather token to read real groups and channels.",
+
+  async listChats(c: Connections = {}): Promise<Chat[]> {
+    if (!token(c)) return demoChats("telegram");
     await poll();
     return bufferedChats("telegram");
   },
 
-  async fetchMessages(chatIds: string[], limit: number): Promise<Message[]> {
-    if (!token()) return filter(demoMessages("telegram"), chatIds, limit);
+  async fetchMessages(chatIds: string[], limit: number, c: Connections = {}): Promise<Message[]> {
+    if (!token(c)) return filter(demoMessages("telegram"), chatIds, limit);
     await poll();
     return filter(await bufferedMessages("telegram"), chatIds, limit);
   },

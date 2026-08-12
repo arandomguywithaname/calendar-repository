@@ -87,7 +87,20 @@ export const slackConnector: Connector = {
 
   isLive: (c) => Boolean(token(c)),
 
-  connectable: () => Boolean(process.env.SLACK_CLIENT_ID && process.env.SLACK_CLIENT_SECRET),
+  connectable: () => true,
+
+  // OAuth when the site is registered, a pasted token otherwise — either way a
+  // person can connect their own workspace without an operator involved.
+  connectVia: () => (process.env.SLACK_CLIENT_ID ? "oauth" : "token"),
+
+  tokenHelp: () => ({
+    label: "Slack token",
+    help:
+      "At api.slack.com/apps create an app for your workspace, add the scopes " +
+      "channels:read, channels:history, groups:read, groups:history, im:read, im:history, users:read, " +
+      "install it, and paste the token. A user token (xoxp-) also gives accurate unread counts.",
+    placeholder: "xoxp-… or xoxb-…",
+  }),
 
   status: (c) =>
     c.slackToken

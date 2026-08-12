@@ -23,6 +23,8 @@ export interface SourceSummary {
   label: string;
   live: boolean;
   connectable: boolean;
+  connectVia: "token" | "oauth" | "none";
+  tokenHelp?: { label: string; help: string; placeholder: string };
   status: string;
   chats: Chat[];
   error?: string;
@@ -38,6 +40,8 @@ export async function listSources(connections: Connections = {}): Promise<Source
         label: connector.label,
         live: connector.isLive(connections),
         connectable: connector.connectable(),
+        connectVia: connector.connectVia(),
+        tokenHelp: connector.tokenHelp ? connector.tokenHelp() : undefined,
         status: connector.status(connections),
       };
       try {

@@ -363,10 +363,73 @@ app.get("/auth/slack/callback", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/connections/:app — connect by pasting a credential.
+ *
+ * Telegram has no OAuth for this: a bot is created by messaging @BotFather,
+ * which is why the token is pasted rather than granted. The token is checked
+ * against the provider before it is stored, so a typo fails here rather than
+ * silently showing sample data forever.
+ */
+app.post("/api/connections/:app", requireUser, async (req: Request, res: Response) => {
+  const which = req.params.app;
+  const token = String((req.body || {}).token || "").trim();
+  if (!token) {
+    res.status(400).json({ error: "Paste a token first." });
+    return;
+  }
+
+  try {
+    if (which === "telegram") {
+      // A bot token is "<digits>:<secret>" and goes into the URL path verbatim —
+      // percent-encoding the colon produces a path Telegram does not recognise.
+      // Since it cannot be escaped, validate its shape so nothing else can be
+      // smuggled into the path.
+      if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+        res.status(400).json({
+          error: "That does not look like a bot token. @BotFather gives you something like 123456789:AAE…",
+        });
+        return;
+      }
+      const probe = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const body: any = await probe.json().catch(() => ({}));
+      if (!body?.ok) {
+        res.status(400).json({
+          error: "Telegram rejected that token. Copy it again from @BotFather — it looks like 123456789:AAE…",
+        });
+        return;
+      }
+      await setConnections(userOf(req).id, { telegramBotToken: token });
+      res.json({ ok: true, detail: `@${body.result?.username || "bot"}` });
+      return;
+    }
+
+    if (which === "slack") {
+      const probe = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/x-www-form-urlencoded" },
+      });
+      const body: any = await probe.json().catch(() => ({}));
+      if (!body?.ok) {
+        res.status(400).json({ error: `Slack rejected that token${body?.error ? ` (${body.error})` : ""}.` });
+        return;
+      }
+      await setConnections(userOf(req).id, { slackToken: token, slackTeam: body.team });
+      res.json({ ok: true, detail: body.team });
+      return;
+    }
+
+    res.status(400).json({ error: "That app is not connected by pasting a token." });
+  } catch (err: any) {
+    res.status(502).json({ error: `Could not reach ${which}: ${err.message || "network error"}` });
+  }
+});
+
 /** GET /api/connections — which apps this account has connected */
 app.get("/api/connections", requireUser, (req: Request, res: Response) => {
   const c = userOf(req).connections || {};
   res.json({
+    telegram: { connected: Boolean(c.telegramBotToken) },
     slack: { connected: Boolean(c.slackToken), detail: c.slackTeam },
     gmail: { connected: Boolean(c.googleRefreshToken), detail: c.googleEmail },
   });
@@ -374,17 +437,17 @@ app.get("/api/connections", requireUser, (req: Request, res: Response) => {
 
 /** DELETE /api/connections/:app — forget one account's credentials */
 app.delete("/api/connections/:app", requireUser, async (req: Request, res: Response) => {
-  const which = req.params.app;
-  if (which !== "slack" && which !== "gmail") {
+  const which = String(req.params.app);
+  const clear: Record<string, Record<string, undefined>> = {
+    telegram: { telegramBotToken: undefined },
+    slack: { slackToken: undefined, slackTeam: undefined },
+    gmail: { googleRefreshToken: undefined, googleEmail: undefined },
+  };
+  if (!clear[which]) {
     res.status(400).json({ error: "Nothing to disconnect for that app." });
     return;
   }
-  await setConnections(
-    userOf(req).id,
-    which === "slack"
-      ? { slackToken: undefined, slackTeam: undefined }
-      : { googleRefreshToken: undefined, googleEmail: undefined }
-  );
+  await setConnections(userOf(req).id, clear[which] as any);
   res.json({ ok: true });
 });
 

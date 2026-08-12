@@ -30,6 +30,12 @@ export interface Message {
  * work and act as a shared fallback for accounts with no connection of their own.
  */
 export interface Connections {
+  /**
+   * A Telegram bot token from @BotFather. Pasted rather than granted: Telegram
+   * has no OAuth for this, and creating the bot takes a chat message — no
+   * developer console, no client id, no app review.
+   */
+  telegramBotToken?: string;
   /** Slack user token (xoxp-) obtained through the OAuth flow. */
   slackToken?: string;
   slackTeam?: string;
@@ -48,6 +54,14 @@ export interface Connector {
   status(connections: Connections): string;
   /** Whether a person can connect this app themselves from the dashboard. */
   connectable(): boolean;
+  /**
+   * How this app is connected by hand, when it can be. `token` means the
+   * person pastes a credential; `oauth` means they are sent to a consent
+   * screen; `none` means there is no self-serve route at all.
+   */
+  connectVia(): "token" | "oauth" | "none";
+  /** What to show above the paste box, for token-connected apps. */
+  tokenHelp?(): { label: string; help: string; placeholder: string };
   listChats(connections: Connections): Promise<Chat[]>;
   fetchMessages(chatIds: string[], limit: number, connections: Connections): Promise<Message[]>;
 }

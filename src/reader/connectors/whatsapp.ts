@@ -106,6 +106,9 @@ export const whatsappConnector: Connector = {
 
   connectable: () => false,
 
+  // Nothing to connect: a personal WhatsApp account has no read API at all.
+  connectVia: () => "none",
+
   status: () =>
     isConfigured()
       ? "Live via the WhatsApp Business Cloud API webhook (POST /webhooks/whatsapp). Only messages received after the webhook was connected are available — WhatsApp exposes no history API."

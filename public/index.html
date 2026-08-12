@@ -127,6 +127,14 @@
   }
   .connect:hover { background: var(--accent-soft); }
   .connect.ghost { border-color: var(--line); color: var(--ink-soft); }
+  .token-form {
+    margin: 8px 0 4px; padding: 12px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel-2);
+  }
+  .token-form .note { margin: 0 0 8px; }
+  .token-form input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .token-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .token-actions .primary { padding: 7px 14px; font-size: 13px; }
   .chatlist { margin: 8px 0 0 4px; display: flex; flex-direction: column; gap: 5px; }
   .chatlist label {
     display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-soft);
@@ -422,13 +430,29 @@ function renderSources() {
         })
         .join("");
 
-      // Only apps with a real per-account sign-in flow get a Connect button;
-      // the rest would send people to a dead end.
-      const connect = !source.live && source.connectable
-        ? `<a class="connect" href="/auth/${source.app === "gmail" ? "google" : source.app}">Connect</a>`
-        : source.live && source.connectable
-          ? `<button class="connect ghost" data-disconnect="${escapeHtml(source.app)}">Disconnect</button>`
-          : "";
+      // Three ways in: paste a credential, be sent to a consent screen, or —
+      // where the provider genuinely offers neither — nothing at all.
+      const connect = source.live
+        ? (source.connectable
+            ? `<button class="connect ghost" data-disconnect="${escapeHtml(source.app)}">Disconnect</button>`
+            : "")
+        : source.connectVia === "oauth"
+          ? `<a class="connect" href="/auth/${source.app === "gmail" ? "google" : source.app}">Connect</a>`
+          : source.connectVia === "token"
+            ? `<button class="connect" data-token="${escapeHtml(source.app)}">Connect</button>`
+            : "";
+
+      const tokenForm = !source.live && source.connectVia === "token" && source.tokenHelp
+        ? `<form class="token-form hidden" data-token-form="${escapeHtml(source.app)}">
+             <p class="note">${escapeHtml(source.tokenHelp.help)}</p>
+             <input type="text" name="token" placeholder="${escapeHtml(source.tokenHelp.placeholder)}"
+                    aria-label="${escapeHtml(source.tokenHelp.label)}" autocomplete="off" spellcheck="false" />
+             <div class="token-actions">
+               <button class="primary" type="submit">Save</button>
+               <span class="note token-note"></span>
+             </div>
+           </form>`
+        : "";
 
       return `<div class="app-block">
         <div class="app-head">
@@ -439,6 +463,7 @@ function renderSources() {
           ${connect}
         </div>
         <div class="source-status">${escapeHtml(source.status)}</div>
+        ${tokenForm}
         ${source.error ? `<div class="warn">${escapeHtml(source.error)}</div>` : ""}
         <div class="chatlist">${chats || '<span class="note">No chats yet.</span>'}</div>
       </div>`;
@@ -450,6 +475,40 @@ function renderSources() {
       input.checked ? state.apps.add(input.dataset.app) : state.apps.delete(input.dataset.app);
     });
   });
+  document.querySelectorAll("button[data-token]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = document.querySelector(`form[data-token-form="${button.dataset.token}"]`);
+      if (form) {
+        form.classList.toggle("hidden");
+        const input = form.querySelector("input[name=token]");
+        if (input && !form.classList.contains("hidden")) input.focus();
+      }
+    });
+  });
+
+  document.querySelectorAll("form[data-token-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const note = form.querySelector(".token-note");
+      const input = form.querySelector("input[name=token]");
+      note.textContent = "Checking…";
+      try {
+        // The server verifies the token with the provider before storing it,
+        // so a typo is caught here rather than showing sample data forever.
+        const result = await api(`/api/connections/${form.dataset.tokenForm}`, {
+          method: "POST",
+          body: JSON.stringify({ token: input.value }),
+        });
+        note.textContent = result.detail ? `Connected ${result.detail}.` : "Connected.";
+        input.value = "";
+        await loadSources();
+        await loadDigest();
+      } catch (err) {
+        note.textContent = err.message;
+      }
+    });
+  });
+
   document.querySelectorAll("button[data-disconnect]").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;

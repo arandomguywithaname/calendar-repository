@@ -135,6 +135,10 @@ export const gmailConnector: Connector = {
 
   connectable: () => Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
 
+  // Gmail has no token you can paste: an app password is IMAP-only, and the
+  // REST API accepts nothing but OAuth. So this one genuinely needs a client.
+  connectVia: () => (process.env.GOOGLE_CLIENT_ID ? "oauth" : "none"),
+
   status: (c) =>
     c.googleRefreshToken
       ? `Connected as ${c.googleEmail || "your Google account"}. Reading your inbox read-only; the app cannot send or delete mail.`
