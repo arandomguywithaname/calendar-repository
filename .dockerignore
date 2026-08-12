@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+bot-dist
+bot-dist-*
+data
+.env
+.git
+*.zip
+*.tar.xz
+netlify-deploy
+public
+docs

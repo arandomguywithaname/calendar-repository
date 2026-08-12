@@ -117,6 +117,14 @@ retrieval over the stored topics rather than by a model.
 It is a real fallback, not a demo: it reads your actual channels and reports
 what it actually found.
 
+## Running it permanently
+
+The desktop build stops when you close the window. To keep it running when your
+computer is off — a spare machine, a VPS, or Fly.io — see
+**[deploying.md](deploying.md)**. Two rules apply to every option: exactly one
+instance may hold the bot token, and the data directory must survive restarts
+or everyone has to sign in again.
+
 ## Shape of the code
 
 | File | |
