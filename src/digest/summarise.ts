@@ -85,9 +85,9 @@ between sources — a digest that hides a contradiction is worse than one that r
 Leave out posts that carry no news: advertising, giveaways, engagement bait, pure self-promotion.`;
 
 /** A long post's opening states what happened; the rest is elaboration. */
-const MAX_POST_CHARS = 800;
-/** Roughly 80k tokens of posts — reduced for faster processing. */
-const MAX_TOTAL_CHARS = 300_000;
+const MAX_POST_CHARS = 1000;
+/** Roughly 120k tokens of posts — balance speed vs context. */
+const MAX_TOTAL_CHARS = 450_000;
 
 /**
  * Trim a window to something a single request can hold.
