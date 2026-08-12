@@ -1,8 +1,10 @@
 import * as dotenv from "dotenv";
 import { startBot, stopBot } from "./digest/bot";
+import { envPath } from "./digest/paths";
 import { runDigestForAll } from "./digest/pipeline";
+import { canPrompt, isConfigured, runSetup } from "./digest/setup";
 
-dotenv.config();
+dotenv.config({ path: envPath(), quiet: true });
 
 /**
  * Entry point for the digest bot.
@@ -37,19 +39,24 @@ async function sweepDigests(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    console.error(
-      "TELEGRAM_BOT_TOKEN is not set.\n\n" +
-        "Open @BotFather in Telegram, send /newbot, and put the token it gives you in a .env file:\n" +
-        "  TELEGRAM_BOT_TOKEN=123456:AA...\n\n" +
-        "Reading channels also needs Telegram API credentials from https://my.telegram.org:\n" +
-        "  TELEGRAM_API_ID=123456\n" +
-        "  TELEGRAM_API_HASH=abc..."
-    );
-    process.exit(1);
-  }
-
   console.log(`Channel digest bot — build ${BUILD}`);
+
+  if (!isConfigured()) {
+    // A terminal means we can just ask. Without one — a service, a container,
+    // a cron — there is nobody to answer, so say what is missing and stop.
+    if (!canPrompt()) {
+      console.error(
+        "\nTELEGRAM_BOT_TOKEN is not set, and there's no terminal to ask on.\n\n" +
+          `Create ${envPath()} with:\n` +
+          "  TELEGRAM_BOT_TOKEN=123456:AA...     (from @BotFather)\n" +
+          "  TELEGRAM_API_ID=123456              (from https://my.telegram.org)\n" +
+          "  TELEGRAM_API_HASH=abc...\n\n" +
+          "Or run it in a terminal and it will ask you for these."
+      );
+      process.exit(1);
+    }
+    await runSetup();
+  }
 
   if (INTERVAL_HOURS > 0) {
     const timer = setInterval(sweepDigests, INTERVAL_HOURS * 3600_000);
@@ -68,6 +75,12 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(err);
-  process.exit(1);
+  console.error(`\n${err?.message || err}`);
+  // A double-clicked window would vanish before the error could be read.
+  if (process.stdin.isTTY) {
+    console.error("\nPress Ctrl+C to close.");
+    setInterval(() => {}, 1 << 30);
+  } else {
+    process.exit(1);
+  }
 });

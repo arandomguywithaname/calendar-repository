@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { dataDir } from "./paths";
 import { PeriodDigest, TelegramAccount } from "./types";
 
 /**
@@ -27,16 +28,18 @@ interface DigestStoreShape {
 }
 
 /**
- * Relative to where the bot was started, not to where this file sits.
+ * Beside the running program, not beside this source file.
  *
  * A path built from `__dirname` means something different in `dist/digest/`
- * than it does in a single bundled file, and the bundled build is how this
- * ships — so the working directory is the stable reference.
+ * than it does inside a single compiled binary — and the binary is how this
+ * ships to anyone without Node. See `paths.ts` for how the two are told apart.
+ *
+ * Resolved lazily: under a compiled binary the answer depends on `execPath`,
+ * which is stable, but tests need to be able to point it elsewhere.
  */
-const STORE_PATH =
-  process.env.DIGEST_DATA_DIR
-    ? path.resolve(process.env.DIGEST_DATA_DIR, "digest-store.json")
-    : path.resolve(process.cwd(), "data/digest-store.json");
+function storePath(): string {
+  return path.join(dataDir(), "digest-store.json");
+}
 const BLOB_STORE = "inbox-reader";
 const BLOB_KEY = "digest-store";
 const MAX_CHAT_TURNS = 24;
@@ -53,8 +56,8 @@ let writableDisk: boolean | null = null;
 function diskIsWritable(): boolean {
   if (writableDisk !== null) return writableDisk;
   try {
-    fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
-    fs.accessSync(path.dirname(STORE_PATH), fs.constants.W_OK);
+    fs.mkdirSync(dataDir(), { recursive: true });
+    fs.accessSync(dataDir(), fs.constants.W_OK);
     writableDisk = true;
   } catch {
     writableDisk = false;
@@ -69,8 +72,8 @@ async function load(): Promise<DigestStoreShape> {
       const stored = (await getStore(BLOB_STORE).get(BLOB_KEY, { type: "json" })) as DigestStoreShape | null;
       return stored ? { ...empty(), ...stored } : empty();
     }
-    if (diskIsWritable() && fs.existsSync(STORE_PATH)) {
-      return { ...empty(), ...JSON.parse(fs.readFileSync(STORE_PATH, "utf-8")) };
+    if (diskIsWritable() && fs.existsSync(storePath())) {
+      return { ...empty(), ...JSON.parse(fs.readFileSync(storePath(), "utf-8")) };
     }
   } catch (err: any) {
     console.warn(`Digest store read failed (${err.message}) — continuing empty.`);
@@ -88,8 +91,8 @@ async function save(store: DigestStoreShape): Promise<void> {
       return;
     }
     if (diskIsWritable()) {
-      fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
-      fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+      fs.mkdirSync(dataDir(), { recursive: true });
+      fs.writeFileSync(storePath(), JSON.stringify(store, null, 2));
     }
   } catch (err: any) {
     console.warn(`Digest store write failed (${err.message}) — kept in memory.`);
