@@ -45,17 +45,38 @@ async function main(): Promise<void> {
     // A terminal means we can just ask. Without one — a service, a container,
     // a cron — there is nobody to answer, so say what is missing and stop.
     if (!canPrompt()) {
-      console.error(
-        "\nTELEGRAM_BOT_TOKEN is not set, and there's no terminal to ask on.\n\n" +
-          `Create ${envPath()} with:\n` +
-          "  TELEGRAM_BOT_TOKEN=123456:AA...     (from @BotFather)\n" +
-          "  TELEGRAM_API_ID=123456              (from https://my.telegram.org)\n" +
-          "  TELEGRAM_API_HASH=abc...\n\n" +
-          "Or run it in a terminal and it will ask you for these."
-      );
-      process.exit(1);
+      // On Fly.io or other managed services, wait and retry in case secrets are still loading.
+      // Secrets take a moment to become available after deploy.
+      if (process.env.FLY) {
+        console.log("Waiting for Fly.io secrets to be available (will retry in 5s)...");
+        await new Promise((r) => setTimeout(r, 5000));
+        if (isConfigured()) {
+          console.log("Secrets loaded, starting bot.");
+        } else {
+          console.error(
+            "\nTELEGRAM_BOT_TOKEN not set. On Fly.io, run:\n" +
+              "  flyctl secrets set TELEGRAM_BOT_TOKEN='your_token_from_botfather'\n" +
+              "  flyctl secrets set TELEGRAM_API_ID='your_id_from_telegram.org'\n" +
+              "  flyctl secrets set TELEGRAM_API_HASH='your_hash_from_telegram.org'\n\n" +
+              "Then deploy:\n" +
+              "  flyctl deploy"
+          );
+          process.exit(1);
+        }
+      } else {
+        console.error(
+          "\nTELEGRAM_BOT_TOKEN is not set, and there's no terminal to ask on.\n\n" +
+            `Create ${envPath()} with:\n` +
+            "  TELEGRAM_BOT_TOKEN=123456:AA...     (from @BotFather)\n" +
+            "  TELEGRAM_API_ID=123456              (from https://my.telegram.org)\n" +
+            "  TELEGRAM_API_HASH=abc...\n\n" +
+            "Or run it in a terminal and it will ask you for these."
+        );
+        process.exit(1);
+      }
+    } else {
+      await runSetup();
     }
-    await runSetup();
   }
 
   if (INTERVAL_HOURS > 0) {
