@@ -152,6 +152,20 @@ legend{
 }
 /* qualified with the element: a bare '.lobby-title' loses to '.brand h1' */
 .brand h1.lobby-title{font-size:clamp(1.5rem,4.6vw,2.1rem);letter-spacing:-.03em}
+.checks{display:flex;flex-direction:column;gap:.4rem;margin:.2rem 0 1rem}
+.check-row{
+  display:grid;grid-template-columns:1.2rem 1fr;gap:.1rem .6rem;
+  align-items:baseline;padding:.5rem .6rem;border-radius:8px;
+  background:var(--sumi-2);border:1px solid var(--line);font-size:.84rem;
+}
+.check-mark{font-family:var(--mono);color:var(--dim);text-align:center}
+.check-row.good .check-mark{color:var(--matcha)}
+.check-row.bad .check-mark{color:var(--shu-soft)}
+.check-row.bad{border-color:rgba(219,75,46,.4)}
+.check-note{
+  grid-column:2;font-family:var(--mono);font-size:.7rem;color:var(--muted);
+  word-break:break-word;
+}
 .net-status{color:var(--muted)}
 .net-status.warn{color:var(--shu-soft)}
 .lobby-players{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.4rem}
@@ -644,6 +658,7 @@ tfoot td{border-bottom:0;color:var(--muted)}
             <button class="btn" id="joinBtn" type="button">Join</button>
           </div>
         </div>
+        <p class="field-note"><button class="link-btn" id="netCheckBtn" type="button">Test this device's connection</button></p>
         <p class="field-note" id="onlineNote">
           Quick match drops you in with anyone else looking for a table right now.
           A private table gives you a four-letter code to send your friends.
@@ -2295,6 +2310,159 @@ function chatSend(){
   }
 }
 
+/* ---------- connection check ----------
+ * Online play has several layers that can each fail on their own and look
+ * identical from the lobby. This walks them one at a time and says which
+ * one broke, so a failure can be reported rather than guessed at. */
+
+function netCheckLine(host, label){
+  var row = document.createElement("div");
+  row.className = "check-row";
+  row.innerHTML = "<span class=\"check-mark\">…</span><span class=\"check-what\">" +
+                  esc(label) + "</span><span class=\"check-note\"></span>";
+  host.appendChild(row);
+  return {
+    ok:function(note){
+      row.querySelector(".check-mark").textContent = "✓";
+      row.className = "check-row good";
+      if(note) row.querySelector(".check-note").textContent = note;
+    },
+    bad:function(note){
+      row.querySelector(".check-mark").textContent = "✗";
+      row.className = "check-row bad";
+      if(note) row.querySelector(".check-note").textContent = note;
+    }
+  };
+}
+
+/* Do we get a public (srflx) candidate? Without one, two devices on
+   different networks cannot find a path to each other. */
+function stunProbe(){
+  return new Promise(function(resolve){
+    var pc;
+    try {
+      pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+    } catch(e){ resolve({ok:false, note:"cannot create a connection"}); return; }
+    var kinds = {};
+    var done = function(){
+      try{ pc.close(); }catch(e){}
+      resolve({ok:!!kinds.srflx, note:Object.keys(kinds).join(", ") || "none"});
+    };
+    pc.onicecandidate = function(e){
+      if(!e.candidate){ done(); return; }
+      var t = (e.candidate.candidate.match(/ typ (\w+)/) || [])[1];
+      if(t) kinds[t] = true;
+    };
+    try {
+      pc.createDataChannel("probe");
+      pc.createOffer().then(function(o){ return pc.setLocalDescription(o); });
+    } catch(e){ resolve({ok:false, note:"offer failed"}); return; }
+    setTimeout(done, 6000);
+  });
+}
+
+/* Two peers in this one page: proves signalling and WebRTC both work here. */
+function loopbackProbe(){
+  return new Promise(function(resolve){
+    var a, b, settled = false;
+    var finish = function(v){
+      if(settled) return;
+      settled = true;
+      try{ a && a.destroy(); }catch(e){}
+      try{ b && b.destroy(); }catch(e){}
+      resolve(v);
+    };
+    setTimeout(function(){ finish({ok:false, note:"timed out after 25s"}); }, 25000);
+    peerCreate(null).then(function(pa){
+      a = pa;
+      return peerCreate(null).then(function(pb){
+        b = pb;
+        b.on("connection", function(dc){
+          dc.on("data", function(m){ if(m === "ping") dc.send("pong"); });
+        });
+        var dc = a.connect(b.id, {reliable:true});
+        a.on("error", function(err){ finish({ok:false, note:"connect error: " + (err.type || err.message)}); });
+        dc.on("open", function(){ dc.send("ping"); });
+        dc.on("data", function(m){ if(m === "pong") finish({ok:true, note:"round trip ok"}); });
+      });
+    }).catch(function(err){
+      finish({ok:false, note:"signalling: " + (err && (err.type || err.message))});
+    });
+  });
+}
+
+async function runNetCheck(){
+  openSheet(
+    "<h2>Connection test</h2>" +
+    "<p class=\"sub\">Checking each layer online play needs, on this device.</p>" +
+    "<div class=\"checks\" id=\"checkList\"></div>" +
+    "<p class=\"field-note\" id=\"checkVerdict\"></p>" +
+    "<div class=\"sheet-actions\">" +
+      "<button class=\"btn\" id=\"checkCopy\" type=\"button\">Copy result</button>" +
+      "<button class=\"btn btn-primary\" id=\"rulesClose\" type=\"button\">Close</button>" +
+    "</div>",
+    function(ov){
+      ov.querySelector("#rulesClose").addEventListener("click", closeSheet);
+      ov.querySelector("#checkCopy").addEventListener("click", function(){
+        var text = Array.prototype.map.call(ov.querySelectorAll(".check-row"), function(r){
+          var mark = r.querySelector(".check-mark").textContent.trim();
+          var what = r.querySelector(".check-what").textContent.trim();
+          var note = r.querySelector(".check-note").textContent.trim();
+          return mark + " " + what + (note ? " — " + note : "");
+        }).join("\n");
+        var blob = "Sushi Go connection test\n" + text +
+                   "\n" + ($("checkVerdict").textContent || "").trim() +
+                   "\n" + navigator.userAgent;
+        if(navigator.clipboard) navigator.clipboard.writeText(blob);
+        this.textContent = "Copied";
+      });
+    }
+  );
+
+  var host = $("checkList");
+  var verdict = $("checkVerdict");
+
+  var l1 = netCheckLine(host, "Page is served securely");
+  l1[window.isSecureContext ? "ok" : "bad"](location.protocol + "//" + (location.host || "(file)"));
+
+  var l2 = netCheckLine(host, "Browser supports WebRTC");
+  l2[typeof RTCPeerConnection !== "undefined" ? "ok" : "bad"]("");
+
+  var l3 = netCheckLine(host, "Multiplayer library loaded");
+  l3[typeof Peer !== "undefined" ? "ok" : "bad"]("");
+
+  var l4 = netCheckLine(host, "Reaches the matchmaking service");
+  var registered = false, regNote = "";
+  try {
+    var p = await peerCreate(null);
+    registered = true;
+    regNote = "registered as " + String(p.id).slice(0, 12) + "…";
+    try{ p.destroy(); }catch(e){}
+    l4.ok(regNote);
+  } catch(err){
+    regNote = (err && (err.type || err.message)) || "failed";
+    l4.bad(regNote);
+  }
+
+  var l5 = netCheckLine(host, "Can find a route to other networks");
+  var stun = await stunProbe();
+  stun.ok ? l5.ok("candidates: " + stun.note) : l5.bad("candidates: " + stun.note);
+
+  var l6 = netCheckLine(host, "Can open a peer connection end to end");
+  if(!registered){
+    l6.bad("skipped — no matchmaking");
+  } else {
+    var loop = await loopbackProbe();
+    loop.ok ? l6.ok(loop.note) : l6.bad(loop.note);
+  }
+
+  verdict.textContent = !registered
+    ? "This device cannot reach the matchmaking service, so it cannot host or join. A different network usually fixes it."
+    : (!stun.ok
+        ? "This device reaches matchmaking but found no public route, so it will only connect to players on the same network."
+        : "This device looks able to play online. If a table still fails, run this on the other device too.");
+}
+
 /* ---------- lobby screen ---------- */
 
 function lobbyStatus(title, sub, note){
@@ -2941,6 +3109,7 @@ $("modeOnline").addEventListener("click", function(){ showMode(true); });
 $("quickBtn").addEventListener("click", startQuickMatch);
 $("privateBtn").addEventListener("click", startPrivateTable);
 $("joinBtn").addEventListener("click", joinByCode);
+$("netCheckBtn").addEventListener("click", runNetCheck);
 $("codeInput").addEventListener("keydown", function(e){
   if(e.key === "Enter") joinByCode();
 });
