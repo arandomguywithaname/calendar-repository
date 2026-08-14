@@ -200,6 +200,27 @@ playing with friends rather than as a service with uptime promises. If the
 service is unreachable the game says so plainly, and everything on your own
 device still works.
 
+### If a code doesn't work
+
+The three failures look identical from the outside, so the game now tells
+them apart:
+
+- **"No table with the code"** — the server has no room under that code. The
+  usual cause is that the host closed the page: a table only exists while its
+  host has the game open. The join retries once before saying this, because a
+  host whose connection blipped is briefly missing even though their table is
+  fine.
+- **"Found table X, but couldn't open a connection"** — the room is there, but
+  the two browsers couldn't get a direct channel open between them. Some
+  networks block peer-to-peer; switching one device to a different wifi, or to
+  mobile data, usually gets through.
+- **"Reached the table but it never answered"** — connected, but the host
+  didn't respond. Ask them to reopen the table.
+
+The host's lobby also shows a line when its own connection to the signalling
+service drops, and reconnects itself — without that, a host could sit there
+looking fine while the server had quietly freed its code.
+
 ### Testing it on one machine
 
 Add `?net=local` to the URL and the game swaps the peer connection for a

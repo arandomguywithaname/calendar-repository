@@ -152,6 +152,8 @@ legend{
 }
 /* qualified with the element: a bare '.lobby-title' loses to '.brand h1' */
 .brand h1.lobby-title{font-size:clamp(1.5rem,4.6vw,2.1rem);letter-spacing:-.03em}
+.net-status{color:var(--muted)}
+.net-status.warn{color:var(--shu-soft)}
 .lobby-players{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.4rem}
 .lobby-players li{
   display:flex;align-items:center;gap:.6rem;padding:.6rem .7rem;
@@ -689,6 +691,7 @@ tfoot td{border-bottom:0;color:var(--muted)}
         <ul class="lobby-players" id="lobbyPlayers"></ul>
       </div>
       <p class="field-note" id="lobbyNote"></p>
+      <p class="field-note net-status" id="netStatus" hidden></p>
       <div class="menu-actions">
         <button class="btn btn-primary" id="lobbyStart" type="button" hidden>Start the belt</button>
         <button class="btn" id="lobbyBots" type="button" hidden>Play the bots instead</button>
@@ -1985,13 +1988,26 @@ function netMode(){
 
 function wrapConn(send, close, label){
   var handlers = {message:[], close:[]};
+  var queued = {message:[], close:[]};
   return {
     label:label,
     send:send,
     close:close,
     open:true,
-    on:function(evt, fn){ handlers[evt].push(fn); return this; },
-    emit:function(evt, arg){ handlers[evt].slice().forEach(function(f){ f(arg); }); }
+    /* Anything that arrives before a handler is attached is held, not
+       dropped: the first message of the handshake routinely beats the
+       listener that wants it. */
+    on:function(evt, fn){
+      handlers[evt].push(fn);
+      var waiting = queued[evt];
+      queued[evt] = [];
+      waiting.forEach(function(arg){ fn(arg); });
+      return this;
+    },
+    emit:function(evt, arg){
+      if(!handlers[evt].length){ queued[evt].push(arg); return; }
+      handlers[evt].slice().forEach(function(f){ f(arg); });
+    }
   };
 }
 
@@ -2020,7 +2036,29 @@ function peerCreate(id){
       try{ p.destroy(); }catch(e){}
       reject(err);
     });
+    /* The signalling socket drops on any network hiccup, and while it is
+       down the server frees your room id — so a host sitting in the lobby
+       quietly stops existing and everyone gets "no table with that code".
+       Reconnecting puts the id back. */
+    p.on("disconnected", function(){
+      if(p.destroyed) return;
+      netStatus("Reconnecting to the matchmaking service…", true);
+      setTimeout(function(){
+        if(p.destroyed || !p.disconnected) return;
+        try{ p.reconnect(); }catch(e){}
+      }, 800);
+    });
+    p.on("close", function(){ netStatus("", false); });
   });
+}
+
+/* A quiet line in the lobby about the connection itself. */
+function netStatus(text, warn){
+  var el = $("netStatus");
+  if(!el) return;
+  el.textContent = text || "";
+  el.hidden = !text;
+  el.className = "field-note net-status" + (warn ? " warn" : "");
 }
 
 function peerWrap(dc){
@@ -2040,10 +2078,15 @@ var peerTransport = {
   host:function(roomId, onConn){
     return peerCreate(roomId).then(function(peer){
       peer.on("connection", function(dc){
-        dc.on("open", function(){ onConn(peerWrap(dc)); });
+        /* Wrap straight away so the data listener exists before the guest's
+           first message can arrive; wrapConn holds anything early. */
+        var conn = peerWrap(dc);
+        if(dc.open) onConn(conn);
+        else dc.on("open", function(){ onConn(conn); });
       });
       return {
         id:roomId,
+        peer:peer,
         close:function(){ try{ peer.destroy(); }catch(e){} }
       };
     }, function(err){
@@ -2051,28 +2094,39 @@ var peerTransport = {
       throw err;
     });
   },
-  /* Open a connection to a room. Resolves null when nobody is hosting it. */
+  /* Open a connection to a room. Resolves {ok:true, conn} or {ok:false,
+     reason} — "no-table" when the id is not registered, "unreachable" when
+     it is but the peers could not get a channel open between them. Those
+     are very different problems and used to read the same. */
   join:function(roomId){
     return peerCreate(null).then(function(peer){
       return new Promise(function(resolve){
         var settled = false;
+        var sawPeer = false;
         var finish = function(v){
           if(settled) return;
           settled = true;
-          if(!v){ try{ peer.destroy(); }catch(e){} }
+          if(!v.ok){ try{ peer.destroy(); }catch(e){} }
           resolve(v);
         };
         peer.on("error", function(err){
-          if(err && err.type === "peer-unavailable") finish(null);
+          if(err && err.type === "peer-unavailable"){ finish({ok:false, reason:"no-table"}); }
         });
-        var dc = peer.connect(roomId, {reliable:true});
-        if(!dc){ finish(null); return; }
-        dc.on("open", function(){
-          var conn = peerWrap(dc);
-          conn.dispose = function(){ try{ peer.destroy(); }catch(e){} };
-          finish(conn);
-        });
-        setTimeout(function(){ finish(null); }, 12000);
+        var dc;
+        try { dc = peer.connect(roomId, {reliable:true}); }
+        catch(e){ finish({ok:false, reason:"no-table"}); return; }
+        if(!dc){ finish({ok:false, reason:"no-table"}); return; }
+
+        /* Reaching ICE means the room exists; only the media path is at fault. */
+        dc.on("iceStateChanged", function(){ sawPeer = true; });
+        var conn = peerWrap(dc);
+        conn.dispose = function(){ try{ peer.destroy(); }catch(e){} };
+        if(dc.open) finish({ok:true, conn:conn});
+        else dc.on("open", function(){ finish({ok:true, conn:conn}); });
+
+        setTimeout(function(){
+          finish({ok:false, reason:sawPeer ? "unreachable" : "no-table"});
+        }, 20000);
       });
     });
   }
@@ -2136,7 +2190,7 @@ var localTransport = {
       ch.onmessage = function(e){
         var m = e.data;
         if(!m) return;
-        if(m.k === "accept" && m.to === me && !settled){ settled = true; resolve(conn); return; }
+        if(m.k === "accept" && m.to === me && !settled){ settled = true; resolve({ok:true, conn:conn}); return; }
         if(m.k === "msg" && m.to === me) conn.emit("message", m.payload);
         if(m.k === "bye" && m.to === me){ conn.open = false; conn.emit("close"); }
       };
@@ -2145,7 +2199,7 @@ var localTransport = {
         if(settled) return;
         settled = true;
         try{ ch.close(); }catch(e){}
-        resolve(null);
+        resolve({ok:false, reason:"no-table"});
       }, 1200);
     });
   }
@@ -2306,19 +2360,21 @@ async function startQuickMatch(){
     for(var slot=1; slot<=QUICK_SLOTS; slot++){
       var roomId = ROOM_PREFIX + "qm" + slot;
 
-      var conn = await tr.join(roomId);
-      if(conn){
-        var seated = await guestHandshake(conn, name);
-        if(seated) return;                    /* joined a table */
-        continue;                             /* full or already started */
+      var res = await tr.join(roomId);
+      if(res.ok){
+        var seated = await guestHandshake(res.conn, name);
+        if(seated === true) return;           /* joined a table */
+        continue;                             /* full, started, or no answer */
       }
+      if(res.reason === "unreachable") continue;   /* table there, can't reach it */
+
       /* Nobody hosting this slot — try to claim it. */
       var claimed = await hostTable({roomId:roomId, name:name, isPrivate:false, slot:slot});
       if(claimed) return;
 
       /* Lost the race: someone claimed it a moment ago. Try joining it. */
-      var conn2 = await tr.join(roomId);
-      if(conn2 && await guestHandshake(conn2, name)) return;
+      var res2 = await tr.join(roomId);
+      if(res2.ok && await guestHandshake(res2.conn, name) === true) return;
     }
     lobbyError("Every table is busy right now. Try again in a moment.");
   } catch(err){
@@ -2364,13 +2420,40 @@ async function joinByCode(){
   lobbyStatus("Joining " + raw, "private table",
     "<span class=\"spinner\"></span>Knocking…");
   try {
-    var conn = await transport().join(ROOM_PREFIX + "room" + raw);
-    if(!conn){
-      lobbyError("No table with the code " + raw + ". Check the letters and try again.");
+    var roomId = ROOM_PREFIX + "room" + raw;
+    var res = await transport().join(roomId);
+
+    /* A host whose signalling socket blipped is briefly absent from the
+       server even though the table is fine, so one miss is not an answer. */
+    if(!res.ok && res.reason === "no-table"){
+      lobbyStatus("Joining " + raw, "private table",
+        "<span class=\"spinner\"></span>No answer yet — trying once more…");
+      await wait(1600);
+      res = await transport().join(roomId);
+    }
+
+    if(!res.ok){
+      if(res.reason === "unreachable"){
+        lobbyError("Found table " + raw + ", but couldn't open a connection to it. " +
+          "That usually means one of you is on a network that blocks direct " +
+          "connections — a different wifi, or a phone's mobile data, often works.");
+      } else {
+        lobbyError("No table with the code " + raw + ". Check the letters, and make " +
+          "sure the host still has their table open — a table closes when they " +
+          "leave the page.");
+      }
       return;
     }
-    var seated = await guestHandshake(conn, name);
-    if(!seated) return;                        /* handshake reported why */
+
+    var seated = await guestHandshake(res.conn, name);
+    if(seated === "full"){
+      lobbyError("Table " + raw + " is full.");
+    } else if(seated === "started"){
+      lobbyError("Table " + raw + " has already started a game.");
+    } else if(seated !== true){
+      lobbyError("Reached table " + raw + " but it never answered. Ask the host to " +
+        "reopen it, then try the code again.");
+    }
   } catch(err){
     lobbyError(netErrorText(err));
   }
@@ -2669,7 +2752,7 @@ function guestHandshake(conn, name){
         settled = true;
         conn.close();
         if(conn.dispose) conn.dispose();
-        resolve(false);
+        resolve(msg.why === "full" ? "full" : msg.why === "started" ? "started" : false);
         return;
       }
       if(settled && session && session.handle_) session.handle_(msg);
@@ -2679,8 +2762,13 @@ function guestHandshake(conn, name){
       if(session && session.onHostGone) session.onHostGone();
     });
     setTimeout(function(){
-      if(!settled){ settled = true; resolve(false); }
-    }, 9000);
+      if(!settled){
+        settled = true;
+        try{ conn.close(); }catch(e){}
+        if(conn.dispose) conn.dispose();
+        resolve("silent");            /* connected, but nobody answered */
+      }
+    }, 12000);
   });
 }
 
