@@ -5,6 +5,7 @@ import express, { Request, Response } from "express";
 import multer from "multer";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
+import { addEventRecord, getEventHistory } from "./history";
 import { ContactsMap } from "./types";
 
 dotenv.config();
@@ -53,7 +54,10 @@ app.post("/api/parse", upload.single("image"), async (req: Request, res: Respons
     // Clean up temp file
     if (tempFile) fs.unlinkSync(tempFile);
 
-    res.json({ event });
+    // Store in history
+    const record = addEventRecord(event, "parsed");
+
+    res.json({ event, recordId: record.id });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to parse event." });
   }
@@ -71,9 +75,23 @@ app.post("/api/create", async (req: Request, res: Response) => {
     const contacts = loadContacts();
     const link = await createCalendarEvent(event, contacts);
 
+    // Store in history as created
+    addEventRecord(event, "created", link);
+
     res.json({ link });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to create event." });
+  }
+});
+
+/** GET /api/history — retrieve past events */
+app.get("/api/history", (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const records = getEventHistory(limit);
+    res.json({ records });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch history." });
   }
 });
 

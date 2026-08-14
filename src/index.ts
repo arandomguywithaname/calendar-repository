@@ -4,6 +4,7 @@ import * as path from "path";
 import * as readline from "readline";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
+import { addEventRecord } from "./history";
 import { AgentInput, ContactsMap } from "./types";
 
 dotenv.config();
@@ -56,6 +57,9 @@ async function main() {
   // Step 1: Parse input with Claude
   const event = await parseInput(input, today);
 
+  // Store in history
+  const record = addEventRecord(event, "parsed");
+
   console.log("\nExtracted event details:");
   console.log(JSON.stringify(event, null, 2));
 
@@ -68,7 +72,10 @@ async function main() {
 
   // Step 3: Create event in Google Calendar
   const contacts = loadContacts();
-  await createCalendarEvent(event, contacts);
+  const link = await createCalendarEvent(event, contacts);
+
+  // Update history with creation status
+  addEventRecord(event, "created", link);
 
   console.log("\nDone!");
 }
