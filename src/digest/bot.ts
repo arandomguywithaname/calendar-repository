@@ -194,8 +194,9 @@ async function onPhone(userId: string, chatId: number, stage: Stage & { name: "a
   }
 
   await typing(chatId);
+  let sendCodeResponse: any;
   try {
-    await startLogin(userId, stage.apiId, stage.apiHash, phone.startsWith("+") ? phone : `+${phone}`);
+    sendCodeResponse = await startLogin(userId, stage.apiId, stage.apiHash, phone.startsWith("+") ? phone : `+${phone}`);
   } catch (err: any) {
     stages.set(userId, { name: "idle" });
     await send(chatId, `Telegram refused that: ${escapeHtml(err?.errorMessage || err?.message || String(err))}\n\n/connect to try again.`);
@@ -203,9 +204,14 @@ async function onPhone(userId: string, chatId: number, stage: Stage & { name: "a
   }
 
   stages.set(userId, { name: "awaiting_code", apiId: stage.apiId, apiHash: stage.apiHash, phone });
+
+  const deliveryInfo = sendCodeResponse.type
+    ? `<b>Code delivery method:</b> ${escapeHtml(sendCodeResponse.type)}${sendCodeResponse.nextType ? ` (also ${escapeHtml(sendCodeResponse.nextType)})` : ""}\n\n`
+    : "";
+
   await send(
     chatId,
-    "Telegram has sent you a code. Send it back to me <b>with dashes between the digits</b> — like <code>1-2-3-4-5</code>.\n\nThe dashes matter: Telegram cancels any login code it sees posted in a chat, and a spaced-out code slips past that check. If you have two-step verification, add your password after the code: <code>1-2-3-4-5 mypassword</code> — I delete that message as soon as I've read it."
+    `${deliveryInfo}Telegram has sent you a code. Send it back to me <b>with dashes between the digits</b> — like <code>1-2-3-4-5</code>.\n\nThe dashes matter: Telegram cancels any login code it sees posted in a chat, and a spaced-out code slips past that check. If you have two-step verification, add your password after the code: <code>1-2-3-4-5 mypassword</code> — I delete that message as soon as I've read it.`
   );
 }
 

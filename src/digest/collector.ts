@@ -187,7 +187,7 @@ function promiseConcurrent<T, R>(
  * each answer, so the flow is split — `startLogin` leaves a client connected and
  * awaiting the code, `completeLogin` finishes it and returns the session string.
  */
-const pending = new Map<string, { client: any; phoneCodeHash: string; phone: string; at: number }>();
+const pending = new Map<string, { client: any; phoneCodeHash: string; phone: string; at: number; sendCodeResponse?: any }>();
 const LOGIN_TTL_MS = 10 * 60 * 1000;
 
 function sweep() {
@@ -205,7 +205,7 @@ export async function startLogin(
   apiId: number,
   apiHash: string,
   phone: string
-): Promise<void> {
+): Promise<{ type: string; nextType?: string; timeout?: number }> {
   sweep();
   // A second /connect must not strand the first attempt's open socket.
   await cancelLogin(userId);
@@ -225,9 +225,16 @@ export async function startLogin(
     })
   );
 
-  console.log(`SendCode response:`, JSON.stringify({ type: sent.type?.className, nextType: sent.nextType?.className, timeout: sent.timeout }, null, 2));
+  const sendCodeResponse = {
+    type: sent.type?.className || "unknown",
+    nextType: sent.nextType?.className,
+    timeout: sent.timeout,
+  };
 
-  pending.set(userId, { client, phoneCodeHash: sent.phoneCodeHash, phone, at: Date.now() });
+  console.log(`SendCode response:`, JSON.stringify(sendCodeResponse, null, 2));
+
+  pending.set(userId, { client, phoneCodeHash: sent.phoneCodeHash, phone, at: Date.now(), sendCodeResponse });
+  return sendCodeResponse;
 }
 
 /**
