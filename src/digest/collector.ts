@@ -1,4 +1,4 @@
-import { Channel, Post, TelegramAccount } from "./types";
+import { Channel, ChannelCoverage, Post, TelegramAccount } from "./types";
 import QRCode from "qrcode";
 
 /**
@@ -285,6 +285,76 @@ function promiseConcurrent<T, R>(
 
     next();
   });
+}
+
+/* ------------------------------- marking read ----------------------------- */
+
+export interface MarkReadOutcome {
+  /** Channels whose read pointer this moved. */
+  marked: number;
+  /** Channels already read past this point, by the person or by an earlier digest. */
+  alreadyRead: number;
+  /** Channels named in the coverage that the account no longer follows. */
+  gone: number;
+}
+
+/**
+ * Move Telegram's own read pointer up to what a digest covered.
+ *
+ * The one place in this program that writes read state, and it runs only when
+ * somebody presses the button. Reading never marks anything: `getMessages` is
+ * `messages.getHistory`, which leaves the pointer alone, so the bot can work
+ * through channels without touching the unread badges on someone's phone.
+ *
+ * The pointer is a high-water mark rather than a range — `channels.readHistory`
+ * marks everything up to an id — so this cannot mark a middle section and leave
+ * older posts unread. Two consequences worth knowing: accepting a digest also
+ * clears anything older in those channels, and asking for a lower id than the
+ * pointer already holds does nothing at all, which is why that case is counted
+ * and reported rather than passed off as success.
+ *
+ * Only the channels in `coverage` are touched. A channel the digest never
+ * opened — filtered out by subject, or quiet — is not something the person has
+ * seen, and clearing it would be a lie told on their behalf.
+ */
+export async function markRead(
+  account: TelegramAccount,
+  coverage: ChannelCoverage[]
+): Promise<MarkReadOutcome> {
+  const client = await connect(account);
+  try {
+    const dialogs = await client.getDialogs({ limit: 200 });
+    const known = new Map<string, { entity: any; readUpTo: number }>();
+    for (const dialog of dialogs) {
+      const entity: any = dialog.entity;
+      if (!entity || entity.className !== "Channel" || !entity.broadcast) continue;
+      known.set(idOf(entity.id), { entity, readUpTo: dialog.dialog?.readInboxMaxId ?? 0 });
+    }
+
+    let marked = 0;
+    let alreadyRead = 0;
+    let gone = 0;
+
+    for (const { channelId, maxMessageId } of coverage) {
+      const target = known.get(channelId);
+      if (!target) {
+        gone += 1;
+        continue;
+      }
+      // A zero maxId means "all of it" to `readHistory`, so a coverage entry
+      // that somehow arrived empty must never reach the wire.
+      if (!(maxMessageId > 0) || target.readUpTo >= maxMessageId) {
+        alreadyRead += 1;
+        continue;
+      }
+      await client.markAsRead(target.entity, undefined, { maxId: maxMessageId });
+      marked += 1;
+    }
+
+    return { marked, alreadyRead, gone };
+  } finally {
+    await client.disconnect();
+  }
 }
 
 /* --------------------------------- login --------------------------------- */

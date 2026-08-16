@@ -89,6 +89,8 @@ export interface PeriodDigest {
   degraded?: boolean;
   /** Per channel, how far this digest got. Absent on digests built before it was recorded. */
   coverage?: ChannelCoverage[];
+  /** When its channels were marked read in Telegram, if they were. Set only by an explicit press. */
+  readMarkedAt?: string;
 }
 
 /**

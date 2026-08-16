@@ -5,6 +5,7 @@ import {
   completeLogin,
   listChannels,
   loginPending,
+  markRead,
   qrLoginPending,
   startLogin,
   startQrLogin,
@@ -14,17 +15,21 @@ import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest } from "./format";
 import { runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
+import { PeriodDigest } from "./types";
 import {
   appendChat,
+  claimReadMark,
   clearAccount,
   clearChat,
   getAccount,
   getChat,
+  getDigest,
   getOverrides,
   getTopics,
   getVerdicts,
   latestDigest,
   listDigests,
+  releaseReadMark,
   setAccount,
   setOverride,
   setTopics,
@@ -91,14 +96,26 @@ function stripHtml(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-async function send(chatId: number | string, text: string): Promise<void> {
-  for (const part of chunk(text)) {
+/**
+ * `markup` rides on the last part only. A digest long enough to be split would
+ * otherwise carry a button under every piece, and pressing any of them would
+ * mean the same thing.
+ */
+async function send(
+  chatId: number | string,
+  text: string,
+  markup?: Record<string, unknown>
+): Promise<void> {
+  const parts = chunk(text);
+  for (const [index, part] of parts.entries()) {
+    const last = index === parts.length - 1;
     try {
       await call("sendMessage", {
         chat_id: chatId,
         text: part,
         parse_mode: "HTML",
         link_preview_options: { is_disabled: true },
+        ...(last && markup ? { reply_markup: markup } : {}),
       });
     } catch (err: any) {
       // Malformed markup should cost the formatting, not the message.
@@ -107,6 +124,7 @@ async function send(chatId: number | string, text: string): Promise<void> {
         chat_id: chatId,
         text: stripHtml(part),
         link_preview_options: { is_disabled: true },
+        ...(last && markup ? { reply_markup: markup } : {}),
       });
     }
   }
@@ -426,6 +444,25 @@ async function watchQrScan(
   }
 }
 
+/**
+ * The digest's own start time is the key.
+ *
+ * `callback_data` is capped at 64 bytes, and the digest id — user and timestamp
+ * — does not reliably fit. The user is already known from the press, so only
+ * the timestamp needs carrying, and it stays valid across restarts in a way a
+ * counter or an index into the last listing would not.
+ */
+function readButton(digest: PeriodDigest): Record<string, unknown> {
+  return {
+    inline_keyboard: [
+      [
+        { text: "✓ Прочитано", callback_data: `read:${digest.from}` },
+        { text: "Оставить", callback_data: `keep:${digest.from}` },
+      ],
+    ],
+  };
+}
+
 async function onDigest(userId: string, chatId: number, args: string[]): Promise<void> {
   const account = await getAccount(userId);
   if (!account) {
@@ -442,7 +479,10 @@ async function onDigest(userId: string, chatId: number, args: string[]): Promise
       await send(chatId, "Nothing new since I last looked. Ask me about anything I've already read.");
       return;
     }
-    await send(chatId, renderDigest(digest));
+    // No coverage, no button: without it there is no honest boundary to mark
+    // up to, and guessing one would clear posts nothing ever summarised.
+    const offer = digest.coverage?.length ? readButton(digest) : undefined;
+    await send(chatId, renderDigest(digest), offer);
   } catch (err: any) {
     const message = err?.errorMessage || err?.message || String(err);
     if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(message)) {
@@ -667,6 +707,103 @@ async function onHistory(userId: string, chatId: number): Promise<void> {
   );
 }
 
+/* ---------------------------- marking read ------------------------------- */
+
+/** Buttons stay on screen until answered, and a stale one is worse than none. */
+async function dropButtons(chatId: number, messageId: number): Promise<void> {
+  await call("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId }).catch(() => {});
+}
+
+async function onReadPress(
+  userId: string,
+  chatId: number,
+  messageId: number,
+  from: string
+): Promise<string> {
+  const account = await getAccount(userId);
+  if (!account) return "Not connected any more — nothing to mark.";
+
+  const digest = await getDigest(`${userId}:${from}`);
+  if (!digest) return "I no longer hold that digest, so I can't tell what it covered.";
+  if (!digest.coverage?.length) return "I didn't record what that digest covered, so I won't guess at what to mark.";
+  if (digest.readMarkedAt) return "Already marked.";
+
+  // Claimed before the work, so a double press cannot report success twice.
+  if (!(await claimReadMark(digest.id))) return "Already marked.";
+
+  await dropButtons(chatId, messageId);
+  await typing(chatId);
+
+  let outcome;
+  try {
+    outcome = await markRead(account, digest.coverage);
+  } catch (err) {
+    // The claim was taken before the work; hand it back so this can be retried
+    // rather than leaving a digest that claims to be marked and a Telegram that
+    // disagrees.
+    await releaseReadMark(digest.id);
+    throw err;
+  }
+
+  const parts = [`Marked ${outcome.marked} channel(s) read in Telegram.`];
+  // The pointer only moves forward, so these are not failures worth alarm —
+  // but reporting the whole count as marked would overstate what happened.
+  if (outcome.alreadyRead > 0) parts.push(`${outcome.alreadyRead} were already read past that point.`);
+  if (outcome.gone > 0) parts.push(`${outcome.gone} you no longer follow.`);
+  return parts.join(" ");
+}
+
+async function handleCallback(query: any): Promise<void> {
+  const chatId = query.message?.chat?.id;
+  const messageId = query.message?.message_id;
+  const userId = String(query.from?.id ?? chatId);
+  const data = String(query.data || "");
+
+  // Telegram spins the button until the query is answered, so every path must
+  // reach `answerCallbackQuery` — including the ones that fail.
+  const answer = (text?: string) =>
+    call("answerCallbackQuery", { callback_query_id: query.id, ...(text ? { text } : {}) }).catch(() => {});
+
+  if (!chatId || !messageId) {
+    await answer();
+    return;
+  }
+
+  const [action, from] = [data.slice(0, data.indexOf(":")), data.slice(data.indexOf(":") + 1)];
+
+  if (action === "keep") {
+    await dropButtons(chatId, messageId);
+    await answer("Left as it is.");
+    return;
+  }
+
+  if (action !== "read") {
+    await answer();
+    return;
+  }
+
+  if (busy.has(userId)) {
+    await answer("Still working on something else — try again in a moment.");
+    return;
+  }
+
+  busy.add(userId);
+  try {
+    const result = await onReadPress(userId, chatId, messageId, from);
+    await answer();
+    await send(chatId, escapeHtml(result));
+  } catch (err: any) {
+    console.error(`read-mark failed for ${userId}:`, err);
+    await answer();
+    await send(
+      chatId,
+      `Couldn't mark those read: ${escapeHtml(err?.errorMessage || err?.message || String(err))}`
+    ).catch(() => {});
+  } finally {
+    busy.delete(userId);
+  }
+}
+
 /* ------------------------------- dispatching ------------------------------ */
 
 async function handleText(
@@ -763,6 +900,8 @@ async function handleText(
 
 /** Exported so a webhook deployment — or a test — can feed updates in directly. */
 export async function handleUpdate(update: any): Promise<void> {
+  if (update.callback_query) return handleCallback(update.callback_query);
+
   // Only fresh messages: re-running a command because someone fixed a typo in it
   // would surprise them, and `allowed_updates` below doesn't request edits anyway.
   const message = update.message;
@@ -830,7 +969,7 @@ export async function startBot(): Promise<void> {
       const updates: any[] = await call("getUpdates", {
         offset,
         timeout: 30,
-        allowed_updates: ["message"],
+        allowed_updates: ["message", "callback_query"],
       });
       backoff = 1000;
 

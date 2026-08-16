@@ -191,6 +191,43 @@ export async function latestDigest(userId: string): Promise<PeriodDigest | undef
   return (await listDigests(userId))[0];
 }
 
+export async function getDigest(id: string): Promise<PeriodDigest | undefined> {
+  return (await load()).digests[id];
+}
+
+/**
+ * Record that a digest's channels were marked read, and say whether this call
+ * was the one that did it.
+ *
+ * The answer matters: two quick presses would otherwise both report success,
+ * and the second would be claiming credit for work it did not do. Read-marking
+ * itself is idempotent, so the cost of losing this race is a misleading
+ * message rather than a wrong pointer — but misleading is enough.
+ */
+export async function claimReadMark(id: string): Promise<boolean> {
+  return mutate((store) => {
+    const digest = store.digests[id];
+    if (!digest || digest.readMarkedAt) return false;
+    digest.readMarkedAt = new Date().toISOString();
+    return true;
+  });
+}
+
+/**
+ * Give the claim back when the marking did not happen.
+ *
+ * Claiming before the work is what stops two presses both reporting success,
+ * but it also means a failure would leave a digest that says it was marked and
+ * a Telegram that disagrees — and no way to try again, since the button is
+ * gone and the flag is set.
+ */
+export async function releaseReadMark(id: string): Promise<void> {
+  await mutate((store) => {
+    const digest = store.digests[id];
+    if (digest) delete digest.readMarkedAt;
+  });
+}
+
 /* ------------------------------- watermark ------------------------------- */
 
 /** The last post already summarised, so collection never re-reads the same window. */
