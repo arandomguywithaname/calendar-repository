@@ -9,6 +9,9 @@ primary_region = "lhr"
 
 [build]
 
+[http_service]
+  disabled = true
+
 [env]
   DIGEST_DATA_DIR = "/data"
   DIGEST_INTERVAL_HOURS = "6"
