@@ -2,8 +2,10 @@ import { collectPosts } from "./collector";
 import { summarisePeriod } from "./summarise";
 import {
   advanceMarks,
+  allowedChannels,
   getAccount,
   getMarks,
+  getTopics,
   getWatermark,
   listAccounts,
   saveDigest,
@@ -56,14 +58,21 @@ export async function runDigest(
   // digested would leave nothing to look at.
   const marks = options.hours ? {} : await getMarks(userId);
 
-  const { posts, channels, silent } = await collectPosts(account, since, {
+  const [allowed, topics] = await Promise.all([allowedChannels(userId), getTopics(userId)]);
+
+  const { posts, channels, silent, filtered } = await collectPosts(account, since, {
     perChannel: 35,
     total: 550,
     marks,
+    allowed: allowed || undefined,
   });
-  if (silent > 0) console.log(`${userId}: skipped ${silent} channel(s) with nothing new`);
+  if (silent > 0 || filtered > 0) {
+    console.log(`${userId}: skipped ${silent} quiet and ${filtered} off-subject channel(s)`);
+  }
 
-  const digest = await summarisePeriod(userId, posts, channels, since, now);
+  // The channels are filtered, but a channel that is on subject still posts
+  // about other things — so the summariser is told what was asked for too.
+  const digest = await summarisePeriod(userId, posts, channels, since, now, topics);
 
   await saveDigest(digest);
   // After the digest is stored, never before: a crash between the two would

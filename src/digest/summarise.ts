@@ -84,6 +84,22 @@ between sources — a digest that hides a contradiction is worse than one that r
 
 Leave out posts that carry no news: advertising, giveaways, engagement bait, pure self-promotion.`;
 
+/**
+ * The subjects asked for, when there are any.
+ *
+ * The channels reaching this point are already filtered, but being on subject
+ * is a property of a channel rather than of every post it publishes — so the
+ * last cut happens here. It costs nothing: these posts have been read either
+ * way, and this only decides what gets written about.
+ */
+function subjectRule(subjects: string[]): string {
+  return subjects.length === 0
+    ? ""
+    : `\n\nThis person reads for: ${subjects.join(", ")}. Cover only what bears on those subjects, and leave ` +
+        `the rest out however prominent it was. If nothing in the window bears on them, say exactly that ` +
+        `rather than filling the digest with the next most interesting thing.`;
+}
+
 /** A long post's opening states what happened; the rest is elaboration. */
 const MAX_POST_CHARS = 1000;
 /** Roughly 120k tokens of posts — balance speed vs context. */
@@ -175,7 +191,8 @@ export async function summarisePeriod(
   allPosts: Post[],
   channels: Channel[],
   from: Date,
-  to: Date
+  to: Date,
+  subjects: string[] = []
 ): Promise<PeriodDigest> {
   // `postCount` below counts what was read, not what survived the trim, so the
   // digest still reports the true size of the window.
@@ -209,7 +226,7 @@ export async function summarisePeriod(
       max_tokens: 4000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
-      system: SYSTEM,
+      system: `${SYSTEM}${subjectRule(subjects)}`,
       output_config: {
         effort: "low",
         format: { type: "json_schema", schema: DIGEST_SCHEMA },

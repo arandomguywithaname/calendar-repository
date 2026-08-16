@@ -13,15 +13,22 @@ import {
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest } from "./format";
 import { runDigest } from "./pipeline";
+import { canTriage, triage } from "./triage";
 import {
   appendChat,
   clearAccount,
   clearChat,
   getAccount,
   getChat,
+  getOverrides,
+  getTopics,
+  getVerdicts,
   latestDigest,
   listDigests,
   setAccount,
+  setOverride,
+  setTopics,
+  setVerdicts,
 } from "./store";
 
 /**
@@ -200,10 +207,12 @@ const HELP = `I read the Telegram channels you follow and keep a digest of them,
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
+/topics — name the subjects you read for, so I skip the rest
 /digest — read the new posts now and summarise them
 /last — the most recent digest
 /history — the digests I'm holding
-/channels — the channels I can see
+/channels — what I read, what I skip, and why
+/include, /exclude — overrule me on one channel
 /forget — delete my copy of your session
 /reset — forget our conversation, keep the digests`;
 
@@ -454,16 +463,193 @@ async function onChannels(userId: string, chatId: number): Promise<void> {
 
   await typing(chatId);
   try {
-    const channels = await listChannels(account);
+    const [channels, topics, verdicts, overrides] = await Promise.all([
+      listChannels(account),
+      getTopics(userId),
+      getVerdicts(userId),
+      getOverrides(userId),
+    ]);
     if (channels.length === 0) {
       await send(chatId, "I can't see any channels on this account. Groups and personal chats aren't included — only channels you follow.");
       return;
     }
-    const lines = channels.map((c) => `• ${escapeHtml(c.title)}${c.username ? ` (@${escapeHtml(c.username)})` : ""}`);
-    await send(chatId, [`<b>${channels.length} channels</b>`, "", ...lines].join("\n"));
+
+    const reading: string[] = [];
+    const skipping: string[] = [];
+    const unjudged: string[] = [];
+
+    for (const channel of channels) {
+      const name = `${escapeHtml(channel.title)}${channel.username ? ` (@${escapeHtml(channel.username)})` : ""}`;
+      const override = overrides[channel.id];
+      if (override) {
+        (override === "include" ? reading : skipping).push(`• ${name} — your choice`);
+        continue;
+      }
+      const verdict = verdicts[channel.id];
+      if (!verdict) {
+        (topics.length > 0 ? unjudged : reading).push(`• ${name}`);
+        continue;
+      }
+      (verdict.onTopic ? reading : skipping).push(`• ${name} — ${escapeHtml(verdict.reason)}`);
+    }
+
+    const sections: string[] = [
+      topics.length > 0
+        ? `<b>Reading for:</b> ${escapeHtml(topics.join(", "))}`
+        : "<b>No subjects set</b> — I read everything. /topics narrows it.",
+      "",
+      `<b>Reading — ${reading.length}</b>`,
+      ...reading,
+    ];
+    if (skipping.length > 0) sections.push("", `<b>Skipping — ${skipping.length}</b>`, ...skipping);
+    if (unjudged.length > 0) {
+      sections.push("", `<b>Not judged yet — ${unjudged.length}</b>`, ...unjudged, "", "I read these until I've seen enough to place them.");
+    }
+    sections.push("", "<code>/include название</code> or <code>/exclude название</code> overrules me.");
+
+    await send(chatId, sections.join("\n"));
   } catch (err: any) {
     await send(chatId, `Couldn't list channels: ${escapeHtml(err?.message || String(err))}`);
   }
+}
+
+async function onTopics(userId: string, chatId: number, args: string[]): Promise<void> {
+  const account = await getAccount(userId);
+  if (!account) {
+    await send(chatId, "Not connected yet — /connect first.");
+    return;
+  }
+
+  const raw = args.join(" ").trim();
+
+  if (!raw) {
+    const topics = await getTopics(userId);
+    await send(
+      chatId,
+      topics.length === 0
+        ? "No subjects set — I read every channel you follow.\n\nName them and I'll stop reading the rest: <code>/topics AI, стартапы</code>."
+        : `Reading for: <b>${escapeHtml(topics.join(", "))}</b>\n\n/channels shows what that lets through. <code>/topics -</code> goes back to everything.`
+    );
+    return;
+  }
+
+  if (raw === "-" || /^(clear|off|все|всё)$/i.test(raw)) {
+    await setTopics(userId, []);
+    await send(chatId, "Subjects cleared — I'm back to reading every channel.");
+    return;
+  }
+
+  const topics = raw
+    .split(/[,;\n]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (topics.length === 0) {
+    await send(chatId, "I couldn't read any subjects in that. Try <code>/topics AI, стартапы</code>.");
+    return;
+  }
+
+  if (!canTriage()) {
+    // Storing them would be worse than refusing: subjects that filter nothing
+    // still change what the summariser writes, so the bot would look like it
+    // was obeying while reading everything.
+    await send(chatId, "I can't judge channels without a summarising model configured (ANTHROPIC_API_KEY), so subjects wouldn't do anything yet.");
+    return;
+  }
+
+  await setTopics(userId, topics);
+  await send(chatId, `Set: <b>${escapeHtml(topics.join(", "))}</b>\n\nReading a few posts from each channel to see which ones qualify — a moment.`);
+  await typing(chatId);
+
+  try {
+    const { verdicts, channels, everythingExcluded } = await triage(account, topics);
+
+    if (channels.length === 0) {
+      await send(chatId, "I can't see any channels on this account, so there was nothing to judge.");
+      return;
+    }
+    if (everythingExcluded) {
+      // Saving this leaves a bot that reads nothing and cannot explain itself.
+      await send(
+        chatId,
+        `None of your ${channels.length} channels look like they cover that. I've left the filter off rather than leave you with empty digests — try broader wording, or /channels to sort them yourself.`
+      );
+      return;
+    }
+
+    await setVerdicts(userId, verdicts);
+    const kept = Object.values(verdicts).filter((v) => v.onTopic).length;
+    const dropped = Object.values(verdicts).length - kept;
+    await send(
+      chatId,
+      `Keeping <b>${kept}</b> of ${channels.length} channels, skipping ${dropped}.\n\n/channels shows which and why — <code>/include название</code> puts one back. /digest reads them now.`
+    );
+  } catch (err: any) {
+    await send(
+      chatId,
+      `I set the subjects but couldn't judge the channels: ${escapeHtml(err?.message || String(err))}\n\nUntil that works I'll keep reading all of them. /topics again to retry.`
+    );
+  }
+}
+
+/**
+ * Matching a channel by what the person typed.
+ *
+ * By name rather than by a number from the last listing: the numbering would
+ * shift between listings, and acting on the wrong channel is invisible until a
+ * digest comes back missing something.
+ */
+async function resolveChannel(
+  userId: string,
+  chatId: number,
+  query: string
+): Promise<{ id: string; title: string } | null> {
+  const account = await getAccount(userId);
+  if (!account) {
+    await send(chatId, "Not connected yet — /connect first.");
+    return null;
+  }
+
+  const channels = await listChannels(account);
+  const needle = query.toLowerCase().replace(/^@/, "");
+  const hits = channels.filter(
+    (c) => c.title.toLowerCase().includes(needle) || (c.username || "").toLowerCase().includes(needle)
+  );
+
+  if (hits.length === 0) {
+    await send(chatId, `No channel of yours matches “${escapeHtml(query)}”. /channels lists them.`);
+    return null;
+  }
+  if (hits.length > 1) {
+    const names = hits.slice(0, 8).map((c) => `• ${escapeHtml(c.title)}`);
+    await send(chatId, [`“${escapeHtml(query)}” matches ${hits.length} channels — be more specific:`, "", ...names].join("\n"));
+    return null;
+  }
+  return { id: hits[0].id, title: hits[0].title };
+}
+
+async function onOverride(
+  userId: string,
+  chatId: number,
+  args: string[],
+  choice: "include" | "exclude"
+): Promise<void> {
+  const query = args.join(" ").trim();
+  if (!query) {
+    await send(chatId, `Which channel? <code>/${choice} часть названия</code>.`);
+    return;
+  }
+
+  await typing(chatId);
+  const channel = await resolveChannel(userId, chatId, query);
+  if (!channel) return;
+
+  await setOverride(userId, channel.id, choice);
+  await send(
+    chatId,
+    choice === "include"
+      ? `Reading <b>${escapeHtml(channel.title)}</b> from now on, whatever I make of its subject.`
+      : `Skipping <b>${escapeHtml(channel.title)}</b> from now on. <code>/include ${escapeHtml(channel.title)}</code> undoes it.`
+  );
 }
 
 async function onHistory(userId: string, chatId: number): Promise<void> {
@@ -524,6 +710,12 @@ async function handleText(
       return onDigest(userId, chatId, args);
     case "/channels":
       return onChannels(userId, chatId);
+    case "/topics":
+      return onTopics(userId, chatId, args);
+    case "/include":
+      return onOverride(userId, chatId, args, "include");
+    case "/exclude":
+      return onOverride(userId, chatId, args, "exclude");
     case "/history":
       return onHistory(userId, chatId);
     case "/last": {

@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { dataDir } from "./paths";
-import { ChannelCoverage, PeriodDigest, TelegramAccount } from "./types";
+import { ChannelCoverage, ChannelVerdict, PeriodDigest, TelegramAccount } from "./types";
 
 /**
  * Persistence for the digest side.
@@ -35,6 +35,18 @@ interface DigestStoreShape {
    * that was truncated at the per-channel limit while another was not.
    */
   marks: Record<string, Record<string, number>>;
+  /** userId -> the subjects they asked for. Absent or empty means everything. */
+  topics: Record<string, string[]>;
+  /** userId -> channelId -> what triage made of it, against the topics above */
+  verdicts: Record<string, Record<string, ChannelVerdict>>;
+  /**
+   * userId -> channelId -> a decision the person made themselves.
+   *
+   * Separate from the verdicts and always stronger. Changing the subjects wipes
+   * what triage decided, because those judgements were made against a question
+   * that no longer applies; it must not wipe these, which were not.
+   */
+  overrides: Record<string, Record<string, "include" | "exclude">>;
 }
 
 /**
@@ -57,7 +69,16 @@ const MAX_CHAT_TURNS = 24;
 const MAX_DIGESTS_PER_USER = 60;
 
 function empty(): DigestStoreShape {
-  return { accounts: {}, digests: {}, chats: {}, watermarks: {}, marks: {} };
+  return {
+    accounts: {},
+    digests: {},
+    chats: {},
+    watermarks: {},
+    marks: {},
+    topics: {},
+    verdicts: {},
+    overrides: {},
+  };
 }
 
 let memory: DigestStoreShape | null = null;
@@ -133,6 +154,9 @@ export async function clearAccount(userId: string): Promise<void> {
     delete store.accounts[userId];
     delete store.watermarks[userId];
     delete store.marks[userId];
+    delete store.verdicts[userId];
+    // Topics and overrides are the person's own settings rather than progress,
+    // so /forget — which removes the session, not the preferences — keeps them.
   });
 }
 
@@ -201,6 +225,94 @@ export async function advanceMarks(userId: string, coverage: ChannelCoverage[]):
       if (!(mine[channelId] >= maxMessageId)) mine[channelId] = maxMessageId;
     }
   });
+}
+
+/* -------------------------------- topics --------------------------------- */
+
+export async function getTopics(userId: string): Promise<string[]> {
+  return (await load()).topics[userId] || [];
+}
+
+/**
+ * Set the subjects, and discard every automatic verdict.
+ *
+ * The verdicts answered "does this channel cover those subjects", and after
+ * this call there are different subjects — so they are not stale, they are
+ * about a question nobody asked. Keeping them would silently filter against
+ * the old list. The person's own include/exclude decisions stay.
+ */
+export async function setTopics(userId: string, topics: string[]): Promise<void> {
+  await mutate((store) => {
+    if (topics.length === 0) delete store.topics[userId];
+    else store.topics[userId] = topics;
+    delete store.verdicts[userId];
+  });
+}
+
+export async function getVerdicts(userId: string): Promise<Record<string, ChannelVerdict>> {
+  return (await load()).verdicts[userId] || {};
+}
+
+export async function setVerdicts(
+  userId: string,
+  verdicts: Record<string, ChannelVerdict>
+): Promise<void> {
+  await mutate((store) => {
+    store.verdicts[userId] = { ...(store.verdicts[userId] || {}), ...verdicts };
+  });
+}
+
+export async function getOverrides(userId: string): Promise<Record<string, "include" | "exclude">> {
+  return (await load()).overrides[userId] || {};
+}
+
+export async function setOverride(
+  userId: string,
+  channelId: string,
+  choice: "include" | "exclude" | null
+): Promise<void> {
+  await mutate((store) => {
+    const mine = store.overrides[userId] || (store.overrides[userId] = {});
+    if (choice === null) delete mine[channelId];
+    else mine[channelId] = choice;
+  });
+}
+
+/**
+ * Which channels a digest may read.
+ *
+ * `null` means no filtering at all — no subjects were asked for, so everything
+ * counts. Otherwise the rules, in the order they win:
+ *
+ *   1. What the person said themselves, either way.
+ *   2. What triage decided.
+ *   3. Nothing known yet — read it.
+ *
+ * The third is what keeps a newly joined channel from being invisible. Erring
+ * towards reading is the cheap mistake: a channel wrongly let in costs one
+ * digest of noise and is then judged, whereas one wrongly kept out produces no
+ * evidence of itself at all.
+ */
+export type ChannelFilter = (channelId: string) => boolean;
+
+export async function allowedChannels(userId: string): Promise<ChannelFilter | null> {
+  const store = await load();
+  const topics = store.topics[userId];
+  const overrides = store.overrides[userId] || {};
+  const verdicts = store.verdicts[userId] || {};
+  const filtering = Boolean(topics && topics.length > 0);
+
+  // Without subjects there is nothing to filter against — but an explicit
+  // exclusion is a decision in its own right and still holds.
+  if (!filtering && Object.keys(overrides).length === 0) return null;
+
+  return (channelId: string) => {
+    const override = overrides[channelId];
+    if (override) return override === "include";
+    if (!filtering) return true;
+    const verdict = verdicts[channelId];
+    return verdict ? verdict.onTopic : true;
+  };
 }
 
 /* --------------------------------- chat ---------------------------------- */

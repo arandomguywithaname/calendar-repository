@@ -73,6 +73,55 @@ export async function listChannels(account: TelegramAccount): Promise<Channel[]>
 }
 
 /**
+ * A handful of recent posts from every channel, enough to tell what it is about.
+ *
+ * This is what makes judging fifty channels affordable: subject matter shows in
+ * a few posts, so triage reads five each instead of the thirty-five a digest
+ * takes, and asks the model once rather than once per channel. Each sample is
+ * cut short for the same reason — the opening of a post says what it concerns,
+ * and nothing beyond that is needed to place the channel.
+ */
+export async function sampleChannels(
+  account: TelegramAccount,
+  perChannel = 5,
+  sampleChars = 300
+): Promise<{ channel: Channel; samples: string[] }[]> {
+  const client = await connect(account);
+  try {
+    const dialogs = await client.getDialogs({ limit: 200 });
+    const targets: { entity: any; channel: Channel }[] = [];
+
+    for (const dialog of dialogs) {
+      const entity: any = dialog.entity;
+      if (!entity || entity.className !== "Channel" || !entity.broadcast) continue;
+      targets.push({
+        entity,
+        channel: {
+          id: idOf(entity.id),
+          title: entity.title || "(untitled channel)",
+          username: entity.username || undefined,
+        },
+      });
+    }
+
+    return promiseConcurrent(
+      targets,
+      async ({ entity, channel }) => {
+        const messages = (await client.getMessages(entity, { limit: perChannel })) as any[];
+        const samples = messages
+          .map((m) => String(m?.message || "").replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .map((text) => (text.length > sampleChars ? `${text.slice(0, sampleChars)}…` : text));
+        return { channel, samples };
+      },
+      12
+    );
+  } finally {
+    await client.disconnect();
+  }
+}
+
+/**
  * Posts published after `since`, across the account's channels.
  *
  * Bounded twice — per channel and overall — because a digest window covering a
@@ -92,11 +141,17 @@ export async function listChannels(account: TelegramAccount): Promise<Channel[]>
 export async function collectPosts(
   account: TelegramAccount,
   since: Date,
-  options: { perChannel?: number; total?: number; marks?: Record<string, number> } = {}
-): Promise<{ posts: Post[]; channels: Channel[]; silent: number }> {
+  options: {
+    perChannel?: number;
+    total?: number;
+    marks?: Record<string, number>;
+    allowed?: (channelId: string) => boolean;
+  } = {}
+): Promise<{ posts: Post[]; channels: Channel[]; silent: number; filtered: number }> {
   const perChannel = options.perChannel ?? 40;
   const total = options.total ?? 600;
   const marks = options.marks || {};
+  const allowed = options.allowed;
 
   const client = await connect(account);
   try {
@@ -105,6 +160,7 @@ export async function collectPosts(
     const channels: Channel[] = [];
     const posts: Post[] = [];
     let silent = 0;
+    let filtered = 0;
 
     // Collect all channels first, then fetch messages concurrently
     const channelsToFetch: Array<{ entity: any; channel: Channel; mark?: number; limit: number }> = [];
@@ -114,6 +170,13 @@ export async function collectPosts(
 
       const channelId = idOf(entity.id);
       if (wanted.size > 0 && !wanted.has(channelId)) continue;
+
+      // Off-subject channels cost nothing here: the decision was made once, on
+      // a sample, and is reused until the subjects change or it is re-examined.
+      if (allowed && !allowed(channelId)) {
+        filtered += 1;
+        continue;
+      }
 
       const channel: Channel = {
         id: channelId,
@@ -180,7 +243,7 @@ export async function collectPosts(
     }
 
     posts.sort((a, b) => a.date.localeCompare(b.date));
-    return { posts: posts.slice(-total), channels, silent };
+    return { posts: posts.slice(-total), channels, silent, filtered };
   } finally {
     await client.disconnect();
   }

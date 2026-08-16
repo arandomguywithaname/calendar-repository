@@ -91,6 +91,23 @@ export interface PeriodDigest {
   coverage?: ChannelCoverage[];
 }
 
+/**
+ * What triage made of one channel, against the subjects in force at the time.
+ *
+ * Kept apart from the person's own include/exclude decisions on purpose. Once
+ * the two are mixed there is no way to tell "I turned this off" from "a model
+ * turned this off", and re-running triage after the subjects change would
+ * quietly overwrite choices someone made deliberately.
+ */
+export interface ChannelVerdict {
+  /** True when the channel regularly covers the subjects asked for. */
+  onTopic: boolean;
+  /** One line explaining the call, shown by /channels so the filter can be argued with. */
+  reason: string;
+  /** When it was decided — what lets a channel that changes subject be looked at again. */
+  decidedAt: string;
+}
+
 /** MTProto credentials for one account, stored per user. */
 export interface TelegramAccount {
   apiId: number;
