@@ -1,3 +1,4 @@
+import { wellFormed } from "./format";
 import { Channel, ChannelCoverage, Post, TelegramAccount } from "./types";
 import QRCode from "qrcode";
 
@@ -132,7 +133,7 @@ export async function sampleChannels(
           const samples = messages
             .map((m) => String(m?.message || "").replace(/\s+/g, " ").trim())
             .filter(Boolean)
-            .map((text) => (text.length > sampleChars ? `${text.slice(0, sampleChars)}…` : text));
+            .map((text) => (text.length > sampleChars ? `${wellFormed(text.slice(0, sampleChars))}…` : wellFormed(text)));
           return { channel, samples };
         } catch (err: any) {
           console.warn(`sampling ${channel.title} failed: ${err?.errorMessage || err?.message || err}`);
@@ -271,7 +272,7 @@ export async function collectQueue(
               channelId: channel.id,
               channelTitle: channel.title,
               messageId: m.id,
-              text: String(m.message),
+              text: wellFormed(String(m.message)),
               date: new Date((m.date || 0) * 1000).toISOString(),
             }));
 
@@ -422,7 +423,7 @@ export async function collectPosts(
           channelId: channel.id,
           channelTitle: channel.title,
           messageId: message.id,
-          text,
+          text: wellFormed(text),
           date: date.toISOString(),
         });
       }

@@ -12,7 +12,7 @@ import {
   waitForQrLogin,
 } from "./collector";
 import { answerFromDigests } from "./converse";
-import { chunk, escapeHtml, renderDigest } from "./format";
+import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
 import { PeriodDigest, TelegramAccount } from "./types";
@@ -112,7 +112,10 @@ async function send(
   markup?: Record<string, unknown>
 ): Promise<void> {
   const parts = chunk(text);
-  for (const [index, part] of parts.entries()) {
+  for (const [index, rawPart] of parts.entries()) {
+    // The 4096-char split can cut an emoji in half too; Telegram's parser is
+    // no fonder of lone surrogates than the model API's.
+    const part = wellFormed(rawPart);
     const last = index === parts.length - 1;
     try {
       await call("sendMessage", {

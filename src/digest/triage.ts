@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sampleChannels } from "./collector";
+import { wellFormed } from "./format";
 import { Channel, ChannelVerdict, TelegramAccount } from "./types";
 
 /**
@@ -141,7 +142,7 @@ export async function triage(
     if (!known.has(entry.channelId)) continue;
     verdicts[entry.channelId] = {
       onTopic: Boolean(entry.onTopic),
-      reason: String(entry.reason || "").slice(0, 200),
+      reason: wellFormed(String(entry.reason || "").slice(0, 200)),
       decidedAt,
     };
   }

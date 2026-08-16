@@ -5,6 +5,22 @@ import { PeriodDigest } from "./types";
 /** Telegram rejects anything longer; splitting is on the caller. */
 export const TELEGRAM_LIMIT = 4096;
 
+/**
+ * Replace lone UTF-16 surrogates with the replacement character.
+ *
+ * Telegram posts are full of emoji, and an emoji is two UTF-16 code units —
+ * so any slice by character count can cut one in half. JSON.stringify encodes
+ * the leftover as a bare "\ud83d", and strict parsers (the model API's among
+ * them) reject the entire request body over it: one half-emoji, no digest.
+ * Sanitising at the boundaries — after truncation, before anything is sent or
+ * stored — keeps that trade from ever being on offer.
+ */
+export function wellFormed(text: string): string {
+  return text
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "�")
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "�");
+}
+
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { wellFormed } from "./format";
 import { Channel, ChannelCoverage, PeriodDigest, Post, SourceRef, TopicDigest } from "./types";
 
 /**
@@ -120,7 +121,9 @@ export interface PriorTopic {
  */
 function priorRule(prior: PriorTopic[]): string {
   if (prior.length === 0) return "";
-  const told = prior.map((t) => `• ${t.title} — ${t.summary}`).join("\n");
+  // Sanitised here, not only at the source: digests stored before this fix
+  // may already carry half-emoji from the lexical fallback's slices.
+  const told = wellFormed(prior.map((t) => `• ${t.title} — ${t.summary}`).join("\n"));
   return (
     `\n\nThe person has already read these stories in their previous digests:\n${told}\n\n` +
     `A post that merely repeats one of them — the same event, however differently worded, from however ` +
@@ -150,7 +153,7 @@ function fit(posts: Post[]): Post[] {
   const trimmed = posts.map((post) =>
     post.text.length <= MAX_POST_CHARS
       ? post
-      : { ...post, text: `${post.text.slice(0, MAX_POST_CHARS)}…` }
+      : { ...post, text: `${wellFormed(post.text.slice(0, MAX_POST_CHARS))}…` }
   );
 
   let total = trimmed.reduce((sum, p) => sum + p.text.length, 0);
@@ -349,14 +352,14 @@ function groupLexically(
   const topics: TopicDigest[] = clusters.slice(0, 25).map((cluster) => {
     const first = cluster.posts[0];
     const sentence = first.text.replace(/\s+/g, " ").trim();
-    const title = sentence.slice(0, 60) + (sentence.length > 60 ? "…" : "");
+    const title = wellFormed(sentence.slice(0, 60)) + (sentence.length > 60 ? "…" : "");
     const covering = new Set(cluster.posts.map((p) => p.channelTitle));
     return {
       title,
       summary:
         cluster.posts.length > 1
-          ? `${cluster.posts.length} posts across ${covering.size} channel(s) with closely matching wording. First: “${sentence.slice(0, 300)}”`
-          : sentence.slice(0, 400),
+          ? `${cluster.posts.length} posts across ${covering.size} channel(s) with closely matching wording. First: “${wellFormed(sentence.slice(0, 300))}”`
+          : wellFormed(sentence.slice(0, 400)),
       points: [],
       sources: sourceRefs(cluster.posts.map((p) => p.id), byId, channels),
     };

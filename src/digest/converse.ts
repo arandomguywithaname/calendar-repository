@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { wellFormed } from "./format";
 import { listDigests } from "./store";
 import { PeriodDigest } from "./types";
 
@@ -143,7 +144,7 @@ export async function answerFromDigests(
         { type: "text", text: SYSTEM },
         {
           type: "text",
-          text: `<digests>\n${renderDigests(digests)}\n</digests>`,
+          text: `<digests>\n${wellFormed(renderDigests(digests))}\n</digests>`,
           cache_control: { type: "ephemeral" },
         },
       ],
