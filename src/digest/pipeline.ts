@@ -1,5 +1,5 @@
 import { collectPosts, collectQueue, QueueChannelFetch } from "./collector";
-import { summarisePeriod } from "./summarise";
+import { PriorTopic, summarisePeriod } from "./summarise";
 import { canTriage, triage } from "./triage";
 import {
   advanceMarks,
@@ -9,6 +9,7 @@ import {
   getOverrides,
   getTopics,
   getVerdicts,
+  listDigests,
   saveDigest,
   setVerdicts,
 } from "./store";
@@ -42,6 +43,28 @@ const MAX_POST_CHARS = 1000;
 const MAX_TOTAL_CHARS = 450_000;
 /** How long a channel stays excluded before it is looked at again. */
 const PROBATION_DAYS = 7;
+/** How many recent digests' topics the summariser is told were already read. */
+const PRIOR_DIGESTS = 3;
+/** Ceiling on carried topics, so a run of dense digests cannot flood the prompt. */
+const PRIOR_TOPICS_MAX = 24;
+
+/**
+ * The stories the person has already been told.
+ *
+ * Consecutive queue steps are adjacent in time — during a catch-up they may be
+ * built minutes apart — so a story unfolding across days would otherwise be
+ * re-told in every step that touches it. The summariser gets the recent
+ * digests' topics and holds new posts against them: pure repetition is
+ * omitted, developments arrive as updates. Titles and summaries only; the
+ * points would triple the size for little extra signal.
+ */
+export async function priorTopics(userId: string): Promise<PriorTopic[]> {
+  const digests = (await listDigests(userId)).filter((d) => d.topics.length > 0);
+  return digests
+    .slice(0, PRIOR_DIGESTS)
+    .flatMap((d) => d.topics.map((t) => ({ title: t.title, summary: t.summary })))
+    .slice(0, PRIOR_TOPICS_MAX);
+}
 
 /**
  * Look again at channels that were set aside.
@@ -202,7 +225,7 @@ export async function runDigest(
   const from = new Date(kept[0].date);
   const to = new Date(kept[kept.length - 1].date);
 
-  const digest = await summarisePeriod(userId, kept, channels, from, to, topics);
+  const digest = await summarisePeriod(userId, kept, channels, from, to, topics, await priorTopics(userId));
   // The summariser measures coverage on what survived its own trim; the queue
   // has already fitted the step and knows about textless stretches too, so its
   // walk is the authoritative one.
@@ -241,6 +264,9 @@ async function runRereadDigest(
     allowed: allowed || undefined,
   });
 
+  // Deliberately no prior-topics memory here: an explicit re-read means "show
+  // me this window again", and suppressing already-told stories would answer a
+  // request the person did not make.
   const digest = await summarisePeriod(userId, posts, channels, since, now, topics);
   digest.coverage = undefined;
   digest.closedAt = new Date().toISOString();

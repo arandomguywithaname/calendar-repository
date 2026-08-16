@@ -100,6 +100,38 @@ function subjectRule(subjects: string[]): string {
         `rather than filling the digest with the next most interesting thing.`;
 }
 
+/** A story already told, carried forward so the next digest does not tell it again. */
+export interface PriorTopic {
+  title: string;
+  summary: string;
+}
+
+/**
+ * What earlier digests already reported, when the caller has any.
+ *
+ * The summariser collapses repetition within one window; this extends that
+ * duty across windows. Whether a post "merely repeats" an earlier story is a
+ * judgement about meaning — the same event arrives from a new channel with no
+ * shared wording — so it is made here, by the model, not by matching words.
+ *
+ * The cut it makes is editorial, not a loss: a post omitted as a repeat is
+ * covered the same way an omitted advertisement is (the digest considered it),
+ * and the story itself remains readable in the earlier digest it came from.
+ */
+function priorRule(prior: PriorTopic[]): string {
+  if (prior.length === 0) return "";
+  const told = prior.map((t) => `• ${t.title} — ${t.summary}`).join("\n");
+  return (
+    `\n\nThe person has already read these stories in their previous digests:\n${told}\n\n` +
+    `A post that merely repeats one of them — the same event, however differently worded, from however ` +
+    `many new channels — must not appear in this digest at all. A post that materially develops one of ` +
+    `them (a consequence, a reversal, a significant new fact) belongs in the digest as a brief update: ` +
+    `open its title with "Update:" (in the digest's language), state what changed, and do not re-tell ` +
+    `the story from the beginning. If nothing in the window is new beyond these stories, produce no ` +
+    `topics and let the headline say exactly that.`
+  );
+}
+
 /** A long post's opening states what happened; the rest is elaboration. */
 const MAX_POST_CHARS = 1000;
 /** Roughly 120k tokens of posts — balance speed vs context. */
@@ -192,7 +224,8 @@ export async function summarisePeriod(
   channels: Channel[],
   from: Date,
   to: Date,
-  subjects: string[] = []
+  subjects: string[] = [],
+  prior: PriorTopic[] = []
 ): Promise<PeriodDigest> {
   // `postCount` below counts what was read, not what survived the trim, so the
   // digest still reports the true size of the window.
@@ -226,7 +259,7 @@ export async function summarisePeriod(
       max_tokens: 4000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
-      system: `${SYSTEM}${subjectRule(subjects)}`,
+      system: `${SYSTEM}${subjectRule(subjects)}${priorRule(prior)}`,
       output_config: {
         effort: "low",
         format: { type: "json_schema", schema: DIGEST_SCHEMA },

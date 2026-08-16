@@ -22,7 +22,18 @@ function when(digest: PeriodDigest): string {
 
 export function renderDigest(digest: PeriodDigest): string {
   if (digest.topics.length === 0) {
-    return `<b>${escapeHtml(when(digest))}</b>\nNothing new in your channels for this window.`;
+    // Zero topics has two different meanings — an empty window, or a window
+    // whose every post repeated stories from earlier digests — and only the
+    // headline knows which. Swallowing it behind a fixed phrase would tell
+    // someone "nothing happened" about posts that were read and set aside.
+    const parts = [
+      `<b>${escapeHtml(when(digest))}</b>`,
+      escapeHtml(digest.headline || "Nothing new in your channels for this window."),
+    ];
+    if (digest.postCount > 0) {
+      parts.push(`<i>${digest.postCount} posts from ${digest.channelCount} channels → no new stories</i>`);
+    }
+    return parts.join("\n");
   }
 
   const parts: string[] = [
