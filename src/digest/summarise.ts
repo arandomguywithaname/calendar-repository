@@ -59,7 +59,10 @@ const DIGEST_SCHEMA = {
           },
           postIds: {
             type: "array",
-            description: "The id of every post that belongs to this topic, exactly as given.",
+            description:
+              "Up to twelve ids of the posts that best represent this topic, exactly as given. " +
+              "Twelve is a ceiling, not a target — sources exist so the person can jump to the " +
+              "originals, and a dozen links serve that better than an exhaustive roll call.",
             items: { type: "string" },
           },
         },
@@ -259,7 +262,7 @@ export async function summarisePeriod(
   try {
     const response: any = await (anthropic().beta.messages.create as any)({
       model: MODEL,
-      max_tokens: 4000,
+      max_tokens: 16000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
       system: `${SYSTEM}${subjectRule(subjects)}${priorRule(prior)}`,
@@ -277,6 +280,7 @@ export async function summarisePeriod(
     });
 
     if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
+      console.warn(`summarise fell back to lexical grouping: stop_reason=${response.stop_reason}`);
       return { ...base, ...groupLexically(posts, byId, channelIndex), degraded: true };
     }
 
@@ -369,7 +373,8 @@ function groupLexically(
   return {
     headline:
       `${posts.length} posts across ${channelCount} channels, grouped by wording rather than meaning ` +
-      `— no summarising model is configured, so related stories phrased differently were not merged.`,
+      `— the summarising model couldn't be used for this window, so related stories phrased ` +
+      `differently were not merged.`,
     topics,
   };
 }

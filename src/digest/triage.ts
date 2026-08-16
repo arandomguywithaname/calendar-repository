@@ -109,7 +109,7 @@ export async function triage(
 
   const response: any = await (anthropic().beta.messages.create as any)({
     model: MODEL,
-    max_tokens: 8000,
+    max_tokens: 12000,
     betas: [FALLBACK_BETA],
     fallbacks: "default",
     system: SYSTEM,
