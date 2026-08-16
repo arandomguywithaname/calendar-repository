@@ -41,7 +41,10 @@ const DIGEST_SCHEMA = {
       type: "array",
       description:
         "One entry per distinct story. Posts describing the same event belong to ONE topic, however " +
-        "differently they are worded. Order by how much attention the story deserves.",
+        "differently they are worded. Order by how much attention the story deserves. A digest a " +
+        "person will actually read holds at most ~15 topics: merge aggressively, and fold genuinely " +
+        "minor items into one final topic titled 'Briefly' (in the digest's language) with one line " +
+        "each — never enumerate every small story as its own topic.",
       items: {
         type: "object",
         properties: {
@@ -262,7 +265,7 @@ export async function summarisePeriod(
   try {
     const response: any = await (anthropic().beta.messages.create as any)({
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: 32000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
       system: `${SYSTEM}${subjectRule(subjects)}${priorRule(prior)}`,
