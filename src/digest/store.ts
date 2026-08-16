@@ -130,11 +130,26 @@ async function save(store: DigestStoreShape): Promise<void> {
   }
 }
 
-async function mutate<T>(fn: (store: DigestStoreShape) => T): Promise<T> {
-  const store = await load();
-  const result = fn(store);
-  await save(store);
-  return result;
+/**
+ * Writes go through one queue.
+ *
+ * `mutate` is read-modify-write over a single file, and the writers multiplied:
+ * message handlers run unawaited, the digest timer runs beside them, and marks,
+ * verdicts and read-claims all land here. Two interleaved mutations would each
+ * load, change different keys, and the second save would silently drop the
+ * first one's work. Serialising them costs nothing anyone can feel.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function mutate<T>(fn: (store: DigestStoreShape) => T): Promise<T> {
+  const run = writeChain.then(async () => {
+    const store = await load();
+    const result = fn(store);
+    await save(store);
+    return result;
+  });
+  writeChain = run.catch(() => {});
+  return run;
 }
 
 /* ------------------------------- accounts -------------------------------- */
@@ -203,12 +218,17 @@ export async function getDigest(id: string): Promise<PeriodDigest | undefined> {
  * and the second would be claiming credit for work it did not do. Read-marking
  * itself is idempotent, so the cost of losing this race is a misleading
  * message rather than a wrong pointer — but misleading is enough.
+ *
+ * A claim also closes the digest: accepting it is one of the ways a queue step
+ * ends.
  */
 export async function claimReadMark(id: string): Promise<boolean> {
   return mutate((store) => {
     const digest = store.digests[id];
     if (!digest || digest.readMarkedAt) return false;
-    digest.readMarkedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    digest.readMarkedAt = now;
+    if (!digest.closedAt) digest.closedAt = now;
     return true;
   });
 }
@@ -219,12 +239,62 @@ export async function claimReadMark(id: string): Promise<boolean> {
  * Claiming before the work is what stops two presses both reporting success,
  * but it also means a failure would leave a digest that says it was marked and
  * a Telegram that disagrees — and no way to try again, since the button is
- * gone and the flag is set.
+ * gone and the flag is set. The close is handed back too: a step whose marking
+ * failed has not ended, and the queue should wait for the person to answer the
+ * restored button rather than roll on past it.
  */
 export async function releaseReadMark(id: string): Promise<void> {
   await mutate((store) => {
     const digest = store.digests[id];
-    if (digest) delete digest.readMarkedAt;
+    if (!digest) return;
+    delete digest.readMarkedAt;
+    delete digest.closedAt;
+  });
+}
+
+/** Close one digest — the "leave unread" press. Marks nothing in Telegram. */
+export async function closeDigest(id: string): Promise<void> {
+  await mutate((store) => {
+    const digest = store.digests[id];
+    if (digest && !digest.closedAt) digest.closedAt = new Date().toISOString();
+  });
+}
+
+/**
+ * The digest currently gating the queue, if any.
+ *
+ * Only the newest digest by creation time can gate. Judging "is anything open"
+ * across the whole history would let one pre-`closedAt` digest — or any row a
+ * crash left half-written — jam the queue permanently; judging only the newest
+ * means the state converges the moment one more step is built or closed.
+ */
+export async function openDigest(userId: string): Promise<PeriodDigest | undefined> {
+  const store = await load();
+  let newest: PeriodDigest | undefined;
+  for (const digest of Object.values(store.digests)) {
+    if (digest.userId !== userId) continue;
+    if (!newest || digest.createdAt > newest.createdAt) newest = digest;
+  }
+  return newest && newest.coverage?.length && !newest.closedAt ? newest : undefined;
+}
+
+/**
+ * Close every open digest a person has, and return how many that was.
+ *
+ * Called when /digest moves on: typing the command while a step sits open is
+ * an answer to it — "next" — and it also sweeps up any older strays so the
+ * store converges instead of accumulating open rows forever.
+ */
+export async function closeOpenDigests(userId: string): Promise<number> {
+  return mutate((store) => {
+    const now = new Date().toISOString();
+    let closed = 0;
+    for (const digest of Object.values(store.digests)) {
+      if (digest.userId !== userId || digest.closedAt || !digest.coverage?.length) continue;
+      digest.closedAt = now;
+      closed += 1;
+    }
+    return closed;
   });
 }
 

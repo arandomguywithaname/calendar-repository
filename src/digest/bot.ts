@@ -21,6 +21,8 @@ import {
   claimReadMark,
   clearAccount,
   clearChat,
+  closeDigest,
+  closeOpenDigests,
   getAccount,
   getChat,
   getDigest,
@@ -28,7 +30,9 @@ import {
   getTopics,
   getVerdicts,
   latestDigest,
+  listAccounts,
   listDigests,
+  openDigest,
   releaseReadMark,
   setAccount,
   setOverride,
@@ -223,10 +227,12 @@ function credentials(): { apiId: number; apiHash: string } | null {
 
 const HELP = `I read the Telegram channels you follow and keep a digest of them, grouped by topic. Ask me about it in plain language — "what happened today?", "anything about the rate decision?", "what did I miss this week?"
 
+I work through your unread backlog from the oldest post forward, one digest at a time. Each digest ends with two buttons — mark its channels read in Telegram, or leave them unread — and I wait for your answer before building the next one.
+
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
 /topics — name the subjects you read for, so I skip the rest
-/digest — read the new posts now and summarise them
+/digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /last — the most recent digest
 /history — the digests I'm holding
 /channels — what I read, what I skip, and why
@@ -349,7 +355,7 @@ async function onCode(
     !scrubbed && password
       ? "\n\nI couldn't delete the message with your password in it — please remove it from this chat yourself."
       : "";
-  await send(chatId, `Signed in. Reading the last day of your channels now — this takes a minute.${warning}`);
+  await send(chatId, `Signed in. Starting on your unread backlog, oldest first — this takes a minute.${warning}`);
   await onDigest(userId, chatId, []);
 }
 
@@ -435,7 +441,7 @@ async function watchQrScan(
   }
   busy.add(userId);
   try {
-    await send(chatId, `Signed in as ${escapeHtml(login.name)}. Reading the last day of your channels now — this takes a minute.`);
+    await send(chatId, `Signed in as ${escapeHtml(login.name)}. Starting on your unread backlog, oldest first — this takes a minute.`);
     await onDigest(userId, chatId, []);
   } catch (err: any) {
     await send(chatId, `Something broke: ${escapeHtml(err?.message || String(err))}`).catch(() => {});
@@ -452,15 +458,48 @@ async function watchQrScan(
  * the timestamp needs carrying, and it stays valid across restarts in a way a
  * counter or an index into the last listing would not.
  */
-function readButton(digest: PeriodDigest): Record<string, unknown> {
+function readMarkup(from: string): Record<string, unknown> {
   return {
     inline_keyboard: [
       [
-        { text: "✓ Прочитано", callback_data: `read:${digest.from}` },
-        { text: "Оставить", callback_data: `keep:${digest.from}` },
+        { text: "✓ Mark read", callback_data: `read:${from}` },
+        { text: "Leave unread", callback_data: `keep:${from}` },
       ],
     ],
   };
+}
+
+function readButton(digest: PeriodDigest): Record<string, unknown> {
+  return readMarkup(digest.from);
+}
+
+/**
+ * One line of queue position under a step, so "why is nothing arriving" and
+ * "how much is left" are answered where the person is already looking.
+ */
+function queueFooter(backlog: number): string {
+  if (backlog <= 0) return "";
+  return `\n\n<i>≈${backlog} posts still queued — close this digest and the next one continues from there.</i>`;
+}
+
+/**
+ * Build and offer the next queue step. Shared by /digest and the timer — the
+ * only difference is that the timer stays silent when there is nothing to say.
+ */
+async function deliverNextStep(userId: string, chatId: number | string, quiet: boolean): Promise<void> {
+  const { digest, empty, backlog } = await runDigest(userId, {});
+  if (empty) {
+    if (!quiet) {
+      await send(
+        chatId,
+        backlog > 0
+          ? `That stretch had no text posts to summarise. ≈${backlog} posts still queued — /digest continues.`
+          : "Nothing unread in your channels — you're all caught up."
+      );
+    }
+    return;
+  }
+  await send(chatId, renderDigest(digest) + queueFooter(backlog), readButton(digest));
 }
 
 async function onDigest(userId: string, chatId: number, args: string[]): Promise<void> {
@@ -474,15 +513,22 @@ async function onDigest(userId: string, chatId: number, args: string[]): Promise
   await typing(chatId);
 
   try {
-    const { digest, empty } = await runDigest(userId, hours ? { hours } : {});
-    if (empty) {
-      await send(chatId, "Nothing new since I last looked. Ask me about anything I've already read.");
+    if (hours) {
+      // A second look at a recent window — outside the queue, nothing advances.
+      const { digest, empty } = await runDigest(userId, { hours });
+      await send(
+        chatId,
+        empty
+          ? "Nothing in that window. The queue is untouched — plain /digest continues it."
+          : renderDigest(digest)
+      );
       return;
     }
-    // No coverage, no button: without it there is no honest boundary to mark
-    // up to, and guessing one would clear posts nothing ever summarised.
-    const offer = digest.coverage?.length ? readButton(digest) : undefined;
-    await send(chatId, renderDigest(digest), offer);
+
+    // Typing /digest over an open step is an answer to it: move on. The step
+    // stays unread in Telegram — only the button marks anything.
+    await closeOpenDigests(userId);
+    await deliverNextStep(userId, chatId, false);
   } catch (err: any) {
     const message = err?.errorMessage || err?.message || String(err);
     if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(message)) {
@@ -740,8 +786,13 @@ async function onReadPress(
   } catch (err) {
     // The claim was taken before the work; hand it back so this can be retried
     // rather than leaving a digest that claims to be marked and a Telegram that
-    // disagrees.
+    // disagrees — and put the button back, since it is the only way to retry.
     await releaseReadMark(digest.id);
+    await call("editMessageReplyMarkup", {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: readMarkup(from),
+    }).catch(() => {});
     throw err;
   }
 
@@ -772,8 +823,11 @@ async function handleCallback(query: any): Promise<void> {
   const [action, from] = [data.slice(0, data.indexOf(":")), data.slice(data.indexOf(":") + 1)];
 
   if (action === "keep") {
+    // Closing the step is what lets the queue move on; the channels themselves
+    // stay unread in Telegram — that is the entire meaning of this button.
+    await closeDigest(`${userId}:${from}`);
     await dropButtons(chatId, messageId);
-    await answer("Left as it is.");
+    await answer("Left unread. The queue moves on.");
     return;
   }
 
@@ -857,7 +911,14 @@ async function handleText(
       return onHistory(userId, chatId);
     case "/last": {
       const digest = await latestDigest(userId);
-      await send(chatId, digest ? renderDigest(digest) : "No digests yet — /digest builds the first one.");
+      if (!digest) {
+        await send(chatId, "No digests yet — /digest builds the first one.");
+        return;
+      }
+      // A step still gating the queue keeps its button here too — /last is how
+      // a digest delivered while the person was away gets answered.
+      const open = Boolean(digest.coverage?.length && !digest.closedAt);
+      await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
     case "/reset":
@@ -927,6 +988,38 @@ export async function handleUpdate(update: any): Promise<void> {
   }
 }
 
+/* --------------------------------- the queue ------------------------------- */
+
+/**
+ * Move every account's queue forward by at most one step.
+ *
+ * Called on a timer, and the timer is subordinate to the confirmations: an
+ * account whose latest step is still open is skipped, so nothing is built that
+ * nobody has answered for. That is what bounds the spend — a person who walks
+ * away for a week costs one unconfirmed digest, not twenty-eight.
+ *
+ * Delivered steps go to the person directly: for a private chat the Bot API
+ * chat id and the user id are the same number, and everyone here arrived by
+ * messaging the bot privately. Quiet mode keeps an all-caught-up account from
+ * being told so every six hours.
+ */
+export async function sweepQueue(): Promise<void> {
+  const accounts = await listAccounts();
+  for (const { userId } of accounts) {
+    if (busy.has(userId)) continue;
+    if (await openDigest(userId)) continue;
+
+    busy.add(userId);
+    try {
+      await deliverNextStep(userId, userId, true);
+    } catch (err: any) {
+      console.warn(`queue step failed for ${userId}: ${err?.message || err}`);
+    } finally {
+      busy.delete(userId);
+    }
+  }
+}
+
 /* --------------------------------- polling -------------------------------- */
 
 let running = false;
@@ -950,11 +1043,15 @@ export async function startBot(): Promise<void> {
 
   await call("setMyCommands", {
     commands: [
-      { command: "connect", description: "sign in so I can read your channels" },
-      { command: "digest", description: "read what's new and summarise it" },
+      { command: "digest", description: "the next digest from your unread queue" },
+      { command: "topics", description: "subjects you read for — I skip the rest" },
+      { command: "channels", description: "what I read, skip, and why" },
       { command: "last", description: "the most recent digest" },
       { command: "history", description: "digests I'm holding" },
-      { command: "channels", description: "channels I can see" },
+      { command: "connect", description: "sign in with a phone code" },
+      { command: "qr", description: "sign in by scanning a QR code" },
+      { command: "include", description: "always read a channel" },
+      { command: "exclude", description: "never read a channel" },
       { command: "reset", description: "forget our conversation" },
       { command: "forget", description: "delete my copy of your session" },
     ],

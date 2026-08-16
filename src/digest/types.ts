@@ -91,6 +91,16 @@ export interface PeriodDigest {
   coverage?: ChannelCoverage[];
   /** When its channels were marked read in Telegram, if they were. Set only by an explicit press. */
   readMarkedAt?: string;
+  /**
+   * When this digest stopped gating the queue.
+   *
+   * The queue moves at the speed of confirmations: the next digest is not built
+   * while the latest one is still open. Any of three things closes it — the
+   * "mark read" press, the "leave unread" press, or a /digest that moves on —
+   * and a digest born outside the queue (an explicit-hours re-read) is born
+   * closed.
+   */
+  closedAt?: string;
 }
 
 /**

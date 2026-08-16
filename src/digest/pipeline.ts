@@ -1,4 +1,4 @@
-import { collectPosts } from "./collector";
+import { collectPosts, collectQueue, QueueChannelFetch } from "./collector";
 import { summarisePeriod } from "./summarise";
 import { canTriage, triage } from "./triage";
 import {
@@ -9,27 +9,37 @@ import {
   getOverrides,
   getTopics,
   getVerdicts,
-  getWatermark,
-  listAccounts,
   saveDigest,
   setVerdicts,
-  setWatermark,
 } from "./store";
-import { PeriodDigest, TelegramAccount } from "./types";
+import { ChannelCoverage, PeriodDigest, Post, TelegramAccount } from "./types";
 
 /**
- * Collect → summarise → store, for one window.
+ * Collect → summarise → store, one queue step at a time.
  *
- * The one invariant worth stating: posts exist only inside this function. They
- * are fetched, handed to the summariser, and dropped when it returns. Nothing
- * downstream — storage, the bot, the model's context — ever sees them again,
- * which is what keeps a conversation about months of channels affordable.
+ * The queue reads from the oldest unread forward, and moves at the speed of
+ * confirmations: a step is built, offered, and the next one waits until it is
+ * closed. Windows are therefore chosen by volume, not by calendar — deep in a
+ * backlog one step may span months of sparse posts, near the present it spans
+ * hours — and the digest's own from/to reports whatever stretch was actually
+ * covered.
+ *
+ * The one invariant worth stating twice: a channel's mark may only move past
+ * material that was either summarised into a saved digest or seen to contain
+ * no text at all. Every trim in this file drops the *newest* posts for that
+ * reason — they are above the mark either way, and become the start of the
+ * next step rather than a silent loss.
+ *
+ * Posts exist only inside this function: fetched, summarised, dropped.
+ * Nothing downstream ever sees them again.
  */
 
-/** How far back to read when a user has no watermark yet. */
-const FIRST_RUN_HOURS = 24;
-/** Never re-read more than this, however long the bot has been asleep. */
-const MAX_LOOKBACK_HOURS = 72;
+/** One step's budget, in posts — roughly one affordable model call. */
+const STEP_POSTS = 550;
+/** A long post's opening states what happened; the rest is elaboration. */
+const MAX_POST_CHARS = 1000;
+/** Roughly 120k tokens of posts — the same ceiling the summariser trims to. */
+const MAX_TOTAL_CHARS = 450_000;
 /** How long a channel stays excluded before it is looked at again. */
 const PROBATION_DAYS = 7;
 
@@ -50,7 +60,8 @@ const PROBATION_DAYS = 7;
  *
  * Nothing is lost while a channel sits excluded: marks only advance for
  * channels that were read, so one coming back still has its backlog above its
- * old mark.
+ * old mark — and the queue's oldest-first order means that backlog is read
+ * before anything newer, not skipped over.
  */
 async function refreshStaleVerdicts(userId: string, account: TelegramAccount, topics: string[]): Promise<void> {
   const [verdicts, overrides] = await Promise.all([getVerdicts(userId), getOverrides(userId)]);
@@ -73,10 +84,60 @@ async function refreshStaleVerdicts(userId: string, account: TelegramAccount, to
   }
 }
 
+/**
+ * Cut a step down to what one model call can hold, keeping the oldest.
+ *
+ * The queue's direction decides which end is expendable: material dropped here
+ * must be the *newest*, because it sits above where the marks will land and so
+ * becomes the next step. Dropping the oldest — what the summariser's own trim
+ * does for time-window re-reads — would orphan posts below an advancing mark.
+ */
+function fitStep(posts: Post[]): Post[] {
+  // +1 per post: the summariser appends an ellipsis when it truncates, and its
+  // own trim must never fire on a step this one has passed — it drops from the
+  // wrong end, past posts the coverage below has already counted.
+  const size = (p: Post) => Math.min(p.text.length, MAX_POST_CHARS) + 1;
+  const kept = posts.slice(0, STEP_POSTS);
+  let total = kept.reduce((sum, p) => sum + size(p), 0);
+  while (kept.length > 1 && total > MAX_TOTAL_CHARS) {
+    total -= size(kept.pop()!);
+  }
+  return kept;
+}
+
+/**
+ * How far each channel's mark may honestly advance.
+ *
+ * Walk each channel's fetched ids from the bottom: a message counts as covered
+ * if it had no text (seen, nothing to summarise — without this, a stretch of
+ * photo-only posts would be refetched on every run forever) or if its post was
+ * kept in the digest. The first fetched message that was neither stops the
+ * walk — everything above it stays queued, whatever else was fetched.
+ */
+export function honestCoverage(fetched: QueueChannelFetch[], kept: Post[]): ChannelCoverage[] {
+  const keptIds = new Set(kept.map((p) => p.id));
+  const coverage: ChannelCoverage[] = [];
+
+  for (const { channel, position, messages } of fetched) {
+    let reached = position;
+    for (const message of messages) {
+      if (!message.hasText || keptIds.has(`${channel.id}:${message.id}`)) {
+        reached = message.id;
+      } else {
+        break;
+      }
+    }
+    if (reached > position) coverage.push({ channelId: channel.id, maxMessageId: reached });
+  }
+  return coverage;
+}
+
 export interface DigestOutcome {
   digest: PeriodDigest;
-  /** True when the window held nothing new — the digest is empty but valid. */
+  /** True when the queue held nothing summarisable — the digest was not saved. */
   empty: boolean;
+  /** ≈ posts still queued after this step, across the channels being read. */
+  backlog: number;
 }
 
 export async function runDigest(
@@ -86,33 +147,18 @@ export async function runDigest(
   const account = await getAccount(userId);
   if (!account) throw new Error("no account connected");
 
-  const now = new Date();
-  let since: Date;
-
-  if (options.hours) {
-    // An explicit window is a request to re-read, so the watermark is ignored.
-    since = new Date(now.getTime() - options.hours * 3600_000);
-  } else {
-    const watermark = await getWatermark(userId);
-    since = watermark ? new Date(watermark) : new Date(now.getTime() - FIRST_RUN_HOURS * 3600_000);
-    const floor = new Date(now.getTime() - MAX_LOOKBACK_HOURS * 3600_000);
-    if (since < floor) since = floor;
-  }
-
-  // The marks go the same way as the watermark: an explicit re-read means
-  // "look again at this window", and filtering it against what has already been
-  // digested would leave nothing to look at.
-  const marks = options.hours ? {} : await getMarks(userId);
+  // An explicit window is a second look, not a queue step: it reads the recent
+  // past newest-first, advances nothing, closes nothing, and gates nothing.
+  if (options.hours) return runRereadDigest(userId, account, options.hours);
 
   const topics = await getTopics(userId);
   // Before the filter is applied, not after: a channel due to come back should
-  // be read in this digest rather than the next one.
+  // be read in this step rather than the next one.
   if (topics.length > 0 && canTriage()) await refreshStaleVerdicts(userId, account, topics);
   const allowed = await allowedChannels(userId);
+  const marks = await getMarks(userId);
 
-  const { posts, channels, silent, filtered } = await collectPosts(account, since, {
-    perChannel: 35,
-    total: 550,
+  const { posts, channels, fetched, silent, filtered, backlog } = await collectQueue(account, {
     marks,
     allowed: allowed || undefined,
   });
@@ -120,43 +166,85 @@ export async function runDigest(
     console.log(`${userId}: skipped ${silent} quiet and ${filtered} off-subject channel(s)`);
   }
 
-  // The channels are filtered, but a channel that is on subject still posts
-  // about other things — so the summariser is told what was asked for too.
-  const digest = await summarisePeriod(userId, posts, channels, since, now, topics);
+  const kept = fitStep(posts);
+  const coverage = honestCoverage(fetched, kept);
+  // What the trims postponed is still queued; say so in the estimate.
+  const stillQueued = backlog + (posts.length - kept.length);
+
+  if (kept.length === 0) {
+    // Nothing summarisable — but marks still advance over stretches that were
+    // seen and textless, or the same photo-only span would be refetched every
+    // run. No digest is saved: an empty one would gate the queue with a step
+    // nobody can close, and pollute both /history and the conversation window.
+    if (coverage.length > 0) await advanceMarks(userId, coverage);
+    const now = new Date();
+    return {
+      digest: {
+        id: `${userId}:${now.toISOString()}`,
+        userId,
+        from: now.toISOString(),
+        to: now.toISOString(),
+        createdAt: now.toISOString(),
+        postCount: 0,
+        channelCount: 0,
+        headline: "Nothing unread to digest.",
+        topics: [],
+        closedAt: now.toISOString(),
+      },
+      empty: true,
+      backlog: stillQueued,
+    };
+  }
+
+  // The step's window is whatever the kept posts actually span — deep in a
+  // backlog that may be months, near the present it is hours. The digest
+  // reports the real stretch rather than a calendar guess.
+  const from = new Date(kept[0].date);
+  const to = new Date(kept[kept.length - 1].date);
+
+  const digest = await summarisePeriod(userId, kept, channels, from, to, topics);
+  // The summariser measures coverage on what survived its own trim; the queue
+  // has already fitted the step and knows about textless stretches too, so its
+  // walk is the authoritative one.
+  digest.coverage = coverage;
+  digest.postCount = kept.length;
 
   await saveDigest(digest);
   // After the digest is stored, never before: a crash between the two would
   // otherwise move the marks past posts that no digest accounts for.
-  if (digest.coverage) await advanceMarks(userId, digest.coverage);
+  if (coverage.length > 0) await advanceMarks(userId, coverage);
 
-  // The watermark advances to the newest post actually seen, not to "now" —
-  // otherwise a post arriving during collection would be skipped forever.
-  const newest = posts.length ? posts[posts.length - 1].date : undefined;
-  if (newest) await setWatermark(userId, newest);
-  else if (!options.hours) await setWatermark(userId, now.toISOString());
-
-  return { digest, empty: posts.length === 0 };
+  return { digest, empty: false, backlog: stillQueued };
 }
 
 /**
- * A digest for everyone who has connected an account.
+ * `/digest 24` and friends: re-read a recent window, newest-first.
  *
- * Failures are per-user: one expired session must not stop the rest of the
- * batch, so each error is reported rather than thrown.
+ * Deliberately outside the queue. The marks are neither consulted nor
+ * advanced — a newest-first read over a time window cannot advance them
+ * honestly, since anything it skips sits *below* its newest posts. The digest
+ * is saved for conversation but born closed, and carries no coverage, so it
+ * never grows a mark-read button and never gates the queue.
  */
-export async function runDigestForAll(): Promise<
-  { userId: string; ok: boolean; error?: string; postCount?: number }[]
-> {
-  const accounts = await listAccounts();
-  const results: { userId: string; ok: boolean; error?: string; postCount?: number }[] = [];
+async function runRereadDigest(
+  userId: string,
+  account: TelegramAccount,
+  hours: number
+): Promise<DigestOutcome> {
+  const now = new Date();
+  const since = new Date(now.getTime() - hours * 3600_000);
+  const [allowed, topics] = await Promise.all([allowedChannels(userId), getTopics(userId)]);
 
-  for (const { userId } of accounts) {
-    try {
-      const { digest } = await runDigest(userId);
-      results.push({ userId, ok: true, postCount: digest.postCount });
-    } catch (err: any) {
-      results.push({ userId, ok: false, error: err?.message || String(err) });
-    }
-  }
-  return results;
+  const { posts, channels } = await collectPosts(account, since, {
+    perChannel: 35,
+    total: STEP_POSTS,
+    allowed: allowed || undefined,
+  });
+
+  const digest = await summarisePeriod(userId, posts, channels, since, now, topics);
+  digest.coverage = undefined;
+  digest.closedAt = new Date().toISOString();
+
+  if (posts.length > 0) await saveDigest(digest);
+  return { digest, empty: posts.length === 0, backlog: 0 };
 }

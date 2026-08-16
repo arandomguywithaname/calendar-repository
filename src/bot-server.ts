@@ -1,7 +1,6 @@
 import * as dotenv from "dotenv";
-import { startBot, stopBot } from "./digest/bot";
+import { startBot, stopBot, sweepQueue } from "./digest/bot";
 import { envPath } from "./digest/paths";
-import { runDigestForAll } from "./digest/pipeline";
 import { canPrompt, isConfigured, runSetup } from "./digest/setup";
 
 dotenv.config({ path: envPath(), quiet: true });
@@ -25,14 +24,15 @@ const INTERVAL_HOURS = Number(process.env.DIGEST_INTERVAL_HOURS || 6);
 declare const __BUILD_STAMP__: string;
 const BUILD = typeof __BUILD_STAMP__ === "undefined" ? "source" : __BUILD_STAMP__;
 
+/**
+ * The timer advances queues; it does not race them. Each tick offers at most
+ * one new step per account, and an account whose last step is still awaiting
+ * its buttons is left alone — the queue moves at the speed of confirmations,
+ * and the timer is just what moves it for people who never type /digest.
+ */
 async function sweepDigests(): Promise<void> {
   try {
-    const results = await runDigestForAll();
-    const failed = results.filter((r) => !r.ok);
-    console.log(
-      `Scheduled digest: ${results.length - failed.length}/${results.length} accounts` +
-        (failed.length ? ` — failures: ${failed.map((f) => `${f.userId}: ${f.error}`).join("; ")}` : "")
-    );
+    await sweepQueue();
   } catch (err) {
     console.error("Scheduled digest failed:", err);
   }

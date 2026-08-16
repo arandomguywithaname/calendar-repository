@@ -125,21 +125,166 @@ export async function sampleChannels(
 }
 
 /**
- * Posts published after `since`, across the account's channels.
+ * The oldest unread stretch of every channel, reading upward.
+ *
+ * This is the queue's collector, and its geometry is the point. Reading
+ * newest-first — what `collectPosts` below does — cannot be reconciled with a
+ * per-channel mark that promises "everything below this is accounted for":
+ * any cap or trim keeps the newest posts, the mark advances to the top, and
+ * whatever sat between quietly falls below it. Reading oldest-first makes the
+ * promise true by construction — everything a cap postpones is *above* what
+ * was read, and is simply first in line next time.
+ *
+ * Each channel's position is its stored mark, or Telegram's own read pointer
+ * (`readInboxMaxId`) on first contact — the person's "I've read to here" is
+ * the honest place to start a queue of their unread. There is no time filter:
+ * the position bounds the window in ids, however old the backlog is.
+ *
+ * Alongside the text posts, the caller gets every fetched message id with a
+ * has-text flag, ascending. Marks cannot advance on kept posts alone: a
+ * stretch of photo-only messages contains nothing to summarise, and a mark
+ * that refused to cross it would refetch the same stretch on every run,
+ * forever. Seen-and-textless is covered; the caller walks the flags to find
+ * how far that holds.
+ */
+export interface QueueChannelFetch {
+  channel: Channel;
+  /** Where this channel's queue stood before the fetch. */
+  position: number;
+  /** Every message fetched, ascending by id, text or not. */
+  messages: { id: number; hasText: boolean }[];
+}
+
+export async function collectQueue(
+  account: TelegramAccount,
+  options: {
+    marks?: Record<string, number>;
+    allowed?: (channelId: string) => boolean;
+    perChannel?: number;
+  } = {}
+): Promise<{
+  posts: Post[];
+  channels: Channel[];
+  fetched: QueueChannelFetch[];
+  silent: number;
+  filtered: number;
+  /** ≈ posts still above what this call reached, across the allowed channels. */
+  backlog: number;
+}> {
+  const perChannel = options.perChannel ?? MAX_PER_CHANNEL;
+  const marks = options.marks || {};
+  const allowed = options.allowed;
+
+  const client = await connect(account);
+  try {
+    const dialogs = await client.getDialogs({ limit: 200 });
+    const wanted = new Set(account.channelIds || []);
+    let silent = 0;
+    let filtered = 0;
+
+    const targets: { entity: any; channel: Channel; position: number; newest: number }[] = [];
+    for (const dialog of dialogs) {
+      const entity: any = dialog.entity;
+      if (!entity || entity.className !== "Channel" || !entity.broadcast) continue;
+
+      const channelId = idOf(entity.id);
+      if (wanted.size > 0 && !wanted.has(channelId)) continue;
+      if (allowed && !allowed(channelId)) {
+        filtered += 1;
+        continue;
+      }
+
+      const newest: number = dialog.dialog?.topMessage ?? 0;
+      const readUpTo: number = dialog.dialog?.readInboxMaxId ?? 0;
+      // A read pointer of zero with a deep channel would mean "queue its entire
+      // history" — years of posts the person never treated as unread. Backstop
+      // the first contact to one fetch's worth instead of paging through it.
+      const position = marks[channelId] ?? (readUpTo > 0 ? readUpTo : Math.max(0, newest - perChannel));
+
+      if (newest <= position) {
+        silent += 1;
+        continue;
+      }
+
+      targets.push({
+        entity,
+        channel: {
+          id: channelId,
+          title: entity.title || "(untitled channel)",
+          username: entity.username || undefined,
+        },
+        position,
+        newest,
+      });
+    }
+
+    const results = await promiseConcurrent(
+      targets,
+      async ({ entity, channel, position, newest }) => {
+        // `reverse` flips the walk to oldest-first, and with it `minId` becomes
+        // the exclusive starting offset — so this reads upward from just above
+        // the position, which is the only direction the marks stay honest in.
+        const raw = (await client.getMessages(entity, {
+          limit: Math.min(perChannel, newest - position),
+          minId: position,
+          reverse: true,
+        })) as any[];
+
+        const ascending = raw.filter((m) => typeof m?.id === "number").sort((a, b) => a.id - b.id);
+        const messages = ascending.map((m) => ({
+          id: m.id as number,
+          hasText: Boolean(String(m?.message || "").trim()),
+        }));
+        const posts: Post[] = ascending
+          .filter((m) => String(m?.message || "").trim())
+          .map((m) => ({
+            id: `${channel.id}:${m.id}`,
+            channelId: channel.id,
+            channelTitle: channel.title,
+            messageId: m.id,
+            text: String(m.message),
+            date: new Date((m.date || 0) * 1000).toISOString(),
+          }));
+
+        const reached = messages.length ? messages[messages.length - 1].id : position;
+        return { channel, position, messages, posts, remaining: Math.max(0, newest - reached) };
+      },
+      12
+    );
+
+    const posts: Post[] = [];
+    const channels: Channel[] = [];
+    const fetched: QueueChannelFetch[] = [];
+    let backlog = 0;
+
+    for (const entry of results) {
+      channels.push(entry.channel);
+      fetched.push({ channel: entry.channel, position: entry.position, messages: entry.messages });
+      posts.push(...entry.posts);
+      // Ids are not dense, so the id gap overstates what is left — an estimate
+      // to show a person, never a boundary to act on.
+      backlog += entry.remaining;
+    }
+
+    posts.sort((a, b) => a.date.localeCompare(b.date));
+    return { posts, channels, fetched, silent, filtered, backlog };
+  } finally {
+    await client.disconnect();
+  }
+}
+
+/**
+ * Posts published after `since`, across the account's channels, newest-first.
+ *
+ * This is the second-look collector: it serves `/digest 24`-style re-reads of
+ * a recent window, where the person wants the freshest material and the marks
+ * are deliberately not consulted or advanced. The queue's collector above is
+ * the one whose reading order the marks depend on.
  *
  * Bounded twice — per channel and overall — because a digest window covering a
  * hundred busy channels would otherwise pull far more than any summariser needs
- * to establish what happened.
- *
- * Message fetching is concurrent with a limit to balance speed against rate-limiting.
- * Sequential fetching times out badly with 50+ channels (1-2s per channel = 50-100s stall).
- *
- * `marks` — per channel, the highest message id already digested — is what
- * keeps that work proportional to what is new rather than to how many channels
- * are followed. A channel whose newest message is already behind its mark is
- * not fetched at all, so a quiet hour costs one `getDialogs` instead of fifty
- * history calls; the rest are asked only for what sits above their mark, so
- * nothing already summarised crosses the wire twice.
+ * to establish what happened. Fetching is concurrent with a limit; sequential
+ * fetching stalls badly at 50+ channels.
  */
 export async function collectPosts(
   account: TelegramAccount,
@@ -615,8 +760,11 @@ export async function waitForQrLogin(
 
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 3000));
-    // /cancel drops the entry; that is the signal to stop, not an error.
-    if (!qrPending.has(userId)) throw new Error("QR_CANCELLED");
+    // /cancel drops the entry, a second /qr replaces it. Both mean this watcher
+    // is done — checking by identity, not by key, is what stops a superseded
+    // watcher from polling its dead client and then, at its own expiry,
+    // cancelling the fresh login that replaced it.
+    if (qrPending.get(userId) !== entry) throw new Error("QR_CANCELLED");
 
     let result: any;
     try {
