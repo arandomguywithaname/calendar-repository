@@ -228,9 +228,9 @@ function answerLocally(question: string, digests: PeriodDigest[]): string {
       "",
       "Two things worth trying:",
       "• /channels — check I can actually see the channels you follow",
-      "• /digest 72 — re-read the last three days, ignoring where I'd got up to",
+      "• /digest 72 — re-read the last three days as a second look",
       "",
-      "Plain /digest only looks at what's new since the last run, so once one run comes back empty the next ones look quiet too.",
+      "Plain /digest works through your unread backlog oldest-first, so if it keeps coming back with nothing, the place to look is /channels — either I can't see your channels, or the subject filter is skipping all of them.",
     ].join("\n");
   }
 
