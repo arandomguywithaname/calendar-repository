@@ -17,6 +17,20 @@ dotenv.config({ path: envPath(), quiet: true });
 const INTERVAL_HOURS = Number(process.env.DIGEST_INTERVAL_HOURS || 6);
 
 /**
+ * A rejection nobody awaited must cost a logged warning, not the process.
+ *
+ * The MTProto library runs background work of its own, and a socket dying at
+ * the wrong instant — mid-iteration, during a reconnect — can surface as a
+ * rejection outside every try/catch this code owns. Node's default response
+ * is to kill the process, which turned one dropped connection during channel
+ * sampling into a dead bot and an unanswered /topics. A long-polling bot
+ * recovers from a missed beat; it does not recover from being dead.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection (continuing):", reason);
+});
+
+/**
  * Stamped in at bundle time. Its only job is to make "am I running the build I
  * think I am?" answerable without guessing — a question that cost real time the
  * last round, when fixes weren't reaching the thing being tested.

@@ -107,20 +107,30 @@ export async function sampleChannels(
       });
     }
 
-    return promiseConcurrent(
+    const sampled = await promiseConcurrent(
       targets,
       async ({ entity, channel }) => {
-        const messages = (await client.getMessages(entity, { limit: perChannel })) as any[];
-        const samples = messages
-          .map((m) => String(m?.message || "").replace(/\s+/g, " ").trim())
-          .filter(Boolean)
-          .map((text) => (text.length > sampleChars ? `${text.slice(0, sampleChars)}…` : text));
-        return { channel, samples };
+        // A channel that cannot be read right now — a reconnect race, one bad
+        // peer — must not sink the whole run. It is dropped from this sample:
+        // no verdict means unjudged, and unjudged channels are read, so the
+        // failure degrades toward reading more rather than silently excluding.
+        try {
+          const messages = (await client.getMessages(entity, { limit: perChannel })) as any[];
+          const samples = messages
+            .map((m) => String(m?.message || "").replace(/\s+/g, " ").trim())
+            .filter(Boolean)
+            .map((text) => (text.length > sampleChars ? `${text.slice(0, sampleChars)}…` : text));
+          return { channel, samples };
+        } catch (err: any) {
+          console.warn(`sampling ${channel.title} failed: ${err?.errorMessage || err?.message || err}`);
+          return null;
+        }
       },
       12
     );
+    return sampled.filter((s): s is { channel: Channel; samples: string[] } => s !== null);
   } finally {
-    await client.disconnect();
+    await client.disconnect().catch(() => {});
   }
 }
 
@@ -224,30 +234,40 @@ export async function collectQueue(
         // `reverse` flips the walk to oldest-first, and with it `minId` becomes
         // the exclusive starting offset — so this reads upward from just above
         // the position, which is the only direction the marks stay honest in.
-        const raw = (await client.getMessages(entity, {
-          limit: Math.min(perChannel, newest - position),
-          minId: position,
-          reverse: true,
-        })) as any[];
+        //
+        // A channel whose fetch fails — a reconnect race, one bad peer — comes
+        // back empty rather than failing the step: with nothing fetched its
+        // mark cannot move, so its backlog is simply still first in line next
+        // time, and the other channels' work is not thrown away.
+        try {
+          const raw = (await client.getMessages(entity, {
+            limit: Math.min(perChannel, newest - position),
+            minId: position,
+            reverse: true,
+          })) as any[];
 
-        const ascending = raw.filter((m) => typeof m?.id === "number").sort((a, b) => a.id - b.id);
-        const messages = ascending.map((m) => ({
-          id: m.id as number,
-          hasText: Boolean(String(m?.message || "").trim()),
-        }));
-        const posts: Post[] = ascending
-          .filter((m) => String(m?.message || "").trim())
-          .map((m) => ({
-            id: `${channel.id}:${m.id}`,
-            channelId: channel.id,
-            channelTitle: channel.title,
-            messageId: m.id,
-            text: String(m.message),
-            date: new Date((m.date || 0) * 1000).toISOString(),
+          const ascending = raw.filter((m) => typeof m?.id === "number").sort((a, b) => a.id - b.id);
+          const messages = ascending.map((m) => ({
+            id: m.id as number,
+            hasText: Boolean(String(m?.message || "").trim()),
           }));
+          const posts: Post[] = ascending
+            .filter((m) => String(m?.message || "").trim())
+            .map((m) => ({
+              id: `${channel.id}:${m.id}`,
+              channelId: channel.id,
+              channelTitle: channel.title,
+              messageId: m.id,
+              text: String(m.message),
+              date: new Date((m.date || 0) * 1000).toISOString(),
+            }));
 
-        const reached = messages.length ? messages[messages.length - 1].id : position;
-        return { channel, position, messages, posts, remaining: Math.max(0, newest - reached) };
+          const reached = messages.length ? messages[messages.length - 1].id : position;
+          return { channel, position, messages, posts, remaining: Math.max(0, newest - reached) };
+        } catch (err: any) {
+          console.warn(`queue fetch for ${channel.title} failed: ${err?.errorMessage || err?.message || err}`);
+          return { channel, position, messages: [], posts: [], remaining: Math.max(0, newest - position) };
+        }
       },
       12
     );
@@ -357,13 +377,20 @@ export async function collectPosts(
     const fetched = await promiseConcurrent(
       channelsToFetch,
       async ({ entity, channel, mark, limit }) => {
-        const messages = await client.getMessages(entity, {
-          limit,
-          // Excludes everything at or below the mark server-side, so already
-          // digested messages are never sent over the wire a second time.
-          ...(mark !== undefined ? { minId: mark } : {}),
-        });
-        return { channel, messages: messages as any[] };
+        // Same tolerance as the queue's collector: one unreachable channel
+        // costs its own posts for this re-read, not everyone else's.
+        try {
+          const messages = await client.getMessages(entity, {
+            limit,
+            // Excludes everything at or below the mark server-side, so already
+            // digested messages are never sent over the wire a second time.
+            ...(mark !== undefined ? { minId: mark } : {}),
+          });
+          return { channel, messages: messages as any[] };
+        } catch (err: any) {
+          console.warn(`fetch for ${channel.title} failed: ${err?.errorMessage || err?.message || err}`);
+          return { channel, messages: [] as any[] };
+        }
       },
       12  // Increased from 5 to 12 for ultra-fast mode
     );
