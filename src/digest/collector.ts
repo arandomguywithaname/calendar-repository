@@ -359,18 +359,20 @@ export async function startQrLogin(userId: string, apiId: number, apiHash: strin
   });
   await client.connect();
 
-  const qrCode: any = await client.invoke(
-    new Api.auth.RequestQrCode({
+  // Export a login token that can be used for QR login
+  const tokenExport: any = await client.invoke(
+    new Api.auth.ExportLoginToken({
       apiId,
       apiHash,
-      appVersion: "1.0.0",
+      exceptIds: [],
     })
   );
 
-  qrPending.set(userId, { client, at: Date.now(), qrToken: Buffer.from(qrCode.token) });
+  const token = tokenExport.token;
+  qrPending.set(userId, { client, at: Date.now(), qrToken: Buffer.from(token) });
 
-  // Generate QR code image
-  const qrDataUrl = await QRCode.toDataURL(qrCode.token.toString("base64"));
+  // Generate QR code image from the token
+  const qrDataUrl = await QRCode.toDataURL(token.toString("base64"));
   return qrDataUrl;
 }
 
@@ -382,11 +384,13 @@ export async function completeQrLogin(userId: string): Promise<CompletedLogin | 
   if (!entry) return null;
 
   try {
+    // Accept the login token that was scanned via QR code
     const result: any = await entry.client.invoke(
       new Api.auth.AcceptLoginToken({ token: entry.qrToken })
     );
 
-    const me: any = await entry.client.getMe();
+    // result should be of type auth.Authorization which contains the user info
+    const me: any = result.user || await entry.client.getMe();
     const session = String(entry.client.session.save());
     await entry.client.disconnect();
     qrPending.delete(userId);
@@ -397,9 +401,21 @@ export async function completeQrLogin(userId: string): Promise<CompletedLogin | 
       name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
     };
   } catch (err: any) {
-    // Login not complete yet
-    if (/SESSION_PASSWORD_NEEDED/i.test(err?.errorMessage || "")) {
-      throw new Error("This account has two-step verification — not supported with QR login. Use /connect with phone code instead.");
+    // Login not complete yet, or error
+    const errorMsg = err?.errorMessage || err?.message || String(err);
+
+    // Specific errors to handle
+    if (/SESSION_PASSWORD_NEEDED|2FA/i.test(errorMsg)) {
+      throw new Error("This account has two-step verification. Use /connect with phone code instead.");
+    }
+    if (/USER_ALREADY_PARTICIPANT/i.test(errorMsg) || /ACCEPT_FAILED/i.test(errorMsg)) {
+      // Token not yet used/scanned
+      return null;
+    }
+
+    // Other errors are real failures
+    if (!/UNKNOWN/i.test(errorMsg) && err?.errorMessage) {
+      throw err;
     }
     return null;
   }
