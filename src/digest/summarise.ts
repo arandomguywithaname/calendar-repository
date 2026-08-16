@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { Channel, PeriodDigest, Post, SourceRef, TopicDigest } from "./types";
+import { Channel, ChannelCoverage, PeriodDigest, Post, SourceRef, TopicDigest } from "./types";
 
 /**
  * Turning a window of posts into a topic-organised digest.
@@ -116,6 +116,24 @@ function fit(posts: Post[]): Post[] {
   return kept;
 }
 
+/**
+ * How far each channel got, measured on the posts that survived `fit`.
+ *
+ * Deliberately not measured on what the collector fetched. Posts trimmed to fit
+ * the context were read and then discarded unsummarised, and counting them as
+ * covered would advance the channel's mark past material no digest ever
+ * mentioned — losing it silently, which is the failure this record exists to
+ * prevent.
+ */
+function coverageOf(posts: Post[]): ChannelCoverage[] {
+  const highest = new Map<string, number>();
+  for (const post of posts) {
+    const seen = highest.get(post.channelId);
+    if (seen === undefined || post.messageId > seen) highest.set(post.channelId, post.messageId);
+  }
+  return [...highest].map(([channelId, maxMessageId]) => ({ channelId, maxMessageId }));
+}
+
 /** Posts as the model sees them: grouped by channel, each line addressable by id. */
 function render(posts: Post[]): string {
   const byChannel = new Map<string, Post[]>();
@@ -171,6 +189,7 @@ export async function summarisePeriod(
     createdAt: new Date().toISOString(),
     postCount: allPosts.length,
     channelCount: new Set(allPosts.map((p) => p.channelId)).size,
+    coverage: coverageOf(posts),
   };
 
   if (posts.length === 0) {

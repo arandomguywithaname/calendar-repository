@@ -51,6 +51,26 @@ export interface TopicDigest {
   sources: SourceRef[];
 }
 
+/**
+ * How far a digest got through one channel.
+ *
+ * This is the only record of what a digest actually read: posts are dropped
+ * once summarised, so without it there is no way to answer "which messages does
+ * this digest account for". Three things need that answer — advancing the
+ * per-channel mark, estimating how much is outstanding without fetching
+ * anything, and knowing what may be marked read in Telegram once a digest is
+ * accepted. All three are wrong if the number is a guess.
+ *
+ * It records what survived into the summary, not what was fetched: material
+ * trimmed to fit the model's context was never digested and must not count as
+ * covered.
+ */
+export interface ChannelCoverage {
+  channelId: string;
+  /** Highest message id folded into the digest. */
+  maxMessageId: number;
+}
+
 /** Everything kept for one window. Raw posts are gone by the time this exists. */
 export interface PeriodDigest {
   /** Stable key: "<userId>:<fromISO>" */
@@ -67,6 +87,8 @@ export interface PeriodDigest {
   topics: TopicDigest[];
   /** Set when the summary was produced without a model, so answers can say so. */
   degraded?: boolean;
+  /** Per channel, how far this digest got. Absent on digests built before it was recorded. */
+  coverage?: ChannelCoverage[];
 }
 
 /** MTProto credentials for one account, stored per user. */

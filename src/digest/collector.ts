@@ -38,6 +38,16 @@ function idOf(value: unknown): string {
   return String(value);
 }
 
+/**
+ * Ceiling on a single channel's history request.
+ *
+ * A channel that has been left unread for months would otherwise be asked for
+ * its entire backlog in one call, and the run would stall on it. Hitting this
+ * ceiling is not a loss: the mark advances to what was read, so the remainder
+ * is simply first in line next time.
+ */
+const MAX_PER_CHANNEL = 200;
+
 /** Every broadcast channel the account follows. */
 export async function listChannels(account: TelegramAccount): Promise<Channel[]> {
   const client = await connect(account);
@@ -71,15 +81,22 @@ export async function listChannels(account: TelegramAccount): Promise<Channel[]>
  *
  * Message fetching is concurrent with a limit to balance speed against rate-limiting.
  * Sequential fetching times out badly with 50+ channels (1-2s per channel = 50-100s stall).
+ *
+ * `marks` — per channel, the highest message id already digested — is what
+ * keeps that work proportional to what is new rather than to how many channels
+ * are followed. A channel whose newest message is already behind its mark is
+ * not fetched at all, so a quiet hour costs one `getDialogs` instead of fifty
+ * history calls; the rest are asked only for what sits above their mark, so
+ * nothing already summarised crosses the wire twice.
  */
 export async function collectPosts(
   account: TelegramAccount,
   since: Date,
-  options: { perChannel?: number; total?: number } = {}
-): Promise<{ posts: Post[]; channels: Channel[] }> {
+  options: { perChannel?: number; total?: number; marks?: Record<string, number> } = {}
+): Promise<{ posts: Post[]; channels: Channel[]; silent: number }> {
   const perChannel = options.perChannel ?? 40;
   const total = options.total ?? 600;
-  const concurrency = 5; // Fetch from 5 channels at once
+  const marks = options.marks || {};
 
   const client = await connect(account);
   try {
@@ -87,9 +104,10 @@ export async function collectPosts(
     const wanted = new Set(account.channelIds || []);
     const channels: Channel[] = [];
     const posts: Post[] = [];
+    let silent = 0;
 
     // Collect all channels first, then fetch messages concurrently
-    const channelsToFetch: Array<{ entity: any; channel: Channel }> = [];
+    const channelsToFetch: Array<{ entity: any; channel: Channel; mark?: number; limit: number }> = [];
     for (const dialog of dialogs) {
       const entity: any = dialog.entity;
       if (!entity || entity.className !== "Channel" || !entity.broadcast) continue;
@@ -102,15 +120,38 @@ export async function collectPosts(
         title: entity.title || "(untitled channel)",
         username: entity.username || undefined,
       };
+
+      const mark = marks[channelId];
+      // `topMessage` rides along with the dialog list, so this comparison is
+      // free — it is the difference between asking fifty channels what is new
+      // and asking only the handful that have anything to say.
+      const newest: number | undefined = dialog.dialog?.topMessage;
+      if (mark !== undefined && newest !== undefined && newest <= mark) {
+        silent += 1;
+        continue;
+      }
+
+      // Ids are not dense — deletions and service messages leave holes — so the
+      // gap between the mark and the newest id overstates how much is waiting.
+      // Overstating is the safe direction: asking for more than exists costs
+      // nothing, whereas asking for too few drops posts that were never read.
+      const outstanding = mark !== undefined && newest !== undefined ? newest - mark : perChannel;
+      const limit = Math.min(MAX_PER_CHANNEL, Math.max(perChannel, outstanding));
+
       channels.push(channel);
-      channelsToFetch.push({ entity, channel });
+      channelsToFetch.push({ entity, channel, mark, limit });
     }
 
     // Fetch messages from channels concurrently with a limit
     const fetched = await promiseConcurrent(
       channelsToFetch,
-      async ({ entity, channel }) => {
-        const messages = await client.getMessages(entity, { limit: perChannel });
+      async ({ entity, channel, mark, limit }) => {
+        const messages = await client.getMessages(entity, {
+          limit,
+          // Excludes everything at or below the mark server-side, so already
+          // digested messages are never sent over the wire a second time.
+          ...(mark !== undefined ? { minId: mark } : {}),
+        });
         return { channel, messages: messages as any[] };
       },
       12  // Increased from 5 to 12 for ultra-fast mode
@@ -139,7 +180,7 @@ export async function collectPosts(
     }
 
     posts.sort((a, b) => a.date.localeCompare(b.date));
-    return { posts: posts.slice(-total), channels };
+    return { posts: posts.slice(-total), channels, silent };
   } finally {
     await client.disconnect();
   }

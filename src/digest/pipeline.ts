@@ -1,6 +1,14 @@
 import { collectPosts } from "./collector";
 import { summarisePeriod } from "./summarise";
-import { getAccount, getWatermark, listAccounts, saveDigest, setWatermark } from "./store";
+import {
+  advanceMarks,
+  getAccount,
+  getMarks,
+  getWatermark,
+  listAccounts,
+  saveDigest,
+  setWatermark,
+} from "./store";
 import { PeriodDigest } from "./types";
 
 /**
@@ -43,10 +51,24 @@ export async function runDigest(
     if (since < floor) since = floor;
   }
 
-  const { posts, channels } = await collectPosts(account, since, { perChannel: 35, total: 550 });
+  // The marks go the same way as the watermark: an explicit re-read means
+  // "look again at this window", and filtering it against what has already been
+  // digested would leave nothing to look at.
+  const marks = options.hours ? {} : await getMarks(userId);
+
+  const { posts, channels, silent } = await collectPosts(account, since, {
+    perChannel: 35,
+    total: 550,
+    marks,
+  });
+  if (silent > 0) console.log(`${userId}: skipped ${silent} channel(s) with nothing new`);
+
   const digest = await summarisePeriod(userId, posts, channels, since, now);
 
   await saveDigest(digest);
+  // After the digest is stored, never before: a crash between the two would
+  // otherwise move the marks past posts that no digest accounts for.
+  if (digest.coverage) await advanceMarks(userId, digest.coverage);
 
   // The watermark advances to the newest post actually seen, not to "now" —
   // otherwise a post arriving during collection would be skipped forever.

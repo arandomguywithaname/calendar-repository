@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { dataDir } from "./paths";
-import { PeriodDigest, TelegramAccount } from "./types";
+import { ChannelCoverage, PeriodDigest, TelegramAccount } from "./types";
 
 /**
  * Persistence for the digest side.
@@ -25,6 +25,16 @@ interface DigestStoreShape {
   chats: Record<string, { role: "user" | "assistant"; content: string }[]>;
   /** userId -> ISO timestamp of the last post already folded into a digest */
   watermarks: Record<string, string>;
+  /**
+   * userId -> channelId -> highest message id already folded into a digest.
+   *
+   * Beside the timestamp watermark rather than instead of it, because they
+   * answer different questions. The watermark bounds the window in time; these
+   * say, per channel, exactly which messages are already accounted for — which
+   * a timestamp cannot, since one shared instant says nothing about a channel
+   * that was truncated at the per-channel limit while another was not.
+   */
+  marks: Record<string, Record<string, number>>;
 }
 
 /**
@@ -47,7 +57,7 @@ const MAX_CHAT_TURNS = 24;
 const MAX_DIGESTS_PER_USER = 60;
 
 function empty(): DigestStoreShape {
-  return { accounts: {}, digests: {}, chats: {}, watermarks: {} };
+  return { accounts: {}, digests: {}, chats: {}, watermarks: {}, marks: {} };
 }
 
 let memory: DigestStoreShape | null = null;
@@ -122,6 +132,7 @@ export async function clearAccount(userId: string): Promise<void> {
   await mutate((store) => {
     delete store.accounts[userId];
     delete store.watermarks[userId];
+    delete store.marks[userId];
   });
 }
 
@@ -166,6 +177,29 @@ export async function getWatermark(userId: string): Promise<string | undefined> 
 export async function setWatermark(userId: string, iso: string): Promise<void> {
   await mutate((store) => {
     store.watermarks[userId] = iso;
+  });
+}
+
+/** Per channel, the highest message id already digested. Empty before the first run. */
+export async function getMarks(userId: string): Promise<Record<string, number>> {
+  return (await load()).marks[userId] || {};
+}
+
+/**
+ * Move each channel's mark forward to what a digest covered.
+ *
+ * Forward only. `/digest 72` deliberately re-reads a window that is already
+ * behind the marks, and letting that rewind them would make the same posts
+ * eligible again on every subsequent run — the re-read is meant to be a second
+ * look, not a reset.
+ */
+export async function advanceMarks(userId: string, coverage: ChannelCoverage[]): Promise<void> {
+  if (coverage.length === 0) return;
+  await mutate((store) => {
+    const mine = store.marks[userId] || (store.marks[userId] = {});
+    for (const { channelId, maxMessageId } of coverage) {
+      if (!(mine[channelId] >= maxMessageId)) mine[channelId] = maxMessageId;
+    }
   });
 }
 
