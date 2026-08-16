@@ -1,4 +1,4 @@
-import { cancelLogin, CompletedLogin, listChannels, startLogin, completeLogin, loginPending } from "./collector";
+import { cancelLogin, CompletedLogin, listChannels, startLogin, completeLogin, loginPending, startQrLogin, completeQrLogin, qrLoginPending, cancelQrLogin } from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest } from "./format";
 import { runDigest } from "./pipeline";
@@ -121,7 +121,8 @@ async function scrub(chatId: number | string, messageId?: number): Promise<boole
 type Stage =
   | { name: "idle" }
   | { name: "awaiting_phone"; apiId: number; apiHash: string }
-  | { name: "awaiting_code"; apiId: number; apiHash: string; phone: string };
+  | { name: "awaiting_code"; apiId: number; apiHash: string; phone: string }
+  | { name: "awaiting_qr"; apiId: number; apiHash: string };
 
 /**
  * In-process, like the half-open MTProto connection it shadows. Losing it on a
@@ -145,7 +146,8 @@ function credentials(): { apiId: number; apiHash: string } | null {
 
 const HELP = `I read the Telegram channels you follow and keep a digest of them, grouped by topic. Ask me about it in plain language — "what happened today?", "anything about the rate decision?", "what did I miss this week?"
 
-/connect — sign in so I can read your channels
+/connect — sign in with phone code
+/qr — sign in with QR code (faster, scan with another device)
 /digest — read the new posts now and summarise them
 /last — the most recent digest
 /history — the digests I'm holding
@@ -272,6 +274,58 @@ async function onCode(
   await onDigest(userId, chatId, []);
 }
 
+async function onQr(userId: string, chatId: number, args: string[]) {
+  const env = credentials();
+  const apiId = args[0] ? Number(args[0]) : env?.apiId;
+  const apiHash = args[1] || env?.apiHash;
+
+  if (!apiId || !apiHash) {
+    await send(
+      chatId,
+      "I need Telegram API credentials. Get them at https://my.telegram.org → API development tools, then either set TELEGRAM_API_ID and TELEGRAM_API_HASH where I'm running, or send:\n\n<code>/qr 123456 your_api_hash</code>"
+    );
+    return;
+  }
+
+  await typing(chatId);
+  try {
+    const qrDataUrl = await startQrLogin(userId, apiId, apiHash);
+    stages.set(userId, { name: "awaiting_qr", apiId, apiHash });
+
+    // Send QR code as image using Telegram Bot API
+    await call("sendPhoto", {
+      chat_id: chatId,
+      photo: qrDataUrl,
+      caption: "Scan this QR code with another device to sign in. You have 10 minutes.\n\n/cancel to stop.",
+    });
+  } catch (err: any) {
+    stages.set(userId, { name: "idle" });
+    await send(chatId, `Error: ${escapeHtml(err?.message || String(err))}\n\n/connect to try phone code instead.`);
+  }
+}
+
+async function checkQrLogin(userId: string, chatId: number) {
+  const stage = stageOf(userId) as any;
+  if (stage.name !== "awaiting_qr") return;
+
+  const login = await completeQrLogin(userId);
+  if (!login) {
+    await send(chatId, "Still waiting for you to scan the QR code...");
+    return;
+  }
+
+  stages.set(userId, { name: "idle" });
+  await setAccount(userId, {
+    apiId: stage.apiId,
+    apiHash: stage.apiHash,
+    session: login.session,
+    phone: "qr-login",
+  });
+
+  await send(chatId, `Signed in as ${escapeHtml(login.name)}. Reading the last day of your channels now — this takes a minute.`);
+  await onDigest(userId, chatId, []);
+}
+
 async function onDigest(userId: string, chatId: number, args: string[]): Promise<void> {
   const account = await getAccount(userId);
   if (!account) {
@@ -353,6 +407,7 @@ async function handleText(
   if (command === "/cancel") {
     stages.set(userId, { name: "idle" });
     await cancelLogin(userId);
+    await cancelQrLogin(userId);
     await send(chatId, "Stopped.");
     return;
   }
@@ -360,6 +415,7 @@ async function handleText(
   const stage = stageOf(userId);
   if (!isCommand && stage.name === "awaiting_phone") return onPhone(userId, chatId, stage, trimmed);
   if (!isCommand && stage.name === "awaiting_code") return onCode(userId, chatId, stage, trimmed, messageId);
+  if (!isCommand && stage.name === "awaiting_qr") return checkQrLogin(userId, chatId);
 
   switch (command) {
     case "/start":
@@ -368,6 +424,8 @@ async function handleText(
       return;
     case "/connect":
       return onConnect(userId, chatId, args);
+    case "/qr":
+      return onQr(userId, chatId, args);
     case "/digest":
       return onDigest(userId, chatId, args);
     case "/channels":

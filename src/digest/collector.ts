@@ -1,4 +1,5 @@
 import { Channel, Post, TelegramAccount } from "./types";
+import QRCode from "qrcode";
 
 /**
  * Reading the channels a person follows.
@@ -188,6 +189,7 @@ function promiseConcurrent<T, R>(
  * awaiting the code, `completeLogin` finishes it and returns the session string.
  */
 const pending = new Map<string, { client: any; phoneCodeHash: string; phone: string; at: number; sendCodeResponse?: any }>();
+const qrPending = new Map<string, { client: any; at: number; qrToken: Buffer }>();
 const LOGIN_TTL_MS = 10 * 60 * 1000;
 
 function sweep() {
@@ -332,5 +334,91 @@ export async function cancelLogin(userId: string): Promise<void> {
   const entry = pending.get(userId);
   if (!entry) return;
   pending.delete(userId);
+  await entry.client.disconnect().catch(() => {});
+}
+
+/* --------------------------------- QR login -------------------------------- */
+
+/**
+ * Start QR-code login. Returns QR code as data URL that can be displayed to user.
+ * User scans with another device to log in.
+ */
+export async function startQrLogin(userId: string, apiId: number, apiHash: string): Promise<string> {
+  sweep();
+  // Cancel any existing login attempt
+  await cancelLogin(userId);
+  const qrEntry = qrPending.get(userId);
+  if (qrEntry) {
+    await qrEntry.client.disconnect().catch(() => {});
+    qrPending.delete(userId);
+  }
+
+  const { TelegramClient, Api, StringSession } = await mtproto();
+  const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
+    connectionRetries: 3,
+  });
+  await client.connect();
+
+  const qrCode: any = await client.invoke(
+    new Api.auth.RequestQrCode({
+      apiId,
+      apiHash,
+      appVersion: "1.0.0",
+    })
+  );
+
+  qrPending.set(userId, { client, at: Date.now(), qrToken: Buffer.from(qrCode.token) });
+
+  // Generate QR code image
+  const qrDataUrl = await QRCode.toDataURL(qrCode.token.toString("base64"));
+  return qrDataUrl;
+}
+
+/**
+ * Check if QR login has completed. Returns session string if successful.
+ */
+export async function completeQrLogin(userId: string): Promise<CompletedLogin | null> {
+  const entry = qrPending.get(userId);
+  if (!entry) return null;
+
+  try {
+    const result: any = await entry.client.invoke(
+      new Api.auth.AcceptLoginToken({ token: entry.qrToken })
+    );
+
+    const me: any = await entry.client.getMe();
+    const session = String(entry.client.session.save());
+    await entry.client.disconnect();
+    qrPending.delete(userId);
+
+    return {
+      session,
+      userId: idOf(me?.id),
+      name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
+    };
+  } catch (err: any) {
+    // Login not complete yet
+    if (/SESSION_PASSWORD_NEEDED/i.test(err?.errorMessage || "")) {
+      throw new Error("This account has two-step verification — not supported with QR login. Use /connect with phone code instead.");
+    }
+    return null;
+  }
+}
+
+export function qrLoginPending(userId: string): boolean {
+  sweep();
+  const entry = qrPending.get(userId);
+  if (entry && Date.now() - entry.at > LOGIN_TTL_MS) {
+    entry.client.disconnect().catch(() => {});
+    qrPending.delete(userId);
+    return false;
+  }
+  return Boolean(entry);
+}
+
+export async function cancelQrLogin(userId: string): Promise<void> {
+  const entry = qrPending.get(userId);
+  if (!entry) return;
+  qrPending.delete(userId);
   await entry.client.disconnect().catch(() => {});
 }
