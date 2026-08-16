@@ -13,7 +13,7 @@ import {
   saveDigest,
   setVerdicts,
 } from "./store";
-import { ChannelCoverage, PeriodDigest, Post, TelegramAccount } from "./types";
+import { Channel, ChannelCoverage, PeriodDigest, Post, TelegramAccount } from "./types";
 
 /**
  * Collect → summarise → store, one queue step at a time.
@@ -189,10 +189,47 @@ export async function runDigest(
     console.log(`${userId}: skipped ${silent} quiet and ${filtered} off-subject channel(s)`);
   }
 
-  const kept = fitStep(posts);
-  const coverage = honestCoverage(fetched, kept);
+  return finishStep(userId, { posts, channels, fetched, backlog }, topics);
+}
+
+/**
+ * A digest of one channel's unread backlog, on the queue's own logic.
+ *
+ * Naming a channel is a one-off /include: the subject filter is not consulted
+ * — an excluded channel can be read this way on purpose — and the subject rule
+ * is not applied to the summary either, because the request itself already
+ * said what to read. The prior-topics memory does apply: a story this person
+ * has been told stays told, whichever door it arrives through. Marks advance
+ * exactly as in the shared queue, so a later /digest will not re-read what
+ * this served.
+ */
+export async function runChannelDigest(userId: string, channelId: string): Promise<DigestOutcome> {
+  const account = await getAccount(userId);
+  if (!account) throw new Error("no account connected");
+
+  const marks = await getMarks(userId);
+  const collected = await collectQueue(account, {
+    marks,
+    allowed: (id) => id === channelId,
+  });
+  return finishStep(userId, collected, []);
+}
+
+/**
+ * The tail every step shares: trim, measure honest coverage, summarise, save,
+ * advance. Kept in one place because the ordering is load-bearing — coverage
+ * is measured on what the summariser will actually receive, and marks move
+ * only after the digest they answer for is stored.
+ */
+async function finishStep(
+  userId: string,
+  collected: { posts: Post[]; channels: Channel[]; fetched: QueueChannelFetch[]; backlog: number },
+  subjects: string[]
+): Promise<DigestOutcome> {
+  const kept = fitStep(collected.posts);
+  const coverage = honestCoverage(collected.fetched, kept);
   // What the trims postponed is still queued; say so in the estimate.
-  const stillQueued = backlog + (posts.length - kept.length);
+  const stillQueued = collected.backlog + (collected.posts.length - kept.length);
 
   if (kept.length === 0) {
     // Nothing summarisable — but marks still advance over stretches that were
@@ -225,7 +262,26 @@ export async function runDigest(
   const from = new Date(kept[0].date);
   const to = new Date(kept[kept.length - 1].date);
 
-  const digest = await summarisePeriod(userId, kept, channels, from, to, topics, await priorTopics(userId));
+  const digest = await summarisePeriod(
+    userId,
+    kept,
+    collected.channels,
+    from,
+    to,
+    subjects,
+    await priorTopics(userId)
+  );
+  // With a model configured, a degraded summary is a failure, not a result.
+  // Saving it would spend this stretch of the backlog — irreversibly, marks
+  // only move forward — on wording-grouped mush. Consume nothing instead: the
+  // same posts are simply read again once whatever failed is fixed. (Without
+  // credentials the lexical fallback is the product, and it stands.)
+  if (digest.degraded && canTriage()) {
+    throw new Error(
+      "the summarising model couldn't process this window — the logs name the reason. Nothing was consumed; the same posts will be read again on the next attempt."
+    );
+  }
+
   // The summariser measures coverage on what survived its own trim; the queue
   // has already fitted the step and knows about textless stretches too, so its
   // walk is the authoritative one.

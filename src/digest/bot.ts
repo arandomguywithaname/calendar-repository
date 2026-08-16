@@ -13,7 +13,7 @@ import {
 } from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
-import { runDigest } from "./pipeline";
+import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
 import { PeriodDigest, TelegramAccount } from "./types";
 import {
@@ -237,6 +237,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /qr — sign in with QR code (faster, scan with another device)
 /topics — name the subjects you read for, so I skip the rest
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
+/channel название — one channel's unread backlog, same logic, filter or no filter
 /last — the most recent digest
 /history — the digests I'm holding
 /channels — what I read, what I skip, and why
@@ -504,6 +505,53 @@ async function deliverNextStep(userId: string, chatId: number | string, quiet: b
     return;
   }
   await send(chatId, renderDigest(digest) + queueFooter(backlog), readButton(digest));
+}
+
+/**
+ * A digest of one channel, asked for by name — the queue's logic scoped down.
+ *
+ * Naming the channel outranks the subject filter (it is a one-off /include),
+ * and like /digest it moves past any open step: an explicit request is an
+ * answer to whatever was waiting.
+ */
+async function onChannelDigest(userId: string, chatId: number, query: string): Promise<void> {
+  const wanted = query.trim();
+  if (!wanted) {
+    await send(chatId, "Which channel? <code>/channel часть названия</code>.");
+    return;
+  }
+  const account = await getAccount(userId);
+  if (!account) {
+    await send(chatId, "Not connected yet — /connect first.");
+    return;
+  }
+
+  await typing(chatId);
+  const channel = await resolveChannel(userId, chatId, wanted);
+  if (!channel) return;
+
+  try {
+    await closeOpenDigests(userId);
+    const { digest, empty, backlog } = await runChannelDigest(userId, channel.id);
+    if (empty) {
+      await send(
+        chatId,
+        backlog > 0
+          ? `That stretch of <b>${escapeHtml(channel.title)}</b> had no text posts to summarise — ≈${backlog} still queued, ask again to continue.`
+          : `<b>${escapeHtml(channel.title)}</b> has nothing unread.`
+      );
+      return;
+    }
+    await send(chatId, renderDigest(digest) + queueFooter(backlog), readButton(digest));
+  } catch (err: any) {
+    const message = err?.errorMessage || err?.message || String(err);
+    if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(message)) {
+      await clearAccount(userId);
+      await send(chatId, "Telegram invalidated my session — that happens if you end the session from your account's device list. /connect to sign in again.");
+      return;
+    }
+    await send(chatId, `Couldn't build that channel's digest: ${escapeHtml(message)}`);
+  }
 }
 
 async function onDigest(userId: string, chatId: number, args: string[]): Promise<void> {
@@ -945,6 +993,8 @@ async function handleText(
       return onQr(userId, chatId, args);
     case "/digest":
       return onDigest(userId, chatId, args);
+    case "/channel":
+      return onChannelDigest(userId, chatId, args.join(" "));
     case "/channels":
       return onChannels(userId, chatId);
     case "/topics":
@@ -1002,7 +1052,7 @@ async function handleText(
   // The model judged this a queue command, not a question. Marking runs before
   // advancing — "прочитано, дальше" means close this one, then continue. The
   // history still gets a turn, so a follow-up like "и ещё" keeps its context.
-  if (reply.markRead || reply.advance) {
+  if (reply.markRead || reply.advance || reply.channelQuery) {
     const acted: string[] = [];
     if (reply.markRead) {
       await onSpokenMarkRead(userId, chatId);
@@ -1011,6 +1061,10 @@ async function handleText(
     if (reply.advance) {
       await onDigest(userId, chatId, []);
       acted.push("(built and delivered the next digest from the queue)");
+    }
+    if (reply.channelQuery) {
+      await onChannelDigest(userId, chatId, reply.channelQuery);
+      acted.push(`(built a digest of the channel matching "${reply.channelQuery}")`);
     }
     await appendChat(userId, [
       { role: "user", content: trimmed },
@@ -1113,6 +1167,7 @@ export async function startBot(): Promise<void> {
     commands: [
       { command: "digest", description: "the next digest from your unread queue" },
       { command: "topics", description: "subjects you read for — I skip the rest" },
+      { command: "channel", description: "digest one channel's unread backlog" },
       { command: "channels", description: "what I read, skip, and why" },
       { command: "last", description: "the most recent digest" },
       { command: "history", description: "digests I'm holding" },

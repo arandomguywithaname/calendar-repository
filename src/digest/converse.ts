@@ -69,6 +69,25 @@ const TOOLS = [
     input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
   },
   {
+    name: "channel_digest",
+    description:
+      "Build and deliver a digest of ONE channel's unread backlog — oldest first, same queue logic, " +
+      "scoped to that channel. Call this when the person asks to summarise or read a specific channel " +
+      "by name — «обобщи канал X», «что там непрочитанного у X», «прочитай X» — passing the name " +
+      "exactly as they said it. Never call it for a question about content already in the digests.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        channel: {
+          type: "string" as const,
+          description: "The channel's name or a fragment of it, as the person referred to it.",
+        },
+      },
+      required: ["channel"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "mark_read",
     description:
       "Mark the channels covered by the most recent digest as read in Telegram — the same thing as " +
@@ -90,6 +109,8 @@ export interface DigestReply {
   text?: string;
   markRead?: boolean;
   advance?: boolean;
+  /** A single channel's digest was asked for, by this (possibly partial) name. */
+  channelQuery?: string;
 }
 
 function renderDigests(digests: PeriodDigest[]): string {
@@ -166,7 +187,10 @@ export async function answerFromDigests(
     const calls = response.content.filter((b: any) => b.type === "tool_use");
     const markRead = calls.some((b: any) => b.name === "mark_read");
     const advance = calls.some((b: any) => b.name === "next_digest");
-    if (markRead || advance) return { markRead, advance };
+    const channelQuery = String(
+      calls.find((b: any) => b.name === "channel_digest")?.input?.channel || ""
+    ).trim() || undefined;
+    if (markRead || advance || channelQuery) return { markRead, advance, channelQuery };
 
     return { text: response.content.find((b: any) => b.type === "text")?.text || "" };
   } catch (err: any) {
