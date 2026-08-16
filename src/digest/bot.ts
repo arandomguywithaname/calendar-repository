@@ -15,7 +15,7 @@ import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest } from "./format";
 import { runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
-import { PeriodDigest } from "./types";
+import { PeriodDigest, TelegramAccount } from "./types";
 import {
   appendChat,
   claimReadMark,
@@ -30,6 +30,7 @@ import {
   getTopics,
   getVerdicts,
   latestDigest,
+  latestMarkableDigest,
   listAccounts,
   listDigests,
   openDigest,
@@ -227,7 +228,7 @@ function credentials(): { apiId: number; apiHash: string } | null {
 
 const HELP = `I read the Telegram channels you follow and keep a digest of them, grouped by topic. Ask me about it in plain language — "what happened today?", "anything about the rate decision?", "what did I miss this week?"
 
-I work through your unread backlog from the oldest post forward, one digest at a time. Each digest ends with two buttons — mark its channels read in Telegram, or leave them unread — and I wait for your answer before building the next one.
+I work through your unread backlog from the oldest post forward, one digest at a time. Each digest ends with two buttons — mark its channels read in Telegram, or leave them unread — and I wait for your answer before building the next one. Plain words work too: «прочитано» does what the ✓ button does, «дальше» builds the next digest.
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
@@ -760,6 +761,30 @@ async function dropButtons(chatId: number, messageId: number): Promise<void> {
   await call("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId }).catch(() => {});
 }
 
+/**
+ * The marking itself, shared by the button press and the spoken request.
+ * Expects the claim to already be held; hands it back if the marking fails.
+ */
+async function markDigestRead(account: TelegramAccount, digest: PeriodDigest): Promise<string> {
+  let outcome;
+  try {
+    outcome = await markRead(account, digest.coverage!);
+  } catch (err) {
+    // The claim was taken before the work; hand it back so this can be retried
+    // rather than leaving a digest that claims to be marked and a Telegram that
+    // disagrees.
+    await releaseReadMark(digest.id);
+    throw err;
+  }
+
+  const parts = [`Marked ${outcome.marked} channel(s) read in Telegram.`];
+  // The pointer only moves forward, so these are not failures worth alarm —
+  // but reporting the whole count as marked would overstate what happened.
+  if (outcome.alreadyRead > 0) parts.push(`${outcome.alreadyRead} were already read past that point.`);
+  if (outcome.gone > 0) parts.push(`${outcome.gone} you no longer follow.`);
+  return parts.join(" ");
+}
+
 async function onReadPress(
   userId: string,
   chatId: number,
@@ -780,14 +805,10 @@ async function onReadPress(
   await dropButtons(chatId, messageId);
   await typing(chatId);
 
-  let outcome;
   try {
-    outcome = await markRead(account, digest.coverage);
+    return await markDigestRead(account, digest);
   } catch (err) {
-    // The claim was taken before the work; hand it back so this can be retried
-    // rather than leaving a digest that claims to be marked and a Telegram that
-    // disagrees — and put the button back, since it is the only way to retry.
-    await releaseReadMark(digest.id);
+    // Put the button back — with the claim released, it is the way to retry.
     await call("editMessageReplyMarkup", {
       chat_id: chatId,
       message_id: messageId,
@@ -795,13 +816,35 @@ async function onReadPress(
     }).catch(() => {});
     throw err;
   }
+}
 
-  const parts = [`Marked ${outcome.marked} channel(s) read in Telegram.`];
-  // The pointer only moves forward, so these are not failures worth alarm —
-  // but reporting the whole count as marked would overstate what happened.
-  if (outcome.alreadyRead > 0) parts.push(`${outcome.alreadyRead} were already read past that point.`);
-  if (outcome.gone > 0) parts.push(`${outcome.gone} you no longer follow.`);
-  return parts.join(" ");
+/**
+ * "Прочитано", said in words.
+ *
+ * The same act as the ✓ button, resolved by recency instead of a message id.
+ * The delivered digest's own buttons stay on screen — the message id was never
+ * stored — so a later press simply answers "Already marked."
+ */
+async function onSpokenMarkRead(userId: string, chatId: number): Promise<void> {
+  const account = await getAccount(userId);
+  if (!account) {
+    await send(chatId, "Not connected — nothing to mark.");
+    return;
+  }
+
+  const digest = await latestMarkableDigest(userId);
+  if (!digest) {
+    await send(chatId, "Nothing to mark — the latest digest's channels are already marked read.");
+    return;
+  }
+  if (!(await claimReadMark(digest.id))) {
+    await send(chatId, "Already marked.");
+    return;
+  }
+
+  await typing(chatId);
+  const result = await markDigestRead(account, digest);
+  await send(chatId, escapeHtml(result));
 }
 
 async function handleCallback(query: any): Promise<void> {
@@ -951,7 +994,29 @@ async function handleText(
 
   await typing(chatId);
   const history = await getChat(userId);
-  const answer = await answerFromDigests(userId, trimmed, history);
+  const reply = await answerFromDigests(userId, trimmed, history);
+
+  // The model judged this a queue command, not a question. Marking runs before
+  // advancing — "прочитано, дальше" means close this one, then continue. The
+  // history still gets a turn, so a follow-up like "и ещё" keeps its context.
+  if (reply.markRead || reply.advance) {
+    const acted: string[] = [];
+    if (reply.markRead) {
+      await onSpokenMarkRead(userId, chatId);
+      acted.push("(marked the latest digest's channels read)");
+    }
+    if (reply.advance) {
+      await onDigest(userId, chatId, []);
+      acted.push("(built and delivered the next digest from the queue)");
+    }
+    await appendChat(userId, [
+      { role: "user", content: trimmed },
+      { role: "assistant", content: acted.join(" ") },
+    ]);
+    return;
+  }
+
+  const answer = reply.text || "";
   await appendChat(userId, [
     { role: "user", content: trimmed },
     { role: "assistant", content: answer },

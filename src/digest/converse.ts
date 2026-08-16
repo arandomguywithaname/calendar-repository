@@ -41,7 +41,55 @@ person writes in, conversationally, without headings or bullet scaffolding unles
 
 When a topic matters, name its channels so they can go to the source. Where a digest is marked as
 grouped without a model, say that stories phrased differently may not have been merged, rather than
-implying the deduplication was thorough.`;
+implying the deduplication was thorough.
+
+These digests come from a queue: the person's unread backlog is digested oldest-first, one step at a
+time, and each step waits for their verdict before the next is built. Two tools drive that queue.
+Everything else — any question about what the digests say — is answered as text, never with a tool.
+When they close a digest and ask for the next in one breath ("прочитано, дальше"), call both tools.`;
+
+/**
+ * The queue's controls, offered to the model instead of a phrase matcher.
+ *
+ * Whether "давай дальше" means "advance my unread queue" or "tell me more about
+ * that story" is a judgement about meaning, and this codebase has twice
+ * rejected lexical matching for exactly that kind of call. The tools carry no
+ * parameters: the person is known from the conversation, and the queue has
+ * exactly one next step and one latest digest.
+ */
+const TOOLS = [
+  {
+    name: "next_digest",
+    description:
+      "Build and deliver the next digest from the person's unread queue. Call this when they ask to " +
+      "continue, advance, or clear their unread backlog — «дальше», «следующий дайджест», «продолжай " +
+      "разбор», «зачисти очередь», or equivalents in any language. Never call it for a question about " +
+      "content that is already in the digests.",
+    input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
+  },
+  {
+    name: "mark_read",
+    description:
+      "Mark the channels covered by the most recent digest as read in Telegram — the same thing as " +
+      "pressing the digest's ✓ button. Call this when the person declares that digest read or done — " +
+      "«прочитано», «отметь прочитанным», «это можно закрывать». Never call it merely because they " +
+      "asked about the digest.",
+    input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
+  },
+];
+
+/**
+ * What a free-text message turned out to be.
+ *
+ * Either an answer to send, or the queue actions the person asked for in
+ * words. Both actions can be requested in one message, and the caller performs
+ * marking before advancing — that is the order the words mean.
+ */
+export interface DigestReply {
+  text?: string;
+  markRead?: boolean;
+  advance?: boolean;
+}
 
 function renderDigests(digests: PeriodDigest[]): string {
   return digests
@@ -64,15 +112,19 @@ export async function answerFromDigests(
   userId: string,
   question: string,
   history: { role: "user" | "assistant"; content: string }[]
-): Promise<string> {
+): Promise<DigestReply> {
   const digests = (await listDigests(userId)).slice(0, DIGEST_WINDOW);
 
   if (digests.length === 0) {
-    return "I haven't built any digests yet. Send /digest once you've connected an account and I'll read the last day of your channels.";
+    return {
+      text: "I haven't built any digests yet. Send /digest once you've connected an account and I'll start on your unread backlog.",
+    };
   }
 
+  // Without a model there is nobody to judge whether a message is a question
+  // or a queue command, so words stay words and the buttons stay the controls.
   if (!haveCredentials()) {
-    return answerLocally(question, digests);
+    return { text: answerLocally(question, digests) };
   }
 
   try {
@@ -96,6 +148,7 @@ export async function answerFromDigests(
         },
       ],
       output_config: { effort: "medium" },
+      tools: TOOLS,
       messages: [
         ...history.map((t) => ({ role: t.role, content: t.content })),
         { role: "user", content: question },
@@ -103,12 +156,21 @@ export async function answerFromDigests(
     });
 
     if (response.stop_reason === "refusal") {
-      return "I couldn't answer that one. Try asking a different way.";
+      return { text: "I couldn't answer that one. Try asking a different way." };
     }
-    return response.content.find((b: any) => b.type === "text")?.text || "";
+
+    // A tool call is the whole answer: the delivered digest (or the marking
+    // report) is what the person sees, and any text the model wrote alongside
+    // would just precede it as chatter.
+    const calls = response.content.filter((b: any) => b.type === "tool_use");
+    const markRead = calls.some((b: any) => b.name === "mark_read");
+    const advance = calls.some((b: any) => b.name === "next_digest");
+    if (markRead || advance) return { markRead, advance };
+
+    return { text: response.content.find((b: any) => b.type === "text")?.text || "" };
   } catch (err: any) {
     if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
-      return answerLocally(question, digests);
+      return { text: answerLocally(question, digests) };
     }
     throw err;
   }

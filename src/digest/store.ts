@@ -261,6 +261,26 @@ export async function closeDigest(id: string): Promise<void> {
 }
 
 /**
+ * The newest digest whose channels could still be marked read.
+ *
+ * What "прочитано" said in words refers to: the digest the person just saw.
+ * Unlike the button press, a spoken request carries no message id, so the
+ * target is resolved by recency — newest by creation time, carrying coverage,
+ * not yet marked. A digest closed with "leave unread" still qualifies: closing
+ * declined to mark it then, and saying "read" afterwards is a change of mind,
+ * not an error.
+ */
+export async function latestMarkableDigest(userId: string): Promise<PeriodDigest | undefined> {
+  const store = await load();
+  let best: PeriodDigest | undefined;
+  for (const digest of Object.values(store.digests)) {
+    if (digest.userId !== userId || !digest.coverage?.length || digest.readMarkedAt) continue;
+    if (!best || digest.createdAt > best.createdAt) best = digest;
+  }
+  return best;
+}
+
+/**
  * The digest currently gating the queue, if any.
  *
  * Only the newest digest by creation time can gate. Judging "is anything open"
