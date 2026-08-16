@@ -83,9 +83,11 @@ export async function listChannels(account: TelegramAccount): Promise<Channel[]>
  */
 export async function sampleChannels(
   account: TelegramAccount,
-  perChannel = 5,
-  sampleChars = 300
+  options: { perChannel?: number; sampleChars?: number; only?: Set<string> } = {}
 ): Promise<{ channel: Channel; samples: string[] }[]> {
+  const perChannel = options.perChannel ?? 5;
+  const sampleChars = options.sampleChars ?? 300;
+
   const client = await connect(account);
   try {
     const dialogs = await client.getDialogs({ limit: 200 });
@@ -94,6 +96,7 @@ export async function sampleChannels(
     for (const dialog of dialogs) {
       const entity: any = dialog.entity;
       if (!entity || entity.className !== "Channel" || !entity.broadcast) continue;
+      if (options.only && !options.only.has(idOf(entity.id))) continue;
       targets.push({
         entity,
         channel: {

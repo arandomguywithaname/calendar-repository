@@ -96,9 +96,10 @@ function render(sampled: { channel: Channel; samples: string[] }[]): string {
 
 export async function triage(
   account: TelegramAccount,
-  topics: string[]
+  topics: string[],
+  options: { only?: Set<string> } = {}
 ): Promise<TriageOutcome> {
-  const sampled = await sampleChannels(account);
+  const sampled = await sampleChannels(account, { only: options.only });
   if (sampled.length === 0) {
     return { verdicts: {}, channels: [], everythingExcluded: false };
   }
@@ -149,8 +150,11 @@ export async function triage(
   return {
     verdicts,
     channels,
-    // Saving this would leave the person with a bot that reads nothing and says
-    // nothing about why, so the caller is expected to refuse it.
-    everythingExcluded: judged.length > 0 && judged.every((v) => !v.onTopic),
+    // Only meaningful when the whole list was judged: that is the case where
+    // excluding everything leaves a bot which reads nothing and cannot say why,
+    // and the caller is expected to refuse it. Re-examining a set of channels
+    // that were already off-subject is expected to leave them off-subject, and
+    // refusing to store that would re-examine them on every run forever.
+    everythingExcluded: !options.only && judged.length > 0 && judged.every((v) => !v.onTopic),
   };
 }

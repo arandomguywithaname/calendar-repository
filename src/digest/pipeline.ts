@@ -1,17 +1,21 @@
 import { collectPosts } from "./collector";
 import { summarisePeriod } from "./summarise";
+import { canTriage, triage } from "./triage";
 import {
   advanceMarks,
   allowedChannels,
   getAccount,
   getMarks,
+  getOverrides,
   getTopics,
+  getVerdicts,
   getWatermark,
   listAccounts,
   saveDigest,
+  setVerdicts,
   setWatermark,
 } from "./store";
-import { PeriodDigest } from "./types";
+import { PeriodDigest, TelegramAccount } from "./types";
 
 /**
  * Collect → summarise → store, for one window.
@@ -26,6 +30,48 @@ import { PeriodDigest } from "./types";
 const FIRST_RUN_HOURS = 24;
 /** Never re-read more than this, however long the bot has been asleep. */
 const MAX_LOOKBACK_HOURS = 72;
+/** How long a channel stays excluded before it is looked at again. */
+const PROBATION_DAYS = 7;
+
+/**
+ * Look again at channels that were set aside.
+ *
+ * Without this the filter is a one-way door: a channel that changes what it
+ * publishes stays excluded for good, and nobody finds out, because an excluded
+ * channel produces no evidence of itself. Re-examining costs five posts each
+ * and one model call, a week apart.
+ *
+ * Only the excluded ones. The two errors are not symmetrical — a channel
+ * wrongly let in shows up as noise in a digest and can be dealt with, whereas
+ * one wrongly kept out is silent — so the side that needs periodic rescuing is
+ * the one nobody can see. Channels the person ruled on themselves are left
+ * alone entirely; re-judging those would spend a sample on an answer that is
+ * outranked anyway.
+ *
+ * Nothing is lost while a channel sits excluded: marks only advance for
+ * channels that were read, so one coming back still has its backlog above its
+ * old mark.
+ */
+async function refreshStaleVerdicts(userId: string, account: TelegramAccount, topics: string[]): Promise<void> {
+  const [verdicts, overrides] = await Promise.all([getVerdicts(userId), getOverrides(userId)]);
+  const cutoff = Date.now() - PROBATION_DAYS * 86_400_000;
+
+  const due = Object.entries(verdicts)
+    .filter(([channelId, v]) => !v.onTopic && !overrides[channelId] && Date.parse(v.decidedAt) < cutoff)
+    .map(([channelId]) => channelId);
+  if (due.length === 0) return;
+
+  // A failure here must cost a re-examination, not the digest.
+  try {
+    const { verdicts: fresh } = await triage(account, topics, { only: new Set(due) });
+    if (Object.keys(fresh).length === 0) return;
+    await setVerdicts(userId, fresh);
+    const returning = Object.values(fresh).filter((v) => v.onTopic).length;
+    console.log(`${userId}: re-examined ${due.length} excluded channel(s), ${returning} back on subject`);
+  } catch (err: any) {
+    console.warn(`${userId}: could not re-examine excluded channels (${err?.message || err})`);
+  }
+}
 
 export interface DigestOutcome {
   digest: PeriodDigest;
@@ -58,7 +104,11 @@ export async function runDigest(
   // digested would leave nothing to look at.
   const marks = options.hours ? {} : await getMarks(userId);
 
-  const [allowed, topics] = await Promise.all([allowedChannels(userId), getTopics(userId)]);
+  const topics = await getTopics(userId);
+  // Before the filter is applied, not after: a channel due to come back should
+  // be read in this digest rather than the next one.
+  if (topics.length > 0 && canTriage()) await refreshStaleVerdicts(userId, account, topics);
+  const allowed = await allowedChannels(userId);
 
   const { posts, channels, silent, filtered } = await collectPosts(account, since, {
     perChannel: 35,
