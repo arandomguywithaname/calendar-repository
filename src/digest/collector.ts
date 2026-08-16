@@ -48,6 +48,19 @@ function idOf(value: unknown): string {
  */
 const MAX_PER_CHANNEL = 200;
 
+/**
+ * How many history reads run at once.
+ *
+ * Telegram rate-limits `messages.GetHistory` per account, and a dozen calls
+ * landing as one burst is exactly what trips it — after which every call in
+ * flight just queues behind the same account-wide flood wait, so parallelism
+ * above this buys nothing and costs 30-second sleeps. Triage runs lower
+ * still: fifty small reads in two seconds is the purest burst this program
+ * produces, and it is also the least urgent.
+ */
+const FETCH_CONCURRENCY = 6;
+const SAMPLE_CONCURRENCY = 3;
+
 /** Every broadcast channel the account follows. */
 export async function listChannels(account: TelegramAccount): Promise<Channel[]> {
   const client = await connect(account);
@@ -126,7 +139,7 @@ export async function sampleChannels(
           return null;
         }
       },
-      12
+      SAMPLE_CONCURRENCY
     );
     return sampled.filter((s): s is { channel: Channel; samples: string[] } => s !== null);
   } finally {
@@ -269,7 +282,7 @@ export async function collectQueue(
           return { channel, position, messages: [], posts: [], remaining: Math.max(0, newest - position) };
         }
       },
-      12
+      FETCH_CONCURRENCY
     );
 
     const posts: Post[] = [];
@@ -392,7 +405,7 @@ export async function collectPosts(
           return { channel, messages: [] as any[] };
         }
       },
-      12  // Increased from 5 to 12 for ultra-fast mode
+      FETCH_CONCURRENCY
     );
 
     // Collect posts from all fetched results
