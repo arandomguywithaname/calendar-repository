@@ -4,7 +4,7 @@
 # it holds a long-poll open to Telegram and talks to nobody else — so it needs
 # no public address, and must never be given one that could stop it when idle.
 
-app = "calendar-repository"
+app = "telereader"
 primary_region = "lhr"
 
 [build]
