@@ -225,6 +225,8 @@ export async function startLogin(
     })
   );
 
+  console.log(`SendCode response:`, JSON.stringify({ type: sent.type?.className, nextType: sent.nextType?.className, timeout: sent.timeout }, null, 2));
+
   pending.set(userId, { client, phoneCodeHash: sent.phoneCodeHash, phone, at: Date.now() });
 }
 
