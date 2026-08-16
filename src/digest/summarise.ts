@@ -263,7 +263,10 @@ export async function summarisePeriod(
   }
 
   try {
-    const response: any = await (anthropic().beta.messages.create as any)({
+    // Streamed because the SDK refuses non-streaming requests this large: at
+    // 32k output tokens a response can outlive its 10-minute HTTP timeout.
+    // `finalMessage()` hands back the same completed message a create() would.
+    const stream: any = (anthropic().beta.messages.stream as any)({
       model: MODEL,
       max_tokens: 32000,
       betas: [FALLBACK_BETA],
@@ -281,6 +284,7 @@ export async function summarisePeriod(
         },
       ],
     });
+    const response: any = await stream.finalMessage();
 
     if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
       console.warn(`summarise fell back to lexical grouping: stop_reason=${response.stop_reason}`);
