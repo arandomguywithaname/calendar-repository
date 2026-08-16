@@ -189,8 +189,13 @@ function promiseConcurrent<T, R>(
  * awaiting the code, `completeLogin` finishes it and returns the session string.
  */
 const pending = new Map<string, { client: any; phoneCodeHash: string; phone: string; at: number; sendCodeResponse?: any }>();
-const qrPending = new Map<string, { client: any; at: number; qrToken: Buffer }>();
+const qrPending = new Map<
+  string,
+  { client: any; at: number; token: Buffer; apiId: number; apiHash: string }
+>();
 const LOGIN_TTL_MS = 10 * 60 * 1000;
+/** Shorter than the code flow: a picture on screen is watched, not waited on. */
+const QR_TTL_MS = 3 * 60 * 1000;
 
 function sweep() {
   const now = Date.now();
@@ -209,8 +214,11 @@ export async function startLogin(
   phone: string
 ): Promise<{ type: string; nextType?: string; timeout?: number }> {
   sweep();
-  // A second /connect must not strand the first attempt's open socket.
+  // A second /connect must not strand the first attempt's open socket — and an
+  // abandoned QR is worse than a stranded socket, because its watcher would
+  // still be able to complete a sign-in behind this one.
   await cancelLogin(userId);
+  await cancelQrLogin(userId);
 
   const { TelegramClient, Api, StringSession } = await mtproto();
   const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
@@ -340,18 +348,43 @@ export async function cancelLogin(userId: string): Promise<void> {
 /* --------------------------------- QR login -------------------------------- */
 
 /**
- * Start QR-code login. Returns QR code as data URL that can be displayed to user.
- * User scans with another device to log in.
+ * Signing in by showing a picture instead of receiving a code.
+ *
+ * Worth being precise about who does what, because the API names mislead:
+ * `auth.exportLoginToken` is called by the *new* client (us) to mint a token,
+ * and `auth.acceptLoginToken` is called by the *already signed-in* device that
+ * scans the picture — never by us. Our half is to mint the token, draw it, and
+ * then keep re-exporting until Telegram answers with an authorisation instead
+ * of another token.
+ *
+ * This exists because the phone-code path can be undeliverable: when Telegram
+ * chooses `SentCodeTypeApp` it puts the code inside an existing session, and if
+ * that session isn't reachable there is no way to receive it. A QR needs no
+ * delivery at all.
  */
-export async function startQrLogin(userId: string, apiId: number, apiHash: string): Promise<string> {
+
+export interface QrCode {
+  png: Buffer;
+  /** What the picture encodes — offered as text so a scan-less client can still use it. */
+  url: string;
+}
+
+/** A token is short-lived; the picture has to be redrawn when Telegram rotates it. */
+function qrUrl(token: Buffer): string {
+  return `tg://login?token=${token.toString("base64url")}`;
+}
+
+async function renderQr(token: Buffer): Promise<QrCode> {
+  const url = qrUrl(token);
+  const png = await QRCode.toBuffer(url, { width: 512, margin: 2 });
+  return { png, url };
+}
+
+export async function startQrLogin(userId: string, apiId: number, apiHash: string): Promise<QrCode> {
   sweep();
-  // Cancel any existing login attempt
+  // Neither login flow may leave the other's socket open.
   await cancelLogin(userId);
-  const qrEntry = qrPending.get(userId);
-  if (qrEntry) {
-    await qrEntry.client.disconnect().catch(() => {});
-    qrPending.delete(userId);
-  }
+  await cancelQrLogin(userId);
 
   const { TelegramClient, Api, StringSession } = await mtproto();
   const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
@@ -359,72 +392,100 @@ export async function startQrLogin(userId: string, apiId: number, apiHash: strin
   });
   await client.connect();
 
-  // Export a login token that can be used for QR login
-  const tokenExport: any = await client.invoke(
-    new Api.auth.ExportLoginToken({
-      apiId,
-      apiHash,
-      exceptIds: [],
-    })
+  const exported: any = await client.invoke(
+    new Api.auth.ExportLoginToken({ apiId, apiHash, exceptIds: [] })
   );
 
-  const token = tokenExport.token;
-  qrPending.set(userId, { client, at: Date.now(), qrToken: Buffer.from(token) });
+  const token = Buffer.from(exported.token);
+  qrPending.set(userId, { client, at: Date.now(), token, apiId, apiHash });
+  return renderQr(token);
+}
 
-  // Generate QR code image from the token
-  const qrDataUrl = await QRCode.toDataURL(token.toString("base64"));
-  return qrDataUrl;
+async function finishQr(userId: string, authorization: any): Promise<CompletedLogin> {
+  const entry = qrPending.get(userId);
+  if (!entry) throw new Error("That QR login expired — send /qr and start again.");
+
+  const me: any = authorization?.user || (await entry.client.getMe());
+  const session = String(entry.client.session.save());
+  await entry.client.disconnect().catch(() => {});
+  qrPending.delete(userId);
+
+  return {
+    session,
+    userId: idOf(me?.id),
+    name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
+  };
 }
 
 /**
- * Check if QR login has completed. Returns session string if successful.
+ * Block until the picture is scanned, redrawing it whenever Telegram rotates
+ * the token.
+ *
+ * `onRefresh` is how the caller keeps the displayed picture current: tokens
+ * expire in well under a minute, so a QR sent once and never updated is dead
+ * long before anyone gets their other device out.
  */
-export async function completeQrLogin(userId: string): Promise<CompletedLogin | null> {
+export async function waitForQrLogin(
+  userId: string,
+  onRefresh?: (qr: QrCode) => Promise<void>
+): Promise<CompletedLogin> {
   const entry = qrPending.get(userId);
-  if (!entry) return null;
+  if (!entry) throw new Error("No QR login in progress — send /qr to start one.");
 
-  try {
-    // Accept the login token that was scanned via QR code
-    const result: any = await entry.client.invoke(
-      new Api.auth.AcceptLoginToken({ token: entry.qrToken })
-    );
+  const { Api } = await mtproto();
+  const { client, apiId, apiHash } = entry;
+  const deadline = Date.now() + QR_TTL_MS;
 
-    // result should be of type auth.Authorization which contains the user info
-    const me: any = result.user || await entry.client.getMe();
-    const session = String(entry.client.session.save());
-    await entry.client.disconnect();
-    qrPending.delete(userId);
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+    // /cancel drops the entry; that is the signal to stop, not an error.
+    if (!qrPending.has(userId)) throw new Error("QR_CANCELLED");
 
-    return {
-      session,
-      userId: idOf(me?.id),
-      name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
-    };
-  } catch (err: any) {
-    // Login not complete yet, or error
-    const errorMsg = err?.errorMessage || err?.message || String(err);
-
-    // Specific errors to handle
-    if (/SESSION_PASSWORD_NEEDED|2FA/i.test(errorMsg)) {
-      throw new Error("This account has two-step verification. Use /connect with phone code instead.");
-    }
-    if (/USER_ALREADY_PARTICIPANT/i.test(errorMsg) || /ACCEPT_FAILED/i.test(errorMsg)) {
-      // Token not yet used/scanned
-      return null;
-    }
-
-    // Other errors are real failures
-    if (!/UNKNOWN/i.test(errorMsg) && err?.errorMessage) {
+    let result: any;
+    try {
+      result = await client.invoke(new Api.auth.ExportLoginToken({ apiId, apiHash, exceptIds: [] }));
+    } catch (err: any) {
+      const message = err?.errorMessage || err?.message || String(err);
+      // The scan succeeded, but the account is behind a second factor. QR
+      // carries no way to ask for it, so the phone-code flow has to take over.
+      if (/SESSION_PASSWORD_NEEDED/i.test(message)) {
+        await cancelQrLogin(userId);
+        throw new Error(
+          "That account has two-step verification, which I can't finish over QR. Use /connect instead — it asks for the password."
+        );
+      }
       throw err;
     }
-    return null;
+
+    if (result.className === "auth.LoginTokenSuccess") {
+      return finishQr(userId, result.authorization);
+    }
+
+    // The account lives on another data centre: move, then present the token
+    // there rather than re-minting it.
+    if (result.className === "auth.LoginTokenMigrateTo") {
+      await client._switchDC(result.dcId);
+      const imported: any = await client.invoke(
+        new Api.auth.ImportLoginToken({ token: result.token })
+      );
+      return finishQr(userId, imported?.authorization ?? imported);
+    }
+
+    // Still auth.LoginToken — nobody has scanned it yet. Redraw if it rotated.
+    const token = Buffer.from(result.token);
+    if (!token.equals(entry.token)) {
+      entry.token = token;
+      if (onRefresh) await onRefresh(await renderQr(token));
+    }
   }
+
+  await cancelQrLogin(userId);
+  throw new Error("QR_EXPIRED");
 }
 
 export function qrLoginPending(userId: string): boolean {
-  sweep();
   const entry = qrPending.get(userId);
-  if (entry && Date.now() - entry.at > LOGIN_TTL_MS) {
+  if (entry && Date.now() - entry.at > QR_TTL_MS) {
     entry.client.disconnect().catch(() => {});
     qrPending.delete(userId);
     return false;

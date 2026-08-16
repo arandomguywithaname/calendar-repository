@@ -1,4 +1,15 @@
-import { cancelLogin, CompletedLogin, listChannels, startLogin, completeLogin, loginPending, startQrLogin, completeQrLogin, qrLoginPending, cancelQrLogin } from "./collector";
+import {
+  cancelLogin,
+  cancelQrLogin,
+  CompletedLogin,
+  completeLogin,
+  listChannels,
+  loginPending,
+  qrLoginPending,
+  startLogin,
+  startQrLogin,
+  waitForQrLogin,
+} from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest } from "./format";
 import { runDigest } from "./pipeline";
@@ -96,6 +107,47 @@ async function send(chatId: number | string, text: string): Promise<void> {
 
 async function typing(chatId: number | string): Promise<void> {
   await call("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+}
+
+/**
+ * Pictures go up as multipart, not as JSON.
+ *
+ * `sendPhoto` takes a file id, an http URL, or an upload — and nothing else. A
+ * `data:` URL looks like it ought to work and fails with "wrong remote file
+ * identifier", because Telegram reads any string as an id to look up rather
+ * than as bytes to decode.
+ */
+async function upload(method: string, fields: Record<string, string>, file: { field: string; data: Buffer; name: string }): Promise<any> {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  form.append(file.field, new Blob([new Uint8Array(file.data)], { type: "image/png" }), file.name);
+
+  const response = await fetch(`${API}/bot${botToken()}/${method}`, { method: "POST", body: form });
+  const data = await response.json().catch(() => null);
+  if (!data?.ok) throw new Error(`${method}: ${data?.description || response.status}`);
+  return data.result;
+}
+
+async function sendPhoto(chatId: number, png: Buffer, caption: string): Promise<number> {
+  const result = await upload(
+    "sendPhoto",
+    { chat_id: String(chatId), caption, parse_mode: "HTML" },
+    { field: "photo", data: png, name: "qr.png" }
+  );
+  return result.message_id;
+}
+
+/** Replacing the picture in place, so a rotated QR doesn't add a new message. */
+async function replacePhoto(chatId: number, messageId: number, png: Buffer, caption: string): Promise<void> {
+  await upload(
+    "editMessageMedia",
+    {
+      chat_id: String(chatId),
+      message_id: String(messageId),
+      media: JSON.stringify({ type: "photo", media: "attach://qr", caption, parse_mode: "HTML" }),
+    },
+    { field: "qr", data: png, name: "qr.png" }
+  );
 }
 
 /**
@@ -274,7 +326,19 @@ async function onCode(
   await onDigest(userId, chatId, []);
 }
 
-async function onQr(userId: string, chatId: number, args: string[]) {
+const QR_CAPTION =
+  "<b>Scan this with Telegram on another device</b>\n\nSettings → Devices → Link Desktop Device, then point the camera here. I refresh the picture as Telegram rotates it, so scan whatever is showing.\n\n/cancel stops.";
+
+async function onQr(userId: string, chatId: number, args: string[]): Promise<void> {
+  const existing = await getAccount(userId);
+  if (existing) {
+    await send(
+      chatId,
+      "You're already connected. /digest reads what's new; /forget removes my copy of your session if you want to start over."
+    );
+    return;
+  }
+
   const env = credentials();
   const apiId = args[0] ? Number(args[0]) : env?.apiId;
   const apiHash = args[1] || env?.apiHash;
@@ -282,48 +346,75 @@ async function onQr(userId: string, chatId: number, args: string[]) {
   if (!apiId || !apiHash) {
     await send(
       chatId,
-      "I need Telegram API credentials. Get them at https://my.telegram.org → API development tools, then either set TELEGRAM_API_ID and TELEGRAM_API_HASH where I'm running, or send:\n\n<code>/qr 123456 your_api_hash</code>"
+      "I need Telegram API credentials before I can sign you in. Get them at https://my.telegram.org → API development tools, then either set TELEGRAM_API_ID and TELEGRAM_API_HASH where I'm running, or send:\n\n<code>/qr 123456 your_api_hash</code>"
     );
     return;
   }
 
   await typing(chatId);
+  let messageId: number;
   try {
-    const qrDataUrl = await startQrLogin(userId, apiId, apiHash);
-    stages.set(userId, { name: "awaiting_qr", apiId, apiHash });
-
-    // Send QR code as image using Telegram Bot API
-    await call("sendPhoto", {
-      chat_id: chatId,
-      photo: qrDataUrl,
-      caption: "Scan this QR code with another device to sign in. You have 10 minutes.\n\n/cancel to stop.",
-    });
+    const qr = await startQrLogin(userId, apiId, apiHash);
+    messageId = await sendPhoto(chatId, qr.png, QR_CAPTION);
   } catch (err: any) {
     stages.set(userId, { name: "idle" });
-    await send(chatId, `Error: ${escapeHtml(err?.message || String(err))}\n\n/connect to try phone code instead.`);
-  }
-}
-
-async function checkQrLogin(userId: string, chatId: number) {
-  const stage = stageOf(userId) as any;
-  if (stage.name !== "awaiting_qr") return;
-
-  const login = await completeQrLogin(userId);
-  if (!login) {
-    await send(chatId, "Still waiting for you to scan the QR code...");
+    await cancelQrLogin(userId);
+    await send(
+      chatId,
+      `Couldn't start a QR login: ${escapeHtml(err?.errorMessage || err?.message || String(err))}\n\n/connect signs in with a phone code instead.`
+    );
     return;
   }
 
-  stages.set(userId, { name: "idle" });
-  await setAccount(userId, {
-    apiId: stage.apiId,
-    apiHash: stage.apiHash,
-    session: login.session,
-    phone: "qr-login",
-  });
+  stages.set(userId, { name: "awaiting_qr", apiId, apiHash });
+  // Deliberately not awaited: the scan happens on another device over minutes,
+  // and holding the per-user lock that long would block even /cancel.
+  void watchQrScan(userId, chatId, apiId, apiHash, messageId);
+}
 
-  await send(chatId, `Signed in as ${escapeHtml(login.name)}. Reading the last day of your channels now — this takes a minute.`);
-  await onDigest(userId, chatId, []);
+async function watchQrScan(
+  userId: string,
+  chatId: number,
+  apiId: number,
+  apiHash: string,
+  messageId: number
+): Promise<void> {
+  let login: CompletedLogin;
+  try {
+    login = await waitForQrLogin(userId, async (qr) => {
+      await replacePhoto(chatId, messageId, qr.png, QR_CAPTION).catch(() => {});
+    });
+  } catch (err: any) {
+    const message = err?.errorMessage || err?.message || String(err);
+    if (stageOf(userId).name === "awaiting_qr") stages.set(userId, { name: "idle" });
+    // /cancel already said its piece.
+    if (message === "QR_CANCELLED") return;
+    await send(
+      chatId,
+      message === "QR_EXPIRED"
+        ? "That QR went unscanned and expired. /qr shows a fresh one."
+        : `QR sign-in failed: ${escapeHtml(message)}\n\n/connect signs in with a phone code instead.`
+    ).catch(() => {});
+    return;
+  }
+
+  await setAccount(userId, { apiId, apiHash, session: login.session, phone: "" });
+  stages.set(userId, { name: "idle" });
+
+  // The digest can run for a while; take the same lock a command would.
+  if (busy.has(userId)) {
+    await send(chatId, `Signed in as ${escapeHtml(login.name)}. Send /digest when you're ready.`).catch(() => {});
+    return;
+  }
+  busy.add(userId);
+  try {
+    await send(chatId, `Signed in as ${escapeHtml(login.name)}. Reading the last day of your channels now — this takes a minute.`);
+    await onDigest(userId, chatId, []);
+  } catch (err: any) {
+    await send(chatId, `Something broke: ${escapeHtml(err?.message || String(err))}`).catch(() => {});
+  } finally {
+    busy.delete(userId);
+  }
 }
 
 async function onDigest(userId: string, chatId: number, args: string[]): Promise<void> {
@@ -415,7 +506,10 @@ async function handleText(
   const stage = stageOf(userId);
   if (!isCommand && stage.name === "awaiting_phone") return onPhone(userId, chatId, stage, trimmed);
   if (!isCommand && stage.name === "awaiting_code") return onCode(userId, chatId, stage, trimmed, messageId);
-  if (!isCommand && stage.name === "awaiting_qr") return checkQrLogin(userId, chatId);
+  if (!isCommand && stage.name === "awaiting_qr") {
+    await send(chatId, "Still waiting for that QR to be scanned — /cancel stops, /connect switches to a phone code.");
+    return;
+  }
 
   switch (command) {
     case "/start":
@@ -445,6 +539,7 @@ async function handleText(
       await clearAccount(userId);
       stages.set(userId, { name: "idle" });
       await cancelLogin(userId);
+      await cancelQrLogin(userId);
       await send(chatId, "Session deleted. Your digests remain — /forget doesn't touch them. /connect to sign in again.");
       return;
   }
@@ -456,6 +551,11 @@ async function handleText(
 
   if (loginPending(userId)) {
     await send(chatId, "I'm still waiting on your login code — send it with dashes, or /cancel.");
+    return;
+  }
+
+  if (qrLoginPending(userId)) {
+    await send(chatId, "I'm still waiting for that QR to be scanned — /cancel stops it.");
     return;
   }
 
