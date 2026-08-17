@@ -13,6 +13,7 @@ import {
 } from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
+import { mcpUrl } from "./mcp";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
 import { PeriodDigest, TelegramAccount } from "./types";
@@ -26,6 +27,7 @@ import {
   getAccount,
   getChat,
   getDigest,
+  getOrCreateMcpToken,
   getOverrides,
   getTopics,
   getVerdicts,
@@ -35,6 +37,7 @@ import {
   listDigests,
   openDigest,
   releaseReadMark,
+  rotateMcpToken,
   setAccount,
   setOverride,
   setTopics,
@@ -242,10 +245,36 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /history — the digests I'm holding
 /channels — what I read, what I skip, and why
 /include, /exclude — overrule me on one channel
+/mcp — a connector URL so your own claude.ai can read these digests
 /forget — delete my copy of your session
 /reset — forget our conversation, keep the digests`;
 
 /* -------------------------------- commands -------------------------------- */
+
+/**
+ * The connector URL for the person's own Claude.
+ *
+ * The URL is the credential — whoever holds it reads these digests — so it is
+ * only ever spoken here, in the person's private chat with the bot, and
+ * `/mcp new` is the revocation: it deletes the old token, and every saved
+ * copy of the old URL stops working at once.
+ */
+async function onMcp(userId: string, chatId: number, args: string[]): Promise<void> {
+  const rotate = args[0] === "new";
+  const token = rotate ? await rotateMcpToken(userId) : await getOrCreateMcpToken(userId);
+  const url = mcpUrl(token);
+  const lines = [
+    rotate
+      ? "New connector URL — the old one no longer works:"
+      : "Your personal connector URL for claude.ai:",
+    `<code>${escapeHtml(url)}</code>`,
+    "",
+    "In claude.ai: Settings → Connectors → Add custom connector → paste this URL. Your Claude can then read these digests in any conversation — ask it about trends, or anything the channels covered.",
+    "",
+    "Treat the URL like a password: anyone who has it can read your digests (and nothing else — it can't mark anything read or touch Telegram). <code>/mcp new</code> replaces it if it leaks.",
+  ];
+  await send(chatId, lines.join("\n"));
+}
 
 async function onConnect(userId: string, chatId: number, args: string[]): Promise<void> {
   const existing = await getAccount(userId);
@@ -1017,6 +1046,8 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/mcp":
+      return onMcp(userId, chatId, args);
     case "/reset":
       await clearChat(userId);
       await send(chatId, "Conversation forgotten. The digests are still here.");
@@ -1175,6 +1206,7 @@ export async function startBot(): Promise<void> {
       { command: "qr", description: "sign in by scanning a QR code" },
       { command: "include", description: "always read a channel" },
       { command: "exclude", description: "never read a channel" },
+      { command: "mcp", description: "connector URL for your claude.ai" },
       { command: "reset", description: "forget our conversation" },
       { command: "forget", description: "delete my copy of your session" },
     ],

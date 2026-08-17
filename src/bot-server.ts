@@ -1,5 +1,6 @@
 import * as dotenv from "dotenv";
 import { startBot, stopBot, sweepQueue } from "./digest/bot";
+import { startMcpServer } from "./digest/mcp";
 import { envPath } from "./digest/paths";
 import { canPrompt, isConfigured, runSetup } from "./digest/setup";
 
@@ -97,6 +98,11 @@ async function main(): Promise<void> {
     const timer = setInterval(sweepDigests, INTERVAL_HOURS * 3600_000);
     timer.unref();
   }
+
+  // The MCP connector — claude.ai reading the digests — listens beside the
+  // long poll. It shares nothing with it but the store, and a port that fails
+  // to bind costs a warning, never the bot.
+  startMcpServer();
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {

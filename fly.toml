@@ -1,8 +1,10 @@
 # Fly.io config for the digest bot.
 #
-# Note what is absent: there is no [http_service]. This is not a web server —
-# it holds a long-poll open to Telegram and talks to nobody else — so it needs
-# no public address, and must never be given one that could stop it when idle.
+# The [http_service] exists for exactly one route: the MCP connector that lets
+# the person's own claude.ai read their digests. The bot's real work is still
+# the Telegram long poll, which is why the auto-stop machinery is pinned off —
+# a machine stopped "because no HTTP traffic" would also stop polling Telegram,
+# and the bot would look dead precisely when nobody was using the connector.
 
 app = "telereader"
 primary_region = "lhr"
@@ -11,7 +13,11 @@ primary_region = "lhr"
   dockerfile = "Dockerfile"
 
 [http_service]
-  disabled = true
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
 
 [env]
   DIGEST_DATA_DIR = "/data"

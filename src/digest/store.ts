@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { dataDir } from "./paths";
@@ -47,6 +48,15 @@ interface DigestStoreShape {
    * that no longer applies; it must not wipe these, which were not.
    */
   overrides: Record<string, Record<string, "include" | "exclude">>;
+  /**
+   * MCP access token -> userId.
+   *
+   * The token *is* the authentication: it rides in the connector URL, because
+   * that is the only credential a claude.ai custom connector can carry without
+   * an OAuth server. Keyed by token so a lookup on every request is O(1) and a
+   * token can be revoked by deleting one key.
+   */
+  mcpTokens: Record<string, string>;
 }
 
 /**
@@ -78,6 +88,7 @@ function empty(): DigestStoreShape {
     topics: {},
     verdicts: {},
     overrides: {},
+    mcpTokens: {},
   };
 }
 
@@ -440,6 +451,43 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* ------------------------------ MCP tokens -------------------------------- */
+
+/**
+ * The token that lets this person's Claude read their digests over MCP.
+ *
+ * One per user, created on first ask and stable after that — the person pastes
+ * it into claude.ai once, and regenerating it on every /mcp would break the
+ * connector they already saved. Rotation is deliberate: /mcp new deletes the
+ * old token and mints another, which is the revocation story for a leaked URL.
+ */
+export async function getOrCreateMcpToken(userId: string): Promise<string> {
+  return mutate((store) => {
+    for (const [token, owner] of Object.entries(store.mcpTokens)) {
+      if (owner === userId) return token;
+    }
+    const token = crypto.randomBytes(24).toString("base64url");
+    store.mcpTokens[token] = userId;
+    return token;
+  });
+}
+
+export async function rotateMcpToken(userId: string): Promise<string> {
+  return mutate((store) => {
+    for (const [token, owner] of Object.entries(store.mcpTokens)) {
+      if (owner === userId) delete store.mcpTokens[token];
+    }
+    const token = crypto.randomBytes(24).toString("base64url");
+    store.mcpTokens[token] = userId;
+    return token;
+  });
+}
+
+export async function userForMcpToken(token: string): Promise<string | undefined> {
+  if (!token) return undefined;
+  return (await load()).mcpTokens[token];
 }
 
 /* --------------------------------- chat ---------------------------------- */
