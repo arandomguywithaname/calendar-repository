@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { wellFormed } from "./format";
-import { listDigests } from "./store";
+import { getFocus, listDigests } from "./store";
 import { PeriodDigest } from "./types";
 
 /**
@@ -20,8 +20,12 @@ import { PeriodDigest } from "./types";
  */
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
-/** Enough history for "and before that?" without unbounded growth. */
-const DIGEST_WINDOW = 30;
+/**
+ * Deep enough for a trend question, not just "and before that?". The digests
+ * block is cached, so the depth is paid for once per new digest rather than
+ * once per question — sixty summaries cost far less to hold than they look.
+ */
+const DIGEST_WINDOW = 60;
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -44,8 +48,17 @@ When a topic matters, name its channels so they can go to the source. Where a di
 grouped without a model, say that stories phrased differently may not have been merged, rather than
 implying the deduplication was thorough.
 
+The digests are dated and run in chronological order, and they are deduplicated across each other: a
+story appears in the digest where it was first told, later developments appear as "Update:" topics,
+and pure repeats are omitted. Questions about tendencies and trends — "what's building up around X?",
+"how did Y evolve over the month?" — are therefore fully answerable and welcome: trace a story from
+its first telling through its updates, compare periods, name what appeared, what intensified, and
+what went quiet. A topic absent from later digests has not necessarily died — repeats are cut on
+purpose — so distinguish "no longer mentioned" from "explicitly reversed".
+
 These digests come from a queue: the person's unread backlog is digested oldest-first, one step at a
-time, and each step waits for their verdict before the next is built. Two tools drive that queue.
+time, and each step waits for their verdict before the next is built. Three tools drive that queue,
+and a fourth (update_focus) records what the person wants their digests to prioritise.
 Everything else — any question about what the digests say — is answered as text, never with a tool.
 When they close a digest and ask for the next in one breath ("прочитано, дальше"), call both tools.`;
 
@@ -96,6 +109,27 @@ const TOOLS = [
       "asked about the digest.",
     input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
   },
+  {
+    name: "update_focus",
+    description:
+      "Rewrite the person's standing editorial brief — what their future digests should prioritise and " +
+      "what should be demoted to one-line mentions. Call this when they state a lasting preference: " +
+      "«меньше про бенчмарки», «не показывай анонсы моделей», «добавь интерес к ценам на токены». " +
+      "Their current brief is shown in the system prompt; pass the COMPLETE new text with their change " +
+      "merged in, keeping everything they didn't ask to change, in their language. Never call it for a " +
+      "one-off question about the digests — only for preferences meant to persist.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        focus: {
+          type: "string" as const,
+          description: "The complete new brief. An empty string clears it entirely.",
+        },
+      },
+      required: ["focus"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /**
@@ -111,6 +145,8 @@ export interface DigestReply {
   advance?: boolean;
   /** A single channel's digest was asked for, by this (possibly partial) name. */
   channelQuery?: string;
+  /** The complete new editorial brief; empty string means "clear it". */
+  focusUpdate?: string;
 }
 
 function renderDigests(digests: PeriodDigest[]): string {
@@ -136,6 +172,7 @@ export async function answerFromDigests(
   history: { role: "user" | "assistant"; content: string }[]
 ): Promise<DigestReply> {
   const digests = (await listDigests(userId)).slice(0, DIGEST_WINDOW);
+  const focus = await getFocus(userId);
 
   if (digests.length === 0) {
     return {
@@ -152,7 +189,8 @@ export async function answerFromDigests(
   try {
     const response: any = await (anthropic().beta.messages.create as any)({
       model: MODEL,
-      max_tokens: 4000,
+      // Thinking and text share this cap, and a trend answer needs both.
+      max_tokens: 8000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
       // The digests belong in the system block, not the final user turn.
@@ -168,8 +206,20 @@ export async function answerFromDigests(
           text: `<digests>\n${wellFormed(renderDigests(digests))}\n</digests>`,
           cache_control: { type: "ephemeral" },
         },
+        // After the breakpoint on purpose: the focus changes on a spoken whim,
+        // and sitting past the cached digests it can do so without re-billing
+        // them. The block is always present so its absence never shifts bytes.
+        {
+          type: "text",
+          text: focus
+            ? `The person's standing brief for what their digests prioritise:\n"${wellFormed(focus)}"\nLet it colour your answers too — lead with what they can use.`
+            : "The person has not written a standing brief for their digests yet.",
+        },
       ],
-      output_config: { effort: "medium" },
+      // "high", not "medium": trend questions ask the model to hold sixty
+      // digests against each other, and the budget must fit a synthesis, not
+      // just a lookup.
+      output_config: { effort: "high" },
       tools: TOOLS,
       messages: [
         ...history.map((t) => ({ role: t.role, content: t.content })),
@@ -190,7 +240,13 @@ export async function answerFromDigests(
     const channelQuery = String(
       calls.find((b: any) => b.name === "channel_digest")?.input?.channel || ""
     ).trim() || undefined;
-    if (markRead || advance || channelQuery) return { markRead, advance, channelQuery };
+    // Presence, not truthiness: an empty string is the "clear my brief" call
+    // and must survive to the caller, so undefined alone means "not asked".
+    const focusCall = calls.find((b: any) => b.name === "update_focus");
+    const focusUpdate = focusCall ? wellFormed(String(focusCall.input?.focus ?? "")).trim() : undefined;
+    if (markRead || advance || channelQuery || focusUpdate !== undefined) {
+      return { markRead, advance, channelQuery, focusUpdate };
+    }
 
     return { text: response.content.find((b: any) => b.type === "text")?.text || "" };
   } catch (err: any) {

@@ -5,6 +5,7 @@ import {
   advanceMarks,
   allowedChannels,
   getAccount,
+  getFocus,
   getMarks,
   getOverrides,
   getTopics,
@@ -269,7 +270,8 @@ async function finishStep(
     from,
     to,
     subjects,
-    await priorTopics(userId)
+    await priorTopics(userId),
+    await getFocus(userId)
   );
   // With a model configured, a degraded summary is a failure, not a result.
   // Saving it would spend this stretch of the backlog — irreversibly, marks
@@ -323,7 +325,9 @@ async function runRereadDigest(
   // Deliberately no prior-topics memory here: an explicit re-read means "show
   // me this window again", and suppressing already-told stories would answer a
   // request the person did not make.
-  const digest = await summarisePeriod(userId, posts, channels, since, now, topics);
+  // The focus still applies on a re-read — "show me this window again" is a
+  // request about the window, not a request to suspend the person's brief.
+  const digest = await summarisePeriod(userId, posts, channels, since, now, topics, [], await getFocus(userId));
   digest.coverage = undefined;
   digest.closedAt = new Date().toISOString();
 

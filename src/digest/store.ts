@@ -57,6 +57,16 @@ interface DigestStoreShape {
    * token can be revoked by deleting one key.
    */
   mcpTokens: Record<string, string>;
+  /**
+   * userId -> their editorial brief, in their own words.
+   *
+   * Different layer from `topics`: topics decide which channels are opened at
+   * all, the focus decides what within them deserves a topic and what folds
+   * into a one-line mention. Free text on purpose — the model applies a stated
+   * criterion far better than any flag set could encode one, and updating it
+   * is a sentence, not a schema change.
+   */
+  focuses: Record<string, string>;
 }
 
 /**
@@ -75,8 +85,13 @@ function storePath(): string {
 const BLOB_STORE = "inbox-reader";
 const BLOB_KEY = "digest-store";
 const MAX_CHAT_TURNS = 24;
-/** Roughly two months of daily digests per person. */
-const MAX_DIGESTS_PER_USER = 60;
+/**
+ * Deep enough that a trend question spanning months has material to stand on.
+ * Digests are compressed text — a couple of hundred of them is still a small
+ * file — and during a heavy backlog catch-up they are born fast, so a tight
+ * cap here would silently eat the early history a trend answer needs most.
+ */
+const MAX_DIGESTS_PER_USER = 240;
 
 function empty(): DigestStoreShape {
   return {
@@ -89,6 +104,7 @@ function empty(): DigestStoreShape {
     verdicts: {},
     overrides: {},
     mcpTokens: {},
+    focuses: {},
   };
 }
 
@@ -451,6 +467,21 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* --------------------------------- focus ---------------------------------- */
+
+export async function getFocus(userId: string): Promise<string> {
+  return (await load()).focuses[userId] || "";
+}
+
+/** Empty text clears it. Like topics and overrides, /forget leaves it alone. */
+export async function setFocus(userId: string, text: string): Promise<void> {
+  await mutate((store) => {
+    const trimmed = text.trim();
+    if (trimmed) store.focuses[userId] = trimmed;
+    else delete store.focuses[userId];
+  });
 }
 
 /* ------------------------------ MCP tokens -------------------------------- */

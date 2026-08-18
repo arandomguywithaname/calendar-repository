@@ -3,7 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import express from "express";
 import { z } from "zod";
 import { wellFormed } from "./format";
-import { getDigest, listDigests, userForMcpToken } from "./store";
+import { getDigest, getFocus, listDigests, setFocus, userForMcpToken } from "./store";
 import { PeriodDigest } from "./types";
 
 /**
@@ -13,8 +13,10 @@ import { PeriodDigest } from "./types";
  * over streamable HTTP — and from then on any conversation there can pull
  * these digests in and read them with everything that Claude knows about its
  * person. This module is that server: three read-only tools over the store,
- * nothing more. It writes nothing, it triggers no collection, and it cannot
- * mark anything read — the queue's controls stay in Telegram, where their
+ * plus one narrow write — the person's editorial brief, so "stop showing me
+ * model announcements" said to their own Claude persists into the bot's
+ * summariser. Nothing else writes: no collection is triggered and nothing can
+ * be marked read — the queue's controls stay in Telegram, where their
  * confirmations live.
  *
  * Authentication is the URL. A custom connector carries no header of ours and
@@ -158,6 +160,47 @@ function buildServer(userId: string): McpServer {
       if (hits.length === 0) return text(`Nothing in the digests matches "${query}".`);
       hits.sort((a, b) => b.score - a.score);
       return text(hits.slice(0, 20).map((h) => h.line).join("\n\n"));
+    }
+  );
+
+  server.registerTool(
+    "get_focus",
+    {
+      title: "Read the standing brief",
+      description:
+        "Read the person's standing editorial brief — the free-text preference that tells the digest " +
+        "summariser what to prioritise and what to shrink to one-line mentions. Read it before calling " +
+        "update_focus, so a change merges into what is already there instead of overwriting it.",
+      inputSchema: {},
+    },
+    async () => {
+      const focus = await getFocus(userId);
+      return text(focus ? `Current brief:\n"${wellFormed(focus)}"` : "No brief is set — digests cover everything their subjects allow.");
+    }
+  );
+
+  server.registerTool(
+    "update_focus",
+    {
+      title: "Update the standing brief",
+      description:
+        "Replace the person's standing editorial brief. Call this only when they state a lasting " +
+        "preference about their digests — 'stop showing me model announcements', 'add interest in token " +
+        "pricing' — never for a one-off question. Read the current brief with get_focus first and pass " +
+        "the COMPLETE merged text in the person's own language; an empty string clears the brief. The " +
+        "change applies from the next digest the bot builds.",
+      inputSchema: {
+        focus: z.string().describe("The complete new brief, or an empty string to clear it."),
+      },
+    },
+    async ({ focus }) => {
+      const cleaned = wellFormed(focus).trim();
+      await setFocus(userId, cleaned);
+      return text(
+        cleaned
+          ? `Brief updated. Future digests will read for:\n"${cleaned}"`
+          : "Brief cleared — future digests cover everything their subjects allow."
+      );
     }
   );
 

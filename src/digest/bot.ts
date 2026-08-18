@@ -27,6 +27,7 @@ import {
   getAccount,
   getChat,
   getDigest,
+  getFocus,
   getOrCreateMcpToken,
   getOverrides,
   getTopics,
@@ -39,6 +40,7 @@ import {
   releaseReadMark,
   rotateMcpToken,
   setAccount,
+  setFocus,
   setOverride,
   setTopics,
   setVerdicts,
@@ -239,6 +241,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
 /topics — name the subjects you read for, so I skip the rest
+/focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
 /last — the most recent digest
@@ -250,6 +253,38 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /reset — forget our conversation, keep the digests`;
 
 /* -------------------------------- commands -------------------------------- */
+
+/**
+ * The standing editorial brief — what digests should prioritise.
+ *
+ * Deliberately free text: /topics is a hard filter over channels, while this
+ * is a soft criterion applied inside them, and only words can carry "things I
+ * can take into use, not launch announcements". Spoken phrases in chat edit
+ * the same text through the update_focus tool.
+ */
+async function onFocus(userId: string, chatId: number, args: string[]): Promise<void> {
+  if (args.length === 0) {
+    const focus = await getFocus(userId);
+    await send(
+      chatId,
+      focus
+        ? `Your digests currently read for:\n<i>${escapeHtml(focus)}</i>\n\n<code>/focus текст</code> replaces it, <code>/focus -</code> clears it. Or just tell me in plain words — «меньше про бенчмарки».`
+        : `No brief set — digests cover everything their subjects allow.\n\nWrite one in your own words, e.g.:\n<code>/focus интересно применимое: агенты, организация труда, экономика токенов; анонсы очередных моделей — одной строкой</code>`
+    );
+    return;
+  }
+  if (args.length === 1 && args[0] === "-") {
+    await setFocus(userId, "");
+    await send(chatId, "Brief cleared — digests go back to covering everything their subjects allow.");
+    return;
+  }
+  const text = args.join(" ");
+  await setFocus(userId, text);
+  await send(
+    chatId,
+    `Noted. From the next digest on, I'll read for:\n<i>${escapeHtml(text)}</i>\n\nStories outside it get one line in «Briefly» rather than vanishing, so you can catch me misjudging. /focus - clears it.`
+  );
+}
 
 /**
  * The connector URL for the person's own Claude.
@@ -1046,6 +1081,8 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/focus":
+      return onFocus(userId, chatId, args);
     case "/mcp":
       return onMcp(userId, chatId, args);
     case "/reset":
@@ -1083,8 +1120,24 @@ async function handleText(
   // The model judged this a queue command, not a question. Marking runs before
   // advancing — "прочитано, дальше" means close this one, then continue. The
   // history still gets a turn, so a follow-up like "и ещё" keeps its context.
-  if (reply.markRead || reply.advance || reply.channelQuery) {
+  if (reply.markRead || reply.advance || reply.channelQuery || reply.focusUpdate !== undefined) {
     const acted: string[] = [];
+    // The preference lands first, so a "no more benchmarks — and next digest"
+    // in one breath builds that next digest under the brief it just set.
+    if (reply.focusUpdate !== undefined) {
+      await setFocus(userId, reply.focusUpdate);
+      await send(
+        chatId,
+        reply.focusUpdate
+          ? `Noted. Your digests will now read for:\n<i>${escapeHtml(reply.focusUpdate)}</i>\n\n/focus shows or changes this anytime.`
+          : "Brief cleared — digests go back to covering everything their subjects allow."
+      );
+      acted.push(
+        reply.focusUpdate
+          ? `(updated the standing brief to: ${reply.focusUpdate})`
+          : "(cleared the standing brief)"
+      );
+    }
     if (reply.markRead) {
       await onSpokenMarkRead(userId, chatId);
       acted.push("(marked the latest digest's channels read)");
@@ -1198,6 +1251,7 @@ export async function startBot(): Promise<void> {
     commands: [
       { command: "digest", description: "the next digest from your unread queue" },
       { command: "topics", description: "subjects you read for — I skip the rest" },
+      { command: "focus", description: "what matters within them — the rest shrinks" },
       { command: "channel", description: "digest one channel's unread backlog" },
       { command: "channels", description: "what I read, skip, and why" },
       { command: "last", description: "the most recent digest" },

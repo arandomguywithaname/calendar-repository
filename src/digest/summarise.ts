@@ -107,6 +107,28 @@ function subjectRule(subjects: string[]): string {
         `rather than filling the digest with the next most interesting thing.`;
 }
 
+/**
+ * The person's editorial brief, when they have written one.
+ *
+ * Subjects decide what the digest is *about*; the focus decides what within
+ * that deserves a topic. The instruction folds rather than drops: a story the
+ * focus demotes still costs one line in "Briefly", so a filter that misjudges
+ * something important stays visible and can be argued with — the same
+ * asymmetry that makes triage err towards inclusion. What the focus omits is
+ * still covered (like an omitted advertisement), so the queue's marks are
+ * unaffected either way.
+ */
+function focusRule(focus: string): string {
+  return focus === ""
+    ? ""
+    : `\n\nThe person has told you what they read for, in their own words:\n"${wellFormed(focus)}"\n\n` +
+        `Let that brief drive the editing. Material they can act on — approaches, practices, economics, ` +
+        `consequences — gets full topics. A story that is news-of-record by their brief (a routine ` +
+        `announcement, a launch with no practical consequence for them) is not dropped but folded into ` +
+        `the final "Briefly" topic as a single line, however prominently the channels covered it. When ` +
+        `such a story does carry a practical consequence, the consequence IS the topic — lead with it.`;
+}
+
 /** A story already told, carried forward so the next digest does not tell it again. */
 export interface PriorTopic {
   title: string;
@@ -234,7 +256,8 @@ export async function summarisePeriod(
   from: Date,
   to: Date,
   subjects: string[] = [],
-  prior: PriorTopic[] = []
+  prior: PriorTopic[] = [],
+  focus: string = ""
 ): Promise<PeriodDigest> {
   // `postCount` below counts what was read, not what survived the trim, so the
   // digest still reports the true size of the window.
@@ -271,7 +294,7 @@ export async function summarisePeriod(
       max_tokens: 32000,
       betas: [FALLBACK_BETA],
       fallbacks: "default",
-      system: `${SYSTEM}${subjectRule(subjects)}${priorRule(prior)}`,
+      system: `${SYSTEM}${subjectRule(subjects)}${focusRule(focus)}${priorRule(prior)}`,
       output_config: {
         effort: "low",
         format: { type: "json_schema", schema: DIGEST_SCHEMA },
