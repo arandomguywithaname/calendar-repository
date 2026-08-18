@@ -1,0 +1,19 @@
+# Staging deploys are a button, not a branch: Actions → "Deploy staging to
+# Fly.io" → Run workflow, picking any branch to rehearse. Nothing deploys to
+# staging on push, so the copy only changes when someone means it to.
+name: Deploy staging to Fly.io
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - run: flyctl deploy -c fly.staging.toml -a telereader-staging
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

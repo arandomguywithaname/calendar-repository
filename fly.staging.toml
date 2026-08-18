@@ -1,0 +1,33 @@
+# The staging copy — telereader-staging.
+#
+# Identical to production except the name, because a staging environment that
+# differs from what it rehearses tests nothing. What it must NOT share is the
+# bot token: two pollers on one token fight over updates and Telegram answers
+# the loser with 409 — the staging app gets its own bot from @BotFather, its
+# own volume, and therefore its own store, sessions, and connector tokens.
+
+app = "telereader-staging"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[env]
+  DIGEST_DATA_DIR = "/data"
+  DIGEST_INTERVAL_HOURS = "6"
+
+[mounts]
+  source = "digest_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["app"]
