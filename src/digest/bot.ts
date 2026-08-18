@@ -30,6 +30,8 @@ import {
   getFocus,
   getOrCreateMcpToken,
   getOverrides,
+  getSuspensions,
+  isSuspended,
   getTopics,
   getVerdicts,
   latestDigest,
@@ -41,6 +43,7 @@ import {
   rotateMcpToken,
   setAccount,
   setFocus,
+  setSuspension,
   setOverride,
   setTopics,
   setVerdicts,
@@ -253,6 +256,65 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /reset — forget our conversation, keep the digests`;
 
 /* -------------------------------- commands -------------------------------- */
+
+/**
+ * The operator, named by environment rather than stored: whoever controls the
+ * deployment controls ADMIN_USER_ID, which is exactly the person suspension
+ * should answer to. Unset means no admin commands exist at all.
+ */
+function isAdmin(userId: string): boolean {
+  const admin = (process.env.ADMIN_USER_ID || "").trim();
+  return admin !== "" && userId === admin;
+}
+
+const SUSPENDED_NOTICE =
+  "This bot is paused for your account — the subscription is inactive. Your digests and settings are kept and come back the moment it's resumed. Contact the person who runs the bot.";
+
+/**
+ * The per-customer kill switch, admin only.
+ *
+ * /suspend with no arguments doubles as the client list, because the admin
+ * needs the numeric ids from somewhere before they can name one. Suspension
+ * deletes nothing — the whole point is that resuming is instant.
+ */
+async function onSuspend(chatId: number, args: string[], suspend: boolean): Promise<void> {
+  if (args.length === 0) {
+    const [accounts, suspensions] = [await listAccounts(), await getSuspensions()];
+    if (accounts.length === 0) {
+      await send(chatId, "No connected accounts yet.");
+      return;
+    }
+    const lines = accounts.map(({ userId, account }) => {
+      const who = account.phone ? ` (${escapeHtml(account.phone)})` : "";
+      const state = suspensions[userId] ? ` — suspended since ${suspensions[userId].slice(0, 10)}` : "";
+      return `<code>${escapeHtml(userId)}</code>${who}${state}`;
+    });
+    // Suspended users who deleted their session via /forget would vanish from
+    // listAccounts; show them anyway so an unsuspend is always possible.
+    for (const [userId, since] of Object.entries(await getSuspensions())) {
+      if (!accounts.some((a) => a.userId === userId)) {
+        lines.push(`<code>${escapeHtml(userId)}</code> (no session) — suspended since ${since.slice(0, 10)}`);
+      }
+    }
+    await send(chatId, `Connected accounts:\n${lines.join("\n")}\n\n<code>/suspend id</code> pauses one, <code>/unsuspend id</code> resumes.`);
+    return;
+  }
+
+  const target = args[0];
+  if (isAdmin(target)) {
+    await send(chatId, "That's you — suspending the admin would be a lock without a key.");
+    return;
+  }
+  const changed = await setSuspension(target, suspend);
+  await send(
+    chatId,
+    changed
+      ? suspend
+        ? `Suspended <code>${escapeHtml(target)}</code>: no digests will be built, and their bot and connector answer with a subscription notice. /unsuspend restores everything.`
+        : `Resumed <code>${escapeHtml(target)}</code> — digests, conversation and connector are back.`
+      : `<code>${escapeHtml(target)}</code> was already ${suspend ? "suspended" : "active"}.`
+  );
+}
 
 /**
  * The standing editorial brief — what digests should prioritise.
@@ -978,6 +1040,13 @@ async function handleCallback(query: any): Promise<void> {
     return;
   }
 
+  // A leftover button on an old digest is still an entry point.
+  if ((await isSuspended(userId)) && !isAdmin(userId)) {
+    await answer();
+    await send(chatId, SUSPENDED_NOTICE).catch(() => {});
+    return;
+  }
+
   const [action, from] = [data.slice(0, data.indexOf(":")), data.slice(data.indexOf(":") + 1)];
 
   if (action === "keep") {
@@ -1081,6 +1150,12 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/suspend":
+    case "/unsuspend":
+      // Invisible to everyone but the admin: a non-admin gets the same "don't
+      // know that one" as any typo, so the command's existence leaks nothing.
+      if (!isAdmin(userId)) break;
+      return onSuspend(chatId, args, command === "/suspend");
     case "/focus":
       return onFocus(userId, chatId, args);
     case "/mcp":
@@ -1178,6 +1253,11 @@ export async function handleUpdate(update: any): Promise<void> {
   const chatId = message.chat.id;
   const userId = String(message.from?.id ?? chatId);
 
+  if ((await isSuspended(userId)) && !isAdmin(userId)) {
+    await send(chatId, SUSPENDED_NOTICE).catch(() => {});
+    return;
+  }
+
   if (busy.has(userId)) {
     await send(chatId, "Still working on the last one — one moment.").catch(() => {});
     return;
@@ -1213,6 +1293,8 @@ export async function sweepQueue(): Promise<void> {
   const accounts = await listAccounts();
   for (const { userId } of accounts) {
     if (busy.has(userId)) continue;
+    // A suspended account costs nothing: no collection, no model calls.
+    if (await isSuspended(userId)) continue;
     if (await openDigest(userId)) continue;
 
     busy.add(userId);

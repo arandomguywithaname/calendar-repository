@@ -58,6 +58,16 @@ interface DigestStoreShape {
    */
   mcpTokens: Record<string, string>;
   /**
+   * userId -> ISO timestamp of when their access was suspended.
+   *
+   * The per-customer kill switch: a lapsed subscription is an application
+   * fact, not an infrastructure one — everyone shares one machine, so the
+   * only correct "shut it off for this person" is a flag their every entry
+   * point checks. Data is deliberately untouched: suspension is meant to be
+   * reversed the day they pay, with nothing to rebuild.
+   */
+  suspensions: Record<string, string>;
+  /**
    * userId -> their editorial brief, in their own words.
    *
    * Different layer from `topics`: topics decide which channels are opened at
@@ -105,6 +115,7 @@ function empty(): DigestStoreShape {
     overrides: {},
     mcpTokens: {},
     focuses: {},
+    suspensions: {},
   };
 }
 
@@ -467,6 +478,27 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* ------------------------------- suspensions ------------------------------- */
+
+export async function isSuspended(userId: string): Promise<boolean> {
+  return Boolean((await load()).suspensions[userId]);
+}
+
+/** Flip one person's access. Returns false when it was already in that state. */
+export async function setSuspension(userId: string, suspended: boolean): Promise<boolean> {
+  return mutate((store) => {
+    const already = Boolean(store.suspensions[userId]);
+    if (suspended === already) return false;
+    if (suspended) store.suspensions[userId] = new Date().toISOString();
+    else delete store.suspensions[userId];
+    return true;
+  });
+}
+
+export async function getSuspensions(): Promise<Record<string, string>> {
+  return (await load()).suspensions;
 }
 
 /* --------------------------------- focus ---------------------------------- */

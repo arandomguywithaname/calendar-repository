@@ -3,7 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import express from "express";
 import { z } from "zod";
 import { wellFormed } from "./format";
-import { getDigest, getFocus, listDigests, setFocus, userForMcpToken } from "./store";
+import { getDigest, getFocus, isSuspended, listDigests, setFocus, userForMcpToken } from "./store";
 import { PeriodDigest } from "./types";
 
 /**
@@ -215,6 +215,12 @@ async function handleMcpPost(req: express.Request, res: express.Response, token:
   const userId = await userForMcpToken(token);
   if (!userId) {
     jsonRpcError(res, 401, -32001, "Unknown token. Send /mcp to the Telegram bot to get your connector URL.");
+    return;
+  }
+  // The token stays valid but answers nothing while suspended: same switch,
+  // same instant restore, as the bot side.
+  if (await isSuspended(userId)) {
+    jsonRpcError(res, 403, -32002, "This account's subscription is inactive — the connector is paused. Contact the person who runs the bot.");
     return;
   }
 
