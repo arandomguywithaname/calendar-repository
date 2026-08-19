@@ -47,7 +47,12 @@ function idOf(value: unknown): string {
  * ceiling is not a loss: the mark advances to what was read, so the remainder
  * is simply first in line next time.
  */
-const MAX_PER_CHANNEL = 200;
+/**
+ * Per-channel fetch ceiling for one step. Configurable because it multiplies
+ * with the step budget: a 40k-post step drawn from a handful of channels can
+ * only exist if each channel may contribute more than a couple of hundred.
+ */
+const MAX_PER_CHANNEL = Math.max(1, Number(process.env.DIGEST_MAX_PER_CHANNEL || 200));
 
 /**
  * How many history reads run at once.

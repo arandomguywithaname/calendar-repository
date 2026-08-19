@@ -95,18 +95,17 @@ function render(sampled: { channel: Channel; samples: string[] }[]): string {
     .join("\n\n");
 }
 
-export async function triage(
-  account: TelegramAccount,
+/**
+ * Channels per model call. A verdict costs ~40 output tokens, so a hundred
+ * fits comfortably; five hundred channels become five sequential calls
+ * rather than one that overruns its output budget and judges nobody.
+ */
+const TRIAGE_BATCH = 100;
+
+async function judgeBatch(
   topics: string[],
-  options: { only?: Set<string> } = {}
-): Promise<TriageOutcome> {
-  const sampled = await sampleChannels(account, { only: options.only });
-  if (sampled.length === 0) {
-    return { verdicts: {}, channels: [], everythingExcluded: false };
-  }
-
-  const channels = sampled.map((s) => s.channel);
-
+  batch: { channel: Channel; samples: string[] }[]
+): Promise<{ channelId: string; onTopic: boolean; reason: string }[]> {
   const response: any = await (anthropic().beta.messages.create as any)({
     model: MODEL,
     max_tokens: 12000,
@@ -120,7 +119,7 @@ export async function triage(
     messages: [
       {
         role: "user",
-        content: `Subjects: ${topics.join(", ")}\n\n${render(sampled)}`,
+        content: `Subjects: ${topics.join(", ")}\n\n${render(batch)}`,
       },
     ],
   });
@@ -130,21 +129,39 @@ export async function triage(
   }
 
   const text = response.content.find((b: any) => b.type === "text")?.text || "";
-  const parsed = JSON.parse(text) as { channels: { channelId: string; onTopic: boolean; reason: string }[] };
+  return (JSON.parse(text) as { channels: { channelId: string; onTopic: boolean; reason: string }[] }).channels;
+}
 
+export async function triage(
+  account: TelegramAccount,
+  topics: string[],
+  options: { only?: Set<string> } = {}
+): Promise<TriageOutcome> {
+  const sampled = await sampleChannels(account, { only: options.only });
+  if (sampled.length === 0) {
+    return { verdicts: {}, channels: [], everythingExcluded: false };
+  }
+
+  const channels = sampled.map((s) => s.channel);
   const decidedAt = new Date().toISOString();
   const known = new Set(channels.map((c) => c.id));
   const verdicts: Record<string, ChannelVerdict> = {};
 
-  for (const entry of parsed.channels) {
-    // An id the model invented would silently filter a channel that does not
-    // exist, or worse, one that does under a mangled id.
-    if (!known.has(entry.channelId)) continue;
-    verdicts[entry.channelId] = {
-      onTopic: Boolean(entry.onTopic),
-      reason: wellFormed(String(entry.reason || "").slice(0, 200)),
-      decidedAt,
-    };
+  for (let i = 0; i < sampled.length; i += TRIAGE_BATCH) {
+    const batch = sampled.slice(i, i + TRIAGE_BATCH);
+    for (const entry of await judgeBatch(topics, batch)) {
+      // An id the model invented would silently filter a channel that does not
+      // exist, or worse, one that does under a mangled id.
+      if (!known.has(entry.channelId)) continue;
+      verdicts[entry.channelId] = {
+        onTopic: Boolean(entry.onTopic),
+        reason: wellFormed(String(entry.reason || "").slice(0, 200)),
+        decidedAt,
+      };
+    }
+    if (sampled.length > TRIAGE_BATCH) {
+      console.log(`triage judged ${Math.min(i + TRIAGE_BATCH, sampled.length)}/${sampled.length} channel(s)`);
+    }
   }
 
   const judged = Object.values(verdicts);

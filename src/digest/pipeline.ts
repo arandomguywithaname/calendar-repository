@@ -1,5 +1,5 @@
 import { collectPosts, collectQueue, QueueChannelFetch } from "./collector";
-import { PriorTopic, summarisePeriod } from "./summarise";
+import { PriorTopic, STEP_CHAR_BUDGET, summarisePeriod } from "./summarise";
 import { canTriage, triage } from "./triage";
 import {
   advanceMarks,
@@ -36,12 +36,15 @@ import { Channel, ChannelCoverage, PeriodDigest, Post, TelegramAccount } from ".
  * Nothing downstream ever sees them again.
  */
 
-/** One step's budget, in posts — roughly one affordable model call. */
-const STEP_POSTS = 550;
+/**
+ * One step's budget, in posts. The default is one affordable model call;
+ * raising it past ~3000 sends the step down the summariser's chunk-and-merge
+ * path — several model calls per digest, so the operator who sets it is the
+ * one choosing to pay for it.
+ */
+const STEP_POSTS = Math.max(1, Number(process.env.DIGEST_STEP_POSTS || 550));
 /** A long post's opening states what happened; the rest is elaboration. */
 const MAX_POST_CHARS = 1000;
-/** Roughly 120k tokens of posts — the same ceiling the summariser trims to. */
-const MAX_TOTAL_CHARS = 450_000;
 /** How long a channel stays excluded before it is looked at again. */
 const PROBATION_DAYS = 7;
 /** How many recent digests' topics the summariser is told were already read. */
@@ -123,7 +126,7 @@ function fitStep(posts: Post[]): Post[] {
   const size = (p: Post) => Math.min(p.text.length, MAX_POST_CHARS) + 1;
   const kept = posts.slice(0, STEP_POSTS);
   let total = kept.reduce((sum, p) => sum + size(p), 0);
-  while (kept.length > 1 && total > MAX_TOTAL_CHARS) {
+  while (kept.length > 1 && total > STEP_CHAR_BUDGET) {
     total -= size(kept.pop()!);
   }
   return kept;

@@ -165,8 +165,19 @@ function priorRule(prior: PriorTopic[]): string {
 
 /** A long post's opening states what happened; the rest is elaboration. */
 const MAX_POST_CHARS = 1000;
-/** Roughly 120k tokens of posts — balance speed vs context. */
-const MAX_TOTAL_CHARS = 450_000;
+/** Roughly 120k tokens of posts — what one model call comfortably holds. */
+const CHUNK_CHARS = 450_000;
+/**
+ * How many model calls one digest may spend before the merge pass.
+ *
+ * This is the knob that lets a single digest cover tens of thousands of
+ * posts: past one chunk the window is summarised in consecutive pieces and
+ * the pieces are merged. It is also the cost knob — each chunk is a ~120k
+ * token call — so the ceiling is configurable by whoever pays.
+ */
+const MAX_CHUNKS = Math.max(1, Number(process.env.DIGEST_STEP_CHUNKS || 16));
+/** The most post-text one digest may carry overall; the pipeline sizes steps to this. */
+export const STEP_CHAR_BUDGET = CHUNK_CHARS * MAX_CHUNKS;
 
 /**
  * Trim a window to something a single request can hold.
@@ -185,14 +196,38 @@ function fit(posts: Post[]): Post[] {
   );
 
   let total = trimmed.reduce((sum, p) => sum + p.text.length, 0);
-  if (total <= MAX_TOTAL_CHARS) return trimmed;
+  if (total <= STEP_CHAR_BUDGET) return trimmed;
 
   const kept = [...trimmed];
-  while (kept.length > 1 && total > MAX_TOTAL_CHARS) {
+  while (kept.length > 1 && total > STEP_CHAR_BUDGET) {
     total -= kept[0].text.length;
     kept.shift(); // posts arrive oldest-first
   }
   return kept;
+}
+
+/**
+ * Consecutive pieces of one window, each sized for one model call.
+ *
+ * Order is preserved — the pieces are stretches of time, not shuffles — so
+ * the merge pass can reason about "earlier in the window" and "later".
+ */
+export function splitChunks(posts: Post[]): Post[][] {
+  const chunks: Post[][] = [];
+  let current: Post[] = [];
+  let size = 0;
+  for (const post of posts) {
+    const s = post.text.length + 1;
+    if (current.length > 0 && size + s > CHUNK_CHARS) {
+      chunks.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(post);
+    size += s;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 /**
@@ -249,6 +284,84 @@ function sourceRefs(postIds: string[], byId: Map<string, Post>, channels: Map<st
   return refs;
 }
 
+/**
+ * The merge pass, for windows summarised in pieces.
+ *
+ * Its duty is the same collapse the chunk passes performed, one level up: a
+ * story that ran through several stretches of the window arrives as several
+ * topics and must leave as one, updates folded in, ids carried along. It is
+ * told the parts are consecutive so "part 3 continues part 1" reads as one
+ * story's timeline, not two opinions about it.
+ */
+const MERGE_SYSTEM = `You are given the topic lists produced from CONSECUTIVE stretches of one period of Telegram posts,
+in time order. Merge them into a single digest of the whole period.
+
+The same story often runs through several stretches and so appears as several topics — sometimes as an
+initial report and later "Update:" entries. Collapse each such thread into ONE topic telling the story
+once, latest state included; keep "Update:" only for stories the earlier digests (listed below, if any)
+already told. Judge sameness by what happened, not by wording.
+
+Order topics by how much attention they deserve across the whole period. Keep at most ~15, folding
+genuinely minor items into one final "Briefly" topic (in the digest's language) with one line each.
+For each merged topic, carry over up to twelve of the source ids from the topics it merges, EXACTLY as
+given — never invent or alter an id. Write in the language the topics are written in.`;
+
+interface RawDigest {
+  headline: string;
+  topics: { title: string; summary: string; points: string[]; postIds: string[] }[];
+}
+
+/** One structured model pass. `null` means the model declined or overflowed. */
+async function modelDigest(system: string, user: string): Promise<RawDigest | null> {
+  // Streamed because the SDK refuses non-streaming requests this large: at
+  // 32k output tokens a response can outlive its 10-minute HTTP timeout.
+  const stream: any = (anthropic().beta.messages.stream as any)({
+    model: MODEL,
+    max_tokens: 32000,
+    betas: [FALLBACK_BETA],
+    fallbacks: "default",
+    system,
+    output_config: {
+      effort: "low",
+      format: { type: "json_schema", schema: DIGEST_SCHEMA },
+    },
+    messages: [{ role: "user", content: user }],
+  });
+  const response: any = await stream.finalMessage();
+
+  if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
+    console.warn(`summarise model pass failed: stop_reason=${response.stop_reason}`);
+    return null;
+  }
+
+  const text = response.content.find((b: any) => b.type === "text")?.text || "";
+  const parsed = JSON.parse(text) as RawDigest;
+  return {
+    headline: parsed.headline,
+    topics: (parsed.topics || []).map((t) => ({
+      title: t.title,
+      summary: t.summary,
+      points: Array.isArray(t.points) ? t.points : [],
+      postIds: Array.isArray(t.postIds) ? t.postIds : [],
+    })),
+  };
+}
+
+/** The chunk results as the merge pass sees them. */
+function renderParts(parts: RawDigest[]): string {
+  return parts
+    .map((part, i) => {
+      const topics = part.topics
+        .map(
+          (t) =>
+            `• ${t.title}\n  ${t.summary}${t.points.length ? `\n  points: ${t.points.join(" | ")}` : ""}\n  ids: ${t.postIds.join(", ") || "none"}`
+        )
+        .join("\n");
+      return `## Part ${i + 1}\nheadline: ${part.headline}\n${topics || "(no topics in this stretch)"}`;
+    })
+    .join("\n\n");
+}
+
 export async function summarisePeriod(
   userId: string,
   allPosts: Post[],
@@ -286,47 +399,59 @@ export async function summarisePeriod(
   }
 
   try {
-    // Streamed because the SDK refuses non-streaming requests this large: at
-    // 32k output tokens a response can outlive its 10-minute HTTP timeout.
-    // `finalMessage()` hands back the same completed message a create() would.
-    const stream: any = (anthropic().beta.messages.stream as any)({
-      model: MODEL,
-      max_tokens: 32000,
-      betas: [FALLBACK_BETA],
-      fallbacks: "default",
-      system: `${SYSTEM}${subjectRule(subjects)}${focusRule(focus)}${priorRule(prior)}`,
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: DIGEST_SCHEMA },
-      },
-      messages: [
-        {
-          role: "user",
-          content:
-            `Posts from ${from.toISOString()} to ${to.toISOString()}.\n\n${render(posts)}`,
-        },
-      ],
-    });
-    const response: any = await stream.finalMessage();
+    const rules = `${subjectRule(subjects)}${focusRule(focus)}${priorRule(prior)}`;
+    const chunks = splitChunks(posts);
+    let final: RawDigest | null;
 
-    if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
-      console.warn(`summarise fell back to lexical grouping: stop_reason=${response.stop_reason}`);
-      return { ...base, ...groupLexically(posts, byId, channelIndex), degraded: true };
+    if (chunks.length === 1) {
+      final = await modelDigest(
+        `${SYSTEM}${rules}`,
+        `Posts from ${from.toISOString()} to ${to.toISOString()}.\n\n${render(posts)}`
+      );
+      if (final === null) {
+        console.warn("summarise fell back to lexical grouping");
+        return { ...base, ...groupLexically(posts, byId, channelIndex), degraded: true };
+      }
+    } else {
+      // Too big for one call: consecutive chunk passes, then a merge. A
+      // failure anywhere throws rather than degrading — a window this size
+      // must never be consumed by wording-grouped mush, and throwing consumes
+      // nothing: the same posts are simply read again next attempt.
+      const parts: RawDigest[] = [];
+      for (const [i, chunk] of chunks.entries()) {
+        const part = await modelDigest(
+          `${SYSTEM}${rules}`,
+          `Posts from ${from.toISOString()} to ${to.toISOString()} — stretch ${i + 1} of ${chunks.length}, in time order.\n\n${render(chunk)}`
+        );
+        if (part === null) {
+          throw new Error(
+            `the summarising model couldn't process stretch ${i + 1} of ${chunks.length}. Nothing was consumed; the same posts will be read again on the next attempt.`
+          );
+        }
+        parts.push(part);
+        console.log(`summarised stretch ${i + 1}/${chunks.length}: ${chunk.length} posts → ${part.topics.length} topic(s)`);
+      }
+      final = await modelDigest(`${MERGE_SYSTEM}${rules}`, renderParts(parts));
+      if (final === null) {
+        throw new Error(
+          "the merge pass over the summarised stretches failed. Nothing was consumed; the same posts will be read again on the next attempt."
+        );
+      }
     }
 
-    const text = response.content.find((b: any) => b.type === "text")?.text || "";
-    const parsed = JSON.parse(text) as { headline: string; topics: any[] };
-
-    const topics: TopicDigest[] = parsed.topics.map((t) => ({
+    const topics: TopicDigest[] = final.topics.map((t) => ({
       title: t.title,
       summary: t.summary,
-      points: Array.isArray(t.points) ? t.points : [],
-      sources: sourceRefs(Array.isArray(t.postIds) ? t.postIds : [], byId, channelIndex),
+      points: t.points,
+      sources: sourceRefs(t.postIds, byId, channelIndex),
     }));
 
-    return { ...base, headline: parsed.headline, topics };
+    return { ...base, headline: final.headline, topics };
   } catch (err: any) {
     if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
+      // The lexical fallback compares every post against every cluster, which
+      // is fine at hundreds of posts and hopeless at tens of thousands.
+      if (posts.length > 3000) throw err;
       return { ...base, ...groupLexically(posts, byId, channelIndex), degraded: true };
     }
     throw err;
