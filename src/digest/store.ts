@@ -58,6 +58,14 @@ interface DigestStoreShape {
    */
   mcpTokens: Record<string, string>;
   /**
+   * userId -> the person's display name, best known.
+   *
+   * Written from wherever an identity passes by — MTProto's getMe at login,
+   * the Bot API's `from` on every message — because the admin's account list
+   * is unreadable as bare numeric ids. Display only, never authorisation.
+   */
+  names: Record<string, string>;
+  /**
    * userId -> ISO timestamp of when their access was suspended.
    *
    * The per-customer kill switch: a lapsed subscription is an application
@@ -116,6 +124,7 @@ function empty(): DigestStoreShape {
     mcpTokens: {},
     focuses: {},
     suspensions: {},
+    names: {},
   };
 }
 
@@ -478,6 +487,26 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* --------------------------------- names ----------------------------------- */
+
+/**
+ * Remember what to call someone. Called on every message, so the no-change
+ * case reads without writing — the store must not be re-serialised each time
+ * a person says «дальше».
+ */
+export async function setName(userId: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  if ((await load()).names[userId] === trimmed) return;
+  await mutate((store) => {
+    store.names[userId] = trimmed;
+  });
+}
+
+export async function getNames(): Promise<Record<string, string>> {
+  return (await load()).names;
 }
 
 /* ------------------------------- suspensions ------------------------------- */

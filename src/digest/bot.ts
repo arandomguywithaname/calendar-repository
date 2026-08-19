@@ -28,6 +28,7 @@ import {
   getChat,
   getDigest,
   getFocus,
+  getNames,
   getOrCreateMcpToken,
   getOverrides,
   getSuspensions,
@@ -43,6 +44,7 @@ import {
   rotateMcpToken,
   setAccount,
   setFocus,
+  setName,
   setSuspension,
   setOverride,
   setTopics,
@@ -279,24 +281,24 @@ const SUSPENDED_NOTICE =
  */
 async function onSuspend(chatId: number, args: string[], suspend: boolean): Promise<void> {
   if (args.length === 0) {
-    const [accounts, suspensions] = [await listAccounts(), await getSuspensions()];
+    const [accounts, suspensions, names] = [await listAccounts(), await getSuspensions(), await getNames()];
     if (accounts.length === 0) {
       await send(chatId, "No connected accounts yet.");
       return;
     }
-    const lines = accounts.map(({ userId, account }) => {
-      const who = account.phone ? ` (${escapeHtml(account.phone)})` : "";
+    const describe = (userId: string, phone?: string, note?: string) => {
+      const who = names[userId] || "(no name yet — they'll be named when they next message me)";
+      const tel = phone ? ` · +${escapeHtml(phone.replace(/^\+/, ""))}` : "";
       const state = suspensions[userId] ? ` — suspended since ${suspensions[userId].slice(0, 10)}` : "";
-      return `<code>${escapeHtml(userId)}</code>${who}${state}`;
-    });
+      return `<b>${escapeHtml(who)}</b>${tel}${note ? ` ${note}` : ""}${state}\n  id: <code>${escapeHtml(userId)}</code>`;
+    };
+    const lines = accounts.map(({ userId, account }) => describe(userId, account.phone));
     // Suspended users who deleted their session via /forget would vanish from
     // listAccounts; show them anyway so an unsuspend is always possible.
-    for (const [userId, since] of Object.entries(await getSuspensions())) {
-      if (!accounts.some((a) => a.userId === userId)) {
-        lines.push(`<code>${escapeHtml(userId)}</code> (no session) — suspended since ${since.slice(0, 10)}`);
-      }
+    for (const userId of Object.keys(suspensions)) {
+      if (!accounts.some((a) => a.userId === userId)) lines.push(describe(userId, undefined, "(no session)"));
     }
-    await send(chatId, `Connected accounts:\n${lines.join("\n")}\n\n<code>/suspend id</code> pauses one, <code>/unsuspend id</code> resumes.`);
+    await send(chatId, `Connected accounts:\n\n${lines.join("\n")}\n\n<code>/suspend id</code> pauses one, <code>/unsuspend id</code> resumes.`);
     return;
   }
 
@@ -480,6 +482,7 @@ async function onCode(
     session: login.session,
     phone: stage.phone,
   });
+  await setName(userId, login.name);
   stages.set(userId, { name: "idle" });
 
   const warning =
@@ -562,7 +565,8 @@ async function watchQrScan(
     return;
   }
 
-  await setAccount(userId, { apiId, apiHash, session: login.session, phone: "" });
+  await setAccount(userId, { apiId, apiHash, session: login.session, phone: login.phone || "" });
+  await setName(userId, login.name);
   stages.set(userId, { name: "idle" });
 
   // The digest can run for a while; take the same lock a command would.
@@ -1252,6 +1256,15 @@ export async function handleUpdate(update: any): Promise<void> {
 
   const chatId = message.chat.id;
   const userId = String(message.from?.id ?? chatId);
+
+  // Every message carries an identity; keep the freshest one so the admin's
+  // account list reads as people, not numbers. Existing users get named the
+  // first time they say anything after this ships.
+  if (message.from) {
+    const parts = [message.from.first_name, message.from.last_name].filter(Boolean).join(" ");
+    const name = message.from.username ? `${parts || "?"} (@${message.from.username})` : parts;
+    if (name) await setName(userId, name).catch(() => {});
+  }
 
   if ((await isSuspended(userId)) && !isAdmin(userId)) {
     await send(chatId, SUSPENDED_NOTICE).catch(() => {});

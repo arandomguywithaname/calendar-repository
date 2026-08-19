@@ -626,6 +626,8 @@ export interface CompletedLogin {
   session: string;
   userId: string;
   name: string;
+  /** The account's own phone number, as MTProto reports it. QR logins have one too. */
+  phone?: string;
 }
 
 export async function completeLogin(
@@ -675,6 +677,7 @@ export async function completeLogin(
     session,
     userId: idOf(me?.id),
     name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
+    phone: me?.phone ? String(me.phone) : undefined,
   };
 }
 
@@ -782,6 +785,7 @@ async function finishQr(userId: string, authorization: any): Promise<CompletedLo
     session,
     userId: idOf(me?.id),
     name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "you",
+    phone: me?.phone ? String(me.phone) : undefined,
   };
 }
 
