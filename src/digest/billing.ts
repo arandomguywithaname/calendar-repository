@@ -22,6 +22,27 @@ export function billingConfigured(): boolean {
   return Boolean(process.env.STRIPE_PAYMENT_LINK && process.env.STRIPE_WEBHOOK_SECRET);
 }
 
+/**
+ * Whether a new account must pay before it works.
+ *
+ * Off unless asked for, and applied only at sign-in: people already using
+ * the bot when this is switched on keep their access. A paywall that
+ * retroactively locks out the people you built it for is a bug, not a
+ * policy.
+ */
+export function billingRequired(): boolean {
+  return billingConfigured() && process.env.STRIPE_REQUIRE_SUBSCRIPTION === "1";
+}
+
+/**
+ * Stripe's no-code customer portal, where a client changes their card or
+ * cancels without going through the operator. A static link: the client
+ * proves who they are by email, so nothing per-user is encoded here.
+ */
+export function portalLink(): string | null {
+  return process.env.STRIPE_PORTAL_LINK || null;
+}
+
 /** The client's personal checkout URL: the Payment Link plus their identity. */
 export function paymentLinkFor(userId: string): string {
   const base = (process.env.STRIPE_PAYMENT_LINK || "").replace(/\/+$/, "");

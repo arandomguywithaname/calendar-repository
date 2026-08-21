@@ -13,7 +13,7 @@ import {
 } from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
-import { billingConfigured, paymentLinkFor, setBillingNotifier } from "./billing";
+import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
@@ -33,6 +33,7 @@ import {
   getOrCreateMcpToken,
   getOverrides,
   getSuspensions,
+  hasStripeCustomer,
   isSuspended,
   getTopics,
   getVerdicts,
@@ -255,7 +256,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /channels — what I read, what I skip, and why
 /include, /exclude — overrule me on one channel
 /mcp — a connector URL so your own claude.ai can read these digests
-/pay — subscribe or renew
+/pay — subscribe or renew\n/billing — manage your card or cancel
 /forget — delete my copy of your session
 /reset — forget our conversation, keep the digests`;
 
@@ -279,6 +280,45 @@ const SUSPENDED_NOTICE =
  * whole trick: when Stripe reports the checkout done, the id comes back and
  * the webhook knows whose switch to flip.
  */
+/**
+ * Lock a brand-new account until it pays, when the operator asked for that.
+ *
+ * Applied at sign-in only, so anyone already using the bot keeps working when
+ * the flag goes on. Someone who paid before and reconnected later is
+ * recognised by their Stripe customer link and let straight through.
+ *
+ * Returns true when the account was locked, so the caller can say so instead
+ * of promising a digest that will not come.
+ */
+async function gateNewAccount(userId: string, chatId: number): Promise<boolean> {
+  if (!billingRequired() || isAdmin(userId)) return false;
+  if (await hasStripeCustomer(userId)) return false;
+  await setSuspension(userId, true);
+  await send(
+    chatId,
+    `Signed in. This bot runs on a subscription — /pay opens the checkout, and everything switches on the moment the payment goes through.\n\n${escapeHtml(paymentLinkFor(userId))}`
+  );
+  return true;
+}
+
+/** Where a client manages their own card, invoices, and cancellation. */
+async function onBilling(userId: string, chatId: number): Promise<void> {
+  const portal = portalLink();
+  if (!portal) {
+    await send(
+      chatId,
+      isAdmin(userId)
+        ? "No portal configured. Create one in Stripe → Settings → Billing → Customer portal, then set STRIPE_PORTAL_LINK."
+        : "Contact the person who runs the bot to change your subscription."
+    );
+    return;
+  }
+  await send(
+    chatId,
+    `Manage your subscription — card, invoices, cancellation:\n${escapeHtml(portal)}\n\nSign in there with the email you paid with. /pay is for starting a new subscription.`
+  );
+}
+
 async function onPay(userId: string, chatId: number): Promise<void> {
   if (!billingConfigured()) {
     await send(
@@ -508,6 +548,8 @@ async function onCode(
   await setName(userId, login.name);
   stages.set(userId, { name: "idle" });
 
+  if (await gateNewAccount(userId, chatId)) return;
+
   const warning =
     !scrubbed && password
       ? "\n\nI couldn't delete the message with your password in it — please remove it from this chat yourself."
@@ -591,6 +633,8 @@ async function watchQrScan(
   await setAccount(userId, { apiId, apiHash, session: login.session, phone: login.phone || "" });
   await setName(userId, login.name);
   stages.set(userId, { name: "idle" });
+
+  if (await gateNewAccount(userId, chatId)) return;
 
   // The digest can run for a while; take the same lock a command would.
   if (busy.has(userId)) {
@@ -1179,6 +1223,8 @@ async function handleText(
     }
     case "/pay":
       return onPay(userId, chatId);
+    case "/billing":
+      return onBilling(userId, chatId);
     case "/suspend":
     case "/unsuspend":
       // Invisible to everyone but the admin: a non-admin gets the same "don't
@@ -1293,7 +1339,7 @@ export async function handleUpdate(update: any): Promise<void> {
 
   // /pay must survive suspension — it is the way back in. Everything else a
   // suspended account says gets the notice.
-  const asksToPay = /^\/pay(@|\s|$)/i.test(text.trim());
+  const asksToPay = /^\/(pay|billing)(@|\s|$)/i.test(text.trim());
   if (!asksToPay && (await isSuspended(userId)) && !isAdmin(userId)) {
     await send(chatId, SUSPENDED_NOTICE).catch(() => {});
     return;
@@ -1405,6 +1451,8 @@ export async function startBot(): Promise<void> {
       { command: "include", description: "always read a channel" },
       { command: "exclude", description: "never read a channel" },
       { command: "mcp", description: "connector URL for your claude.ai" },
+      { command: "pay", description: "subscribe or renew" },
+      { command: "billing", description: "manage your card or cancel" },
       { command: "pay", description: "subscribe or renew" },
       { command: "reset", description: "forget our conversation" },
       { command: "forget", description: "delete my copy of your session" },

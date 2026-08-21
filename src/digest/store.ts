@@ -513,6 +513,11 @@ export async function userForStripeCustomer(customerId: string): Promise<string 
   return (await load()).stripeCustomers[customerId];
 }
 
+/** Has this person ever completed a checkout? Survives /forget and reconnects. */
+export async function hasStripeCustomer(userId: string): Promise<boolean> {
+  return Object.values((await load()).stripeCustomers).includes(userId);
+}
+
 /* --------------------------------- names ----------------------------------- */
 
 /**
