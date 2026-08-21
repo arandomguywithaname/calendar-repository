@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import { z } from "zod";
+import { handleStripeWebhook } from "./billing";
 import { wellFormed } from "./format";
 import { getDigest, getFocus, isSuspended, listDigests, setFocus, userForMcpToken } from "./store";
 import { PeriodDigest } from "./types";
@@ -251,6 +252,13 @@ async function handleMcpPost(req: express.Request, res: express.Response, token:
 export function startMcpServer(): void {
   const port = Number(process.env.PORT || 8080);
   const app = express();
+
+  // Registered before the JSON parser on purpose: Stripe's signature covers
+  // the exact request bytes, and a parse-and-reserialise would never verify.
+  app.post("/stripe/webhook", express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
+    void handleStripeWebhook(req, res);
+  });
+
   app.use(express.json({ limit: "1mb" }));
 
   // Fly's health checks and anyone poking the root get a plain answer.

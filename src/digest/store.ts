@@ -58,6 +58,15 @@ interface DigestStoreShape {
    */
   mcpTokens: Record<string, string>;
   /**
+   * Stripe customer id -> userId.
+   *
+   * Written once, when a checkout completes carrying the Telegram id as its
+   * client_reference_id. Every later webhook — a failed invoice, a cancelled
+   * subscription — identifies the person only by customer id, so this map is
+   * what lets billing events reach the suspension switch.
+   */
+  stripeCustomers: Record<string, string>;
+  /**
    * userId -> the person's display name, best known.
    *
    * Written from wherever an identity passes by — MTProto's getMe at login,
@@ -125,6 +134,7 @@ function empty(): DigestStoreShape {
     focuses: {},
     suspensions: {},
     names: {},
+    stripeCustomers: {},
   };
 }
 
@@ -487,6 +497,20 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* --------------------------------- billing ---------------------------------- */
+
+export async function linkStripeCustomer(customerId: string, userId: string): Promise<void> {
+  if (!customerId || !userId) return;
+  await mutate((store) => {
+    store.stripeCustomers[customerId] = userId;
+  });
+}
+
+export async function userForStripeCustomer(customerId: string): Promise<string | undefined> {
+  if (!customerId) return undefined;
+  return (await load()).stripeCustomers[customerId];
 }
 
 /* --------------------------------- names ----------------------------------- */

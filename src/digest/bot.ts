@@ -13,6 +13,7 @@ import {
 } from "./collector";
 import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
+import { billingConfigured, paymentLinkFor, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
@@ -254,6 +255,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 /channels — what I read, what I skip, and why
 /include, /exclude — overrule me on one channel
 /mcp — a connector URL so your own claude.ai can read these digests
+/pay — subscribe or renew
 /forget — delete my copy of your session
 /reset — forget our conversation, keep the digests`;
 
@@ -270,7 +272,28 @@ function isAdmin(userId: string): boolean {
 }
 
 const SUSPENDED_NOTICE =
-  "This bot is paused for your account — the subscription is inactive. Your digests and settings are kept and come back the moment it's resumed. Contact the person who runs the bot.";
+  "This bot is paused for your account — the subscription is inactive. Your digests and settings are kept and come back the moment it's resumed. /pay renews the subscription; anything else, contact the person who runs the bot.";
+
+/**
+ * The client's checkout link. Their Telegram id rides in it, which is the
+ * whole trick: when Stripe reports the checkout done, the id comes back and
+ * the webhook knows whose switch to flip.
+ */
+async function onPay(userId: string, chatId: number): Promise<void> {
+  if (!billingConfigured()) {
+    await send(
+      chatId,
+      isAdmin(userId)
+        ? "Billing isn't configured. Set STRIPE_PAYMENT_LINK and STRIPE_WEBHOOK_SECRET as Fly secrets — the deploy notes explain where each comes from."
+        : "Payments aren't set up here yet — contact the person who runs the bot."
+    );
+    return;
+  }
+  await send(
+    chatId,
+    `Subscribe here:\n${escapeHtml(paymentLinkFor(userId))}\n\nThe link is personal — it tells the payment to your account. Once the payment goes through, access switches on (or stays on) automatically, and if a renewal ever fails the bot pauses until it's fixed.`
+  );
+}
 
 /**
  * The per-customer kill switch, admin only.
@@ -1154,6 +1177,8 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/pay":
+      return onPay(userId, chatId);
     case "/suspend":
     case "/unsuspend":
       // Invisible to everyone but the admin: a non-admin gets the same "don't
@@ -1266,7 +1291,10 @@ export async function handleUpdate(update: any): Promise<void> {
     if (name) await setName(userId, name).catch(() => {});
   }
 
-  if ((await isSuspended(userId)) && !isAdmin(userId)) {
+  // /pay must survive suspension — it is the way back in. Everything else a
+  // suspended account says gets the notice.
+  const asksToPay = /^\/pay(@|\s|$)/i.test(text.trim());
+  if (!asksToPay && (await isSuspended(userId)) && !isAdmin(userId)) {
     await send(chatId, SUSPENDED_NOTICE).catch(() => {});
     return;
   }
@@ -1342,6 +1370,27 @@ export async function startBot(): Promise<void> {
   }
   console.log(`Bot @${me.username} listening.`);
 
+  // Billing's mouth: when a webhook flips someone's switch, tell them, and
+  // tell the admin. Registered here because billing must not import the bot.
+  setBillingNotifier(async ({ userId, kind, reason }) => {
+    const chatId = Number(userId);
+    const admin = (process.env.ADMIN_USER_ID || "").trim();
+    if (Number.isFinite(chatId)) {
+      await send(
+        chatId,
+        kind === "activated"
+          ? "Subscription active — welcome back. Everything is exactly where you left it."
+          : `Your subscription ${reason === "payment failed" ? "payment failed" : "was cancelled"}, so the bot is paused for you. Your digests and settings are kept. /pay reactivates it.`
+      ).catch(() => {});
+    }
+    if (admin && admin !== userId) {
+      const names = await getNames().catch(() => ({} as Record<string, string>));
+      const who = names[userId] || userId;
+      await send(Number(admin), `Billing: ${escapeHtml(who)} ${kind} (${escapeHtml(reason)}).`).catch(() => {});
+    }
+    console.log(`billing: ${userId} ${kind} — ${reason}`);
+  });
+
   await call("setMyCommands", {
     commands: [
       { command: "digest", description: "the next digest from your unread queue" },
@@ -1356,6 +1405,7 @@ export async function startBot(): Promise<void> {
       { command: "include", description: "always read a channel" },
       { command: "exclude", description: "never read a channel" },
       { command: "mcp", description: "connector URL for your claude.ai" },
+      { command: "pay", description: "subscribe or renew" },
       { command: "reset", description: "forget our conversation" },
       { command: "forget", description: "delete my copy of your session" },
     ],
