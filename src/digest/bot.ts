@@ -15,6 +15,7 @@ import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
+import { connectUrl, setSlackNotifier, slackOauthConfigured } from "./slack-connect";
 import { appLabel, connectedApps } from "./sources";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
@@ -319,8 +320,9 @@ async function onSources(userId: string, chatId: number): Promise<void> {
       ? `Also reading: <b>${live.map(appLabel).map(escapeHtml).join(", ")}</b>. Their messages join the same digests as your channels.`
       : "Right now I read your Telegram channels only.",
     "",
-    "<b>Slack</b> — <code>/slack xoxp-…</code>",
-    "At api.slack.com/apps: create an app for your workspace, add the user scopes channels:read, channels:history, groups:read, groups:history, im:read, im:history, users:read, install it, then paste the token here. <code>/slack off</code> disconnects.",
+    slackOauthConfigured()
+      ? "<b>Slack</b> — send <code>/slack</code> and press the link. It opens Slack's own sign-in, you press Allow, and the conversations you can see join your digests. <code>/slack off</code> disconnects."
+      : "<b>Slack</b> — <code>/slack xoxp-…</code>. No Slack app is registered for this bot yet, so connecting means creating one at api.slack.com/apps and pasting its token. Ask the operator to register one and it becomes a one-tap sign-in.",
     "",
     "<b>WhatsApp</b> — personal chats can't be read by anything but WhatsApp itself; there is no API for it, and the tools that claim otherwise drive the account towards a ban. What does work is a WhatsApp <i>Business</i> number whose webhook points at this bot, which then accumulates what arrives from that moment on. Ask if you want that set up.",
     "",
@@ -332,6 +334,23 @@ async function onSources(userId: string, chatId: number): Promise<void> {
 /** Slack, connected by pasting a token — no consent screen, no redirect URL. */
 async function onSlack(userId: string, chatId: number, args: string[]): Promise<void> {
   const value = (args[0] || "").trim();
+
+  // With the app registered, connecting is a login: one link, Slack's own
+  // consent screen, nothing to paste. The token path below stays for whoever
+  // runs this without registering an app — but it is the fallback, not the
+  // route a subscriber should ever be walked through.
+  if (!value && slackOauthConfigured()) {
+    const { slackToken, slackTeam } = await getConnections(userId);
+    const link = connectUrl(userId);
+    await send(
+      chatId,
+      slackToken
+        ? `Slack is connected${slackTeam ? ` to <b>${escapeHtml(slackTeam)}</b>` : ""}. Its conversations join your digests.\n\n<a href="${escapeHtml(link)}">Reconnect</a> to switch workspace, or <code>/slack off</code> to disconnect.`
+        : `<a href="${escapeHtml(link)}">Connect Slack</a> — the link opens Slack, you press Allow, and that's it. Nothing to paste.\n\nThe link is yours alone and expires in 15 minutes.`
+    );
+    return;
+  }
+
   if (!value) {
     const { slackToken } = await getConnections(userId);
     await send(
@@ -345,6 +364,10 @@ async function onSlack(userId: string, chatId: number, args: string[]): Promise<
   if (value === "off") {
     await clearConnection(userId, ["slackToken", "slackTeam"]);
     await send(chatId, "Slack disconnected. Your digests go back to Telegram only.");
+    return;
+  }
+  if (value !== "off" && !slackOauthConfigured() && !/^xox[bp]-/.test(value)) {
+    await send(chatId, "That doesn't look like a Slack token — they start with <code>xoxp-</code> or <code>xoxb-</code>. /sources explains where to find one.");
     return;
   }
   if (!/^xox[bp]-/.test(value)) {
@@ -1490,6 +1513,15 @@ export async function startBot(): Promise<void> {
 
   // Billing's mouth: when a webhook flips someone's switch, tell them, and
   // tell the admin. Registered here because billing must not import the bot.
+  setSlackNotifier((userId, team) => {
+    const chatId = Number(userId);
+    if (!Number.isFinite(chatId)) return;
+    void send(
+      chatId,
+      `Slack connected${team ? ` — <b>${escapeHtml(team)}</b>` : ""}. Its conversations join your next digest. /sources shows what's connected.`
+    ).catch(() => {});
+  });
+
   setBillingNotifier(async ({ userId, kind, reason }) => {
     const chatId = Number(userId);
     const admin = (process.env.ADMIN_USER_ID || "").trim();

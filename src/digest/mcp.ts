@@ -4,6 +4,7 @@ import express from "express";
 import { z } from "zod";
 import { handleStripeWebhook } from "./billing";
 import { wellFormed } from "./format";
+import { mountSlackOauth } from "./slack-connect";
 import { getDigest, getFocus, isSuspended, listDigests, setFocus, userForMcpToken } from "./store";
 import { PeriodDigest } from "./types";
 
@@ -260,6 +261,10 @@ export function startMcpServer(): void {
   });
 
   app.use(express.json({ limit: "1mb" }));
+
+  // "Connect Slack" lands here: a redirect out to Slack's consent screen, and
+  // the code exchange on the way back. See slack-connect.ts.
+  mountSlackOauth(app);
 
   // Fly's health checks and anyone poking the root get a plain answer.
   app.get("/", (_req, res) => {

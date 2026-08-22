@@ -68,7 +68,7 @@ In Telegram, with the bot:
 | `/topics` | subjects you read for — the hard channel filter |
 | `/focus` | editorial brief — what matters inside them |
 | `/sources` | add Slack and other messengers |
-| `/slack xoxp-…` | connect a Slack workspace (`/slack off` disconnects) |
+| `/slack` | connect a Slack workspace by signing in (`/slack off` disconnects) |
 | `/channels`, `/include`, `/exclude` | see and overrule the channel filter |
 | `/last`, `/history` | the most recent digest; everything held |
 | `/mcp` | connector URL for claude.ai (`/mcp new` rotates it) |
@@ -101,7 +101,7 @@ brief — nothing there can mark anything read or touch Telegram.
 | Source | How | Status |
 |---|---|---|
 | **Telegram** | your own account over MTProto (QR or phone code) | full — channels, queue, read-marking |
-| **Slack** | user token (`xoxp-`) pasted with `/slack` | conversations join the same digests |
+| **Slack** | "Connect Slack" link → Slack's own consent screen (OAuth) | conversations join the same digests |
 | **Gmail** | connector exists, needs a Google consent screen | not wired to the bot yet |
 | **WhatsApp** | Business Cloud API webhook only | see below |
 | **iMessage** | — | not possible from a server |
@@ -150,7 +150,8 @@ Optional:
 | `DIGEST_STEP_POSTS` | posts per digest (default 550; 10000 = chunked summarisation, several model calls) |
 | `DIGEST_STEP_CHUNKS` | model calls one digest may spend before merging (default 16) |
 | `DIGEST_MAX_PER_CHANNEL` | per-channel fetch ceiling per step (default 200) |
-| `MCP_PUBLIC_URL` | overrides the base URL in `/mcp` links |
+| `MCP_PUBLIC_URL` | overrides the base URL in `/mcp` and Slack redirect links |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | registers the Slack app once, turning `/slack` into a one-tap sign-in |
 | `STRIPE_PAYMENT_LINK`, `STRIPE_WEBHOOK_SECRET` | enables `/pay` and automatic suspension |
 | `STRIPE_PORTAL_LINK` | enables `/billing` |
 | `STRIPE_REQUIRE_SUBSCRIPTION=1` | new sign-ups start locked until they pay |
