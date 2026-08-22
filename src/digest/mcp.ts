@@ -81,7 +81,7 @@ function words(s: string): string[] {
  * takes a userId parameter that could be pointed at someone else.
  */
 function buildServer(userId: string): McpServer {
-  const server = new McpServer({ name: "telegram-digests", version: "1.0.0" });
+  const server = new McpServer({ name: "digestify", version: "1.0.0" });
 
   server.registerTool(
     "list_digests",

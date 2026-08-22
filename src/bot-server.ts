@@ -54,7 +54,7 @@ async function sweepDigests(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log(`Channel digest bot — build ${BUILD}`);
+  console.log(`Digestify — build ${BUILD}`);
 
   if (!isConfigured()) {
     // A terminal means we can just ask. Without one — a service, a container,

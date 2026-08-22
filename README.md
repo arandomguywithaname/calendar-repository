@@ -1,267 +1,190 @@
-# Inbox Reader
+# Digestify
+
+Reads the channels and chats you follow, collapses the repetition between them
+into a digest organised by topic, and lets you talk to it — in Telegram, or from
+your own Claude. Ask "what's been building up around agentic AI?" months later
+and it answers from stored summaries; the raw messages were never kept.
 
 Powered by Claude (`claude-opus-5`).
-
-## → [Channel Digest Bot](docs/digest-bot.md)
-
-A Telegram bot that reads the channels *you* follow, collapses the repetition
-between them into a digest organised by topic, and talks to you about it in
-ordinary language. Ask it "what happened this week?" months later and it answers
-from stored summaries — the raw posts were never kept.
 
 ```bash
 npm run bot
 ```
 
-Setup, design notes and commands: **[docs/digest-bot.md](docs/digest-bot.md)**.
-
 ---
-
-## Inbox Reader (web)
-
-The earlier dashboard, still here and still working: it reads your Telegram,
-WhatsApp and Slack chats and gives you one page that says what you missed.
-
-```
-Sign in  →  pick your apps and chats  →  read the summary  →  ask follow-ups
-```
 
 ## What it does
 
-- **One dashboard for everything.** A single "What you missed" summary across
-  every app you've connected, with the things that actually need you pulled to
-  the top and the group-chat noise pushed down.
-- **You choose the sources.** Per-app and per-chat checkboxes, plus an
-  unread-only switch. Your selection is saved to your account.
-- **Ask in your own words.** Not menu commands — real sentences:
-  *"hey uhhh can you give me a summary of my unread chats pls?"*,
-  *"anything from Lena today or nah"*,
-  *"what did I miss in the incidents channel while I was out"*.
-  The assistant answers from your actual messages and follows the thread across
-  questions.
-- **Runs with no credentials.** Every connector falls back to a realistic demo
-  inbox, so the whole app works before you've configured anything.
+**Works through a backlog, oldest first.** Digestify doesn't show you "the last
+24 hours" — it starts at your oldest unread post and moves forward one digest at
+a time. Each digest ends with two buttons: mark its channels read in Telegram,
+or leave them unread. Nothing new is built until you answer, so an unread
+backlog gets cleared at the speed you confirm it, and the bill is bounded by the
+same thing.
 
-## Setup
+**Reads what you actually follow.** You sign in with your own Telegram account
+(QR code or phone code), so it sees the channels you see — not just channels a
+bot was added to. Slack can be connected too, and its conversations join the same
+digests.
+
+**Filters in two layers.** `/topics` decides which channels are opened at all —
+a model samples each one and judges it against the subjects you named, so
+off-subject channels cost nothing. `/focus` is an editorial brief in your own
+words ("things I can take into use, not launch announcements") that decides what
+inside those channels deserves a topic and what shrinks to one line.
+
+**Never repeats itself.** Each digest is held against the previous ones: a story
+already told is omitted, a development arrives as an "Update:". That makes the
+stored digests a chronology — first tellings plus update chains — which is what
+lets it answer questions about trends rather than just "what happened".
+
+**Talks to your Claude.** `/mcp` gives you a personal connector URL. Add it on
+claude.ai and any conversation there can read your digests, with everything
+Claude already knows about you.
+
+---
+
+## Quick start (as a user)
+
+In Telegram, with the bot:
+
+1. `/qr` — scan the code with Telegram on another device (Settings → Devices →
+   Link Device). Or `/connect` for a phone code.
+2. `/topics ai, agents, инфраструктура` — the subjects you read for. The bot
+   samples your channels and keeps the ones that qualify; `/channels` shows what
+   it kept, dropped, and why.
+3. `/focus меня интересует применимое: подходы, экономика токенов; анонсы моделей — одной строкой`
+   — optional, and the single biggest lever on digest quality.
+4. `/digest` — the first digest. Then ✓ / "leave unread", or just say
+   «прочитано» and «дальше».
+5. `/mcp` — your connector URL for claude.ai (see below).
+
+### Commands
+
+| | |
+|---|---|
+| `/digest` | next digest from your unread queue (`/digest 24` re-reads a recent day instead) |
+| `/channel имя` | one channel's unread backlog, same logic |
+| `/topics` | subjects you read for — the hard channel filter |
+| `/focus` | editorial brief — what matters inside them |
+| `/sources` | add Slack and other messengers |
+| `/slack xoxp-…` | connect a Slack workspace (`/slack off` disconnects) |
+| `/channels`, `/include`, `/exclude` | see and overrule the channel filter |
+| `/last`, `/history` | the most recent digest; everything held |
+| `/mcp` | connector URL for claude.ai (`/mcp new` rotates it) |
+| `/pay`, `/billing` | subscribe; manage card or cancel |
+| `/reset`, `/forget` | forget the conversation; delete the stored session |
+
+Admin only (the Telegram id in `ADMIN_USER_ID`): `/suspend`, `/unsuspend`.
+
+---
+
+## Connecting it to Claude
+
+`/mcp` returns `https://<your-app>.fly.dev/mcp/<token>`. On claude.ai:
+**Settings → Connectors → Add custom connector**, paste the whole URL (token
+included), leave the OAuth fields empty.
+
+The token *is* the authentication — a custom connector can't carry a header of
+ours, and there's no OAuth server here — so the URL is a password: anyone with it
+reads those digests. `/mcp new` revokes the old one. The same token works as an
+`Authorization: Bearer` header against bare `/mcp` for clients that can send one.
+
+Five tools are exposed: `list_digests`, `get_digest`, `search_digests`,
+`get_focus`, `update_focus`. Only the last one writes, and only to the editorial
+brief — nothing there can mark anything read or touch Telegram.
+
+---
+
+## Sources
+
+| Source | How | Status |
+|---|---|---|
+| **Telegram** | your own account over MTProto (QR or phone code) | full — channels, queue, read-marking |
+| **Slack** | user token (`xoxp-`) pasted with `/slack` | conversations join the same digests |
+| **Gmail** | connector exists, needs a Google consent screen | not wired to the bot yet |
+| **WhatsApp** | Business Cloud API webhook only | see below |
+| **iMessage** | — | not possible from a server |
+
+**WhatsApp and iMessage are honest gaps, not to-dos.** A personal WhatsApp
+account has no read API: nothing but WhatsApp itself can enumerate your chat
+history, and the libraries that claim otherwise drive a WhatsApp Web session and
+get accounts banned — not something to build a paid product on. What does work is
+a WhatsApp *Business* number pointed at this app's webhook, which accumulates
+messages from that moment forward. iMessage has no server-side API at all; it
+would require running on the user's own Mac with Full Disk Access.
+
+---
+
+## Running it
+
+Deployed on Fly.io as one always-on machine: the Telegram long poll and the HTTP
+server (MCP connector + Stripe webhook) share a process, with a volume at `/data`
+holding the store.
 
 ```bash
-npm install
-npm start               # http://localhost:3000
+flyctl deploy                      # or push to the deploy branch; Actions does it
+flyctl logs -a <app>               # what it's doing
+flyctl secrets list -a <app>       # what it's configured with
 ```
 
-That's it. No configuration, no environment variables — sign in with your email
-and the dashboard works.
+`fly.staging.toml` + the "Deploy staging" workflow give a full twin under a
+second bot token, deployed by hand from the Actions tab.
 
-**Summaries without an API key.** Calling a model needs credentials, so with none
-configured the reader analyses your messages on the server instead: it groups
-them by chat, finds the ones that put a question or request to you, ranks them
-by urgency and unread count, and quotes them back. The ask box does real
-retrieval over the same messages. Everything it says is drawn from messages that
-exist — it just can't paraphrase the way Claude can.
+### Configuration
 
-Set `ANTHROPIC_API_KEY` and the same screens switch to Claude, which reads for
-nuance rather than keywords. Nothing else changes.
+Required:
 
-## Deploying
+| | |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | from @BotFather |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` | from my.telegram.org → API development tools |
+| `ANTHROPIC_API_KEY` | summarising, triage, conversation |
 
-This is a Node server, not a static site. The summaries and the ask box call
-Claude with your API key, sign-in exchanges an OAuth code for a profile, and
-WhatsApp needs a real webhook endpoint — none of which can happen in a browser.
-Dropping `public/` on static hosting gets you the front end and nothing behind
-it (the page will say so).
+Optional:
 
-### Netlify
+| | |
+|---|---|
+| `ADMIN_USER_ID` | your Telegram id — enables `/suspend` and `/unsuspend` |
+| `DIGEST_INTERVAL_HOURS` | how often the queue sweep runs (default 6) |
+| `DIGEST_STEP_POSTS` | posts per digest (default 550; 10000 = chunked summarisation, several model calls) |
+| `DIGEST_STEP_CHUNKS` | model calls one digest may spend before merging (default 16) |
+| `DIGEST_MAX_PER_CHANNEL` | per-channel fetch ceiling per step (default 200) |
+| `MCP_PUBLIC_URL` | overrides the base URL in `/mcp` links |
+| `STRIPE_PAYMENT_LINK`, `STRIPE_WEBHOOK_SECRET` | enables `/pay` and automatic suspension |
+| `STRIPE_PORTAL_LINK` | enables `/billing` |
+| `STRIPE_REQUIRE_SUBSCRIPTION=1` | new sign-ups start locked until they pay |
+| `ANTHROPIC_MODEL` | override the model |
 
-**Deploy from Git, not by dropping a folder.** Drag-and-drop deploys run no
-build step, and `netlify/functions/api.ts` is TypeScript whose imports resolve
-from `node_modules` — neither of which exists in a dropped archive. Netlify
-then fails to bundle the function, the deploy fails, and the site keeps serving
-whatever was published before. A stale site after an apparently successful
-upload almost always means this; the deploy log will say so.
+### Billing
 
-Connect the repository instead (**Add new site → Import an existing project**)
-and Netlify runs `npm install` and the build command from `netlify.toml`,
-bundling the function properly.
+`/pay` hands a client a Stripe Payment Link with their Telegram id as
+`client_reference_id`. Stripe posts back to `/stripe/webhook` (HMAC-verified over
+the raw body); a completed checkout activates the account and records which
+Stripe customer it is, a failed invoice suspends, a paid invoice restores, a
+cancelled subscription suspends. Suspension deletes nothing — it flips a flag
+every entry point checks (messages, buttons, the queue sweep, the MCP connector)
+so resuming is instant. Money never passes through this app.
 
-The sign-in card prints a build stamp. If it does not match the commit you
-expect, the deploy did not land — no amount of code changes will alter what you
-are looking at.
+Turning the paywall on affects **new sign-ins only**; people already using the
+bot keep working.
 
-`netlify.toml` and `netlify/functions/api.ts` are set up: the Express app is
-wrapped with `serverless-http`, `public/` is published as static assets, and
-`/api/*`, `/auth/*` and `/webhooks/*` are redirected into the function.
+---
 
-Because serverless filesystems are per-invocation, the store swaps to
-**Netlify Blobs** automatically when `NETLIFY` is set — no configuration.
-Locally it stays a JSON file.
+## Design notes
 
-Set these under **Site configuration → Environment variables**:
+- **Raw messages are never stored.** They are fetched, summarised, and dropped
+  inside one function. What persists is digests, one MTProto session per user,
+  and per-channel marks.
+- **Marks are honest.** A channel's mark advances only past material that was
+  either summarised into a saved digest or seen to contain no text at all. Every
+  trim drops the *newest* posts, so what's cut becomes the next step rather than
+  a silent loss.
+- **A failed summary consumes nothing.** With a model configured, a degraded
+  (wording-grouped) digest throws instead of saving — the same posts are read
+  again next attempt.
+- **Big windows are summarised in stretches.** Past one model call's worth, the
+  window is split into consecutive chunks, each summarised, then merged into one
+  digest with source ids carried through.
 
-| Variable | Why |
-| --- | --- |
-| `ANTHROPIC_API_KEY` | Required — no summaries or answers without it |
-| `SESSION_SECRET` | **Required here.** Without it each cold start mints a new secret and signs everyone out at random |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google sign-in |
-| `GOOGLE_REDIRECT_URI` | `https://<your-site>.netlify.app/auth/google/callback`, and add the same URI to the OAuth client |
-
-Both are checked at runtime and surfaced in the UI if missing, so a
-misconfigured deploy says what's wrong instead of failing quietly.
-
-Telegram polls on demand when the dashboard loads — `getUpdates` holds
-messages for 24 hours, so nothing is lost between visits and no scheduled
-function is needed.
-
-One caveat: the store is a single blob read-modify-written per request, so
-concurrent writes are last-write-wins. Fine for one person; if this grows
-users, move the store to a real database.
-
-### Anywhere that runs Node
-
-Render, Railway, Fly.io and friends need no changes: set the env vars and run
-`npm run web`.
-
-## Sign-in
-
-Sign-in is **Google OAuth**: the button sends you to Google's own consent
-screen, you type your password on `accounts.google.com`, and the app gets back
-a code it exchanges for your name and email. Your account is created on first
-sign-in.
-
-The app never asks for, receives, or stores your Gmail password. A page that
-collected one directly would be a phishing form — and Google blocks sign-ins
-made that way, so it wouldn't work even if it were built.
-
-To enable it, create an OAuth client at
-[console.cloud.google.com](https://console.cloud.google.com), then set:
-
-```
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
-```
-
-The same redirect URI must be listed on the OAuth client.
-
-**Without Google configured**, a local sign-in form stands in: enter an email,
-get an account, no password involved. It's labelled as such in the UI and turns
-itself off as soon as Google credentials are present (`ALLOW_DEMO_SIGNIN=true`
-keeps it on alongside Google; `false` disables it entirely).
-
-Sessions are signed cookies — set `SESSION_SECRET` or they reset on restart.
-
-## Connecting your apps
-
-Two of the four connect per-account: a person clicks **Connect** on the
-dashboard and approves it for their own account. Nobody pastes a token, and one
-person connecting exposes nothing to anyone else. The site has to be registered
-once with each provider so the OAuth handshake has a client to identify —
-that's the one piece an operator does, not each user.
-
-| App | How it connects | What it can read |
-| --- | --- | --- |
-| **Gmail** | Click Connect (same Google sign-in, plus read-only inbox scope). Needs `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. | Your inbox, read-only — the app cannot send or delete |
-| **Slack** | Click Connect. With `SLACK_CLIENT_ID` set that is an OAuth consent screen; without it, paste a token from an app you created at api.slack.com | The conversations your Slack account can see, with real unread counts |
-| **Telegram** | **Click Connect and paste a @BotFather token.** No OAuth, no client id, no developer console — creating the bot is a chat message | Groups and channels the bot is added to. **Not your personal DMs** — those need an MTProto user client, which the Bot API cannot do |
-| **WhatsApp** | Business Cloud API webhook | Messages sent to a *business* number after the webhook is connected. **A personal WhatsApp account cannot be read by anything** — it is end-to-end encrypted with no read API |
-
-Pasted tokens are checked against the provider before they are stored, so a typo
-is reported at the moment you paste it rather than leaving the dashboard quietly
-on sample data. Anything not connected shows sample chats so the page still works.
-
-Gmail is the one that genuinely cannot be connected without an OAuth client: its
-API accepts no other credential, and an app password only works over IMAP.
-
-### Telegram — `TELEGRAM_BOT_TOKEN`
-
-Create a bot with [@BotFather](https://t.me/botfather), then add it to the
-groups and channels you want summarised. The reader polls `getUpdates` and
-buffers what arrives.
-
-> The Bot API only shows a bot what it can see: chats it was added to, and
-> channels where it's an admin. **It cannot read your personal DM history** —
-> that requires an MTProto user client (Telethon/TDLib) signed in as you, which
-> is a different auth model and isn't implemented here.
-
-### Slack — `SLACK_BOT_TOKEN` (or `SLACK_USER_TOKEN`)
-
-A bot token reads the conversations the app has been invited to. A user token
-(`xoxp-`) also exposes `last_read`, which is what makes unread counts accurate —
-with a bot token everything in the fetch window counts as unread.
-
-Scopes: `channels:read`, `groups:read`, `im:read`, `channels:history`,
-`groups:history`, `im:history`, `users:read`.
-
-### WhatsApp — `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`
-
-WhatsApp has no read API for a personal account — nothing can enumerate your
-existing chats. What exists is the Business Cloud API, which **pushes** messages
-to a webhook as they arrive, so this connector is push-based: point Meta's
-webhook at `POST /webhooks/whatsapp` and the reader accumulates conversations
-from that point forward. Setting `WHATSAPP_APP_SECRET` turns on signature
-verification of inbound deliveries.
-
-## API
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/session` | Who's signed in, and which sign-in methods exist |
-| `GET` | `/auth/google` → `/auth/google/callback` | Google OAuth sign-in |
-| `POST` | `/auth/demo` · `/auth/signout` | Local sign-in · sign out |
-| `GET` | `/api/sources` | Apps and chats available to pick from |
-| `PUT` | `/api/preferences` | Save selected apps, chats, unread-only |
-| `GET` | `/api/digest` | The AI summary on the dashboard |
-| `GET` | `/api/messages` | The raw feed behind the summary |
-| `POST` | `/api/ask` | Ask a question; `GET` for history, `DELETE` to clear |
-| `POST` | `/api/mark-read` | Clear unread flags (Telegram/WhatsApp) |
-| `GET`/`POST` | `/webhooks/whatsapp` | Cloud API verification and delivery |
-
-## How the AI part works
-
-`src/reader/ai.ts` makes two kinds of call, both to `claude-opus-5`:
-
-- **The digest** uses structured outputs (`output_config.format` with a JSON
-  schema), so the dashboard gets a guaranteed shape: headline, "needs you" list,
-  and a per-chat summary with an urgency and action items.
-- **The ask box** is conversational, with the message transcript supplied in an
-  `<inbox>` block each turn and the last few turns of history replayed.
-
-Both send `fallbacks: "default"`, so if Claude's safety classifiers decline a
-request the API retries it server-side on the recommended fallback model instead
-of returning nothing.
-
-Messages are grouped by chat before being sent, so the model sees conversations
-rather than a flat feed.
-
-## Architecture
-
-```
-netlify.toml                 Publish dir, function bundling, route redirects
-netlify/functions/api.ts     Wraps the Express app for Netlify Functions
-src/
-  auth.ts                    Google OAuth, signed-cookie sessions
-  app.ts                     Express app: pages, API, webhooks
-  server.ts                  Local entry point (app.listen)
-  reader/
-    types.ts                 Chat, Message, Connector, User, Digest
-    store.ts                 File-backed accounts, preferences, message buffer
-    ai.ts                    Claude calls: digest + ask
-    connectors/
-      index.ts               Registry, source listing, selection → messages
-      telegram.ts            Bot API polling
-      slack.ts               Web API
-      whatsapp.ts            Cloud API webhook ingest
-      demo.ts                Sample inbox used when an app has no credentials
-public/
-  index.html                 The reader front end (served at /)
-  calendar.html              The older calendar agent UI (served at /calendar)
-```
-
-Accounts and buffered messages live in `data/reader-store.json` (gitignored).
-
-## Also in this repo: the calendar agent
-
-The original natural-language → Google Calendar agent still lives here, now at
-[`/calendar`](http://localhost:3000/calendar) (CLI: `npm run dev`). It turns
-"meeting 1 on Saturday March 15 with @leo and @mia at 12311 Templeton Street"
-into a real calendar event, with attendees resolved via `contacts.json` and a
-Google Meet link when asked. See `src/parser.ts` and `src/calendar.ts`.
+More: **[docs/digest-bot.md](docs/digest-bot.md)**, **[docs/deploying.md](docs/deploying.md)**.

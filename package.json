@@ -1,7 +1,7 @@
 {
-  "name": "calendar-repository",
+  "name": "digestify",
   "version": "1.0.0",
-  "description": "",
+  "description": "Digestify — reads the channels and chats you follow, and keeps a digest you can talk to.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

@@ -1,9 +1,13 @@
 import { collectPosts, collectQueue, QueueChannelFetch } from "./collector";
+import { collectSourcePosts, sourceCoverage } from "./sources";
 import { PriorTopic, STEP_CHAR_BUDGET, summarisePeriod } from "./summarise";
 import { canTriage, triage } from "./triage";
 import {
   advanceMarks,
+  advanceSourceMarks,
   allowedChannels,
+  getConnections,
+  getSourceMarks,
   getAccount,
   getFocus,
   getMarks,
@@ -193,7 +197,7 @@ export async function runDigest(
     console.log(`${userId}: skipped ${silent} quiet and ${filtered} off-subject channel(s)`);
   }
 
-  return finishStep(userId, { posts, channels, fetched, backlog }, topics);
+  return finishStep(userId, { posts, channels, fetched, backlog }, topics, { includeOtherSources: true });
 }
 
 /**
@@ -228,12 +232,29 @@ export async function runChannelDigest(userId: string, channelId: string): Promi
 async function finishStep(
   userId: string,
   collected: { posts: Post[]; channels: Channel[]; fetched: QueueChannelFetch[]; backlog: number },
-  subjects: string[]
+  subjects: string[],
+  options: { includeOtherSources?: boolean } = {}
 ): Promise<DigestOutcome> {
-  const kept = fitStep(collected.posts);
+  // Slack, Gmail and WhatsApp join the same step rather than getting digests
+  // of their own: what the person wants is one account of what they missed,
+  // and the summariser collapses repetition better when it sees everything at
+  // once. Their failures are collected, never thrown — a stale Slack token
+  // must not cost the Telegram digest.
+  let sourcePosts: Post[] = [];
+  if (options.includeOtherSources) {
+    const connections = await getConnections(userId);
+    const fetched = await collectSourcePosts(connections, await getSourceMarks(userId));
+    sourcePosts = fetched.posts;
+    for (const error of fetched.errors) console.warn(`${userId}: ${error}`);
+  }
+
+  const merged = sourcePosts.length
+    ? [...collected.posts, ...sourcePosts].sort((a, b) => a.date.localeCompare(b.date))
+    : collected.posts;
+  const kept = fitStep(merged);
   const coverage = honestCoverage(collected.fetched, kept);
   // What the trims postponed is still queued; say so in the estimate.
-  const stillQueued = collected.backlog + (collected.posts.length - kept.length);
+  const stillQueued = collected.backlog + (merged.length - kept.length);
 
   if (kept.length === 0) {
     // Nothing summarisable — but marks still advance over stretches that were
@@ -295,8 +316,11 @@ async function finishStep(
 
   await saveDigest(digest);
   // After the digest is stored, never before: a crash between the two would
-  // otherwise move the marks past posts that no digest accounts for.
+  // otherwise move the marks past posts that no digest accounts for. The
+  // other sources follow the same rule, measured on the kept posts so a trim
+  // postpones them rather than losing them.
   if (coverage.length > 0) await advanceMarks(userId, coverage);
+  await advanceSourceMarks(userId, sourceCoverage(kept));
 
   return { digest, empty: false, backlog: stillQueued };
 }

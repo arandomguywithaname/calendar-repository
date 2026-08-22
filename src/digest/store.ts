@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { dataDir } from "./paths";
+import { Connections } from "../reader/types";
 import { ChannelCoverage, ChannelVerdict, PeriodDigest, TelegramAccount } from "./types";
 
 /**
@@ -94,6 +95,26 @@ interface DigestStoreShape {
    * is a sentence, not a schema change.
    */
   focuses: Record<string, string>;
+  /**
+   * userId -> credentials for the non-Telegram sources they have connected.
+   *
+   * Reuses the reader's `Connections` shape so the existing Slack, Gmail and
+   * WhatsApp connectors work unchanged: connecting an app is something the
+   * person does in their own chat, not something the operator pastes into a
+   * deploy.
+   */
+  connections: Record<string, Connections>;
+  /**
+   * userId -> "<app>:<chatId>" -> ISO timestamp of the newest message already
+   * folded into a digest.
+   *
+   * Separate from `marks`, which are Telegram message ids. Slack counts in
+   * fractional-second strings and Gmail in opaque ids, so the one thing every
+   * source agrees on is when a message happened — and a timestamp is enough
+   * here because these sources are fetched as a recent window rather than
+   * walked id by id.
+   */
+  sourceMarks: Record<string, Record<string, string>>;
 }
 
 /**
@@ -135,6 +156,8 @@ function empty(): DigestStoreShape {
     suspensions: {},
     names: {},
     stripeCustomers: {},
+    connections: {},
+    sourceMarks: {},
   };
 }
 
@@ -497,6 +520,46 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* -------------------------------- sources ---------------------------------- */
+
+export async function getConnections(userId: string): Promise<Connections> {
+  return (await load()).connections[userId] || {};
+}
+
+/** Merge in what was just connected, leaving the other apps alone. */
+export async function setConnections(userId: string, patch: Connections): Promise<void> {
+  await mutate((store) => {
+    store.connections[userId] = { ...(store.connections[userId] || {}), ...patch };
+  });
+}
+
+/** Forget one app's credentials. */
+export async function clearConnection(userId: string, keys: (keyof Connections)[]): Promise<void> {
+  await mutate((store) => {
+    const mine = store.connections[userId];
+    if (!mine) return;
+    for (const key of keys) delete mine[key];
+  });
+}
+
+export async function getSourceMarks(userId: string): Promise<Record<string, string>> {
+  return (await load()).sourceMarks[userId] || {};
+}
+
+/** Forward only, for the same reason Telegram's marks are: a re-read must not rewind. */
+export async function advanceSourceMarks(
+  userId: string,
+  marks: Record<string, string>
+): Promise<void> {
+  if (Object.keys(marks).length === 0) return;
+  await mutate((store) => {
+    const mine = store.sourceMarks[userId] || (store.sourceMarks[userId] = {});
+    for (const [key, iso] of Object.entries(marks)) {
+      if (!mine[key] || mine[key] < iso) mine[key] = iso;
+    }
+  });
 }
 
 /* --------------------------------- billing ---------------------------------- */

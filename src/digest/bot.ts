@@ -15,6 +15,7 @@ import { answerFromDigests } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
+import { appLabel, connectedApps } from "./sources";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
 import { PeriodDigest, TelegramAccount } from "./types";
@@ -32,6 +33,7 @@ import {
   getNames,
   getOrCreateMcpToken,
   getOverrides,
+  getConnections,
   getSuspensions,
   hasStripeCustomer,
   isSuspended,
@@ -44,7 +46,9 @@ import {
   openDigest,
   releaseReadMark,
   rotateMcpToken,
+  clearConnection,
   setAccount,
+  setConnections,
   setFocus,
   setName,
   setSuspension,
@@ -247,7 +251,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/topics — name the subjects you read for, so I skip the rest
+/sources — add Slack and other messengers to your digests\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -299,6 +303,70 @@ async function gateNewAccount(userId: string, chatId: number): Promise<boolean> 
     `Signed in. This bot runs on a subscription — /pay opens the checkout, and everything switches on the moment the payment goes through.\n\n${escapeHtml(paymentLinkFor(userId))}`
   );
   return true;
+}
+
+/**
+ * The other messengers, listed with how to add them.
+ *
+ * Telegram is deliberately absent: it is not a source you connect here, it is
+ * the account this whole conversation runs on.
+ */
+async function onSources(userId: string, chatId: number): Promise<void> {
+  const connections = await getConnections(userId);
+  const live = connectedApps(connections);
+  const lines = [
+    live.length
+      ? `Also reading: <b>${live.map(appLabel).map(escapeHtml).join(", ")}</b>. Their messages join the same digests as your channels.`
+      : "Right now I read your Telegram channels only.",
+    "",
+    "<b>Slack</b> — <code>/slack xoxp-…</code>",
+    "At api.slack.com/apps: create an app for your workspace, add the user scopes channels:read, channels:history, groups:read, groups:history, im:read, im:history, users:read, install it, then paste the token here. <code>/slack off</code> disconnects.",
+    "",
+    "<b>WhatsApp</b> — personal chats can't be read by anything but WhatsApp itself; there is no API for it, and the tools that claim otherwise drive the account towards a ban. What does work is a WhatsApp <i>Business</i> number whose webhook points at this bot, which then accumulates what arrives from that moment on. Ask if you want that set up.",
+    "",
+    "<b>Gmail</b> — the connector exists but needs a Google consent screen, which is a setup step rather than a pasted token. Not wired to the bot yet.",
+  ];
+  await send(chatId, lines.join("\n"));
+}
+
+/** Slack, connected by pasting a token — no consent screen, no redirect URL. */
+async function onSlack(userId: string, chatId: number, args: string[]): Promise<void> {
+  const value = (args[0] || "").trim();
+  if (!value) {
+    const { slackToken } = await getConnections(userId);
+    await send(
+      chatId,
+      slackToken
+        ? "Slack is connected. Its messages join your digests. <code>/slack off</code> disconnects it; <code>/slack xoxp-…</code> replaces the token."
+        : "Send <code>/slack xoxp-…</code> with a Slack token to connect it. /sources explains where to get one."
+    );
+    return;
+  }
+  if (value === "off") {
+    await clearConnection(userId, ["slackToken", "slackTeam"]);
+    await send(chatId, "Slack disconnected. Your digests go back to Telegram only.");
+    return;
+  }
+  if (!/^xox[bp]-/.test(value)) {
+    await send(chatId, "That doesn't look like a Slack token — they start with <code>xoxp-</code> or <code>xoxb-</code>. /sources explains where to find one.");
+    return;
+  }
+
+  // A token that cannot list conversations is worth rejecting now, while the
+  // person is still here to fix it, rather than silently at the next digest.
+  await typing(chatId);
+  try {
+    const { connectors } = await import("../reader/connectors");
+    const chats = await connectors.slack.listChats({ slackToken: value });
+    await setConnections(userId, { slackToken: value });
+    await scrub(chatId, undefined);
+    await send(
+      chatId,
+      `Slack connected — I can see <b>${chats.length}</b> conversation(s). They'll be part of your next digest. /sources shows what's connected.`
+    );
+  } catch (err: any) {
+    await send(chatId, `Slack refused that token: ${escapeHtml(err?.message || String(err))}\n\nCheck the scopes at api.slack.com/apps, then try again.`);
+  }
 }
 
 /** Where a client manages their own card, invoices, and cancellation. */
@@ -1221,6 +1289,10 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/sources":
+      return onSources(userId, chatId);
+    case "/slack":
+      return onSlack(userId, chatId, args);
     case "/pay":
       return onPay(userId, chatId);
     case "/billing":
@@ -1442,6 +1514,7 @@ export async function startBot(): Promise<void> {
       { command: "digest", description: "the next digest from your unread queue" },
       { command: "topics", description: "subjects you read for — I skip the rest" },
       { command: "focus", description: "what matters within them — the rest shrinks" },
+      { command: "sources", description: "add Slack and other messengers" },
       { command: "channel", description: "digest one channel's unread backlog" },
       { command: "channels", description: "what I read, skip, and why" },
       { command: "last", description: "the most recent digest" },
