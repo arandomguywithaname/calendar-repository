@@ -27,6 +27,15 @@ same thing.
 bot was added to. Slack can be connected too, and its conversations join the same
 digests.
 
+**Four reading modes.** `/mode auto` learns what you read for from which
+digests you work through and what you ask about, revising your brief every few
+digests and telling you each time. `/mode cultural` reads for concerts, theatre
+and exhibitions, keeping dates and venues. `/mode work` reads for what changes
+what you have to do — rule changes, deadlines, decisions waiting on you.
+`/mode custom` is whatever you set by hand. Each mode keeps its own subjects,
+brief and triage verdicts parked, so switching back is instant and costs no
+re-examination.
+
 **Filters in two layers.** `/topics` decides which channels are opened at all —
 a model samples each one and judges it against the subjects you named, so
 off-subject channels cost nothing. `/focus` is an editorial brief in your own
@@ -50,7 +59,8 @@ In Telegram, with the bot:
 
 1. `/qr` — scan the code with Telegram on another device (Settings → Devices →
    Link Device). Or `/connect` for a phone code.
-2. `/topics ai, agents, инфраструктура` — the subjects you read for. The bot
+2. `/mode work` (or `cultural`, `auto`) for a preset — or set the two filters
+   yourself: `/topics ai, agents, инфраструктура` — the subjects you read for. The bot
    samples your channels and keeps the ones that qualify; `/channels` shows what
    it kept, dropped, and why.
 3. `/focus меня интересует применимое: подходы, экономика токенов; анонсы моделей — одной строкой`
@@ -65,6 +75,7 @@ In Telegram, with the bot:
 |---|---|
 | `/digest` | next digest from your unread queue (`/digest 24` re-reads a recent day instead) |
 | `/channel имя` | one channel's unread backlog, same logic |
+| `/mode` | auto / cultural / work / custom — presets of the two filters below |
 | `/topics` | subjects you read for — the hard channel filter |
 | `/focus` | editorial brief — what matters inside them |
 | `/sources` | add Slack and other messengers |

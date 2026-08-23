@@ -120,6 +120,26 @@ export interface ChannelVerdict {
   decidedAt: string;
 }
 
+/**
+ * A reading mode: a named preset of the two filters that already exist.
+ *
+ * `topics` decides which channels open at all; `focus` decides what inside
+ * them deserves a topic. A mode is those two set together, plus the triage
+ * verdicts they produced — parked rather than discarded, so switching back is
+ * instant and costs no re-examination.
+ *
+ * "custom" is what everyone was using before modes existed: whatever they set
+ * by hand. Switching to it restores exactly that.
+ */
+export type ModeName = "auto" | "cultural" | "work" | "custom";
+
+export interface ModeProfile {
+  topics: string[];
+  focus: string;
+  verdicts: Record<string, ChannelVerdict>;
+  overrides: Record<string, "include" | "exclude">;
+}
+
 /** MTProto credentials for one account, stored per user. */
 export interface TelegramAccount {
   apiId: number;

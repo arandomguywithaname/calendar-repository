@@ -16,10 +16,12 @@ import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
 import { connectUrl, setSlackNotifier, slackOauthConfigured } from "./slack-connect";
+import { LEARN_EVERY, learnFocus } from "./auto";
+import { isModeName, modeBlurb, modeLabel, MODES, presetProfile } from "./modes";
 import { appLabel, connectedApps } from "./sources";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
-import { PeriodDigest, TelegramAccount } from "./types";
+import { ModeName, PeriodDigest, TelegramAccount } from "./types";
 import {
   appendChat,
   claimReadMark,
@@ -35,8 +37,10 @@ import {
   getOrCreateMcpToken,
   getOverrides,
   getConnections,
+  getMode,
   getSuspensions,
   hasStripeCustomer,
+  noteDigestClosed,
   isSuspended,
   getTopics,
   getVerdicts,
@@ -54,6 +58,7 @@ import {
   setName,
   setSuspension,
   setOverride,
+  switchMode,
   setTopics,
   setVerdicts,
 } from "./store";
@@ -252,7 +257,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/sources — add Slack and other messengers to your digests\n/topics — name the subjects you read for, so I skip the rest
+/mode — auto, cultural, work or custom reading modes\n/sources — add Slack and other messengers to your digests\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -304,6 +309,102 @@ async function gateNewAccount(userId: string, chatId: number): Promise<boolean> 
     `Signed in. This bot runs on a subscription — /pay opens the checkout, and everything switches on the moment the payment goes through.\n\n${escapeHtml(paymentLinkFor(userId))}`
   );
   return true;
+}
+
+/**
+ * Reading modes: the two filters, preset and named.
+ *
+ * Switching parks the settings of the mode being left and loads the other's,
+ * so going back and forth costs nothing and re-buys no triage. Entering a
+ * preset mode for the first time is the one case that needs re-examining the
+ * channels, because its subjects are new.
+ */
+async function onMode(userId: string, chatId: number, args: string[]): Promise<void> {
+  const current = await getMode(userId);
+  const asked = (args[0] || "").toLowerCase();
+
+  if (!asked) {
+    const list = (["auto", "cultural", "work", "custom"] as ModeName[])
+      .map((m) => `${m === current ? "▸" : " "} <b>/mode ${m}</b> — ${modeBlurb(m)}`)
+      .join("\n");
+    await send(
+      chatId,
+      `You're reading in <b>${modeLabel(current)}</b> mode.\n\n${list}\n\nEach mode keeps its own subjects and brief, so switching back is instant. /topics and /focus still edit whichever mode you're in.`
+    );
+    return;
+  }
+
+  if (!isModeName(asked)) {
+    await send(chatId, "Modes are <b>auto</b>, <b>cultural</b>, <b>work</b> and <b>custom</b>. /mode on its own shows what each reads for.");
+    return;
+  }
+
+  const { changed, fresh } = await switchMode(userId, asked, (active) => presetProfile(asked, active));
+  if (!changed) {
+    await send(chatId, `Already in <b>${modeLabel(asked)}</b> mode. /mode lists the others.`);
+    return;
+  }
+
+  const lines = [`Switched to <b>${modeLabel(asked)}</b> — ${modeBlurb(asked)}.`];
+  if (asked === "auto") {
+    lines.push("", "I'll work out what you read for from which digests you actually work through and what you ask me about, and tell you each time I revise it. /focus overrules me whenever you like.");
+  } else if (fresh && (asked === "cultural" || asked === "work")) {
+    lines.push(
+      "",
+      `Subjects: <i>${escapeHtml(MODES[asked].topics.slice(0, 6).join(", "))}…</i>`,
+      "",
+      "These are new subjects, so I need to look at your channels again before the next digest — /channels shows the result. /topics and /focus adjust this mode without leaving it."
+    );
+  } else {
+    lines.push("", "Restored the subjects and brief you had in this mode.");
+  }
+  await send(chatId, lines.join("\n"));
+
+  // A fresh preset means channels judged against subjects nobody has judged
+  // them against yet; without this the first digest reads on last mode's
+  // verdicts. Done after the reply so the person is not left waiting.
+  if (fresh && (asked === "cultural" || asked === "work") && canTriage()) {
+    void retriageForMode(userId, chatId).catch((err) =>
+      console.warn(`mode re-triage failed for ${userId}: ${err?.message || err}`)
+    );
+  }
+
+  if (asked === "auto") void announceLearned(userId, chatId);
+}
+
+async function retriageForMode(userId: string, chatId: number): Promise<void> {
+  const account = await getAccount(userId);
+  if (!account) return;
+  const topics = await getTopics(userId);
+  if (topics.length === 0) return;
+  const { verdicts, channels, everythingExcluded } = await triage(account, topics);
+  if (everythingExcluded) {
+    await send(chatId, "None of your channels look like they cover this mode's subjects, so I've left the filter off rather than give you empty digests. /channels to sort them yourself.");
+    return;
+  }
+  await setVerdicts(userId, verdicts);
+  const kept = Object.values(verdicts).filter((v) => v.onTopic).length;
+  await send(chatId, `Looked at your channels for this mode: keeping <b>${kept}</b> of ${channels.length}. /channels shows which and why.`);
+}
+
+/**
+ * A digest was answered. In auto mode that is the evidence, so count it and
+ * refresh the brief every few — unawaited, because the person is owed their
+ * confirmation now, not after a model call.
+ */
+async function noteEngagement(userId: string, chatId: number): Promise<void> {
+  if (!(await noteDigestClosed(userId, LEARN_EVERY))) return;
+  void announceLearned(userId, chatId);
+}
+
+/** Auto's refresh, said out loud — a brief that changes silently cannot be corrected. */
+async function announceLearned(userId: string, chatId: number): Promise<void> {
+  const learned = await learnFocus(userId);
+  if (!learned) return;
+  await send(
+    chatId,
+    `From how you've been using me, I've set your brief to:\n<i>${escapeHtml(learned)}</i>\n\n/focus rewrites it if I've read you wrong.`
+  ).catch(() => {});
 }
 
 /**
@@ -1184,6 +1285,7 @@ async function onSpokenMarkRead(userId: string, chatId: number): Promise<void> {
   await typing(chatId);
   const result = await markDigestRead(account, digest);
   await send(chatId, escapeHtml(result));
+  void noteEngagement(userId, chatId);
 }
 
 async function handleCallback(query: any): Promise<void> {
@@ -1217,6 +1319,7 @@ async function handleCallback(query: any): Promise<void> {
     await closeDigest(`${userId}:${from}`);
     await dropButtons(chatId, messageId);
     await answer("Left unread. The queue moves on.");
+    void noteEngagement(userId, chatId);
     return;
   }
 
@@ -1235,6 +1338,7 @@ async function handleCallback(query: any): Promise<void> {
     const result = await onReadPress(userId, chatId, messageId, from);
     await answer();
     await send(chatId, escapeHtml(result));
+    void noteEngagement(userId, chatId);
   } catch (err: any) {
     console.error(`read-mark failed for ${userId}:`, err);
     await answer();
@@ -1312,6 +1416,8 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/mode":
+      return onMode(userId, chatId, args);
     case "/sources":
       return onSources(userId, chatId);
     case "/slack":
@@ -1546,6 +1652,7 @@ export async function startBot(): Promise<void> {
       { command: "digest", description: "the next digest from your unread queue" },
       { command: "topics", description: "subjects you read for — I skip the rest" },
       { command: "focus", description: "what matters within them — the rest shrinks" },
+      { command: "mode", description: "auto, cultural, work or custom" },
       { command: "sources", description: "add Slack and other messengers" },
       { command: "channel", description: "digest one channel's unread backlog" },
       { command: "channels", description: "what I read, skip, and why" },

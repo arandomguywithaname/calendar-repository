@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { dataDir } from "./paths";
 import { Connections } from "../reader/types";
-import { ChannelCoverage, ChannelVerdict, PeriodDigest, TelegramAccount } from "./types";
+import { ChannelCoverage, ChannelVerdict, ModeName, ModeProfile, PeriodDigest, TelegramAccount } from "./types";
 
 /**
  * Persistence for the digest side.
@@ -115,6 +115,20 @@ interface DigestStoreShape {
    * walked id by id.
    */
   sourceMarks: Record<string, Record<string, string>>;
+  /** userId -> the reading mode in force. Absent means "custom", the pre-modes behaviour. */
+  modes: Record<string, ModeName>;
+  /**
+   * userId -> mode -> that mode's parked settings.
+   *
+   * Only the modes the person is *not* currently in live here; the active
+   * one's settings stay in `topics` / `focuses` / `verdicts` / `overrides`
+   * where every existing reader already looks for them. Switching parks one
+   * and loads the other, which is what keeps triage verdicts from being
+   * thrown away and re-bought on every switch.
+   */
+  profiles: Record<string, Partial<Record<ModeName, ModeProfile>>>;
+  /** userId -> digests closed since auto mode last re-read what they engage with. */
+  autoCounters: Record<string, number>;
 }
 
 /**
@@ -158,6 +172,9 @@ function empty(): DigestStoreShape {
     stripeCustomers: {},
     connections: {},
     sourceMarks: {},
+    modes: {},
+    profiles: {},
+    autoCounters: {},
   };
 }
 
@@ -520,6 +537,85 @@ export async function allowedChannels(userId: string): Promise<ChannelFilter | n
     const verdict = verdicts[channelId];
     return verdict ? verdict.onTopic : true;
   };
+}
+
+/* --------------------------------- modes ----------------------------------- */
+
+export async function getMode(userId: string): Promise<ModeName> {
+  return (await load()).modes[userId] || "custom";
+}
+
+/** The settings in force right now, as a profile — what a switch parks. */
+function activeProfile(store: DigestStoreShape, userId: string): ModeProfile {
+  return {
+    topics: store.topics[userId] || [],
+    focus: store.focuses[userId] || "",
+    verdicts: store.verdicts[userId] || {},
+    overrides: store.overrides[userId] || {},
+  };
+}
+
+function applyProfile(store: DigestStoreShape, userId: string, profile: ModeProfile): void {
+  if (profile.topics.length) store.topics[userId] = profile.topics;
+  else delete store.topics[userId];
+  if (profile.focus) store.focuses[userId] = profile.focus;
+  else delete store.focuses[userId];
+  store.verdicts[userId] = profile.verdicts;
+  store.overrides[userId] = profile.overrides;
+}
+
+/**
+ * Park the mode being left, load the one being entered.
+ *
+ * One mutate, because a half-applied switch would leave someone reading with
+ * one mode's channel filter and another's brief. `makeProfile` supplies the
+ * starting point when a mode is entered for the first time — it is passed in
+ * rather than imported so this module keeps knowing nothing about what any
+ * particular mode means.
+ *
+ * Returns whether the entered mode was new, so the caller can say "here is
+ * what this mode reads for" the first time and stay quiet afterwards.
+ */
+export async function switchMode(
+  userId: string,
+  next: ModeName,
+  makeProfile: (current: ModeProfile) => ModeProfile
+): Promise<{ changed: boolean; fresh: boolean }> {
+  return mutate((store) => {
+    const current = store.modes[userId] || "custom";
+    if (current === next) return { changed: false, fresh: false };
+
+    const mine = store.profiles[userId] || (store.profiles[userId] = {});
+    mine[current] = activeProfile(store, userId);
+
+    const parked = mine[next];
+    const fresh = !parked;
+    applyProfile(store, userId, parked || makeProfile(activeProfile(store, userId)));
+    delete mine[next];
+
+    store.modes[userId] = next;
+    return { changed: true, fresh };
+  });
+}
+
+/**
+ * Count a digest the person answered, and say whether auto should look again.
+ *
+ * Engagement is the only signal there is — nobody rates topics — so the
+ * trigger is simply "a few more digests have been closed". Cheap, and it
+ * means learning happens at the pace of reading rather than of the clock.
+ */
+export async function noteDigestClosed(userId: string, every: number): Promise<boolean> {
+  return mutate((store) => {
+    if ((store.modes[userId] || "custom") !== "auto") return false;
+    const next = (store.autoCounters[userId] || 0) + 1;
+    if (next < every) {
+      store.autoCounters[userId] = next;
+      return false;
+    }
+    store.autoCounters[userId] = 0;
+    return true;
+  });
 }
 
 /* -------------------------------- sources ---------------------------------- */
