@@ -1,4 +1,5 @@
 import { connectors } from "../reader/connectors";
+import { ForwardedPost } from "./store";
 import { AppId, Connections } from "../reader/types";
 import { wellFormed } from "./format";
 import { Post } from "./types";
@@ -96,6 +97,40 @@ export async function collectSourcePosts(
 }
 
 /**
+ * The namespace forwarded messages live under, kept distinct from any
+ * connector's `<app>:<chat>` so the timestamp-marked sources and the
+ * drained-by-id forwards never collide.
+ */
+export const FORWARD_PREFIX = "forward";
+
+/**
+ * Forwarded messages as digest posts.
+ *
+ * They carry `messageId: 0` like a connector post — there is no numeric id to
+ * count and nothing downstream needs one — but their channel is the forward
+ * namespace, which `sourceCoverage` skips: a forward is consumed by having
+ * its queue entry removed, not by advancing a timestamp mark. The post id
+ * keeps the queue id so the caller can remove exactly what a digest kept.
+ */
+export function forwardPosts(forwards: ForwardedPost[]): Post[] {
+  return forwards.map((f) => ({
+    id: `${FORWARD_PREFIX}:${f.id}`,
+    channelId: FORWARD_PREFIX,
+    channelTitle: `Forwarded · ${f.from}`,
+    messageId: 0,
+    text: f.from ? `${f.from}: ${wellFormed(f.text)}` : wellFormed(f.text),
+    date: f.date,
+  }));
+}
+
+/** Which of the kept posts are forwards, by their queue id, so they can be drained. */
+export function keptForwardIds(kept: Post[]): string[] {
+  return kept
+    .filter((p) => p.channelId === FORWARD_PREFIX)
+    .map((p) => p.id.slice(FORWARD_PREFIX.length + 1));
+}
+
+/**
  * The marks to store, given what actually survived into the digest.
  *
  * Measured on the kept posts rather than the fetched ones, for the same
@@ -107,6 +142,7 @@ export function sourceCoverage(kept: Post[]): Record<string, string> {
   const covered: Record<string, string> = {};
   for (const post of kept) {
     if (post.messageId !== 0) continue; // a Telegram post, handled by the queue's own walk
+    if (post.channelId === FORWARD_PREFIX) continue; // a forward, drained by id rather than marked
     if (!covered[post.channelId] || post.date > covered[post.channelId]) {
       covered[post.channelId] = post.date;
     }

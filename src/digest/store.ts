@@ -129,6 +129,28 @@ interface DigestStoreShape {
   profiles: Record<string, Partial<Record<ModeName, ModeProfile>>>;
   /** userId -> digests closed since auto mode last re-read what they engage with. */
   autoCounters: Record<string, number>;
+  /**
+   * userId -> messages the person forwarded into the bot, waiting to join a
+   * digest.
+   *
+   * The one source that needs no account and no API: anything a person can
+   * see in Telegram, they can forward here, and it lands in the next digest
+   * beside their channels. Held as a queue rather than marked by timestamp
+   * like the connectors, because two forwards can share a second and the
+   * honest-coverage rule still has to drain exactly what a digest consumed —
+   * so kept forwards are removed by id, and a trim leaves the rest for next
+   * time.
+   */
+  forwards: Record<string, ForwardedPost[]>;
+}
+
+
+/** One message forwarded into the bot, before it becomes a digest Post. */
+export interface ForwardedPost {
+  id: string;   // unique within the person's queue
+  text: string; // the message body or caption, already well-formed
+  from: string; // where it was forwarded from, as a human label
+  date: string; // ISO 8601 — the original message's date when known, else arrival
 }
 
 /**
@@ -175,6 +197,7 @@ function empty(): DigestStoreShape {
     modes: {},
     profiles: {},
     autoCounters: {},
+    forwards: {},
   };
 }
 
@@ -655,6 +678,49 @@ export async function advanceSourceMarks(
     for (const [key, iso] of Object.entries(marks)) {
       if (!mine[key] || mine[key] < iso) mine[key] = iso;
     }
+  });
+}
+
+/* -------------------------------- forwards --------------------------------- */
+
+/**
+ * Bounded so a person who forwards a hundred things and never asks for a
+ * digest can't grow the store without limit. When full the oldest go first —
+ * they're also the ones a digest would have consumed soonest.
+ */
+const MAX_FORWARDS_PER_USER = 500;
+
+export async function addForward(userId: string, post: ForwardedPost): Promise<number> {
+  return mutate((store) => {
+    const mine = store.forwards[userId] || (store.forwards[userId] = []);
+    mine.push(post);
+    if (mine.length > MAX_FORWARDS_PER_USER) mine.splice(0, mine.length - MAX_FORWARDS_PER_USER);
+    return mine.length;
+  });
+}
+
+export async function getForwards(userId: string): Promise<ForwardedPost[]> {
+  return (await load()).forwards[userId] || [];
+}
+
+export async function countForwards(userId: string): Promise<number> {
+  return ((await load()).forwards[userId] || []).length;
+}
+
+/** Drop exactly the forwards a digest consumed; a trim leaves the rest queued. */
+export async function removeForwards(userId: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const gone = new Set(ids);
+  await mutate((store) => {
+    const mine = store.forwards[userId];
+    if (!mine) return;
+    store.forwards[userId] = mine.filter((f) => !gone.has(f.id));
+  });
+}
+
+export async function clearForwards(userId: string): Promise<void> {
+  await mutate((store) => {
+    delete store.forwards[userId];
   });
 }
 

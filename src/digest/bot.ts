@@ -28,8 +28,11 @@ import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
 import { ModeName, PeriodDigest, TelegramAccount } from "./types";
 import {
+  addForward,
   appendChat,
   claimReadMark,
+  clearForwards,
+  getForwards,
   clearAccount,
   clearChat,
   closeDigest,
@@ -262,7 +265,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/news тема — search the web and report what actually happened, with sources\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/slack, /gmail — connect one by signing in; nothing to paste\n/topics — name the subjects you read for, so I skip the rest
+/news тема — search the web and report what actually happened, with sources\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/slack, /gmail — connect one by signing in; nothing to paste\nForward me any message and it joins your next digest — /forwards shows the queue\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -464,6 +467,8 @@ async function onSources(userId: string, chatId: number): Promise<void> {
     gmailOauthConfigured()
       ? "<b>Gmail</b> — send <code>/gmail</code> and press the link. Google's own sign-in, read-only access, and your mail joins the same digests. <code>/gmail off</code> disconnects."
       : "<b>Gmail</b> — needs a Google OAuth client registered for this bot before it can be offered. Ask the operator.",
+    "",
+    "<b>Forwarding</b> — the one that needs nothing set up. Forward me any message — from a chat, a channel you don't follow, anywhere — and it joins your next digest beside your channels. Add a caption when you forward a photo or file, so there are words to read. <code>/forwards</code> shows what's waiting.",
   ];
   await send(chatId, lines.join("\n"));
 }
@@ -1498,6 +1503,8 @@ async function handleText(
       return onSlack(userId, chatId, args);
     case "/gmail":
       return onGmail(userId, chatId, args);
+    case "/forwards":
+      return onForwards(userId, chatId, args);
     case "/pay":
       return onPay(userId, chatId);
     case "/billing":
@@ -1592,6 +1599,127 @@ async function handleText(
   await send(chatId, escapeHtml(answer));
 }
 
+/**
+ * `/forwards` — what's queued from forwarding, and a way to empty it.
+ *
+ * Forwarding is silent-by-default: a message lands, gets a one-line "saved",
+ * and waits. This is the window into that queue for anyone who wants to check
+ * what's pending or drop it before it reaches a digest.
+ */
+async function onForwards(userId: string, chatId: number, args: string[]): Promise<void> {
+  if ((args[0] || "").trim() === "clear") {
+    await clearForwards(userId);
+    await send(chatId, "Cleared. Nothing forwarded is waiting; your channels and other sources are untouched.");
+    return;
+  }
+
+  const forwards = await getForwards(userId);
+  if (forwards.length === 0) {
+    await send(
+      chatId,
+      "Nothing forwarded is waiting. Forward any message — from a chat, a channel you don't follow, anywhere in Telegram — and it joins your next digest. Add a caption if you're forwarding a photo or file, so there are words to read."
+    );
+    return;
+  }
+
+  const lines = forwards.slice(-10).map((f) => {
+    const preview = f.text.length > 80 ? `${f.text.slice(0, 80)}…` : f.text;
+    return `• <b>${escapeHtml(f.from)}</b> — ${escapeHtml(preview)}`;
+  });
+  const more = forwards.length > 10 ? `
+
+…and ${forwards.length - 10} more.` : "";
+  await send(
+    chatId,
+    `${forwards.length === 1 ? "1 forward is" : `${forwards.length} forwards are`} waiting for your next digest:
+
+${lines.join("\n")}${more}
+
+<code>/forwards clear</code> empties the queue.`
+  );
+}
+
+/**
+ * Where a forwarded message came from, as a human label — or null if the
+ * message isn't a forward at all.
+ *
+ * Telegram tells us the origin two ways: the modern `forward_origin` object
+ * (a channel, a named user, an account that has hidden itself, or an ordinary
+ * group), and the legacy fields that older clients and the odd library still
+ * send. An empty string is a real answer — a forward whose sender chose not to
+ * be named — and is kept distinct from null so an anonymous forward is still
+ * treated as content, not as a command.
+ */
+function forwardOrigin(message: any): string | null {
+  const o = message?.forward_origin;
+  if (o) {
+    switch (o.type) {
+      case "channel":
+        return o.chat?.title || o.chat?.username || "a channel";
+      case "user": {
+        const u = o.sender_user;
+        return [u?.first_name, u?.last_name].filter(Boolean).join(" ") || (u?.username ? `@${u.username}` : "");
+      }
+      case "hidden_user":
+        return o.sender_user_name || "";
+      case "chat":
+        return o.sender_chat?.title || "a group";
+      default:
+        return "";
+    }
+  }
+  // Legacy shape, still emitted by some clients.
+  if (message?.forward_from_chat) return message.forward_from_chat.title || "a channel";
+  if (message?.forward_from) {
+    const u = message.forward_from;
+    return [u.first_name, u.last_name].filter(Boolean).join(" ") || (u.username ? `@${u.username}` : "");
+  }
+  if (typeof message?.forward_sender_name === "string") return message.forward_sender_name;
+  if (message?.forward_date) return ""; // a forward whose origin Telegram withheld
+  return null;
+}
+
+/**
+ * A forwarded message, dropped into the queue that joins the next digest.
+ *
+ * This is the one source that needs no account and no permission from anyone:
+ * anything a person can see in Telegram, they forward here and it lands in the
+ * digest beside their channels. Media with no words is the one thing we can't
+ * use — the summariser only reads text — so we say so rather than storing an
+ * empty entry.
+ */
+async function onForward(
+  userId: string,
+  chatId: number,
+  from: string,
+  message: any
+): Promise<void> {
+  const text = wellFormed(message.text ?? message.caption ?? "").trim();
+  if (!text) {
+    await send(
+      chatId,
+      "That forward had no text I can read — a photo or file on its own isn't something the digest can summarise. Forward something with words, or add a caption when you forward it."
+    );
+    return;
+  }
+
+  // The original message's own time when Telegram gives it, so the forward
+  // sits where it belongs in the digest's window rather than at "now".
+  const unix = Number(message.forward_origin?.date ?? message.forward_date);
+  const date = Number.isFinite(unix) && unix > 0 ? new Date(unix * 1000).toISOString() : new Date().toISOString();
+
+  const count = await addForward(userId, {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    text,
+    from: from || "an unnamed source",
+    date,
+  });
+  await send(
+    chatId,
+    `Saved${from ? ` from <b>${escapeHtml(from)}</b>` : ""}. It joins your next digest — ${count === 1 ? "1 forward is" : `${count} forwards are`} waiting. <code>/forwards</code> to see or clear them.`
+  );
+}
+
 /** Exported so a webhook deployment — or a test — can feed updates in directly. */
 export async function handleUpdate(update: any): Promise<void> {
   if (update.callback_query) return handleCallback(update.callback_query);
@@ -1599,8 +1727,7 @@ export async function handleUpdate(update: any): Promise<void> {
   // Only fresh messages: re-running a command because someone fixed a typo in it
   // would surprise them, and `allowed_updates` below doesn't request edits anyway.
   const message = update.message;
-  const text: string | undefined = message?.text;
-  if (!text || !message.chat) return;
+  if (!message?.chat) return;
 
   const chatId = message.chat.id;
   const userId = String(message.from?.id ?? chatId);
@@ -1614,13 +1741,28 @@ export async function handleUpdate(update: any): Promise<void> {
     if (name) await setName(userId, name).catch(() => {});
   }
 
+  // A forwarded message is content, not a command — even if its text happens
+  // to start with a slash. Caught here, before the text guard, because a
+  // forwarded photo or video carries its words in `caption`, not `text`.
+  const forwardedFrom = forwardOrigin(message);
+  const text: string | undefined = message.text ?? (forwardedFrom !== null ? message.caption : undefined);
+
   // /pay must survive suspension — it is the way back in. Everything else a
-  // suspended account says gets the notice.
-  const asksToPay = /^\/(pay|billing)(@|\s|$)/i.test(text.trim());
+  // suspended account says (a forward included) gets the notice.
+  const asksToPay = !forwardedFrom && /^\/(pay|billing)(@|\s|$)/i.test((text || "").trim());
   if (!asksToPay && (await isSuspended(userId)) && !isAdmin(userId)) {
     await send(chatId, SUSPENDED_NOTICE).catch(() => {});
     return;
   }
+
+  if (forwardedFrom !== null) {
+    await onForward(userId, chatId, forwardedFrom, message).catch((err) =>
+      console.warn(`forward failed for ${userId}: ${err?.message || err}`)
+    );
+    return;
+  }
+
+  if (!text) return;
 
   if (busy.has(userId)) {
     await send(chatId, "Still working on the last one — one moment.").catch(() => {});
@@ -1741,6 +1883,7 @@ export async function startBot(): Promise<void> {
       { command: "mode", description: "auto, cultural, work or custom" },
       { command: "sources", description: "add Slack, Gmail and other sources" },
       { command: "gmail", description: "connect Gmail, read-only" },
+      { command: "forwards", description: "what you've forwarded in, waiting for a digest" },
       { command: "channel", description: "digest one channel's unread backlog" },
       { command: "channels", description: "what I read, skip, and why" },
       { command: "last", description: "the most recent digest" },

@@ -1,5 +1,5 @@
 import { collectPosts, collectQueue, QueueChannelFetch } from "./collector";
-import { collectSourcePosts, sourceCoverage } from "./sources";
+import { collectSourcePosts, forwardPosts, keptForwardIds, sourceCoverage } from "./sources";
 import { PriorTopic, STEP_CHAR_BUDGET, summarisePeriod } from "./summarise";
 import { canTriage, triage } from "./triage";
 import {
@@ -7,6 +7,7 @@ import {
   advanceSourceMarks,
   allowedChannels,
   getConnections,
+  getForwards,
   getSourceMarks,
   getAccount,
   getFocus,
@@ -15,6 +16,7 @@ import {
   getTopics,
   getVerdicts,
   listDigests,
+  removeForwards,
   saveDigest,
   setVerdicts,
 } from "./store";
@@ -246,6 +248,9 @@ async function finishStep(
     const fetched = await collectSourcePosts(connections, await getSourceMarks(userId));
     sourcePosts = fetched.posts;
     for (const error of fetched.errors) console.warn(`${userId}: ${error}`);
+    // Whatever the person forwarded in since the last digest joins the same
+    // step. No credentials, no window — just the queue, drained by id below.
+    sourcePosts = [...sourcePosts, ...forwardPosts(await getForwards(userId))];
   }
 
   const merged = sourcePosts.length
@@ -321,6 +326,9 @@ async function finishStep(
   // postpones them rather than losing them.
   if (coverage.length > 0) await advanceMarks(userId, coverage);
   await advanceSourceMarks(userId, sourceCoverage(kept));
+  // Forwards are drained, not marked: remove exactly the ones this digest
+  // kept, so a trim leaves the rest queued for the next step.
+  await removeForwards(userId, keptForwardIds(kept));
 
   return { digest, empty: false, backlog: stillQueued };
 }
