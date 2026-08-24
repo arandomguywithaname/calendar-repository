@@ -149,3 +149,41 @@ export function sourceCoverage(kept: Post[]): Record<string, string> {
   }
   return covered;
 }
+
+
+export interface AppCheck {
+  app: AppId;
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * Live-check every source app, in parallel, one bad one never sinking the rest.
+ *
+ * A connector with a `verify` gets a real call — Slack's auth.test, Gmail's
+ * getProfile — so an expired sign-in reads as broken here rather than silently
+ * dropping out of digests. One without falls back to its `isLive`, which is
+ * still an honest "connected or not". Telegram is excluded: its session is the
+ * account itself, checked by the caller, not a connector credential.
+ */
+export async function verifyConnections(connections: Connections): Promise<AppCheck[]> {
+  return Promise.all(
+    SOURCE_APPS.map(async (app) => {
+      const connector = connectors[app];
+      const label = connector.label;
+      if (!connector.isLive(connections)) {
+        return { app, label, ok: false, detail: "not connected" };
+      }
+      if (!connector.verify) {
+        return { app, label, ok: true, detail: "connected" };
+      }
+      try {
+        const result = await connector.verify(connections);
+        return { app, label, ok: result.ok, detail: result.detail };
+      } catch (err: any) {
+        return { app, label, ok: false, detail: `check failed: ${err?.message || err}` };
+      }
+    })
+  );
+}

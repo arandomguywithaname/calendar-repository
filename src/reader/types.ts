@@ -64,6 +64,13 @@ export interface Connector {
   tokenHelp?(): { label: string; help: string; placeholder: string };
   listChats(connections: Connections): Promise<Chat[]>;
   fetchMessages(chatIds: string[], limit: number, connections: Connections): Promise<Message[]>;
+  /**
+   * A live check that the stored credential still works — a cheap real call,
+   * not just "is a token present". Optional: a connector without one is
+   * verified by its `isLive` alone. Never throws; a failure is a returned
+   * `ok: false` with a human reason.
+   */
+  verify?(connections: Connections): Promise<{ ok: boolean; detail: string }>;
 }
 
 /** What the user picked on the dashboard */

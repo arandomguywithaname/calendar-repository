@@ -24,7 +24,7 @@ import {
 import { connectUrl, setSlackNotifier, slackOauthConfigured } from "./slack-connect";
 import { LEARN_EVERY, learnFocus } from "./auto";
 import { isModeName, modeBlurb, modeLabel, MODES, presetProfile } from "./modes";
-import { appLabel, connectedApps } from "./sources";
+import { appLabel, connectedApps, verifyConnections } from "./sources";
 import { runChannelDigest, runDigest } from "./pipeline";
 import { canTriage, triage } from "./triage";
 import { ModeName, PeriodDigest, TelegramAccount } from "./types";
@@ -44,6 +44,7 @@ import {
   getFocus,
   getNames,
   getOrCreateMcpToken,
+  hasMcpToken,
   getOverrides,
   getConnections,
   getMode,
@@ -266,7 +267,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/news тема — search the web and report what actually happened, with sources\n/check — is something true? I search, weigh sources, and say honestly — paste a link too\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/slack, /gmail — connect one by signing in; nothing to paste\nForward me any message and it joins your next digest — /forwards shows the queue\n/topics — name the subjects you read for, so I skip the rest
+/news тема — search the web and report what actually happened, with sources\n/check — is something true? I search, weigh sources, and say honestly — paste a link too\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/verify — check every connection is actually working right now\n/slack, /gmail — connect one by signing in; nothing to paste\nForward me any message and it joins your next digest — /forwards shows the queue\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -516,6 +517,58 @@ async function onSources(userId: string, chatId: number): Promise<void> {
     "",
     "<b>Forwarding</b> — the one that needs nothing set up. Forward me any message — from a chat, a channel you don't follow, anywhere — and it joins your next digest beside your channels. Add a caption when you forward a photo or file, so there are words to read. <code>/forwards</code> shows what's waiting.",
   ];
+  await send(chatId, lines.join("\n"));
+}
+
+/**
+ * `/verify` — not "what could be connected" but "what actually works right now".
+ *
+ * /sources describes the menu; this pings each connection live. Slack's own
+ * auth.test, Gmail forced to mint a fresh token — an expired sign-in shows up
+ * here as broken, with the one command that fixes it, rather than quietly
+ * vanishing from digests. Telegram is the account itself, and the claude.ai
+ * connector is checked without minting a token as a side effect.
+ */
+async function onVerify(userId: string, chatId: number): Promise<void> {
+  await typing(chatId);
+  const [account, connections, connector] = await Promise.all([
+    getAccount(userId),
+    getConnections(userId),
+    hasMcpToken(userId),
+  ]);
+
+  const cross = "\u274c";
+  const lines: string[] = ["<b>Checking your connections…</b>", ""];
+
+  // Telegram — the core account, its session either present or not.
+  lines.push(
+    account
+      ? `\u2705 <b>Telegram</b> — signed in${account.phone ? ` (${escapeHtml(account.phone)})` : ""}, reading your channels.`
+      : `${cross} <b>Telegram</b> — not signed in. /connect to start.`
+  );
+
+  // Slack, Gmail, WhatsApp — a real call each, in parallel.
+  const checks = await verifyConnections(connections);
+  for (const c of checks) {
+    const mark = c.detail === "not connected" ? "\u26aa" : c.ok ? "\u2705" : cross;
+    lines.push(`${mark} <b>${escapeHtml(c.label)}</b> — ${escapeHtml(c.detail)}`);
+  }
+
+  // The claude.ai connector: does a token exist to read these digests with.
+  lines.push(
+    connector
+      ? "\u2705 <b>claude.ai connector</b> — a URL is active. /mcp shows it; /mcp new replaces it."
+      : "\u26aa <b>claude.ai connector</b> — none yet. /mcp creates one so your own Claude can read these digests."
+  );
+
+  const anyBroken = !account || checks.some((c) => !c.ok && c.detail !== "not connected");
+  lines.push("");
+  lines.push(
+    anyBroken
+      ? "A \u274c means the sign-in lapsed — reconnect with the command shown and it's back in your digests."
+      : "Everything that's connected is working."
+  );
+
   await send(chatId, lines.join("\n"));
 }
 
@@ -1550,6 +1603,8 @@ async function handleText(
       return onMode(userId, chatId, args);
     case "/sources":
       return onSources(userId, chatId);
+    case "/verify":
+      return onVerify(userId, chatId);
     case "/slack":
       return onSlack(userId, chatId, args);
     case "/gmail":
@@ -1934,6 +1989,7 @@ export async function startBot(): Promise<void> {
       { command: "check", description: "is it true? I search and say honestly" },
       { command: "mode", description: "auto, cultural, work or custom" },
       { command: "sources", description: "add Slack, Gmail and other sources" },
+      { command: "verify", description: "check every connection is working now" },
       { command: "gmail", description: "connect Gmail, read-only" },
       { command: "forwards", description: "what you've forwarded in, waiting for a digest" },
       { command: "channel", description: "digest one channel's unread backlog" },

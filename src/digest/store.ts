@@ -820,6 +820,12 @@ export async function getOrCreateMcpToken(userId: string): Promise<string> {
   });
 }
 
+/** Does this person already have a connector token? A read-only peek — /verify must not mint one. */
+export async function hasMcpToken(userId: string): Promise<boolean> {
+  const store = await load();
+  return Object.values(store.mcpTokens).includes(userId);
+}
+
 export async function rotateMcpToken(userId: string): Promise<string> {
   return mutate((store) => {
     for (const [token, owner] of Object.entries(store.mcpTokens)) {

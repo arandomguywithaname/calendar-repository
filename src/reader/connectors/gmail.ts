@@ -146,6 +146,23 @@ export const gmailConnector: Connector = {
         ? "Not connected — click Connect to allow read-only access to your Gmail inbox."
         : "Not connected — showing sample mail. Gmail needs a Google OAuth client (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) registered once for this site.",
 
+  async verify(c): Promise<{ ok: boolean; detail: string }> {
+    if (!c.googleRefreshToken) return { ok: false, detail: "not connected" };
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return { ok: false, detail: "the Google client isn't set up on this server — ask the operator" };
+    }
+    try {
+      // getProfile forces the refresh token to mint a fresh access token: if it
+      // was revoked, this is where Google says invalid_grant, cheaply.
+      const auth = oauthClient(c.googleRefreshToken);
+      const profile = await google.gmail({ version: "v1", auth }).users.getProfile({ userId: "me" });
+      return { ok: true, detail: `reading ${profile.data.emailAddress || c.googleEmail || "your inbox"}, read-only` };
+    } catch (err: any) {
+      const revoked = /invalid_grant|invalid_token|unauthorized/i.test(err?.message || "");
+      return { ok: false, detail: revoked ? "access was revoked — reconnect with /gmail" : `Google said: ${err?.message || err}` };
+    }
+  },
+
   async listChats(c): Promise<Chat[]> {
     if (!c.googleRefreshToken) return demoChats("gmail");
 

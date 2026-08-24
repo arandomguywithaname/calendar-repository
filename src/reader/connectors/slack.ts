@@ -111,6 +111,24 @@ export const slackConnector: Connector = {
           ? "Not connected — click Connect to sign in with Slack and read your own conversations."
           : "Not connected — showing a sample workspace. Slack needs an app registered at api.slack.com (SLACK_CLIENT_ID / SLACK_CLIENT_SECRET) once for this site.",
 
+  async verify(c: Connections = {}): Promise<{ ok: boolean; detail: string }> {
+    const t = token(c);
+    if (!t) return { ok: false, detail: "not connected" };
+    try {
+      // auth.test is Slack's own "is this token still good" call — no scopes,
+      // no cost, and it names the workspace it's signed in to.
+      const res = await fetch(`${API}/auth.test`, { headers: { Authorization: `Bearer ${t}` } });
+      const body = (await res.json()) as { ok: boolean; error?: string; team?: string; user?: string };
+      if (body.ok) {
+        return { ok: true, detail: `signed in to ${body.team || "your workspace"}${body.user ? ` as ${body.user}` : ""}` };
+      }
+      const expired = body.error === "invalid_auth" || body.error === "token_revoked" || body.error === "account_inactive";
+      return { ok: false, detail: expired ? "the sign-in expired — reconnect with /slack" : `Slack said: ${body.error || "not ok"}` };
+    } catch (err: any) {
+      return { ok: false, detail: `couldn't reach Slack: ${err?.message || err}` };
+    }
+  },
+
   async listChats(c: Connections = {}): Promise<Chat[]> {
     if (!token(c)) return demoChats("slack");
 
