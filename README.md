@@ -47,6 +47,12 @@ already told is omitted, a development arrives as an "Update:". That makes the
 stored digests a chronology — first tellings plus update chains — which is what
 lets it answer questions about trends rather than just "what happened".
 
+**Reads the world, not just your feed.** Ask it what actually happened — an ECB
+rate decision, an Amazon announcement, whether a story is still true — and it
+searches the web and answers with named sources and dates. `/news <subject>` is
+the explicit version. It never blurs the two: your channels are one source, the
+open web is another, and every answer says which is which.
+
 **Talks to your Claude.** `/mcp` gives you a personal connector URL. Add it on
 claude.ai and any conversation there can read your digests, with everything
 Claude already knows about you.
@@ -75,6 +81,7 @@ In Telegram, with the bot:
 |---|---|
 | `/digest` | next digest from your unread queue (`/digest 24` re-reads a recent day instead) |
 | `/channel имя` | one channel's unread backlog, same logic |
+| `/news тема` | search the web and report what actually happened, with sources |
 | `/mode` | auto / cultural / work / custom — presets of the two filters below |
 | `/topics` | subjects you read for — the hard channel filter |
 | `/focus` | editorial brief — what matters inside them |

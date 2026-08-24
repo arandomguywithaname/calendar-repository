@@ -11,7 +11,7 @@ import {
   startQrLogin,
   waitForQrLogin,
 } from "./collector";
-import { answerFromDigests } from "./converse";
+import { answerFromDigests, newsBriefing } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
@@ -257,7 +257,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/mode — auto, cultural, work or custom reading modes\n/sources — add Slack and other messengers to your digests\n/topics — name the subjects you read for, so I skip the rest
+/news тема — search the web and report what actually happened, with sources\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack and other messengers to your digests\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -309,6 +309,35 @@ async function gateNewAccount(userId: string, chatId: number): Promise<boolean> 
     `Signed in. This bot runs on a subscription — /pay opens the checkout, and everything switches on the moment the payment goes through.\n\n${escapeHtml(paymentLinkFor(userId))}`
   );
   return true;
+}
+
+/**
+ * "Go and find out", as opposed to "tell me what my channels said".
+ *
+ * The digests answer what this person's own sources reported; this answers
+ * what happened, checked against the open web. Separate command because the
+ * two are different promises and blurring them is how a reader stops trusting
+ * either.
+ */
+async function onNews(userId: string, chatId: number, args: string[]): Promise<void> {
+  const subject = args.join(" ").trim();
+  if (!subject) {
+    const topics = await getTopics(userId);
+    await send(
+      chatId,
+      topics.length
+        ? `<code>/news тема</code> — I'll search the web and tell you what actually happened, with sources.\n\nFor example: <code>/news ${escapeHtml(topics[0])}</code>`
+        : "<code>/news тема</code> — I'll search the web and tell you what actually happened, with sources. For example: <code>/news ставка ЕЦБ</code> or <code>/news Amazon</code>."
+    );
+    return;
+  }
+
+  await typing(chatId);
+  try {
+    await send(chatId, await newsBriefing(userId, subject));
+  } catch (err: any) {
+    await send(chatId, `Couldn't read the news on that: ${escapeHtml(err?.message || String(err))}`);
+  }
 }
 
 /**
@@ -1416,6 +1445,8 @@ async function handleText(
       await send(chatId, renderDigest(digest), open ? readButton(digest) : undefined);
       return;
     }
+    case "/news":
+      return onNews(userId, chatId, args);
     case "/mode":
       return onMode(userId, chatId, args);
     case "/sources":
@@ -1652,6 +1683,7 @@ export async function startBot(): Promise<void> {
       { command: "digest", description: "the next digest from your unread queue" },
       { command: "topics", description: "subjects you read for — I skip the rest" },
       { command: "focus", description: "what matters within them — the rest shrinks" },
+      { command: "news", description: "search the web on a subject, with sources" },
       { command: "mode", description: "auto, cultural, work or custom" },
       { command: "sources", description: "add Slack and other messengers" },
       { command: "channel", description: "digest one channel's unread backlog" },

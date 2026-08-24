@@ -40,8 +40,18 @@ function haveCredentials(): boolean {
 const SYSTEM = `You are the person's reader for the Telegram channels they follow. You have their digests —
 already summarised and deduplicated by period — not the original posts.
 
-Answer from the digests in front of you and nothing else. If they do not cover something, say so plainly
-instead of guessing; "that isn't in the digests I have" is a complete answer. Reply in the language the
+You have two sources and they are not interchangeable. The digests are what THIS person's own channels
+and chats said — the record of what they follow. The web_search tool reaches the open internet for
+anything else: what actually happened somewhere, whether a story is still true, the detail their channels
+left out, a subject nobody they follow covers at all.
+
+Search when the answer depends on the world rather than on their reading: a rate decision, a company
+announcement, a law taking effect, an event's real date, or anything they ask about that the digests do
+not carry. Answer from the digests alone when the question is about what they read or missed. Use both
+when it helps — "your channels reported X; the announcement itself says Y".
+
+Never blur the two. Say where a fact came from: their channels, or a named source you found. Do not
+guess: "that isn't in your digests and I couldn't find it" is a complete answer. Reply in the language the
 person writes in, conversationally, without headings or bullet scaffolding unless they ask for a list.
 
 When a topic matters, name its channels so they can go to the source. Where a digest is marked as
@@ -71,7 +81,12 @@ When they close a digest and ask for the next in one breath ("прочитано
  * parameters: the person is known from the conversation, and the queue has
  * exactly one next step and one latest digest.
  */
-const TOOLS = [
+const TOOLS: any[] = [
+  // Server-executed: the search happens on Anthropic's side and its results
+  // come back inside this same response. max_uses bounds a single question's
+  // cost — searches are billed per use, and an unbounded loop on a vague
+  // question is exactly the kind of bill nobody agreed to.
+  { type: "web_search_20260209", name: "web_search", max_uses: 6 },
   {
     name: "next_digest",
     description:
@@ -187,7 +202,18 @@ export async function answerFromDigests(
   }
 
   try {
-    const response: any = await (anthropic().beta.messages.create as any)({
+    // The search runs inside the model's turn, and a turn that searches
+    // several times can hit the server's own iteration limit and come back
+    // `pause_turn`. That is "still working", not an answer: hand the partial
+    // turn straight back and let it continue. Bounded, because a loop that
+    // cannot end is worse than an unfinished answer.
+    const messages: any[] = [
+      ...history.map((t) => ({ role: t.role, content: t.content })),
+      { role: "user", content: question },
+    ];
+    let response: any;
+    for (let attempt = 0; ; attempt++) {
+      response = await (anthropic().beta.messages.create as any)({
       model: MODEL,
       // Thinking and text share this cap, and a trend answer needs both.
       max_tokens: 8000,
@@ -221,11 +247,11 @@ export async function answerFromDigests(
       // just a lookup.
       output_config: { effort: "high" },
       tools: TOOLS,
-      messages: [
-        ...history.map((t) => ({ role: t.role, content: t.content })),
-        { role: "user", content: question },
-      ],
-    });
+      messages,
+      });
+      if (response.stop_reason !== "pause_turn" || attempt >= 3) break;
+      messages.push({ role: "assistant", content: response.content });
+    }
 
     if (response.stop_reason === "refusal") {
       return { text: "I couldn't answer that one. Try asking a different way." };
@@ -248,7 +274,15 @@ export async function answerFromDigests(
       return { markRead, advance, channelQuery, focusUpdate };
     }
 
-    return { text: response.content.find((b: any) => b.type === "text")?.text || "" };
+    // With a search in the turn the answer arrives as several text blocks
+    // around the results, so taking the first would return a preamble.
+    return {
+      text: response.content
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text)
+        .join("")
+        .trim(),
+    };
   } catch (err: any) {
     if (err instanceof Anthropic.AuthenticationError || /authentication method/i.test(err.message)) {
       return { text: answerLocally(question, digests) };
@@ -365,4 +399,70 @@ function answerLocally(question: string, digests: PeriodDigest[]): string {
 
   hits.sort((a, b) => b.score - a.score);
   return ["From the digests:", "", ...hits.slice(0, 6).map((h) => h.text)].join("\n");
+}
+
+
+/* --------------------------------- news ----------------------------------- */
+
+const NEWS_SYSTEM = `You are briefing one person on what has actually happened in the world on a subject they asked about,
+using web search. This is not their reading — it is the record, checked.
+
+Search properly before answering: what happened, when, who said so, and what follows from it. Prefer
+primary sources and established outlets over aggregators, and say when reports disagree. Lead with what
+changed, not with background. Give dates. Name the source of each claim inline — "the ECB said on
+Thursday", "Reuters reports" — so nothing is a floating assertion.
+
+Keep it to what a person can read in a minute or two: the handful of things that actually happened, each
+in a sentence or three. If the subject is quiet, say so rather than padding it with old news. Write in
+the language they asked in.`;
+
+/**
+ * An explicit "go and find out", rather than "tell me what my channels said".
+ *
+ * Kept apart from the conversation for one reason: here searching is the whole
+ * point, so it is instructed to search rather than allowed to. Their standing
+ * brief still colours it — someone who reads for what they can act on wants
+ * that from world news too.
+ */
+export async function newsBriefing(userId: string, subject: string): Promise<string> {
+  if (!haveCredentials()) {
+    return "I can't read the news without a summarising model configured (ANTHROPIC_API_KEY).";
+  }
+
+  const focus = await getFocus(userId);
+  const messages: any[] = [
+    {
+      role: "user",
+      content: `Subject: ${wellFormed(subject)}\n\nWhat has actually happened here recently? Today is ${new Date().toISOString().slice(0, 10)}.${
+        focus ? `\n\nFor context, this person reads for: "${wellFormed(focus)}" — weight the briefing accordingly, but do not omit something important because it falls outside that.` : ""
+      }`,
+    },
+  ];
+
+  let response: any;
+  for (let attempt = 0; ; attempt++) {
+    response = await (anthropic().beta.messages.create as any)({
+      model: MODEL,
+      max_tokens: 4000,
+      betas: [FALLBACK_BETA],
+      fallbacks: "default",
+      system: NEWS_SYSTEM,
+      output_config: { effort: "medium" },
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }],
+      messages,
+    });
+    if (response.stop_reason !== "pause_turn" || attempt >= 3) break;
+    messages.push({ role: "assistant", content: response.content });
+  }
+
+  if (response.stop_reason === "refusal") {
+    return "I couldn't look that one up. Try asking a different way.";
+  }
+
+  const text = response.content
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("")
+    .trim();
+  return text || "I searched but found nothing solid enough to report on that.";
 }
