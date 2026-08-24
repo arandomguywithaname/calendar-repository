@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { wellFormed } from "./format";
 import { getFocus, listDigests } from "./store";
 import { PeriodDigest } from "./types";
+import { CONTENT_GUARD } from "./guard";
 
 /**
  * Answering questions about the accumulated digests.
@@ -70,7 +71,8 @@ These digests come from a queue: the person's unread backlog is digested oldest-
 time, and each step waits for their verdict before the next is built. Three tools drive that queue,
 and a fourth (update_focus) records what the person wants their digests to prioritise.
 Everything else — any question about what the digests say — is answered as text, never with a tool.
-When they close a digest and ask for the next in one breath ("прочитано, дальше"), call both tools.`;
+When they close a digest and ask for the next in one breath ("прочитано, дальше"), call both tools.
+${CONTENT_GUARD}`;
 
 /**
  * The queue's controls, offered to the model instead of a phrase matcher.
@@ -414,7 +416,8 @@ Thursday", "Reuters reports" — so nothing is a floating assertion.
 
 Keep it to what a person can read in a minute or two: the handful of things that actually happened, each
 in a sentence or three. If the subject is quiet, say so rather than padding it with old news. Write in
-the language they asked in.`;
+the language they asked in.
+${CONTENT_GUARD}`;
 
 /**
  * An explicit "go and find out", rather than "tell me what my channels said".

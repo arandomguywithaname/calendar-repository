@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { wellFormed } from "./format";
 import { Channel, ChannelCoverage, PeriodDigest, Post, SourceRef, TopicDigest } from "./types";
+import { CONTENT_GUARD } from "./guard";
 
 /**
  * Turning a window of posts into a topic-organised digest.
@@ -89,7 +90,8 @@ Write in the language the posts are written in. Be concrete: name what happened 
 characterising it. Do not add facts that are not in the posts, and do not smooth over disagreement
 between sources — a digest that hides a contradiction is worse than one that reports it.
 
-Leave out posts that carry no news: advertising, giveaways, engagement bait, pure self-promotion.`;
+Leave out posts that carry no news: advertising, giveaways, engagement bait, pure self-promotion.
+${CONTENT_GUARD}`;
 
 /**
  * The subjects asked for, when there are any.
@@ -304,7 +306,8 @@ already told. Judge sameness by what happened, not by wording.
 Order topics by how much attention they deserve across the whole period. Keep at most ~15, folding
 genuinely minor items into one final "Briefly" topic (in the digest's language) with one line each.
 For each merged topic, carry over up to twelve of the source ids from the topics it merges, EXACTLY as
-given — never invent or alter an id. Write in the language the topics are written in.`;
+given — never invent or alter an id. Write in the language the topics are written in.
+${CONTENT_GUARD}`;
 
 interface RawDigest {
   headline: string;

@@ -12,6 +12,7 @@ import {
   waitForQrLogin,
 } from "./collector";
 import { answerFromDigests, newsBriefing } from "./converse";
+import { factCheck } from "./factcheck";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
@@ -265,7 +266,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/news тема — search the web and report what actually happened, with sources\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/slack, /gmail — connect one by signing in; nothing to paste\nForward me any message and it joins your next digest — /forwards shows the queue\n/topics — name the subjects you read for, so I skip the rest
+/news тема — search the web and report what actually happened, with sources\n/check — is something true? I search, weigh sources, and say honestly — paste a link too\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/slack, /gmail — connect one by signing in; nothing to paste\nForward me any message and it joins your next digest — /forwards shows the queue\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -346,6 +347,51 @@ async function onNews(userId: string, chatId: number, args: string[]): Promise<v
   } catch (err: any) {
     await send(chatId, `Couldn't read the news on that: ${escapeHtml(err?.message || String(err))}`);
   }
+}
+
+/**
+ * `/check` — is this actually true? A gentle fact-check, not a verdict machine.
+ *
+ * Built on web search, so it weighs sources instead of asserting; it is allowed
+ * to come back with "I couldn't find this, are you sure?" rather than a false
+ * confident answer. Paste a URL and it reads the page honestly first — a dead
+ * link, a 404, a bot wall — and only treats a page that loaded as one input,
+ * never as proof.
+ */
+async function onCheck(userId: string, chatId: number, args: string[]): Promise<void> {
+  const claim = args.join(" ").trim();
+  if (!claim) {
+    await send(
+      chatId,
+      "<code>/check that thing you're not sure about</code> — I'll search for it and tell you honestly whether it holds up. If you have a website that says it, paste the link and I'll read that too."
+    );
+    return;
+  }
+  await typing(chatId);
+  try {
+    await send(chatId, await factCheck(userId, claim));
+  } catch (err: any) {
+    await send(chatId, `Couldn't check that one: ${escapeHtml(err?.message || String(err))}`);
+  }
+}
+
+/**
+ * `/claude` — how to get a deeper answer from their own Claude.
+ *
+ * The fact-checker is deliberately simple; when someone wants more than it can
+ * give, the honest next step is their own Claude, which already reads these
+ * digests over the connector. This is the pointer to that, not a second copy
+ * of the /mcp setup.
+ */
+async function onClaude(userId: string, chatId: number): Promise<void> {
+  await send(
+    chatId,
+    [
+      "For anything you want dug into more deeply than my quick check, ask your own Claude — it reads these digests directly.",
+      "",
+      "Send <code>/mcp</code> to get your personal connector URL, then in claude.ai: Settings → Connectors → Add custom connector → paste it. After that, any conversation there can read your digests and go as deep as you like.",
+    ].join("\n")
+  );
 }
 
 /**
@@ -1495,6 +1541,11 @@ async function handleText(
     }
     case "/news":
       return onNews(userId, chatId, args);
+    case "/check":
+    case "/factcheck":
+      return onCheck(userId, chatId, args);
+    case "/claude":
+      return onClaude(userId, chatId);
     case "/mode":
       return onMode(userId, chatId, args);
     case "/sources":
@@ -1880,6 +1931,7 @@ export async function startBot(): Promise<void> {
       { command: "topics", description: "subjects you read for — I skip the rest" },
       { command: "focus", description: "what matters within them — the rest shrinks" },
       { command: "news", description: "search the web on a subject, with sources" },
+      { command: "check", description: "is it true? I search and say honestly" },
       { command: "mode", description: "auto, cultural, work or custom" },
       { command: "sources", description: "add Slack, Gmail and other sources" },
       { command: "gmail", description: "connect Gmail, read-only" },
