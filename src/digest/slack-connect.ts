@@ -1,5 +1,5 @@
-import * as crypto from "crypto";
 import express from "express";
+import { consumeState, issueState, peekState, publicBaseUrl, resultPage } from "./oauth-state";
 import { setConnections } from "./store";
 
 /**
@@ -24,32 +24,13 @@ const SCOPES = [
   "users:read",
 ].join(",");
 
-/** Long enough to walk to a laptop, short enough that a leaked link is stale. */
-const STATE_TTL_MS = 15 * 60 * 1000;
-
-/** state -> the Telegram user who asked. In memory: one process, and expiry is the point. */
-const pending = new Map<string, { userId: string; at: number }>();
 
 export function slackOauthConfigured(): boolean {
   return Boolean(process.env.SLACK_CLIENT_ID && process.env.SLACK_CLIENT_SECRET);
 }
 
-function baseUrl(): string {
-  return (
-    process.env.MCP_PUBLIC_URL ||
-    (process.env.FLY_APP_NAME ? `https://${process.env.FLY_APP_NAME}.fly.dev` : `http://localhost:${process.env.PORT || 8080}`)
-  ).replace(/\/+$/, "");
-}
-
 function redirectUri(): string {
-  return `${baseUrl()}/slack/callback`;
-}
-
-function sweep(): void {
-  const now = Date.now();
-  for (const [state, entry] of pending) {
-    if (now - entry.at > STATE_TTL_MS) pending.delete(state);
-  }
+  return `${publicBaseUrl()}/slack/callback`;
 }
 
 /**
@@ -58,27 +39,15 @@ function sweep(): void {
  * moment of the click, and the message in Telegram stays short enough to tap.
  */
 export function connectUrl(userId: string): string {
-  sweep();
-  const state = crypto.randomBytes(24).toString("base64url");
-  pending.set(state, { userId, at: Date.now() });
-  return `${baseUrl()}/slack/start/${state}`;
-}
-
-function page(title: string, body: string): string {
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100dvh;padding:2rem;background:#0f1115;color:#e9edf2}
-main{max-width:32rem;text-align:center}h1{font-size:1.3rem;margin:0 0 .75rem}p{margin:0;color:#a8b3c2}</style>
-<main><h1>${title}</h1><p>${body}</p></main>`;
+  return `${publicBaseUrl()}/slack/start/${issueState(userId, "slack")}`;
 }
 
 /** Both halves of the dance, mounted on the server the bot already runs. */
 export function mountSlackOauth(app: express.Express): void {
   app.get("/slack/start/:state", (req, res) => {
-    sweep();
     const state = String(req.params.state || "");
-    if (!pending.has(state)) {
-      res.status(400).send(page("That link expired", "Send /slack to the bot again for a fresh one."));
+    if (!peekState(state, "slack")) {
+      res.status(400).send(resultPage("That link expired", "Send /slack to the bot again for a fresh one."));
       return;
     }
     const url = new URL("https://slack.com/oauth/v2/authorize");
@@ -92,17 +61,15 @@ export function mountSlackOauth(app: express.Express): void {
   app.get("/slack/callback", async (req, res) => {
     const { code, state, error } = req.query as Record<string, string | undefined>;
     if (error || !code || !state) {
-      res.status(400).send(page("Slack sign-in was cancelled", "Nothing was connected. /slack starts it again."));
+      res.status(400).send(resultPage("Slack sign-in was cancelled", "Nothing was connected. /slack starts it again."));
       return;
     }
 
-    sweep();
     // Consumed on sight: a state is one authorisation, and replaying a
     // callback must not attach a second workspace to somebody's account.
-    const claim = pending.get(state);
-    pending.delete(state);
-    if (!claim) {
-      res.status(400).send(page("That link expired", "Send /slack to the bot again for a fresh one."));
+    const claimed = consumeState(state, "slack");
+    if (!claimed) {
+      res.status(400).send(resultPage("That link expired", "Send /slack to the bot again for a fresh one."));
       return;
     }
 
@@ -126,20 +93,20 @@ export function mountSlackOauth(app: express.Express): void {
       const token = payload.authed_user?.access_token || payload.access_token;
       if (!token) throw new Error("Slack returned no usable token.");
 
-      await setConnections(claim.userId, {
+      await setConnections(claimed, {
         slackToken: token,
         slackTeam: payload.team?.name || undefined,
       });
-      notifyConnected(claim.userId, payload.team?.name);
+      notifyConnected(claimed, payload.team?.name);
       res.send(
-        page(
+        resultPage(
           "Slack connected",
           `${payload.team?.name ? `<b>${payload.team.name}</b> is ` : ""}now part of your digests. You can close this tab and go back to Telegram.`
         )
       );
     } catch (err: any) {
-      console.warn(`slack oauth failed for ${claim.userId}: ${err?.message || err}`);
-      res.status(400).send(page("Slack sign-in failed", "Nothing was connected. Send /slack to the bot to try again."));
+      console.warn(`slack oauth failed for ${claimed}: ${err?.message || err}`);
+      res.status(400).send(resultPage("Slack sign-in failed", "Nothing was connected. Send /slack to the bot to try again."));
     }
   });
 }

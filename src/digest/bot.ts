@@ -15,6 +15,11 @@ import { answerFromDigests, newsBriefing } from "./converse";
 import { chunk, escapeHtml, renderDigest, wellFormed } from "./format";
 import { billingConfigured, billingRequired, paymentLinkFor, portalLink, setBillingNotifier } from "./billing";
 import { mcpUrl } from "./mcp";
+import {
+  connectUrl as gmailConnectUrl,
+  gmailOauthConfigured,
+  setGmailNotifier,
+} from "./gmail-connect";
 import { connectUrl, setSlackNotifier, slackOauthConfigured } from "./slack-connect";
 import { LEARN_EVERY, learnFocus } from "./auto";
 import { isModeName, modeBlurb, modeLabel, MODES, presetProfile } from "./modes";
@@ -257,7 +262,7 @@ I work through your unread backlog from the oldest post forward, one digest at a
 
 /connect — sign in with phone code
 /qr — sign in with QR code (faster, scan with another device)
-/news тема — search the web and report what actually happened, with sources\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack and other messengers to your digests\n/topics — name the subjects you read for, so I skip the rest
+/news тема — search the web and report what actually happened, with sources\n/mode — auto, cultural, work or custom reading modes\n/sources — add Slack, Gmail and other sources to your digests\n/slack, /gmail — connect one by signing in; nothing to paste\n/topics — name the subjects you read for, so I skip the rest
 /focus — say what matters within those subjects; the rest shrinks to one line
 /digest — the next digest from your unread queue (/digest 24 re-reads a recent day instead)
 /channel название — one channel's unread backlog, same logic, filter or no filter
@@ -456,12 +461,50 @@ async function onSources(userId: string, chatId: number): Promise<void> {
     "",
     "<b>WhatsApp</b> — personal chats can't be read by anything but WhatsApp itself; there is no API for it, and the tools that claim otherwise drive the account towards a ban. What does work is a WhatsApp <i>Business</i> number whose webhook points at this bot, which then accumulates what arrives from that moment on. Ask if you want that set up.",
     "",
-    "<b>Gmail</b> — the connector exists but needs a Google consent screen, which is a setup step rather than a pasted token. Not wired to the bot yet.",
+    gmailOauthConfigured()
+      ? "<b>Gmail</b> — send <code>/gmail</code> and press the link. Google's own sign-in, read-only access, and your mail joins the same digests. <code>/gmail off</code> disconnects."
+      : "<b>Gmail</b> — needs a Google OAuth client registered for this bot before it can be offered. Ask the operator.",
   ];
   await send(chatId, lines.join("\n"));
 }
 
-/** Slack, connected by pasting a token — no consent screen, no redirect URL. */
+/**
+ * Gmail, which is OAuth or nothing — Google has no pasteable token at all.
+ *
+ * Worth being plain about what is asked for: the scope is gmail.readonly, so
+ * the bot can read mail and cannot send, delete or change any of it. "Let a
+ * bot into my email" deserves that sentence before the link, not after.
+ */
+async function onGmail(userId: string, chatId: number, args: string[]): Promise<void> {
+  if ((args[0] || "").trim() === "off") {
+    await clearConnection(userId, ["googleRefreshToken", "googleEmail"]);
+    await send(chatId, "Gmail disconnected. Revoke the permission entirely at myaccount.google.com → Data & privacy → Third-party access.");
+    return;
+  }
+
+  if (!gmailOauthConfigured()) {
+    await send(
+      chatId,
+      isAdmin(userId)
+        ? "Gmail needs a Google OAuth client. Create one at console.cloud.google.com (redirect URI <code>" +
+            escapeHtml(`${(process.env.MCP_PUBLIC_URL || "https://telereader.fly.dev").replace(/\/+$/, "")}/gmail/callback`) +
+            "</code>), enable the Gmail API, then set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        : "Gmail isn't set up for this bot yet — ask the person who runs it."
+    );
+    return;
+  }
+
+  const { googleRefreshToken, googleEmail } = await getConnections(userId);
+  const link = gmailConnectUrl(userId);
+  await send(
+    chatId,
+    googleRefreshToken
+      ? `Gmail is connected${googleEmail ? ` as <b>${escapeHtml(googleEmail)}</b>` : ""}, read-only. <a href="${escapeHtml(link)}">Reconnect</a> to switch account, or <code>/gmail off</code> to disconnect.`
+      : `<a href="${escapeHtml(link)}">Connect Gmail</a> — Google's own sign-in, you pick the account and press Allow.\n\nI ask for <b>read-only</b> access: I can read mail, and I can't send, delete or change anything. The link is yours alone and expires in 15 minutes.`
+  );
+}
+
+/** Slack, connected by signing in — the pasted token stays only as a fallback. */
 async function onSlack(userId: string, chatId: number, args: string[]): Promise<void> {
   const value = (args[0] || "").trim();
 
@@ -1453,6 +1496,8 @@ async function handleText(
       return onSources(userId, chatId);
     case "/slack":
       return onSlack(userId, chatId, args);
+    case "/gmail":
+      return onGmail(userId, chatId, args);
     case "/pay":
       return onPay(userId, chatId);
     case "/billing":
@@ -1659,6 +1704,15 @@ export async function startBot(): Promise<void> {
     ).catch(() => {});
   });
 
+  setGmailNotifier((userId, email) => {
+    const chatId = Number(userId);
+    if (!Number.isFinite(chatId)) return;
+    void send(
+      chatId,
+      `Gmail connected${email ? ` — <b>${escapeHtml(email)}</b>` : ""}, read-only. It joins your next digest. /sources shows what's connected.`
+    ).catch(() => {});
+  });
+
   setBillingNotifier(async ({ userId, kind, reason }) => {
     const chatId = Number(userId);
     const admin = (process.env.ADMIN_USER_ID || "").trim();
@@ -1685,7 +1739,8 @@ export async function startBot(): Promise<void> {
       { command: "focus", description: "what matters within them — the rest shrinks" },
       { command: "news", description: "search the web on a subject, with sources" },
       { command: "mode", description: "auto, cultural, work or custom" },
-      { command: "sources", description: "add Slack and other messengers" },
+      { command: "sources", description: "add Slack, Gmail and other sources" },
+      { command: "gmail", description: "connect Gmail, read-only" },
       { command: "channel", description: "digest one channel's unread backlog" },
       { command: "channels", description: "what I read, skip, and why" },
       { command: "last", description: "the most recent digest" },
