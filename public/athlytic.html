@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Athlytic → Claude Connector</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    h1 { font-size: 24px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
+    h2 { font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 28px 0 10px; }
+    .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+    p, li { color: #374151; font-size: 14px; line-height: 1.6; }
+    ol { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+
+    code {
+      background: #f3f4f6;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .stat {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .stat .label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+    .stat .value { font-size: 16px; font-weight: 600; color: #1a1a2e; }
+
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin: 14px 0 6px; }
+
+    input[type="password"], input[type="file"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+      background: white;
+    }
+    input:focus { border-color: #6366f1; }
+
+    button {
+      margin-top: 14px;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    .result { margin-top: 12px; font-size: 13px; white-space: pre-wrap; }
+    .result.ok { color: #047857; }
+    .result.err { color: #b91c1c; }
+    a { color: #6366f1; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Athlytic → Claude Connector</h1>
+    <p class="subtitle">
+      Feeds the Apple Health data behind Athlytic (recovery, sleep, HRV, workouts) to Claude as a custom connector.
+    </p>
+
+    <div class="status" id="status">
+      <div class="stat"><div class="label">Days of data</div><div class="value" id="stat-days">…</div></div>
+      <div class="stat"><div class="label">Last sync</div><div class="value" id="stat-sync">…</div></div>
+      <div class="stat"><div class="label">Date range</div><div class="value" id="stat-range">…</div></div>
+      <div class="stat"><div class="label">Connector endpoint</div><div class="value" id="stat-mcp">…</div></div>
+    </div>
+
+    <h2>Automatic sync (recommended)</h2>
+    <p>
+      On the iPhone, install <strong>Health Auto Export</strong> and create an automation:
+      REST API → URL <code id="ingest-url">…/api/athlytic/ingest</code>, format JSON, header
+      <code>Authorization: Bearer &lt;your ingest token&gt;</code>. Full steps are in
+      <code>ATHLYTIC.md</code> in the repository.
+    </p>
+
+    <h2>Manual upload</h2>
+    <p>Export JSON from Health Auto Export (or use the sample file in <code>examples/</code>) and upload it here.</p>
+    <form id="upload-form">
+      <label for="token">Ingest token</label>
+      <input type="password" id="token" placeholder="ATHLYTIC_INGEST_TOKEN" autocomplete="off" />
+      <label for="file">Health Auto Export JSON file</label>
+      <input type="file" id="file" accept=".json,application/json" />
+      <button type="submit" id="upload-btn">Upload</button>
+      <div class="result" id="result"></div>
+    </form>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch("/api/athlytic/status");
+        const s = await res.json();
+        $("stat-days").textContent = s.daysStored;
+        $("stat-sync").textContent = s.lastSync ? new Date(s.lastSync).toLocaleString() : "never";
+        $("stat-range").textContent = s.firstDate ? `${s.firstDate} → ${s.lastDate}` : "—";
+        $("stat-mcp").textContent = s.mcpPath;
+        $("ingest-url").textContent = `${location.origin}/api/athlytic/ingest`;
+      } catch {
+        $("stat-days").textContent = "?";
+      }
+    }
+    refreshStatus();
+
+    $("upload-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = $("file").files[0];
+      const token = $("token").value.trim();
+      const result = $("result");
+      result.className = "result";
+      if (!file) { result.textContent = "Choose a JSON file first."; result.classList.add("err"); return; }
+      $("upload-btn").disabled = true;
+      result.textContent = "Uploading…";
+      try {
+        const body = await file.text();
+        JSON.parse(body); // fail fast on non-JSON
+        const res = await fetch("/api/athlytic/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+          body,
+        });
+        const out = await res.json();
+        if (!res.ok || out.ok === false) throw new Error(out.error || res.statusText);
+        result.textContent = `Imported ${out.dataPoints} data points across ${out.daysTouched} day(s) (${out.firstDate} → ${out.lastDate}). ${out.totalDaysStored} days stored in total.`;
+        result.classList.add("ok");
+        refreshStatus();
+      } catch (err) {
+        result.textContent = "Upload failed: " + err.message;
+        result.classList.add("err");
+      } finally {
+        $("upload-btn").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

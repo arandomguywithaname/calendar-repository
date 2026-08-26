@@ -2,6 +2,10 @@
 
 An AI-powered agent that parses natural language (or images) into Google Calendar events using Claude.
 
+Also included: an **[Athlytic → Claude connector](ATHLYTIC.md)** — an MCP server that gives Claude
+access to the Apple Health data behind the Athlytic app (recovery, exertion, sleep, HRV, workouts).
+See [ATHLYTIC.md](ATHLYTIC.md) for setup.
+
 ## Example
 
 ```
@@ -54,8 +58,17 @@ Edit `contacts.json` to map @mentions to email addresses:
 
 ### 4. Run
 
+Production-style (compile once, run with plain node — this is what the Dockerfile/Fly.io use):
+
 ```bash
-npm run dev
+npm run build
+npm start          # web UI + Athlytic connector at /mcp
+```
+
+Or the interactive CLI:
+
+```bash
+npm run build && npm run cli
 ```
 
 ## Features
@@ -76,4 +89,11 @@ src/
   parser.ts    — Claude API integration for NL/image → structured event
   calendar.ts  — Google Calendar API integration
   index.ts     — CLI entrypoint
+  server.ts    — Express web server (also mounts the Athlytic connector)
+  athlytic/    — Athlytic → Claude connector (MCP server, see ATHLYTIC.md)
+    ingest.ts  — parses Health Auto Export payloads
+    metrics.ts — Athlytic-style recovery/exertion estimates
+    mcp.ts     — the MCP tools Claude calls
+    router.ts  — /api/athlytic/ingest + /mcp endpoints
+    stdio.ts   — local stdio entry for Claude Desktop
 ```

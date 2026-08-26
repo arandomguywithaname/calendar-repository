@@ -6,6 +6,7 @@ import multer from "multer";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
 import { ContactsMap } from "./types";
+import { athlyticRouter } from "./athlytic/router";
 
 dotenv.config();
 
@@ -15,8 +16,12 @@ const PORT = process.env.PORT || 3000;
 // Multer for image uploads (stored in memory)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-app.use(express.json());
+// Large limit: Health Auto Export payloads can carry weeks of data in one POST.
+app.use(express.json({ limit: "64mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
+
+// Athlytic → Claude connector: /mcp endpoint, health-data ingest, /athlytic page
+app.use(athlyticRouter());
 
 /** Load contacts map */
 function loadContacts(): ContactsMap {
@@ -79,4 +84,5 @@ app.post("/api/create", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`Calendar Agent running at http://localhost:${PORT}`);
+  console.log(`Athlytic connector: MCP at /mcp${process.env.MCP_TOKEN ? "/<MCP_TOKEN>" : ""}, setup page at /athlytic`);
 });

@@ -5,10 +5,12 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/server.js",
+    "cli": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "web": "tsc && node dist/server.js",
-    "web:start": "node dist/server.js"
+    "web:start": "node dist/server.js",
+    "mcp:stdio": "node dist/athlytic/stdio.js"
   },
   "repository": {
     "type": "git",
@@ -19,6 +21,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.4.0",
@@ -26,6 +29,7 @@
     "express": "^5.2.1",
     "googleapis": "^171.4.0",
     "multer": "^2.1.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "^3.25.76"
   }
 }
