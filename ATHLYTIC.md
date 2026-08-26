@@ -50,7 +50,19 @@ Node.js, npm, and the TypeScript compile all happen there, not on your computer.
 
    (If you do have Node.js, `npm run tokens` prints both in one go.)
 
-4. **Set them and deploy**, from the repo folder:
+4. **Give this its own Fly app.** The app name in `fly.toml` is where `fly deploy` ships the
+   code — **never point it at a Fly app that already runs another project** (the deploy would
+   replace that project). If the name in `fly.toml` doesn't exist on your account yet, or your
+   account has other apps, create a dedicated one and point `fly.toml` at it:
+
+   ```
+   fly apps create <pick-a-unique-name>
+   notepad fly.toml
+   ```
+
+   In the editor, change the `app = '...'` line to the name you just created, and save.
+
+5. **Set the secrets and deploy**, from the repo folder:
 
    ```
    fly secrets set ATHLYTIC_INGEST_TOKEN=<first secret> MCP_TOKEN=<second secret>
