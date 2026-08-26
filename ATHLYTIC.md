@@ -20,40 +20,47 @@ Apple Watch ──▶ Apple Health ──▶ Health Auto Export ──▶ this s
 Run it however you like: `npm run dev` (compile + start in one command) for local use, or
 `npm run build` + `npm start` (plain `node dist/server.js` — what the Dockerfile and Fly.io deploy run).
 Every command in this guide works in Windows Command Prompt, PowerShell, and bash.
+**No Node.js installed? That's fine** — use the Fly.io path (Option A): the build happens on
+Fly's servers, so your machine only needs the Fly CLI.
 
 ---
 
 ## 1. Run the server
 
-### Option A — Fly.io (recommended; this repo is already set up for it)
+### Option A — Fly.io (recommended; no Node.js needed on your machine)
 
-One-time: install the Fly CLI ([fly.io/docs/flyctl/install](https://fly.io/docs/flyctl/install/) —
-on Windows, run `iwr https://fly.io/install.ps1 -useb | iex` in PowerShell once; after that `fly`
-works in Command Prompt too) and sign in with `fly auth login`.
+`fly deploy` uploads the source and builds it on Fly's servers with the repo's Dockerfile —
+Node.js, npm, and the TypeScript compile all happen there, not on your computer.
 
-Then, from the repository folder:
+1. **Install the Fly CLI** ([fly.io/docs/flyctl/install](https://fly.io/docs/flyctl/install/)).
+   On Windows, run this once in PowerShell, then `fly` works in Command Prompt too:
+   `iwr https://fly.io/install.ps1 -useb | iex`
+   Sign in with `fly auth login`.
 
-```bash
-npm run tokens
-```
+2. **Get the code onto your machine** — `git clone` if you have git, or with no tools at all:
+   on the GitHub repo page press the green **Code** button → **Download ZIP**, unzip it, and open
+   a terminal in that folder (the one containing `fly.toml`).
 
-This prints two freshly generated secrets, ready to paste:
+3. **Pick two secrets.** They're just passwords — any two *different* random strings of 30+
+   characters work. Use a password manager's generator, or paste this in PowerShell twice:
 
-```
-ATHLYTIC_INGEST_TOKEN=1f0c6...
-MCP_TOKEN=9a41d...
-```
+   ```powershell
+   $b = New-Object byte[] 24; (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($b); -join ($b | ForEach-Object ToString x2)
+   ```
 
-Put both of them (space-separated) into one command, then deploy:
+   (If you do have Node.js, `npm run tokens` prints both in one go.)
 
-```bash
-fly secrets set ATHLYTIC_INGEST_TOKEN=1f0c6... MCP_TOKEN=9a41d...
-fly deploy
-```
+4. **Set them and deploy**, from the repo folder:
 
-(`fly secrets set` stores them encrypted and restarts the app with them as environment variables.
-Run `npm run tokens` only once — running it again prints *different* tokens, and the ones on Fly
-are what count. `fly secrets list` shows what's set, without values.)
+   ```
+   fly secrets set ATHLYTIC_INGEST_TOKEN=<first secret> MCP_TOKEN=<second secret>
+   fly deploy
+   ```
+
+`fly secrets set` stores them encrypted and restarts the app with them as environment variables —
+they're set once and live only on Fly, so keep a copy somewhere safe (you'll need the first one in
+Health Auto Export and the second one in the connector URL). `fly secrets list` shows what's set,
+without values.
 
 Your endpoints become:
 
@@ -74,7 +81,7 @@ Your endpoints become:
 > ```
 > (Or just re-send history from Health Auto Export after a deploy — see step 3.)
 
-### Option B — any machine, including Windows
+### Option B — run locally on any machine (requires [Node.js](https://nodejs.org), v20+)
 
 Put the tokens in a `.env` file (the server loads it automatically on every platform — no shell
 env-var syntax needed, so this works the same in Command Prompt):
