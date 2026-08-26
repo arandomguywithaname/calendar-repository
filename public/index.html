@@ -1,426 +1,659 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calendar Planning Agent</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f0f4f8;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inbox Reader</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📬</text></svg>" />
+<style>
+  :root {
+    --bg: #f6f5f3;
+    --panel: #ffffff;
+    --panel-2: #fbfaf9;
+    --ink: #17181a;
+    --ink-soft: #5c6068;
+    --line: #e2e0dc;
+    --accent: #2f6df6;
+    --accent-soft: #e8f0ff;
+    --high: #c2410c;
+    --high-soft: #fdf0e8;
+    --low: #6b7280;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1c1f25;
+      --panel-2: #21252c;
+      --ink: #eceef2;
+      --ink-soft: #9aa2ae;
+      --line: #2e333c;
+      --accent: #6f9bff;
+      --accent-soft: #1e2a44;
+      --high: #f8a56a;
+      --high-soft: #3a2415;
+      --low: #8b93a0;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
     }
+  }
 
-    .card {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-      padding: 40px;
-      width: 100%;
-      max-width: 600px;
-    }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 620; letter-spacing: -.01em; }
+  button { font: inherit; cursor: pointer; }
+  a { color: var(--accent); }
 
-    h1 {
-      font-size: 24px;
-      font-weight: 700;
-      color: #1a1a2e;
-      margin-bottom: 8px;
-    }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 20px 64px; }
+  .hidden { display: none !important; }
 
-    .subtitle {
-      color: #6b7280;
-      font-size: 14px;
-      margin-bottom: 32px;
-    }
+  /* ---------- sign in ---------- */
+  .signin { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+  .signin-card {
+    width: min(440px, 100%); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 18px; padding: 32px; box-shadow: var(--shadow); text-align: center;
+  }
+  .logo { font-size: 30px; }
+  .signin-card h1 { font-size: 24px; margin: 12px 0 6px; }
+  .signin-card p.sub { color: var(--ink-soft); margin: 0 0 24px; }
+  .gbtn {
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--ink); font-weight: 560; text-decoration: none;
+  }
+  .gbtn:hover { border-color: var(--accent); }
+  .divider { display: flex; align-items: center; gap: 10px; color: var(--ink-soft); font-size: 13px; margin: 20px 0; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  input[type=text], input[type=email], textarea {
+    width: 100%; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--ink); font: inherit;
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .primary {
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    padding: 11px 18px; font-weight: 560;
+  }
+  .primary:disabled { opacity: .55; cursor: default; }
+  .note { font-size: 12.5px; color: var(--ink-soft); }
+  .error { color: var(--high); font-size: 13.5px; }
 
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 6px;
-    }
+  /* ---------- header ---------- */
+  header.bar {
+    display: flex; align-items: center; gap: 12px; justify-content: space-between;
+    padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 22px;
+  }
+  .who { display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft);
+    color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 13px;
+    object-fit: cover;
+  }
+  .ghost {
+    background: transparent; border: 1px solid var(--line); color: var(--ink-soft);
+    border-radius: 9px; padding: 7px 13px;
+  }
+  .ghost:hover { color: var(--ink); border-color: var(--ink-soft); }
 
-    textarea {
-      width: 100%;
-      padding: 12px 14px;
-      border: 1.5px solid #e5e7eb;
-      border-radius: 10px;
-      font-size: 15px;
-      resize: vertical;
-      min-height: 100px;
-      transition: border-color 0.2s;
-      outline: none;
-      font-family: inherit;
-    }
+  /* ---------- layout ---------- */
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
 
-    textarea:focus { border-color: #6366f1; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; box-shadow: var(--shadow); margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; margin-bottom: 4px; }
+  .card .hint { color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; }
 
-    .file-input-wrapper {
-      margin-top: 20px;
-    }
+  /* ---------- sources ---------- */
+  .app-block { border-top: 1px solid var(--line); padding: 12px 0 4px; }
+  .app-block:first-of-type { border-top: none; padding-top: 0; }
+  .app-head { display: flex; align-items: center; gap: 8px; }
+  .app-head label { font-weight: 560; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .badge {
+    font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px;
+    border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-soft);
+  }
+  .badge.live { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  .connect {
+    margin-left: auto; font-size: 12.5px; font-weight: 560; text-decoration: none;
+    padding: 4px 11px; border-radius: 999px; border: 1px solid var(--accent);
+    color: var(--accent); background: transparent; cursor: pointer;
+  }
+  .connect:hover { background: var(--accent-soft); }
+  .connect.ghost { border-color: var(--line); color: var(--ink-soft); }
+  .token-form {
+    margin: 8px 0 4px; padding: 12px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel-2);
+  }
+  .token-form .note { margin: 0 0 8px; }
+  .token-form input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .token-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .token-actions .primary { padding: 7px 14px; font-size: 13px; }
+  .chatlist { margin: 8px 0 0 4px; display: flex; flex-direction: column; gap: 5px; }
+  .chatlist label {
+    display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-soft);
+    cursor: pointer; padding: 2px 0;
+  }
+  .chatlist label:hover { color: var(--ink); }
+  .unread-dot {
+    margin-left: auto; font-size: 11px; font-weight: 640; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 1px 7px;
+  }
+  .source-status { font-size: 12px; color: var(--ink-soft); margin: 6px 0 2px 4px; }
 
-    .file-label {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border: 1.5px dashed #d1d5db;
-      border-radius: 10px;
-      cursor: pointer;
-      color: #6b7280;
-      font-size: 14px;
-      transition: border-color 0.2s, background 0.2s;
-    }
+  /* ---------- digest ---------- */
+  .headline { font-size: 19px; line-height: 1.4; font-weight: 600; margin: 0 0 4px; }
+  .stats { color: var(--ink-soft); font-size: 13px; margin-bottom: 16px; }
+  .needs { background: var(--high-soft); border-radius: 12px; padding: 12px 14px; margin-bottom: 18px; }
+  .needs h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--high); margin-bottom: 6px; }
+  .needs ul, .chat-card ul { margin: 0; padding-left: 18px; }
+  .needs li { margin: 3px 0; }
 
-    .file-label:hover { border-color: #6366f1; background: #f5f3ff; }
-    .file-label .icon { font-size: 20px; }
-    #imageInput { display: none; }
-    #fileName { font-size: 13px; color: #6366f1; margin-top: 6px; }
+  .chat-card { border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; margin-bottom: 10px; background: var(--panel-2); }
+  .chat-card header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+  .chat-card h3 { font-size: 14.5px; }
+  .chat-card .src { font-size: 12px; color: var(--ink-soft); }
+  .pill { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; margin-left: auto; }
+  .pill.high { background: var(--high-soft); color: var(--high); }
+  .pill.normal { background: var(--accent-soft); color: var(--accent); }
+  .pill.low { background: var(--panel); color: var(--low); border: 1px solid var(--line); }
+  .chat-card p { margin: 0 0 6px; }
+  .chat-card li { font-size: 13.5px; color: var(--ink-soft); }
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 24px;
-      border: none;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
-    }
-
-    .btn:active { transform: scale(0.98); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-primary {
-      background: #6366f1;
-      color: white;
-      width: 100%;
-      justify-content: center;
-      margin-top: 24px;
-    }
-
-    .btn-primary:hover:not(:disabled) { background: #4f46e5; }
-
-    .btn-success {
-      background: #10b981;
-      color: white;
-      width: 100%;
-      justify-content: center;
-      margin-top: 12px;
-    }
-
-    .btn-success:hover:not(:disabled) { background: #059669; }
-
-    .btn-ghost {
-      background: #f3f4f6;
-      color: #374151;
-      width: 100%;
-      justify-content: center;
-      margin-top: 8px;
-    }
-
-    .btn-ghost:hover:not(:disabled) { background: #e5e7eb; }
-
-    /* Result section */
-    #result { margin-top: 32px; display: none; }
-
-    .result-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 12px;
-    }
-
-    .event-card {
-      background: #f9fafb;
-      border: 1.5px solid #e5e7eb;
-      border-radius: 10px;
-      padding: 16px;
-    }
-
-    .event-row {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
-      align-items: flex-start;
-    }
-
-    .event-row:last-child { margin-bottom: 0; }
-
-    .event-icon { font-size: 16px; min-width: 20px; }
-
-    .event-field {
-      font-size: 13px;
-      color: #6b7280;
-      font-weight: 500;
-      min-width: 80px;
-    }
-
-    .event-value {
-      font-size: 14px;
-      color: #111827;
-      flex: 1;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      background: #ede9fe;
-      color: #6366f1;
-      margin-right: 4px;
-    }
-
-    .error-box {
-      background: #fef2f2;
-      border: 1.5px solid #fecaca;
-      color: #dc2626;
-      border-radius: 10px;
-      padding: 12px 14px;
-      font-size: 14px;
-      margin-top: 16px;
-      display: none;
-    }
-
-    .success-box {
-      background: #f0fdf4;
-      border: 1.5px solid #86efac;
-      color: #16a34a;
-      border-radius: 10px;
-      padding: 14px;
-      font-size: 14px;
-      margin-top: 12px;
-      display: none;
-    }
-
-    .success-box a { color: #16a34a; font-weight: 600; }
-
-    .spinner {
-      width: 18px;
-      height: 18px;
-      border: 2.5px solid rgba(255,255,255,0.4);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
+  /* ---------- ask ---------- */
+  .thread { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+  .turn { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
+  .turn.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .turn.assistant { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .askbar { display: flex; gap: 8px; align-items: flex-end; }
+  .askbar textarea { resize: vertical; min-height: 46px; max-height: 180px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .examples button {
+    font-size: 12.5px; color: var(--ink-soft); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px;
+  }
+  .examples button:hover { color: var(--ink); border-color: var(--accent); }
+  .spinner { color: var(--ink-soft); font-size: 13.5px; }
+  .warn { font-size: 12.5px; color: var(--high); margin-top: 8px; }
+</style>
 </head>
 <body>
-  <div class="card">
-    <h1>📅 Calendar Planning Agent</h1>
-    <p class="subtitle">Describe your event in plain English and it'll be added to Google Calendar.</p>
-
-    <label for="eventText">Event description</label>
-    <textarea id="eventText" placeholder='e.g. "Team standup every Monday at 9am with @alice and @bob, add a Google Meet link"'></textarea>
-
-    <div class="file-input-wrapper">
-      <label>Image (optional)</label>
-      <label class="file-label" for="imageInput">
-        <span class="icon">🖼️</span>
-        <span>Click to upload an image with event details</span>
-      </label>
-      <input type="file" id="imageInput" accept="image/*" />
-      <div id="fileName"></div>
-    </div>
-
-    <button class="btn btn-primary" id="parseBtn" onclick="parseEvent()">
-      ✨ Parse Event
-    </button>
-
-    <div class="error-box" id="errorBox"></div>
-
-    <!-- Result -->
-    <div id="result">
-      <div class="result-title">Extracted event details</div>
-      <div class="event-card" id="eventCard"></div>
-
-      <button class="btn btn-success" id="createBtn" onclick="createEvent()">
-        📆 Add to Google Calendar
-      </button>
-      <button class="btn btn-ghost" onclick="reset()">
-        ↩ Start over
-      </button>
-
-      <div class="success-box" id="successBox"></div>
-    </div>
+<noscript>
+  <div style="max-width:520px;margin:60px auto;padding:24px;border:1px solid #e2e0dc;border-radius:14px;font:15px/1.55 system-ui,sans-serif">
+    <strong>Inbox Reader needs JavaScript.</strong>
+    <p>The dashboard reads your messages in the browser, so it can't run with scripting turned off.</p>
   </div>
+</noscript>
 
-  <script>
-    let parsedEvent = null;
+<!-- ============================= sign in ============================= -->
+<section id="signin" class="signin">
+  <div class="signin-card">
+    <div class="logo">📬</div>
+    <h1>Inbox Reader</h1>
+    <p class="sub">Your Telegram, WhatsApp and Slack chats, summarised in one place.</p>
 
-    document.getElementById("imageInput").addEventListener("change", function () {
-      const file = this.files[0];
-      document.getElementById("fileName").textContent = file ? `Selected: ${file.name}` : "";
+    <a id="googleBtn" class="gbtn hidden" href="/auth/google">
+      <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-4H24v7.5h12c-.2 2-1.6 5-4.5 7l6.9 5.3C42.5 36.2 45 30.6 45 24z"/><path fill="#34A853" d="M24 46c6 0 11-2 14.4-5.3l-6.9-5.3c-1.9 1.3-4.4 2.2-7.5 2.2-5.8 0-10.7-3.8-12.4-9.1l-7.1 5.5C8 41.2 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.6 28.5c-.5-1.3-.7-2.7-.7-4.5s.3-3.2.7-4.5l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.5 10z"/><path fill="#EA4335" d="M24 10.6c3.3 0 5.5 1.4 6.8 2.6l5-4.9C32.9 5.5 28.6 3.5 24 3.5 15.4 3.5 8 8.3 4.5 14l7.1 5.5c1.7-5.3 6.6-8.9 12.4-8.9z"/></svg>
+      Sign in with Google
+    </a>
+
+    <div id="demoWrap">
+      <div id="demoDivider" class="divider hidden">or</div>
+      <form id="demoForm" style="display:flex;flex-direction:column;gap:10px;text-align:left">
+        <label class="note" for="demoEmail">Email</label>
+        <input id="demoEmail" type="email" placeholder="you@example.com" required />
+        <label class="note" for="demoName">Display name (optional)</label>
+        <input id="demoName" type="text" placeholder="Your name" />
+        <button class="primary" type="submit">Create account &amp; continue</button>
+      </form>
+      <p class="note" style="margin-top:14px">
+        Local sign-in — no password, no verification. Configure
+        <code>GOOGLE_CLIENT_ID</code> / <code>GOOGLE_CLIENT_SECRET</code> for real
+        Google sign-in.
+      </p>
+    </div>
+
+    <p id="signinError" class="error" style="margin-top:14px"></p>
+    <p class="note" style="margin-top:10px;opacity:.6">build 2026-08-11 · a464acd</p>
+  </div>
+</section>
+
+<!-- ============================ dashboard ============================ -->
+<section id="dashboard" class="wrap hidden">
+  <header class="bar">
+    <div>
+      <h1 style="font-size:19px">📬 Inbox Reader</h1>
+      <div class="note" id="greeting"></div>
+    </div>
+    <div class="who">
+      <span id="avatar" class="avatar"></span>
+      <button class="ghost" id="signoutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <div id="serverWarnings" class="card hidden" style="border-color:var(--high)"></div>
+
+  <div class="grid">
+    <!-- sources -->
+    <aside>
+      <div class="card">
+        <h2>What to read</h2>
+        <p class="hint">Pick the apps and chats you want in your summary.</p>
+        <div id="sources"><div class="spinner">Loading your chats…</div></div>
+
+        <label class="chatlist" style="margin-top:14px;display:flex;flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" id="unreadOnly" />
+          <span style="font-size:13.5px">Unread messages only</span>
+        </label>
+
+        <button class="primary" id="saveBtn" style="width:100%;margin-top:14px">Save &amp; refresh</button>
+        <p class="note" id="saveNote" style="margin-top:8px"></p>
+      </div>
+    </aside>
+
+    <!-- main -->
+    <main>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+          <h2>What you missed</h2>
+          <button class="ghost" id="refreshBtn">Refresh</button>
+        </div>
+        <div id="digest"><div class="spinner">Reading your chats…</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Ask about your messages</h2>
+        <p class="hint">Type it however you like — full sentences, half-questions, whatever.</p>
+        <div class="examples">
+          <button data-q="hey uhhh can you give me a summary of my unread chats pls?">summary of my unread chats</button>
+          <button data-q="is there anything I actually need to reply to today?">anything I need to reply to?</button>
+          <button data-q="what did I miss in the work channels while I was out?">what did I miss at work?</button>
+          <button data-q="did anyone mention a deadline or a time I should know about?">any deadlines mentioned?</button>
+        </div>
+        <div class="thread" id="thread"></div>
+        <form class="askbar" id="askForm">
+          <textarea id="question" rows="1" placeholder="e.g. anything from Lena today, or did she give up on me?"></textarea>
+          <button class="primary" type="submit" id="askBtn">Ask</button>
+        </form>
+        <p class="note" id="askNote" style="margin-top:8px"></p>
+      </div>
+    </main>
+  </div>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let state = { user: null, sources: [], selection: new Set(), apps: new Set() };
+
+async function api(path, options) {
+  let res;
+  try {
+    res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
     });
+  } catch (err) {
+    // No server answered at all: the file was opened directly, or only the
+    // static half of the site is deployed. Say which, rather than relaying a
+    // browser-internal message about parsing a URL.
+    throw new Error(
+      "This page is loaded without its backend, so sign-in and summaries can't run. " +
+      "If you deployed only the public/ folder, the server half is missing; " +
+      "deploy from Git so Netlify builds the function too."
+    );
+  }
 
-    function showError(msg) {
-      const box = document.getElementById("errorBox");
-      box.textContent = msg;
-      box.style.display = "block";
-    }
+  // Static hosting answers /api/* with an HTML 404 page rather than JSON.
+  // Say so plainly instead of surfacing a bare "404".
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      `No backend here: ${path} returned ${res.status} (${contentType.split(";")[0] || "no content type"}). ` +
+        `This page is the front end of a Node server — sign-in, summaries and questions all run server-side. ` +
+        `Run "npm run web" locally, or deploy somewhere that runs the server.`
+    );
+  }
 
-    function hideError() {
-      document.getElementById("errorBox").style.display = "none";
-    }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+  return body;
+}
 
-    function formatDateTime(iso) {
-      if (!iso) return "—";
-      return new Date(iso).toLocaleString(undefined, {
-        weekday: "short", year: "numeric", month: "short",
-        day: "numeric", hour: "2-digit", minute: "2-digit"
-      });
-    }
+/* ------------------------------- boot ---------------------------------- */
 
-    function renderEvent(event) {
-      const card = document.getElementById("eventCard");
-      const attendees = (event.attendees || []).map(a =>
-        `<span class="badge">${a.displayName || a.tag || a.email}</span>`
-      ).join("") || "None";
+async function boot() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("authError")) {
+    $("signinError").textContent = "Sign-in failed: " + params.get("authError");
+    history.replaceState({}, "", "/");
+  }
 
-      card.innerHTML = `
-        <div class="event-row">
-          <span class="event-icon">📌</span>
-          <span class="event-field">Title</span>
-          <span class="event-value">${event.title || "—"}</span>
+  if (params.get("connected") || params.get("connectError")) {
+    const note = params.get("connectError")
+      ? `Could not connect: ${params.get("connectError")}`
+      : `${params.get("connected")} connected.`;
+    setTimeout(() => { $("saveNote").textContent = note; }, 0);
+    history.replaceState({}, "", "/");
+  }
+
+  const session = await api("/api/session");
+
+  if (session.googleEnabled) $("googleBtn").classList.remove("hidden");
+  if (session.demoEnabled) {
+    if (session.googleEnabled) $("demoDivider").classList.remove("hidden");
+  } else {
+    $("demoWrap").classList.add("hidden");
+  }
+
+  if (!session.authenticated) {
+    $("signin").classList.remove("hidden");
+    return;
+  }
+
+  state.user = session.user;
+  $("signin").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
+  $("greeting").textContent = "Signed in as " + session.user.email;
+  const avatar = $("avatar");
+  if (session.user.picture) {
+    avatar.outerHTML = `<img class="avatar" src="${session.user.picture}" alt="" />`;
+  } else {
+    avatar.textContent = (session.user.name || session.user.email)[0].toUpperCase();
+  }
+
+  state.apps = new Set(session.user.preferences.apps);
+  state.selection = new Set(session.user.preferences.chatIds);
+  $("unreadOnly").checked = Boolean(session.user.preferences.unreadOnly);
+
+  await Promise.all([loadSources(), loadDigest(), loadThread()]);
+}
+
+/* ------------------------------ sign in -------------------------------- */
+
+$("demoForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("signinError").textContent = "";
+  try {
+    await api("/auth/demo", {
+      method: "POST",
+      body: JSON.stringify({ email: $("demoEmail").value, name: $("demoName").value }),
+    });
+    location.href = "/";
+  } catch (err) {
+    $("signinError").textContent = err.message;
+  }
+});
+
+$("signoutBtn").addEventListener("click", async () => {
+  await api("/auth/signout", { method: "POST" });
+  location.href = "/";
+});
+
+/* ------------------------------ sources -------------------------------- */
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+async function loadSources() {
+  try {
+    const { sources } = await api("/api/sources");
+    state.sources = sources;
+    renderSources();
+  } catch (err) {
+    $("sources").innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderSources() {
+  $("sources").innerHTML = state.sources
+    .map((source) => {
+      const chats = source.chats
+        .map((chat) => {
+          const key = `${source.app}:${chat.id}`;
+          const checked = state.selection.has(key) ? "checked" : "";
+          // Chat ids come from external APIs and, for WhatsApp, straight off an
+          // unauthenticated webhook — escape them like any other untrusted text.
+          const unread = chat.unreadCount > 0
+            ? `<span class="unread-dot">${escapeHtml(String(chat.unreadCount))}</span>`
+            : "";
+          return `<label><input type="checkbox" class="chat" data-key="${escapeHtml(key)}" ${checked}/>
+                    <span>${escapeHtml(chat.title)}</span>${unread}</label>`;
+        })
+        .join("");
+
+      // Three ways in: paste a credential, be sent to a consent screen, or —
+      // where the provider genuinely offers neither — nothing at all.
+      const connect = source.live
+        ? (source.connectable
+            ? `<button class="connect ghost" data-disconnect="${escapeHtml(source.app)}">Disconnect</button>`
+            : "")
+        : source.connectVia === "oauth"
+          ? `<a class="connect" href="/auth/${source.app === "gmail" ? "google" : source.app}">Connect</a>`
+          : source.connectVia === "token"
+            ? `<button class="connect" data-token="${escapeHtml(source.app)}">Connect</button>`
+            : "";
+
+      const tokenForm = !source.live && source.connectVia === "token" && source.tokenHelp
+        ? `<form class="token-form hidden" data-token-form="${escapeHtml(source.app)}">
+             <p class="note">${escapeHtml(source.tokenHelp.help)}</p>
+             <input type="text" name="token" placeholder="${escapeHtml(source.tokenHelp.placeholder)}"
+                    aria-label="${escapeHtml(source.tokenHelp.label)}" autocomplete="off" spellcheck="false" />
+             <div class="token-actions">
+               <button class="primary" type="submit">Save</button>
+               <span class="note token-note"></span>
+             </div>
+           </form>`
+        : "";
+
+      return `<div class="app-block">
+        <div class="app-head">
+          <label><input type="checkbox" class="app" data-app="${escapeHtml(source.app)}" ${
+            state.apps.has(source.app) ? "checked" : ""
+          }/> ${escapeHtml(source.label)}</label>
+          <span class="badge ${source.live ? "live" : ""}">${source.live ? "connected" : "not connected"}</span>
+          ${connect}
         </div>
-        ${event.description ? `
-        <div class="event-row">
-          <span class="event-icon">📝</span>
-          <span class="event-field">Notes</span>
-          <span class="event-value">${event.description}</span>
-        </div>` : ""}
-        <div class="event-row">
-          <span class="event-icon">🕐</span>
-          <span class="event-field">Start</span>
-          <span class="event-value">${formatDateTime(event.startDateTime)}</span>
-        </div>
-        <div class="event-row">
-          <span class="event-icon">🕑</span>
-          <span class="event-field">End</span>
-          <span class="event-value">${formatDateTime(event.endDateTime)}</span>
-        </div>
-        ${event.location ? `
-        <div class="event-row">
-          <span class="event-icon">📍</span>
-          <span class="event-field">Location</span>
-          <span class="event-value">${event.location}</span>
-        </div>` : ""}
-        <div class="event-row">
-          <span class="event-icon">👥</span>
-          <span class="event-field">Attendees</span>
-          <span class="event-value">${attendees}</span>
-        </div>
-        ${event.conferenceLink ? `
-        <div class="event-row">
-          <span class="event-icon">🎥</span>
-          <span class="event-field">Meet</span>
-          <span class="event-value">Google Meet link will be generated</span>
-        </div>` : ""}
-        ${event.recurrence && event.recurrence.length ? `
-        <div class="event-row">
-          <span class="event-icon">🔁</span>
-          <span class="event-field">Repeats</span>
-          <span class="event-value">${event.recurrence.join(", ")}</span>
-        </div>` : ""}
-        <div class="event-row">
-          <span class="event-icon">🌍</span>
-          <span class="event-field">Time Zone</span>
-          <span class="event-value">${event.timeZone || "America/New_York"}</span>
-        </div>
-      `;
-    }
+        <div class="source-status">${escapeHtml(source.status)}</div>
+        ${tokenForm}
+        ${source.error ? `<div class="warn">${escapeHtml(source.error)}</div>` : ""}
+        <div class="chatlist">${chats || '<span class="note">No chats yet.</span>'}</div>
+      </div>`;
+    })
+    .join("");
 
-    async function parseEvent() {
-      hideError();
-      parsedEvent = null;
-      document.getElementById("result").style.display = "none";
-      document.getElementById("successBox").style.display = "none";
-
-      const text = document.getElementById("eventText").value.trim();
-      const imageFile = document.getElementById("imageInput").files[0];
-
-      if (!text && !imageFile) {
-        showError("Please enter an event description or upload an image.");
-        return;
+  document.querySelectorAll("input.app").forEach((input) => {
+    input.addEventListener("change", () => {
+      input.checked ? state.apps.add(input.dataset.app) : state.apps.delete(input.dataset.app);
+    });
+  });
+  document.querySelectorAll("button[data-token]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = document.querySelector(`form[data-token-form="${button.dataset.token}"]`);
+      if (form) {
+        form.classList.toggle("hidden");
+        const input = form.querySelector("input[name=token]");
+        if (input && !form.classList.contains("hidden")) input.focus();
       }
+    });
+  });
 
-      const btn = document.getElementById("parseBtn");
-      btn.disabled = true;
-      btn.innerHTML = '<div class="spinner"></div> Parsing...';
-
+  document.querySelectorAll("form[data-token-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const note = form.querySelector(".token-note");
+      const input = form.querySelector("input[name=token]");
+      note.textContent = "Checking…";
       try {
-        const formData = new FormData();
-        if (text) formData.append("text", text);
-        if (imageFile) formData.append("image", imageFile);
-
-        const res = await fetch("/api/parse", { method: "POST", body: formData });
-        const data = await res.json();
-
-        if (!res.ok) throw new Error(data.error || "Failed to parse.");
-
-        parsedEvent = data.event;
-        renderEvent(parsedEvent);
-        document.getElementById("result").style.display = "block";
-      } catch (err) {
-        showError(err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = "✨ Parse Event";
-      }
-    }
-
-    async function createEvent() {
-      if (!parsedEvent) return;
-      document.getElementById("successBox").style.display = "none";
-      hideError();
-
-      const btn = document.getElementById("createBtn");
-      btn.disabled = true;
-      btn.innerHTML = '<div class="spinner"></div> Creating...';
-
-      try {
-        const res = await fetch("/api/create", {
+        // The server verifies the token with the provider before storing it,
+        // so a typo is caught here rather than showing sample data forever.
+        const result = await api(`/api/connections/${form.dataset.tokenForm}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: parsedEvent })
+          body: JSON.stringify({ token: input.value }),
         });
-        const data = await res.json();
-
-        if (!res.ok) throw new Error(data.error || "Failed to create event.");
-
-        const box = document.getElementById("successBox");
-        box.innerHTML = `Event created! <a href="${data.link}" target="_blank">Open in Google Calendar →</a>`;
-        box.style.display = "block";
+        note.textContent = result.detail ? `Connected ${result.detail}.` : "Connected.";
+        input.value = "";
+        await loadSources();
+        await loadDigest();
       } catch (err) {
-        showError(err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = "📆 Add to Google Calendar";
+        note.textContent = err.message;
       }
-    }
+    });
+  });
 
-    function reset() {
-      document.getElementById("eventText").value = "";
-      document.getElementById("imageInput").value = "";
-      document.getElementById("fileName").textContent = "";
-      document.getElementById("result").style.display = "none";
-      document.getElementById("successBox").style.display = "none";
-      hideError();
-      parsedEvent = null;
-    }
-  </script>
+  document.querySelectorAll("button[data-disconnect]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await api(`/api/connections/${button.dataset.disconnect}`, { method: "DELETE" });
+        await loadSources();
+      } catch (err) {
+        button.disabled = false;
+        $("saveNote").textContent = err.message;
+      }
+    });
+  });
+
+  document.querySelectorAll("input.chat").forEach((input) => {
+    input.addEventListener("change", () => {
+      input.checked ? state.selection.add(input.dataset.key) : state.selection.delete(input.dataset.key);
+    });
+  });
+}
+
+$("saveBtn").addEventListener("click", async () => {
+  $("saveNote").textContent = "Saving…";
+  try {
+    await api("/api/preferences", {
+      method: "PUT",
+      body: JSON.stringify({
+        apps: [...state.apps],
+        chatIds: [...state.selection],
+        unreadOnly: $("unreadOnly").checked,
+      }),
+    });
+    $("saveNote").textContent = "Saved.";
+    await loadDigest();
+  } catch (err) {
+    $("saveNote").textContent = err.message;
+  }
+});
+
+/* ------------------------------- digest -------------------------------- */
+
+$("refreshBtn").addEventListener("click", loadDigest);
+
+async function loadDigest() {
+  $("digest").innerHTML = '<div class="spinner">Reading your chats…</div>';
+  try {
+    const { digest, stats, warnings } = await api("/api/digest");
+
+    const needs = digest.needsYouNow.length
+      ? `<div class="needs"><h3>Needs you</h3><ul>${digest.needsYouNow
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join("")}</ul></div>`
+      : "";
+
+    const chats = digest.chats
+      .map(
+        (chat) => `<div class="chat-card">
+          <header>
+            <h3>${escapeHtml(chat.title)}</h3>
+            <span class="src">${escapeHtml(chat.app)}</span>
+            <span class="pill ${chat.urgency}">${chat.urgency}</span>
+          </header>
+          <p>${escapeHtml(chat.summary)}</p>
+          ${
+            chat.actionItems.length
+              ? `<ul>${chat.actionItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              : ""
+          }
+        </div>`
+      )
+      .join("");
+
+    $("digest").innerHTML = `
+      <p class="headline">${escapeHtml(digest.headline)}</p>
+      <p class="stats">${stats.messages} messages · ${stats.unread} unread · ${stats.chats} chats</p>
+      ${needs}${chats}
+      ${(warnings || []).map((w) => `<p class="warn">${escapeHtml(w)}</p>`).join("")}`;
+  } catch (err) {
+    $("digest").innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+/* --------------------------------- ask --------------------------------- */
+
+function renderThread(turns) {
+  $("thread").innerHTML = turns
+    .map((turn) => `<div class="turn ${turn.role}">${escapeHtml(turn.content)}</div>`)
+    .join("");
+  $("thread").scrollIntoView({ block: "end", behavior: "smooth" });
+}
+
+async function loadThread() {
+  try {
+    const { turns } = await api("/api/ask");
+    renderThread(turns);
+  } catch {
+    /* an empty thread is fine */
+  }
+}
+
+document.querySelectorAll(".examples button").forEach((button) => {
+  button.addEventListener("click", () => {
+    $("question").value = button.dataset.q;
+    $("question").focus();
+  });
+});
+
+$("question").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    $("askForm").requestSubmit();
+  }
+});
+
+$("askForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const question = $("question").value.trim();
+  if (!question) return;
+
+  $("question").value = "";
+  $("askBtn").disabled = true;
+  $("askNote").textContent = "Thinking…";
+
+  const thread = $("thread");
+  thread.insertAdjacentHTML("beforeend", `<div class="turn user">${escapeHtml(question)}</div>`);
+  thread.scrollIntoView({ block: "end", behavior: "smooth" });
+
+  try {
+    const { answer } = await api("/api/ask", {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    });
+    thread.insertAdjacentHTML("beforeend", `<div class="turn assistant">${escapeHtml(answer)}</div>`);
+    $("askNote").textContent = "";
+  } catch (err) {
+    $("askNote").textContent = err.message;
+  } finally {
+    $("askBtn").disabled = false;
+    thread.scrollIntoView({ block: "end", behavior: "smooth" });
+  }
+});
+
+boot().catch((err) => {
+  $("signin").classList.remove("hidden");
+  $("signinError").textContent = err.message;
+});
+</script>
 </body>
 </html>

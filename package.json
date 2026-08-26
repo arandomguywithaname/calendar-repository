@@ -1,14 +1,15 @@
 {
-  "name": "calendar-repository",
+  "name": "digestify",
   "version": "1.0.0",
-  "description": "",
+  "description": "Digestify — reads the channels and chats you follow, and keeps a digest you can talk to.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js",
+    "start": "tsc && node dist/server.js",
     "web": "tsc && node dist/server.js",
-    "web:start": "node dist/server.js"
+    "bundle": "esbuild netlify/functions/api.ts --bundle --platform=node --target=node20 --format=cjs --minify --outfile=netlify-deploy/netlify/functions/api.js",
+    "bot": "tsc && node dist/bot-server.js",
+    "package": "node scripts/package-bot.js"
   },
   "repository": {
     "type": "git",
@@ -18,7 +19,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@anthropic-ai/sdk": "^0.116.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@netlify/blobs": "^10.7.12",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.4.0",
@@ -26,6 +29,14 @@
     "express": "^5.2.1",
     "googleapis": "^171.4.0",
     "multer": "^2.1.1",
-    "typescript": "^5.9.3"
+    "qrcode": "^1.5.4",
+    "serverless-http": "^4.0.0",
+    "teleproto": "^1.228.5",
+    "typescript": "^5.9.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "esbuild": "^0.28.2"
   }
 }

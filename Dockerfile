@@ -1,42 +1,31 @@
-# syntax = docker/dockerfile:1
+# The bot bundled to a single file, then run on a bare Node image.
+#
+# Bundling in the build stage means the runtime image carries no node_modules
+# and no package manager — the same reason the desktop build is one file. What
+# ships is a few megabytes of JavaScript and nothing to install at boot.
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=22.21.1
-FROM node:${NODE_VERSION}-slim AS base
+FROM node:22-slim AS build
+WORKDIR /src
 
-LABEL fly_launch_runtime="Node.js"
-
-# Node.js app lives here
-WORKDIR /app
-
-# Set production environment
-ENV NODE_ENV="production"
-
-
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
-
-# Install node modules
-COPY package-lock.json package.json ./
+COPY package*.json ./
 RUN npm ci
 
-# Copy application code
-COPY . .
+COPY tsconfig.json ./
+COPY src ./src
+RUN npx esbuild src/bot-server.ts \
+      --bundle --platform=node --target=node20 --format=cjs \
+      --define:__BUILD_STAMP__="\"docker-$(date -u +%Y-%m-%dT%H-%M)\"" \
+      --outfile=/src/bot.js
 
-# Build application
-RUN npm run build
+FROM node:22-slim
+WORKDIR /app
 
+# Digests and the MTProto session live here. Mount a volume on it — without
+# one, a redeploy loses the session and everyone has to /connect again.
+ENV DIGEST_DATA_DIR=/data
+RUN mkdir -p /data && chown node:node /data
 
-# Final stage for app image
-FROM base
+COPY --from=build /src/bot.js /app/bot.js
 
-# Copy built application
-COPY --from=build /app /app
-
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
-CMD [ "npm", "run", "start" ]
+USER node
+CMD ["node", "/app/bot.js"]

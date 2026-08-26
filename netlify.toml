@@ -1,0 +1,28 @@
+[build]
+  # tsc is a type check here — Netlify bundles the function from TypeScript source.
+  command = "npm run build"
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # Bundled rather than inlined so its dynamic imports resolve at runtime.
+  external_node_modules = ["@netlify/blobs"]
+
+# The Express routes live behind one function. The path after the function name
+# is preserved so serverless-http can strip the prefix and hand Express the
+# original path (see netlify/functions/api.ts).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/.netlify/functions/api/auth/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/webhooks/*"
+  to = "/.netlify/functions/api/webhooks/:splat"
+  status = 200
