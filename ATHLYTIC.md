@@ -17,8 +17,9 @@ Apple Watch ──▶ Apple Health ──▶ Health Auto Export ──▶ this s
                  Athlytic uses)      push, JSON)           stores + scores it        at /mcp/<token>
 ```
 
-No dev server involved anywhere: the whole thing runs from the compiled output with `node dist/server.js`
-(which is what `npm start`, the Dockerfile, and the Fly.io deploy run).
+Run it however you like: `npm run dev` (compile + start in one command) for local use, or
+`npm run build` + `npm start` (plain `node dist/server.js` — what the Dockerfile and Fly.io deploy run).
+Every command in this guide works in Windows Command Prompt, PowerShell, and bash.
 
 ---
 
@@ -26,14 +27,33 @@ No dev server involved anywhere: the whole thing runs from the compiled output w
 
 ### Option A — Fly.io (recommended; this repo is already set up for it)
 
-```bash
-# Generate two secrets (any long random strings work)
-openssl rand -hex 24   # → use as ATHLYTIC_INGEST_TOKEN
-openssl rand -hex 24   # → use as MCP_TOKEN
+One-time: install the Fly CLI ([fly.io/docs/flyctl/install](https://fly.io/docs/flyctl/install/) —
+on Windows, run `iwr https://fly.io/install.ps1 -useb | iex` in PowerShell once; after that `fly`
+works in Command Prompt too) and sign in with `fly auth login`.
 
-fly secrets set ATHLYTIC_INGEST_TOKEN=<first-token> MCP_TOKEN=<second-token>
+Then, from the repository folder:
+
+```bash
+npm run tokens
+```
+
+This prints two freshly generated secrets, ready to paste:
+
+```
+ATHLYTIC_INGEST_TOKEN=1f0c6...
+MCP_TOKEN=9a41d...
+```
+
+Put both of them (space-separated) into one command, then deploy:
+
+```bash
+fly secrets set ATHLYTIC_INGEST_TOKEN=1f0c6... MCP_TOKEN=9a41d...
 fly deploy
 ```
+
+(`fly secrets set` stores them encrypted and restarts the app with them as environment variables.
+Run `npm run tokens` only once — running it again prints *different* tokens, and the ones on Fly
+are what count. `fly secrets list` shows what's set, without values.)
 
 Your endpoints become:
 
@@ -54,13 +74,25 @@ Your endpoints become:
 > ```
 > (Or just re-send history from Health Auto Export after a deploy — see step 3.)
 
-### Option B — any machine (no dev tooling)
+### Option B — any machine, including Windows
 
-```bash
-npm ci
-npm run build              # one-time TypeScript compile
-ATHLYTIC_INGEST_TOKEN=... MCP_TOKEN=... npm start   # = node dist/server.js
+Put the tokens in a `.env` file (the server loads it automatically on every platform — no shell
+env-var syntax needed, so this works the same in Command Prompt):
+
 ```
+npm ci
+copy .env.example .env     :: Windows Command Prompt   (macOS/Linux: cp .env.example .env)
+npm run tokens
+```
+
+Open `.env` in any editor and paste the two printed lines over the empty
+`ATHLYTIC_INGEST_TOKEN=` / `MCP_TOKEN=` entries. Then:
+
+```
+npm run dev                :: compiles and starts everything at http://localhost:3000
+```
+
+(`npm start` does the same without recompiling, once `npm run build` has been run.)
 
 For claude.ai to reach it, the URL must be public HTTPS (e.g. behind a reverse proxy or a tunnel).
 For Claude Desktop only, no hosting is needed at all — see step 4, Option B.
@@ -86,13 +118,12 @@ good after it has some history (it needs ≥5 days to score at all). In Health A
 manual export of the **last 60–90 days** to the same endpoint (or export to a JSON file and upload it on
 the `/athlytic` page).
 
-To try everything without a phone, this repo ships a realistic sample:
+To try everything without a phone, this repo ships a realistic sample. One line, works in
+Command Prompt and bash alike (replace `YOUR_INGEST_TOKEN` with the value from your `.env`) —
+or skip curl entirely and upload `examples/health-auto-export-sample.json` on the `/athlytic` page:
 
-```bash
-curl -X POST "http://localhost:3000/api/athlytic/ingest" \
-  -H "Authorization: Bearer $ATHLYTIC_INGEST_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data @examples/health-auto-export-sample.json
+```
+curl -X POST "http://localhost:3000/api/athlytic/ingest" -H "Authorization: Bearer YOUR_INGEST_TOKEN" -H "Content-Type: application/json" --data @examples/health-auto-export-sample.json
 ```
 
 ## 4. Connect Claude

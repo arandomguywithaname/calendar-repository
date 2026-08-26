@@ -115,7 +115,7 @@ export function athlyticRouter(): Router {
       next();
       return;
     }
-    const supplied = req.params.token ?? providedToken(req);
+    const supplied = (typeof req.params.token === "string" ? req.params.token : undefined) ?? providedToken(req);
     if (supplied && tokensMatch(supplied, mcpToken)) {
       next();
       return;

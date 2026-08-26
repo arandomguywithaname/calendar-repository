@@ -70,6 +70,43 @@ function daySummary(dateArg?: string) {
   });
 }
 
+type ToolResult = { content: { type: "text"; text: string }[] };
+
+// server.registerTool's generic inference overflows TypeScript's instantiation
+// budget (TS2589) with this SDK+zod pairing, so registrations go through this
+// loosely-typed wrapper. Runtime behavior is identical; the zod schemas still
+// validate input and are still advertised to Claude, and each handler types its
+// own arguments explicitly.
+function addTool(
+  server: McpServer,
+  name: string,
+  config: { title: string; description: string; inputSchema: z.ZodRawShape },
+  handler: (args: any) => Promise<ToolResult>
+): void {
+  (server.registerTool as (n: string, c: unknown, h: unknown) => unknown)(name, config, handler);
+}
+
+const dailySummaryInput: z.ZodRawShape = {
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+    .describe("Day to summarize, YYYY-MM-DD. Omit for the latest day with data."),
+};
+const trendsInput: z.ZodRawShape = {
+  days: z.number().int().min(2).max(365).optional()
+    .describe("How many days back to include (default 14)."),
+};
+const workoutsInput: z.ZodRawShape = {
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Earliest day, YYYY-MM-DD (inclusive)."),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Latest day, YYYY-MM-DD (inclusive)."),
+  limit: z.number().int().min(1).max(200).optional().describe("Max workouts to return (default 20)."),
+};
+const sleepInput: z.ZodRawShape = {
+  days: z.number().int().min(1).max(90).optional().describe("How many nights back (default 7)."),
+};
+const rawMetricInput: z.ZodRawShape = {
+  name: z.string().describe("Metric name, e.g. 'hrvMs' or an 'other' key like 'flights_climbed'."),
+  days: z.number().int().min(1).max(365).optional().describe("How many days back (default 30)."),
+};
+
 export function buildAthlyticMcpServer(): McpServer {
   const server = new McpServer(
     { name: "athlytic-health", version: "1.0.0" },
@@ -81,7 +118,8 @@ export function buildAthlyticMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
+  addTool(
+    server,
     "get_data_status",
     {
       title: "Data status",
@@ -121,7 +159,8 @@ export function buildAthlyticMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
+  addTool(
+    server,
     "get_daily_summary",
     {
       title: "Daily summary",
@@ -129,47 +168,39 @@ export function buildAthlyticMcpServer(): McpServer {
         "Full picture for one day: recovery score (0-100) with its HRV/resting-HR/sleep components and personal baselines, " +
         "exertion score (0-10) with target range, sleep breakdown, vitals, steps, energy, and workouts. " +
         "Defaults to the most recent day with data. Use this for questions like 'how recovered am I today?'.",
-      inputSchema: {
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
-          .describe("Day to summarize, YYYY-MM-DD. Omit for the latest day with data."),
-      },
+      inputSchema: dailySummaryInput,
     },
-    async ({ date }) => daySummary(date)
+    async ({ date }: { date?: string }) => daySummary(date)
   );
 
-  server.registerTool(
+  addTool(
+    server,
     "get_trends",
     {
       title: "Trends",
       description:
         "Day-by-day series over the last N days: recovery, exertion, training load, HRV, resting HR, sleep hours, steps, " +
         "active energy, workout count. Use for 'how has my week/month looked?' and spotting patterns.",
-      inputSchema: {
-        days: z.number().int().min(2).max(365).optional()
-          .describe("How many days back to include (default 14)."),
-      },
+      inputSchema: trendsInput,
     },
-    async ({ days }) => {
+    async ({ days }: { days?: number }) => {
       const store = loadStore();
       if (sortedDates(store).length === 0) return noData();
       return json({ note: ESTIMATE_NOTE, days: computeTrend(store, days ?? 14) });
     }
   );
 
-  server.registerTool(
+  addTool(
+    server,
     "get_workouts",
     {
       title: "Workouts",
       description:
         "List workouts (type, start, duration, distance, calories, avg/max heart rate), most recent first. " +
         "Optionally filter by date range.",
-      inputSchema: {
-        start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Earliest day, YYYY-MM-DD (inclusive)."),
-        end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Latest day, YYYY-MM-DD (inclusive)."),
-        limit: z.number().int().min(1).max(200).optional().describe("Max workouts to return (default 20)."),
-      },
+      inputSchema: workoutsInput,
     },
-    async ({ start, end, limit }) => {
+    async ({ start, end, limit }: { start?: string; end?: string; limit?: number }) => {
       const store = loadStore();
       const dates = sortedDates(store);
       if (dates.length === 0) return noData();
@@ -184,17 +215,16 @@ export function buildAthlyticMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
+  addTool(
+    server,
     "get_sleep",
     {
       title: "Sleep",
       description:
         "Sleep for the last N nights: total, in-bed, core/deep/REM/awake hours and bed/wake times, plus the average.",
-      inputSchema: {
-        days: z.number().int().min(1).max(90).optional().describe("How many nights back (default 7)."),
-      },
+      inputSchema: sleepInput,
     },
-    async ({ days }) => {
+    async ({ days }: { days?: number }) => {
       const store = loadStore();
       const dates = sortedDates(store).slice(-(days ?? 7));
       if (dates.length === 0) return noData();
@@ -207,7 +237,8 @@ export function buildAthlyticMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
+  addTool(
+    server,
     "get_raw_metric",
     {
       title: "Raw metric",
@@ -216,12 +247,9 @@ export function buildAthlyticMcpServer(): McpServer {
         "heartRateMax, respiratoryRate, bloodOxygenPct, vo2Max, wristTemperatureC, activeEnergyKcal, steps — " +
         "plus anything listed under 'other:*' by get_data_status (e.g. mindful_minutes). Escape hatch when the " +
         "summary tools don't cover a metric.",
-      inputSchema: {
-        name: z.string().describe("Metric name, e.g. 'hrvMs' or an 'other' key like 'flights_climbed'."),
-        days: z.number().int().min(1).max(365).optional().describe("How many days back (default 30)."),
-      },
+      inputSchema: rawMetricInput,
     },
-    async ({ name, days }) => {
+    async ({ name, days }: { name: string; days?: number }) => {
       const store = loadStore();
       const dates = sortedDates(store).slice(-(days ?? 30));
       if (dates.length === 0) return noData();

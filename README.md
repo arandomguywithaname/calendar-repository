@@ -58,17 +58,15 @@ Edit `contacts.json` to map @mentions to email addresses:
 
 ### 4. Run
 
-Production-style (compile once, run with plain node — this is what the Dockerfile/Fly.io use):
-
 ```bash
-npm run build
-npm start          # web UI + Athlytic connector at /mcp
+npm run dev        # compiles and starts the web app + Athlytic connector at http://localhost:3000
 ```
 
-Or the interactive CLI:
+All of these work in Windows Command Prompt, PowerShell, and bash alike. Other ways to run:
 
 ```bash
-npm run build && npm run cli
+npm run build && npm start   # compile once, then run with plain node (what the Dockerfile/Fly.io use)
+npm run dev:cli              # the interactive command-line agent instead of the web app
 ```
 
 ## Features
