@@ -12,6 +12,7 @@
     "web": "tsc && node dist/server.js",
     "web:start": "node dist/server.js",
     "mcp:stdio": "node dist/health/stdio.js",
+    "deploy": "node scripts/deploy-fly.js",
     "tokens": "node -e \"const c=require('crypto');console.log('HEALTH_INGEST_TOKEN='+c.randomBytes(24).toString('hex'));console.log('MCP_TOKEN='+c.randomBytes(24).toString('hex'))\""
   },
   "repository": {

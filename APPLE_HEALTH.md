@@ -50,6 +50,12 @@ Node.js, npm, and the TypeScript compile all happen there, not on your computer.
    on the GitHub repo page press the green **Code** button → **Download ZIP**, unzip it, and open
    a terminal in that folder (the one containing `fly.toml`).
 
+> **Shortcut:** with Node.js installed, `npm run deploy` does steps 3–5 for you — it generates
+> and saves the tokens to `.env`, creates a dedicated Fly app (asking before touching any
+> existing one), updates `fly.toml`, sets the secrets, deploys, and prints the final URLs for
+> the phone and claude.ai. Steps 1–2 (Fly CLI + `fly auth login`, and having the code) still
+> come first.
+
 3. **Pick two secrets.** They're just passwords — any two *different* random strings of 30+
    characters work. Use a password manager's generator, or paste this in PowerShell twice:
 
