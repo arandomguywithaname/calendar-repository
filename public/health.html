@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Athlytic → Claude Connector</title>
+  <title>Apple Health → Claude Connector</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -94,9 +94,10 @@
 </head>
 <body>
   <div class="card">
-    <h1>Athlytic → Claude Connector</h1>
+    <h1>Apple Health → Claude Connector</h1>
     <p class="subtitle">
-      Feeds the Apple Health data behind Athlytic (recovery, sleep, HRV, workouts) to Claude as a custom connector.
+      Feeds Apple Health data (sleep, HRV, heart rate, workouts, and more) to Claude as a custom connector,
+      with recovery and exertion estimates computed from it.
     </p>
 
     <div class="status" id="status">
@@ -109,16 +110,16 @@
     <h2>Automatic sync (recommended)</h2>
     <p>
       On the iPhone, install <strong>Health Auto Export</strong> and create an automation:
-      REST API → URL <code id="ingest-url">…/api/athlytic/ingest</code>, format JSON, header
+      REST API → URL <code id="ingest-url">…/api/health/ingest</code>, format JSON, header
       <code>Authorization: Bearer &lt;your ingest token&gt;</code>. Full steps are in
-      <code>ATHLYTIC.md</code> in the repository.
+      <code>APPLE_HEALTH.md</code> in the repository.
     </p>
 
     <h2>Manual upload</h2>
     <p>Export JSON from Health Auto Export (or use the sample file in <code>examples/</code>) and upload it here.</p>
     <form id="upload-form">
       <label for="token">Ingest token</label>
-      <input type="password" id="token" placeholder="ATHLYTIC_INGEST_TOKEN" autocomplete="off" />
+      <input type="password" id="token" placeholder="HEALTH_INGEST_TOKEN" autocomplete="off" />
       <label for="file">Health Auto Export JSON file</label>
       <input type="file" id="file" accept=".json,application/json" />
       <button type="submit" id="upload-btn">Upload</button>
@@ -131,13 +132,13 @@
 
     async function refreshStatus() {
       try {
-        const res = await fetch("/api/athlytic/status");
+        const res = await fetch("/api/health/status");
         const s = await res.json();
         $("stat-days").textContent = s.daysStored;
         $("stat-sync").textContent = s.lastSync ? new Date(s.lastSync).toLocaleString() : "never";
         $("stat-range").textContent = s.firstDate ? `${s.firstDate} → ${s.lastDate}` : "—";
         $("stat-mcp").textContent = s.mcpPath;
-        $("ingest-url").textContent = `${location.origin}/api/athlytic/ingest`;
+        $("ingest-url").textContent = `${location.origin}/api/health/ingest`;
       } catch {
         $("stat-days").textContent = "?";
       }
@@ -156,7 +157,7 @@
       try {
         const body = await file.text();
         JSON.parse(body); // fail fast on non-JSON
-        const res = await fetch("/api/athlytic/ingest", {
+        const res = await fetch("/api/health/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
           body,

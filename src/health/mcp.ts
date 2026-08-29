@@ -5,15 +5,15 @@ import { computeExertion, computeRecovery, computeTrend } from "./metrics";
 import { DayRecord, WorkoutRecord } from "./types";
 
 /**
- * The MCP server Claude connects to (the "Athlytic connector").
+ * The MCP server Claude connects to (the Apple Health connector).
  * Each tool reloads the store from disk so freshly-synced data from the
  * phone is visible immediately without restarting anything.
  */
 
 const ESTIMATE_NOTE =
-  "Recovery/exertion are Athlytic-style estimates computed from Apple Health data " +
+  "Recovery/exertion are estimates computed from this person's Apple Health data " +
   "(HRV vs personal baseline, resting HR, sleep, heart-rate training load) — " +
-  "not Athlytic's proprietary in-app numbers.";
+  "similar in spirit to fitness apps' readiness scores, not values from any app.";
 
 function json(result: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
@@ -23,8 +23,8 @@ function noData() {
   return json({
     error: "No health data has been synced yet.",
     howToFix:
-      "Send data from the phone with the Health Auto Export app (Automations → REST API → POST to /api/athlytic/ingest), " +
-      "or upload an export on the /athlytic page. See ATHLYTIC.md in the repository.",
+      "Send data from the phone with the Health Auto Export app (Automations → REST API → POST to /api/health/ingest), " +
+      "or upload an export on the /health page. See APPLE_HEALTH.md in the repository.",
     dataFile: storePath(),
   });
 }
@@ -107,14 +107,15 @@ const rawMetricInput: z.ZodRawShape = {
   days: z.number().int().min(1).max(365).optional().describe("How many days back (default 30)."),
 };
 
-export function buildAthlyticMcpServer(): McpServer {
+export function buildHealthMcpServer(): McpServer {
   const server = new McpServer(
-    { name: "athlytic-health", version: "1.0.0" },
+    { name: "apple-health", version: "1.0.0" },
     {
       instructions:
-        "Fitness and recovery data for one person, sourced from Apple Health (the same data the Athlytic app uses; " +
-        "Athlytic has no public API, so recovery/exertion here are transparent estimates from the same inputs). " +
-        "Dates are YYYY-MM-DD in the user's local time. Start with get_data_status if unsure what's available.",
+        "One person's Apple Health data: sleep, heart metrics, workouts, activity, and any other synced HealthKit " +
+        "metrics, plus recovery/exertion estimates computed from them (Apple Health has no cloud API, so the phone " +
+        "pushes this data to the server). Dates are YYYY-MM-DD in the user's local time. " +
+        "Start with get_data_status if unsure what's available.",
     }
   );
 
@@ -264,7 +265,7 @@ export function buildAthlyticMcpServer(): McpServer {
       if (values.length === 0) {
         return json({ error: `No values stored for metric '${name}'.`, hint: "Call get_data_status to see available metrics." });
       }
-      return json({ metric: name, values });
+      return json({ metric: name, units: store.units?.[name], values });
     }
   );
 

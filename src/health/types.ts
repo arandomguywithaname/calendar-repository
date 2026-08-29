@@ -1,10 +1,10 @@
 /**
- * Types for the Athlytic → Claude connector.
+ * Types for the Apple Health → Claude connector.
  *
- * Athlytic has no public API — it reads everything from Apple Health.
- * This connector ingests the same Apple Health data (delivered by the
- * Health Auto Export iOS app, or uploaded manually) and serves it to
- * Claude over MCP, including Athlytic-style recovery/exertion estimates.
+ * Apple Health has no cloud API — HealthKit data lives on the phone.
+ * This connector ingests Apple Health data pushed off the phone by the
+ * Health Auto Export iOS app (or uploaded manually) and serves it to
+ * Claude over MCP, including recovery/exertion estimates computed from it.
  */
 
 /** A single workout session, normalized from Health Auto Export. */
@@ -59,6 +59,8 @@ export interface HealthStore {
   updatedAt?: string;
   lastIngestSource?: string;
   days: { [date: string]: DayRecord };
+  /** Units per metric as last reported by the phone (e.g. { flights_climbed: "count" }). */
+  units?: { [metric: string]: string };
 }
 
 /** Result summary returned to the ingest caller (shown in Health Auto Export). */

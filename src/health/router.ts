@@ -2,17 +2,23 @@ import * as crypto from "crypto";
 import * as path from "path";
 import express, { NextFunction, Request, Response, Router } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { buildAthlyticMcpServer } from "./mcp";
+import { buildHealthMcpServer } from "./mcp";
 import { ingestPayload } from "./ingest";
 import { loadStore, saveStore, sortedDates } from "./store";
 
 /**
- * HTTP surface of the Athlytic connector:
- *   POST /api/athlytic/ingest   ← Health Auto Export pushes JSON here (token required)
- *   GET  /api/athlytic/status   ← non-sensitive sync status (used by the /athlytic page)
- *   ALL  /mcp[/<MCP_TOKEN>]     ← the Claude connector endpoint (Streamable HTTP, stateless)
- *   GET  /athlytic              ← setup/status/upload page
+ * HTTP surface of the Apple Health connector:
+ *   POST /api/health/ingest   ← Health Auto Export pushes JSON here (token required)
+ *   GET  /api/health/status   ← non-sensitive sync status (used by the /health page)
+ *   ALL  /mcp[/<MCP_TOKEN>]   ← the Claude connector endpoint (Streamable HTTP, stateless)
+ *   GET  /health              ← setup/status/upload page
+ * The pre-rename /api/athlytic/* and /athlytic paths stay as aliases.
  */
+
+function ingestToken(): string | undefined {
+  // HEALTH_INGEST_TOKEN is the current name; ATHLYTIC_INGEST_TOKEN kept for existing setups.
+  return process.env.HEALTH_INGEST_TOKEN || process.env.ATHLYTIC_INGEST_TOKEN;
+}
 
 function tokensMatch(provided: string, expected: string): boolean {
   // Hash first so timingSafeEqual gets equal-length buffers.
@@ -30,20 +36,20 @@ function providedToken(req: Request): string | undefined {
   return undefined;
 }
 
-/** Ingest requires ATHLYTIC_INGEST_TOKEN — health data should never be writable by strangers. */
+/** Ingest requires the token — health data should never be writable by strangers. */
 function requireIngestToken(req: Request, res: Response, next: NextFunction): void {
-  const expected = process.env.ATHLYTIC_INGEST_TOKEN;
+  const expected = ingestToken();
   if (!expected) {
     res.status(503).json({
       error:
-        "Ingest is disabled: set the ATHLYTIC_INGEST_TOKEN environment variable (e.g. `fly secrets set ATHLYTIC_INGEST_TOKEN=...`), " +
+        "Ingest is disabled: set the HEALTH_INGEST_TOKEN environment variable (e.g. `fly secrets set HEALTH_INGEST_TOKEN=...`), " +
         "then send that token as an `Authorization: Bearer <token>` header from Health Auto Export.",
     });
     return;
   }
   const provided = providedToken(req);
   if (!provided || !tokensMatch(provided, expected)) {
-    res.status(401).json({ error: "Missing or invalid token. Send `Authorization: Bearer <ATHLYTIC_INGEST_TOKEN>`." });
+    res.status(401).json({ error: "Missing or invalid token. Send `Authorization: Bearer <HEALTH_INGEST_TOKEN>`." });
     return;
   }
   next();
@@ -59,7 +65,7 @@ function jsonRpcError(res: Response, status: number, code: number, message: stri
  * sees the latest synced data.
  */
 async function handleMcpPost(req: Request, res: Response): Promise<void> {
-  const server = buildAthlyticMcpServer();
+  const server = buildHealthMcpServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close();
@@ -74,27 +80,27 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
   }
 }
 
-export function athlyticRouter(): Router {
+export function healthRouter(): Router {
   const router = express.Router();
   const mcpToken = process.env.MCP_TOKEN;
 
-  router.post("/api/athlytic/ingest", requireIngestToken, (req: Request, res: Response) => {
+  const handleIngest = (req: Request, res: Response) => {
     try {
       const store = loadStore();
       const summary = ingestPayload(store, req.body, "health-auto-export");
       saveStore(store);
       const dates = sortedDates(store);
       console.log(
-        `Athlytic ingest: ${summary.dataPoints} points, ${summary.daysTouched} days (${summary.firstDate}..${summary.lastDate})`
+        `Health ingest: ${summary.dataPoints} points, ${summary.daysTouched} days (${summary.firstDate}..${summary.lastDate})`
       );
       res.json({ ok: true, ...summary, totalDaysStored: dates.length });
     } catch (err: any) {
       res.status(400).json({ ok: false, error: err.message || "Failed to parse payload." });
     }
-  });
+  };
 
   // Deliberately excludes health values — it powers the public setup page.
-  router.get("/api/athlytic/status", (_req: Request, res: Response) => {
+  const handleStatus = (_req: Request, res: Response) => {
     const store = loadStore();
     const dates = sortedDates(store);
     res.json({
@@ -102,10 +108,15 @@ export function athlyticRouter(): Router {
       firstDate: dates[0] ?? null,
       lastDate: dates[dates.length - 1] ?? null,
       lastSync: store.updatedAt ?? null,
-      ingestConfigured: Boolean(process.env.ATHLYTIC_INGEST_TOKEN),
+      ingestConfigured: Boolean(ingestToken()),
       mcpPath: mcpToken ? "/mcp/<MCP_TOKEN>" : "/mcp",
     });
-  });
+  };
+
+  for (const base of ["/api/health", "/api/athlytic"]) {
+    router.post(`${base}/ingest`, requireIngestToken, handleIngest);
+    router.get(`${base}/status`, handleStatus);
+  }
 
   // The Claude connector endpoint. With MCP_TOKEN set, the real endpoint
   // lives at /mcp/<token> (claude.ai custom connectors can't send custom
@@ -133,9 +144,10 @@ export function athlyticRouter(): Router {
     console.warn("MCP_TOKEN is not set — /mcp is unauthenticated. Set MCP_TOKEN before exposing this server publicly.");
   }
 
-  router.get("/athlytic", (_req: Request, res: Response) => {
-    res.sendFile(path.join(__dirname, "../../public/athlytic.html"));
+  router.get("/health", (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, "../../public/health.html"));
   });
+  router.get("/athlytic", (_req: Request, res: Response) => res.redirect("/health"));
 
   return router;
 }

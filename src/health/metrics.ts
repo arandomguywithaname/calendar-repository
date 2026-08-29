@@ -2,16 +2,15 @@ import { DayRecord, HealthStore } from "./types";
 import { sortedDates } from "./store";
 
 /**
- * Athlytic-style scores computed from the raw Apple Health inputs.
- *
- * Athlytic's exact formulas are proprietary and unpublished, so these are
- * transparent estimates built the same way Athlytic describes its scores:
+ * Recovery/exertion scores computed from the raw Apple Health inputs,
+ * in the spirit of fitness apps' readiness scores (Athlytic, Whoop, …)
+ * but with transparent formulas:
  *  - Recovery (0–100): today's HRV vs your rolling personal baseline,
  *    adjusted by resting heart rate and sleep.
  *  - Exertion (0–10): cardiovascular load (a TRIMP-style heart-rate ×
  *    duration sum) scaled against your own recent training history.
- *  - Target exertion range: derived from recovery, like Athlytic's
- *    daily "train in this range" guidance.
+ *  - Target exertion range: derived from recovery — the readier you
+ *    are, the harder the suggested training range.
  * Every tool response labels them as estimates.
  */
 

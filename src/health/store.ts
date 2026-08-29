@@ -12,6 +12,11 @@ export function dataDir(): string {
 }
 
 export function storePath(): string {
+  return path.join(dataDir(), "apple-health.json");
+}
+
+/** Pre-rename data file; read as a fallback so existing data keeps working. */
+function legacyStorePath(): string {
   return path.join(dataDir(), "athlytic-health.json");
 }
 
@@ -20,8 +25,11 @@ export function emptyStore(): HealthStore {
 }
 
 export function loadStore(): HealthStore {
-  const p = storePath();
-  if (!fs.existsSync(p)) return emptyStore();
+  let p = storePath();
+  if (!fs.existsSync(p)) {
+    p = legacyStorePath();
+    if (!fs.existsSync(p)) return emptyStore();
+  }
   try {
     const parsed = JSON.parse(fs.readFileSync(p, "utf-8")) as HealthStore;
     if (!parsed || typeof parsed !== "object" || !parsed.days) return emptyStore();

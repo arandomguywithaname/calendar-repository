@@ -179,6 +179,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
 
   // metric -> date -> accumulated value (avg or sum resolved at the end)
   const accs = new Map<string, Map<string, Acc>>();
+  const unitsSeen: { [metric: string]: string } = {};
   // heart_rate keeps Min/Avg/Max; hold separate accumulators
   const hrAcc = new Map<string, { min: Acc; avg: Acc; max: Acc }>();
 
@@ -187,6 +188,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
     if (!name || !Array.isArray(metric?.data)) continue;
     seen.add(name);
     const units: string | undefined = typeof metric.units === "string" ? metric.units : undefined;
+    if (units) unitsSeen[name] = units;
 
     for (const row of metric.data) {
       const date = localDay(row?.date);
@@ -296,6 +298,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   summary.lastDate = dates[dates.length - 1];
   summary.metricsSeen = [...seen].sort();
 
+  store.units = { ...store.units, ...unitsSeen };
   store.updatedAt = new Date().toISOString();
   store.lastIngestSource = source || "api";
   return summary;

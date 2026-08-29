@@ -6,7 +6,7 @@ import multer from "multer";
 import { parseInput } from "./parser";
 import { createCalendarEvent } from "./calendar";
 import { ContactsMap } from "./types";
-import { athlyticRouter } from "./athlytic/router";
+import { healthRouter } from "./health/router";
 
 dotenv.config();
 
@@ -20,8 +20,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(express.json({ limit: "64mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
 
-// Athlytic → Claude connector: /mcp endpoint, health-data ingest, /athlytic page
-app.use(athlyticRouter());
+// Apple Health → Claude connector: /mcp endpoint, health-data ingest, /health page
+app.use(healthRouter());
 
 /** Load contacts map */
 function loadContacts(): ContactsMap {
@@ -84,5 +84,5 @@ app.post("/api/create", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`Calendar Agent running at http://localhost:${PORT}`);
-  console.log(`Athlytic connector: MCP at /mcp${process.env.MCP_TOKEN ? "/<MCP_TOKEN>" : ""}, setup page at /athlytic`);
+  console.log(`Apple Health connector: MCP at /mcp${process.env.MCP_TOKEN ? "/<MCP_TOKEN>" : ""}, setup page at /health`);
 });

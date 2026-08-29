@@ -1,20 +1,19 @@
-# Athlytic → Claude Connector
+# Apple Health → Claude Connector
 
-A real, working Claude connector (an [MCP](https://modelcontextprotocol.io) server) for the fitness data behind the
-[Athlytic](https://www.athlyticapp.com/) app: recovery, exertion, sleep, HRV, resting heart rate, and workouts.
+A real, working Claude connector (an [MCP](https://modelcontextprotocol.io) server) for your Apple Health
+data: sleep, HRV, resting heart rate, workouts, activity, and any other HealthKit metric your phone
+syncs — plus recovery (0–100) and exertion (0–10) estimates computed from your own baselines.
 
-**One honest caveat up front:** Athlytic has no public API and no data export —
-[Athlytic's own help docs](https://athlyticapp.helpscoutdocs.com/article/47-can-i-export-data-from-athlytic)
-say all of its data lives in Apple Health. So this connector works with the *same Apple Health data
-Athlytic reads* (delivered automatically from the iPhone by the free-tier
-[Health Auto Export](https://apps.apple.com/us/app/health-auto-export-to-csv/id1115567069) app) and computes
-transparent, Athlytic-style Recovery (0–100) and Exertion (0–10) scores from it. Claude sees your real numbers;
-the scores are clearly labeled as estimates, not Athlytic's proprietary in-app values.
+**One honest caveat up front:** Apple Health has **no cloud API** — HealthKit data lives on the
+iPhone, and there is nothing a server can "log into". So the phone itself pushes the data here,
+automatically, using the free-tier
+[Health Auto Export](https://apps.apple.com/us/app/health-auto-export-to-csv/id1115567069) app
+(or you upload an export by hand). Claude then reads everything through a custom connector.
 
 ```
 Apple Watch ──▶ Apple Health ──▶ Health Auto Export ──▶ this server ──▶ Claude
-                (same source        (automatic REST        /api/athlytic/ingest      custom connector
-                 Athlytic uses)      push, JSON)           stores + scores it        at /mcp/<token>
+                (HealthKit,         (automatic REST        /api/health/ingest       custom connector
+                 on the phone)       push, JSON)           stores + scores it       at /mcp/<token>
 ```
 
 Run it however you like: `npm run dev` (compile + start in one command) for local use, or
@@ -22,6 +21,11 @@ Run it however you like: `npm run dev` (compile + start in one command) for loca
 Every command in this guide works in Windows Command Prompt, PowerShell, and bash.
 **No Node.js installed? That's fine** — use the Fly.io path (Option A): the build happens on
 Fly's servers, so your machine only needs the Fly CLI.
+
+> This project started life as an "Athlytic connector" (Athlytic reads the same Apple Health data
+> and has no API of its own). The old names still work: `/api/athlytic/ingest`, `/api/athlytic/status`,
+> the `/athlytic` page, the `ATHLYTIC_INGEST_TOKEN` variable, and an existing `athlytic-health.json`
+> data file are all still accepted.
 
 ---
 
@@ -65,7 +69,7 @@ Node.js, npm, and the TypeScript compile all happen there, not on your computer.
 5. **Set the secrets and deploy**, from the repo folder:
 
    ```
-   fly secrets set ATHLYTIC_INGEST_TOKEN=<first secret> MCP_TOKEN=<second secret>
+   fly secrets set HEALTH_INGEST_TOKEN=<first secret> MCP_TOKEN=<second secret>
    fly deploy
    ```
 
@@ -74,13 +78,13 @@ they're set once and live only on Fly, so keep a copy somewhere safe (you'll nee
 Health Auto Export and the second one in the connector URL). `fly secrets list` shows what's set,
 without values.
 
-Your endpoints become:
+Your endpoints become (using your app name):
 
-- Ingest: `https://calendar-repository.fly.dev/api/athlytic/ingest`
-- Claude connector: `https://calendar-repository.fly.dev/mcp/<MCP_TOKEN>`
-- Setup/status page: `https://calendar-repository.fly.dev/athlytic`
+- Ingest: `https://<your-app>.fly.dev/api/health/ingest`
+- Claude connector: `https://<your-app>.fly.dev/mcp/<MCP_TOKEN>`
+- Setup/status page: `https://<your-app>.fly.dev/health`
 
-> **Keeping data across deploys:** by default health data is stored in `data/athlytic-health.json`
+> **Keeping data across deploys:** by default health data is stored in `data/apple-health.json`
 > inside the machine, which survives restarts but not `fly deploy`. For durable storage, create a
 > volume and point `DATA_DIR` at it:
 > ```bash
@@ -105,7 +109,7 @@ npm run tokens
 ```
 
 Open `.env` in any editor and paste the two printed lines over the empty
-`ATHLYTIC_INGEST_TOKEN=` / `MCP_TOKEN=` entries. Then:
+`HEALTH_INGEST_TOKEN=` / `MCP_TOKEN=` entries. Then:
 
 ```
 npm run dev                :: compiles and starts everything at http://localhost:3000
@@ -119,30 +123,31 @@ For Claude Desktop only, no hosting is needed at all — see step 4, Option B.
 ## 2. Send health data from the iPhone
 
 1. Install **Health Auto Export — JSON+CSV** from the App Store and grant it Apple Health access
-   (at minimum: Heart Rate, Heart Rate Variability, Resting Heart Rate, Sleep, Active Energy,
-   Steps, Respiratory Rate, VO₂ Max, Workouts — the same permissions Athlytic uses).
+   for whatever you want Claude to see (e.g. Heart Rate, Heart Rate Variability, Resting Heart
+   Rate, Sleep, Active Energy, Steps, Respiratory Rate, VO₂ Max, and Workouts — but any HealthKit
+   metric the app can export will be stored and queryable).
 2. In the app, create an **Automation**:
    - Type: **REST API**
-   - URL: `https://<your-app>.fly.dev/api/athlytic/ingest`
-   - Headers: add `Authorization` = `Bearer <ATHLYTIC_INGEST_TOKEN>`
+   - URL: `https://<your-app>.fly.dev/api/health/ingest`
+   - Headers: add `Authorization` = `Bearer <HEALTH_INGEST_TOKEN>`
    - Data format: **JSON**, aggregation: **Days**
-   - Select the health metrics above, enable workouts, and set the schedule (e.g. hourly).
+   - Select the health metrics you want, enable workouts, and set the schedule (e.g. hourly).
 3. Tap **Update/Run** once to test — the server replies with how many data points and days it stored,
-   and the `/athlytic` page shows the sync status.
+   and the `/health` page shows the sync status.
 
 ## 3. Seed history (do this once)
 
 Recovery scores compare each day against your rolling 42-day personal baseline, so the connector gets
 good after it has some history (it needs ≥5 days to score at all). In Health Auto Export, do a one-time
 manual export of the **last 60–90 days** to the same endpoint (or export to a JSON file and upload it on
-the `/athlytic` page).
+the `/health` page).
 
 To try everything without a phone, this repo ships a realistic sample. One line, works in
 Command Prompt and bash alike (replace `YOUR_INGEST_TOKEN` with the value from your `.env`) —
-or skip curl entirely and upload `examples/health-auto-export-sample.json` on the `/athlytic` page:
+or skip curl entirely and upload `examples/health-auto-export-sample.json` on the `/health` page:
 
 ```
-curl -X POST "http://localhost:3000/api/athlytic/ingest" -H "Authorization: Bearer YOUR_INGEST_TOKEN" -H "Content-Type: application/json" --data @examples/health-auto-export-sample.json
+curl -X POST "http://localhost:3000/api/health/ingest" -H "Authorization: Bearer YOUR_INGEST_TOKEN" -H "Content-Type: application/json" --data @examples/health-auto-export-sample.json
 ```
 
 ## 4. Connect Claude
@@ -150,11 +155,12 @@ curl -X POST "http://localhost:3000/api/athlytic/ingest" -H "Authorization: Bear
 ### Option A — claude.ai custom connector (web, desktop, and mobile)
 
 1. Go to **claude.ai → Settings → Connectors → Add custom connector** (available on paid plans).
-2. Name: `Athlytic`, URL: `https://<your-app>.fly.dev/mcp/<MCP_TOKEN>`.
-3. Add it, then enable it in a chat and ask: *“How recovered am I today?”*
+2. Name: `Apple Health`, URL: `https://<your-app>.fly.dev/mcp/<MCP_TOKEN>`.
+3. Add it, then enable it in a chat and ask: *“How did I sleep this week?”*
 
 The `<MCP_TOKEN>` path segment is the access control — claude.ai connectors can't send custom
-headers, so treat that URL like a password.
+headers, so treat that URL like a password. (Opening it in a browser shows a "POST only" error;
+that's normal — browsers send GET, Claude sends POST.)
 
 ### Option B — Claude Desktop, fully local (no hosting)
 
@@ -163,21 +169,21 @@ Add to `claude_desktop_config.json` (Claude Desktop → Settings → Developer �
 ```json
 {
   "mcpServers": {
-    "athlytic": {
+    "apple-health": {
       "command": "node",
-      "args": ["/path/to/calendar-repository/dist/athlytic/stdio.js"]
+      "args": ["/path/to/calendar-repository/dist/health/stdio.js"]
     }
   }
 }
 ```
 
-Data still has to get into `data/athlytic-health.json` — either run the web server on the same machine
-to receive pushes, or periodically upload a Health Auto Export JSON file on the `/athlytic` page.
+Data still has to get into `data/apple-health.json` — either run the web server on the same machine
+to receive pushes, or periodically upload a Health Auto Export JSON file on the `/health` page.
 
 ### Option C — Claude Code
 
 ```bash
-claude mcp add --transport http athlytic https://<your-app>.fly.dev/mcp/<MCP_TOKEN>
+claude mcp add --transport http apple-health https://<your-app>.fly.dev/mcp/<MCP_TOKEN>
 ```
 
 ## What Claude can do with it
@@ -191,7 +197,7 @@ Tools exposed by the connector:
 | `get_trends` | “How has my sleep/HRV/training load looked this month?” |
 | `get_workouts` | “What did my runs look like last week?” |
 | `get_sleep` | “Am I sleeping enough?” |
-| `get_raw_metric` | Any individual stored metric, day by day |
+| `get_raw_metric` | Any individual stored metric, day by day, with units |
 
 ### How the scores work (and their limits)
 
@@ -199,12 +205,12 @@ Tools exposed by the connector:
   baseline, 25% sleep duration (7.5 h ≈ full credit). ≥67 is high / 34–66 moderate / <34 low.
 - **Exertion (0–10):** a TRIMP-style load — workout minutes × heart-rate-reserve fraction, plus a
   small credit for steps — scaled so your own typical hard day lands around 7. The target range
-  comes from recovery, like Athlytic's daily guidance.
-- These follow Athlytic's published *descriptions* of its scores, but Athlytic's exact formulas are
-  proprietary, so expect the trend to match far better than any individual number.
+  comes from recovery: the readier you are, the harder the suggested range.
+- They're computed with transparent formulas from your own data, in the spirit of fitness apps'
+  readiness scores (Athlytic, Whoop, …) — expect trends to be more meaningful than any single number.
 
 ## Privacy
 
 Health data is sensitive. It stays in one JSON file on your server (`DATA_DIR`), is only writable
-with `ATHLYTIC_INGEST_TOKEN`, and only readable through the secret `/mcp/<MCP_TOKEN>` URL. Don't
+with `HEALTH_INGEST_TOKEN`, and only readable through the secret `/mcp/<MCP_TOKEN>` URL. Don't
 share those tokens, and don't add the connector to a Claude account that isn't yours.
