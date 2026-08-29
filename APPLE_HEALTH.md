@@ -4,6 +4,11 @@ A real, working Claude connector (an [MCP](https://modelcontextprotocol.io) serv
 data: sleep, HRV, resting heart rate, workouts, activity, and any other HealthKit metric your phone
 syncs — plus recovery (0–100) and exertion (0–10) estimates computed from your own baselines.
 
+**Check the official route first:** the Claude iOS app has a built-in Apple Health integration
+(Settings → Integrations), but as of August 2026 it's a **US-only** beta for Pro/Max accounts.
+This connector is the do-it-yourself alternative that works **anywhere — Europe included** — and
+from web/desktop chats, with your data on your own server.
+
 **One honest caveat up front:** Apple Health has **no cloud API** — HealthKit data lives on the
 iPhone, and there is nothing a server can "log into". So the phone itself pushes the data here,
 automatically, using the free-tier
