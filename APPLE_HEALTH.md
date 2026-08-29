@@ -154,8 +154,10 @@ manual export of the **last 60–90 days** to the same endpoint (or export to a 
 the `/health` page).
 
 To try everything without a phone, this repo ships a realistic sample. One line, works in
-Command Prompt and bash alike (replace `YOUR_INGEST_TOKEN` with the value from your `.env`) —
-or skip curl entirely and upload `examples/health-auto-export-sample.json` on the `/health` page:
+Command Prompt and bash alike (replace `YOUR_INGEST_TOKEN` with the value from your `.env`;
+**in PowerShell type `curl.exe` instead of `curl`** — bare `curl` is an alias for a different
+command there) — or skip curl entirely and upload `examples/health-auto-export-sample.json`
+on the `/health` page:
 
 ```
 curl -X POST "http://localhost:3000/api/health/ingest" -H "Authorization: Bearer YOUR_INGEST_TOKEN" -H "Content-Type: application/json" --data @examples/health-auto-export-sample.json
