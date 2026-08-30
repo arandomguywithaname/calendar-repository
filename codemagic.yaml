@@ -13,7 +13,7 @@ workflows:
       groups:
         - appstore_credentials # holds CERTIFICATE_PRIVATE_KEY (and optional VITAL_CONNECTION_LINK / VITAL_SERVER_URL)
       vars:
-        BUNDLE_ID: "com.CHANGEME.family.Vital" # ← your registered App ID
+        BUNDLE_ID: "com.tim.Vital" # ← your registered App ID
       xcode: latest
     triggering:
       events: [] # manual "Start new build" button only; add push triggers later if wanted
