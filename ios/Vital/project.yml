@@ -20,6 +20,10 @@ targets:
         # Optional zero-config: paste the connection link from `npm run link`
         # here before building, and installers never have to set anything up.
         VitalDefaultConnectionLink: ""
+        # Background refresh: iOS wakes the app between opens to send fresh
+        # data. Timing is decided by iOS (best-effort, a few times a day).
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [app.vital.refresh]
     entitlements:
       path: Vital.entitlements
       properties:

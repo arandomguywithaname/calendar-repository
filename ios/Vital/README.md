@@ -15,6 +15,11 @@ What's in the box:
 - `Sources/ContentView.swift` — the main screen, built to Tim's spec: last sent time,
   success or error, and one big **Send now** button (plus a 7/30/90-day picker — use
   90 once at the start to seed history).
+- **Automatic updates:** the app re-sends by itself every time it's opened (if the last
+  send is 4+ hours old), and registers an iOS background-refresh task that sends between
+  opens. Background timing is decided by iOS (best-effort, typically a few times a day) —
+  opening the app is the guaranteed refresh. `Sources/SyncEngine.swift` is the one place
+  all three triggers (button, open, background) go through.
 - `Sources/SettingsView.swift` — one-time setup: server URL + secret key, with a
   **Test connection** button. The key is stored in the phone's Keychain, never in code.
 - `Sources/HealthKitReader.swift` — asks permission for each data type separately
@@ -44,9 +49,11 @@ prefix (`com.CHANGEME.family`) in `project.yml` (regenerate) or in the project s
 1. Xcode → New Project → iOS App, name `Vital`, interface SwiftUI, language Swift.
 2. Delete the generated `ContentView.swift`/`VitalApp.swift`; drag everything from
    `Sources/` into the project.
-3. Signing & Capabilities → **+ Capability → HealthKit**.
+3. Signing & Capabilities → **+ Capability → HealthKit**, and **+ Capability →
+   Background Modes** with **Background fetch** checked.
 4. Info tab → add **Privacy – Health Share Usage Description** with a sentence like
-   the one in `project.yml`.
+   the one in `project.yml`, and **BGTaskSchedulerPermittedIdentifiers** (array) with
+   one item: `app.vital.refresh`.
 
 Run on a simulator first (the Health app on a simulator can hold test data), then on
 the real phones: dad's via TestFlight, Tim's via the ad-hoc "secret link" (his UDID

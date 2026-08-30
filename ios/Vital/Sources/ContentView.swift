@@ -2,25 +2,16 @@ import SwiftUI
 
 /// Vital's main screen — Tim's design: when data was last sent,
 /// whether it worked, and one big "Send now" button.
+/// Data also refreshes itself: automatically whenever the app opens
+/// (if the last send is a few hours old), and via background refresh.
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var sending = false
     @State private var lastSync = Uploader.lastSync
     @State private var lastMessage = Uploader.lastMessage
     @State private var lastOK = Uploader.lastOK
     @State private var days = 7
     @State private var showSettings = false
-
-    private let reader = HealthKitReader()
-
-    /// Zero-config install: if the family's connection link was baked into the
-    /// build (VitalDefaultConnectionLink in Info.plist), apply it on first run
-    /// so a user only installs, allows Health access, and taps Send.
-    private func applyBakedInLinkIfNeeded() {
-        guard !Uploader.isConfigured,
-              let link = Bundle.main.object(forInfoDictionaryKey: "VitalDefaultConnectionLink") as? String,
-              !link.isEmpty else { return }
-        _ = Uploader.applyConnectionLink(link)
-    }
 
     var body: some View {
         NavigationStack {
@@ -62,7 +53,7 @@ struct ContentView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 40)
 
-                Button(action: sendNow) {
+                Button(action: { startSync(days: days, manual: true) }) {
                     HStack {
                         if sending {
                             ProgressView().tint(.white)
@@ -83,7 +74,7 @@ struct ContentView: View {
 
                 Spacer()
 
-                Text("Vital reads Apple Health on this phone and sends it only to our own server. Nowhere else.")
+                Text("Vital reads Apple Health on this phone and sends it only to our own server. It updates automatically when you open the app.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -101,34 +92,48 @@ struct ContentView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .onAppear(perform: applyBakedInLinkIfNeeded)
+            .onAppear {
+                applyBakedInLinkIfNeeded()
+                autoSyncIfDue()
+            }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active { autoSyncIfDue() }
+            }
         }
     }
 
-    private func sendNow() {
-        guard Uploader.isConfigured else {
+    /// Zero-config install: if the family's connection link was baked into the
+    /// build (VitalDefaultConnectionLink in Info.plist), apply it on first run
+    /// so a user only installs, allows Health access, and taps Send.
+    private func applyBakedInLinkIfNeeded() {
+        guard !Uploader.isConfigured,
+              let link = Bundle.main.object(forInfoDictionaryKey: "VitalDefaultConnectionLink") as? String,
+              !link.isEmpty else { return }
+        _ = Uploader.applyConnectionLink(link)
+    }
+
+    /// The automatic refresh: fires on open/foreground, but only when the
+    /// last send is old enough (SyncEngine decides) — never spams.
+    private func autoSyncIfDue() {
+        guard !sending, SyncEngine.isDue else { return }
+        startSync(days: 7, manual: false)
+    }
+
+    private func startSync(days: Int, manual: Bool) {
+        if manual, !Uploader.isConfigured {
             lastOK = false
             lastMessage = "Paste the family connection link first (gear button)."
             showSettings = true
             return
         }
+        guard !sending else { return }
         sending = true
         Task {
-            defer { sending = false }
-            do {
-                try await reader.requestPermission()
-                let payload = try await reader.buildPayload(days: days)
-                let result = await Uploader.send(payload: payload)
-                lastOK = result.ok
-                lastMessage = result.message
-            } catch {
-                lastOK = false
-                lastMessage = "Health access problem: \(error.localizedDescription)"
-                Uploader.lastOK = false
-                Uploader.lastMessage = lastMessage
-                Uploader.lastSync = Date()
-            }
+            let result = await SyncEngine.sync(days: days)
+            lastOK = result.ok
+            lastMessage = result.message
             lastSync = Uploader.lastSync
+            sending = false
         }
     }
 }
