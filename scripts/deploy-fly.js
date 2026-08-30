@@ -182,8 +182,9 @@ async function main() {
   Status page (safe for any browser): ${base}/health
 
 Reprint these anytime with \`npm run link\`. Try it out with \`npm run demo\`
-(sends 35 days of sample data). The links contain your secrets — share them
-only inside the family; they're saved in .env.
+(sends 35 days of sample data). The links contain your secrets — saved in
+.env, shared only inside the family. 🔒 Never paste this output into any
+chat, screenshot, or message (not even to Claude).
 `);
 }
 

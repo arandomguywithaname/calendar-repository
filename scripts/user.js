@@ -31,6 +31,10 @@ if (missing.length) {
   process.exit(1);
 }
 
+console.log(
+  "\n🔒 SECRETS BELOW — never paste this output into any chat, screenshot, or\n" +
+    "   message (not even to Claude). Hand each person their links privately."
+);
 for (const name of names) {
   const slug = slugify(name);
   if (!slug) {

@@ -10,6 +10,9 @@ if (missing.length) {
 }
 
 console.log(`
+🔒 SECRETS BELOW — never paste this output into any chat, screenshot, or
+   message (not even to Claude). Hand links to family members privately.
+
 Vital — your links (each contains a secret; share only inside the family)
 
   Phone (paste as the ONE setting in the Vital app,
