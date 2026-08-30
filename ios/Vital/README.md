@@ -54,12 +54,17 @@ goes into the provisioning profile) — exactly as the project plan says.
 
 ## First run on a phone
 
-1. Gear button → enter the server URL (`https://<your-app>.fly.dev`) and the secret
-   key (the `HEALTH_INGEST_TOKEN` value) → **Test connection** → Save.
-2. Pick **90 days** and press **Send now** — the phone asks permission for each
-   health type; approve what you're happy to share.
-3. The screen shows the result; the server's `/health` page shows the data arriving;
-   Claude can answer questions about it immediately.
+The zero-config way: before building, paste the **connection link** (printed by
+`npm run link` on the computer) into `VitalDefaultConnectionLink` in `project.yml`
+(or the Info tab in Xcode). Then anyone who installs the app just:
+
+1. Opens Vital, presses **Send now**, and approves the Health permissions they're
+   happy to share (pick **90 days** the first time to seed history).
+2. Done — the server's `/health` page shows the data arriving, and Claude can
+   answer questions about it immediately.
+
+No baked-in link? Then it's one extra step: gear button → paste the connection
+link → **Test connection** → Save.
 
 ## Honesty note from the robot programmer
 

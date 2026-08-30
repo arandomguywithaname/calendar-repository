@@ -33,6 +33,26 @@ enum Uploader {
         !serverURL.isEmpty && KeychainHelper.load()?.isEmpty == false
     }
 
+    /// The one thing a person configures: "https://host/ingest/<secret>".
+    static var connectionLink: String {
+        guard !serverURL.isEmpty, let token = KeychainHelper.load(), !token.isEmpty else { return "" }
+        return serverURL + "/ingest/" + token
+    }
+
+    /// Parses a connection link and stores server + secret. False = not a valid link.
+    static func applyConnectionLink(_ raw: String) -> Bool {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.lowercased().hasPrefix("http") { text = "https://" + text }
+        guard let url = URL(string: text), let host = url.host else { return false }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count == 2, parts[0] == "ingest", parts[1].count >= 8 else { return false }
+        var base = (url.scheme ?? "https") + "://" + host
+        if let port = url.port { base += ":\(port)" }
+        serverURL = base
+        KeychainHelper.save(parts[1])
+        return true
+    }
+
     private static func endpoint(_ path: String) -> URL? {
         var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         while base.hasSuffix("/") { base.removeLast() }
@@ -43,14 +63,13 @@ enum Uploader {
     /// POST the health payload. Returns a human-readable result and records
     /// it for the main screen.
     static func send(payload: [String: Any]) async -> Result {
-        guard let url = endpoint("/api/health/ingest"), let token = KeychainHelper.load() else {
-            return remember(Result(ok: false, message: "Not set up yet — open Settings."))
+        guard let token = KeychainHelper.load(), !token.isEmpty, let url = endpoint("/ingest/\(token)") else {
+            return remember(Result(ok: false, message: "Not set up yet — open Settings and paste the connection link."))
         }
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.httpBody = try Payload.encode(payload)
             request.timeoutInterval = 60
 

@@ -139,8 +139,9 @@ For Claude Desktop only, no hosting is needed at all — see step 4, Option B.
    metric the app can export will be stored and queryable).
 2. In the app, create an **Automation**:
    - Type: **REST API**
-   - URL: `https://<your-app>.fly.dev/api/health/ingest`
-   - Headers: add `Authorization` = `Bearer <HEALTH_INGEST_TOKEN>`
+   - URL: the **connection link** printed by `npm run link` (it looks like
+     `https://<your-app>.fly.dev/ingest/<secret>` — the secret rides inside the link, so
+     **no headers are needed**)
    - Data format: **JSON**, aggregation: **Days**
    - Select the health metrics you want, enable workouts, and set the schedule (e.g. hourly).
 3. Tap **Update/Run** once to test — the server replies with how many data points and days it stored,
@@ -157,8 +158,9 @@ you've granted HealthKit permission reads it and sends it. Health Auto Export is
 app; **your own app can do the same job with no other company in between**, and this server
 needs zero changes for it. The contract your app implements:
 
-- `POST /api/health/ingest` with header `Authorization: Bearer <HEALTH_INGEST_TOKEN>` and a
-  JSON body in this shape (the same one Health Auto Export sends):
+- `POST` to the connection link (`/ingest/<HEALTH_INGEST_TOKEN>` — no headers; this is what
+  Vital uses), or to `/api/health/ingest` with an `Authorization: Bearer <HEALTH_INGEST_TOKEN>`
+  header. Either way the JSON body has this shape (the same one Health Auto Export sends):
 
   ```json
   { "data": {
@@ -195,15 +197,14 @@ good after it has some history (it needs ≥5 days to score at all). In Health A
 manual export of the **last 60–90 days** to the same endpoint (or export to a JSON file and upload it on
 the `/health` page).
 
-To try everything without a phone, this repo ships a realistic sample. One line, works in
-Command Prompt and bash alike (replace `YOUR_INGEST_TOKEN` with the value from your `.env`;
-**in PowerShell type `curl.exe` instead of `curl`** — bare `curl` is an alias for a different
-command there) — or skip curl entirely and upload `examples/health-auto-export-sample.json`
-on the `/health` page:
+To try everything without a phone, one command sends the built-in 35-day sample for you
+(no files, no tokens to copy — it reads `.env` and `fly.toml` itself):
 
 ```
-curl -X POST "http://localhost:3000/api/health/ingest" -H "Authorization: Bearer YOUR_INGEST_TOKEN" -H "Content-Type: application/json" --data @examples/health-auto-export-sample.json
+npm run demo
 ```
+
+(`npm run demo -- --url=http://localhost:3000` targets a locally running server instead.)
 
 ## 4. Connect Claude
 

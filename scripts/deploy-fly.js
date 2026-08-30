@@ -172,16 +172,18 @@ async function main() {
   console.log(`
 ✓ Deployed!
 
-  Status page (open in a browser):   ${base}/health
-  Phone → Health Auto Export:
-      URL:    ${base}/api/health/ingest
-      Header: Authorization = Bearer ${ingestToken}
-  claude.ai → Settings → Connectors → Add custom connector:
-      Name:   Apple Health
-      URL:    ${base}/mcp/${mcpToken}
+  Phone link — the ONE setting for the Vital app (or the REST API URL in
+  Health Auto Export; no headers needed):
+      ${base}/ingest/${ingestToken}
 
-Both tokens are saved in .env — treat them like passwords.
-(Opening the /mcp URL in a browser shows a "POST only" error; that's normal.)
+  claude.ai → Settings → Connectors → Add custom connector (name: Vital):
+      ${base}/mcp/${mcpToken}
+
+  Status page (safe for any browser): ${base}/health
+
+Reprint these anytime with \`npm run link\`. Try it out with \`npm run demo\`
+(sends 35 days of sample data). The links contain your secrets — share them
+only inside the family; they're saved in .env.
 `);
 }
 

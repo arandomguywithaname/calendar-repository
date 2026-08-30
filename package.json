@@ -13,6 +13,8 @@
     "web:start": "node dist/server.js",
     "mcp:stdio": "node dist/health/stdio.js",
     "deploy": "node scripts/deploy-fly.js",
+    "link": "node scripts/link.js",
+    "demo": "node scripts/demo.js",
     "tokens": "node -e \"const c=require('crypto');console.log('HEALTH_INGEST_TOKEN='+c.randomBytes(24).toString('hex'));console.log('MCP_TOKEN='+c.randomBytes(24).toString('hex'))\""
   },
   "repository": {

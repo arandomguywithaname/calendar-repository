@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// One-time setup: the server address and the secret key. The key goes
-/// into the Keychain, never into the code (project rule #2).
+/// One-time setup, one field: paste the family's connection link
+/// (`npm run link` on the computer prints it). The secret inside it goes to
+/// the phone's Keychain, never into the code (project rule #2).
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var serverURL = Uploader.serverURL
-    @State private var token = KeychainHelper.load() ?? ""
+    @State private var link = Uploader.connectionLink
+    @State private var problem = ""
     @State private var testing = false
     @State private var testMessage = ""
     @State private var testOK = false
@@ -13,20 +14,23 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Our server") {
-                    TextField("https://your-app.fly.dev", text: $serverURL)
+                Section {
+                    TextField("https://our-server.fly.dev/ingest/…", text: $link, axis: .vertical)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                }
-                Section {
-                    SecureField("Secret key (HEALTH_INGEST_TOKEN)", text: $token)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .lineLimit(3)
                 } header: {
-                    Text("Secret key")
+                    Text("Connection link")
                 } footer: {
-                    Text("The same HEALTH_INGEST_TOKEN that lives on the server. It is stored in this phone's Keychain only.")
+                    Text("The one secret link from `npm run link`. It contains the key, which is stored only in this phone's Keychain.")
+                }
+                if !problem.isEmpty {
+                    Section {
+                        Label(problem, systemImage: "xmark.octagon.fill")
+                            .foregroundStyle(.red)
+                            .font(.subheadline)
+                    }
                 }
                 Section {
                     Button(action: test) {
@@ -35,7 +39,7 @@ struct SettingsView: View {
                             Text(testing ? "Checking…" : "Test connection")
                         }
                     }
-                    .disabled(testing || serverURL.isEmpty)
+                    .disabled(testing || link.isEmpty)
                     if !testMessage.isEmpty {
                         Label(testMessage, systemImage: testOK ? "checkmark.circle.fill" : "xmark.octagon.fill")
                             .foregroundStyle(testOK ? .green : .red)
@@ -47,9 +51,11 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        Uploader.serverURL = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                        KeychainHelper.save(token.trimmingCharacters(in: .whitespacesAndNewlines))
-                        dismiss()
+                        if Uploader.applyConnectionLink(link) {
+                            dismiss()
+                        } else {
+                            problem = "That doesn't look like a connection link — it should end with /ingest/ and a long secret."
+                        }
                     }
                 }
                 ToolbarItem(placement: .cancellationAction) {
@@ -60,10 +66,15 @@ struct SettingsView: View {
     }
 
     private func test() {
+        guard Uploader.applyConnectionLink(link) else {
+            problem = "That doesn't look like a connection link — it should end with /ingest/ and a long secret."
+            return
+        }
+        problem = ""
         testing = true
         testMessage = ""
         Task {
-            let result = await Uploader.testConnection(urlString: serverURL)
+            let result = await Uploader.testConnection(urlString: Uploader.serverURL)
             testOK = result.ok
             testMessage = result.message
             testing = false

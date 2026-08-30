@@ -17,6 +17,9 @@ targets:
         NSHealthShareUsageDescription: >-
           Vital reads the health data you approve (sleep, heart, activity,
           workouts) and sends it only to your family's own server.
+        # Optional zero-config: paste the connection link from `npm run link`
+        # here before building, and installers never have to set anything up.
+        VitalDefaultConnectionLink: ""
     entitlements:
       path: Vital.entitlements
       properties:

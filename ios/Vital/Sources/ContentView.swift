@@ -12,6 +12,16 @@ struct ContentView: View {
 
     private let reader = HealthKitReader()
 
+    /// Zero-config install: if the family's connection link was baked into the
+    /// build (VitalDefaultConnectionLink in Info.plist), apply it on first run
+    /// so a user only installs, allows Health access, and taps Send.
+    private func applyBakedInLinkIfNeeded() {
+        guard !Uploader.isConfigured,
+              let link = Bundle.main.object(forInfoDictionaryKey: "VitalDefaultConnectionLink") as? String,
+              !link.isEmpty else { return }
+        _ = Uploader.applyConnectionLink(link)
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 28) {
@@ -91,13 +101,14 @@ struct ContentView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .onAppear(perform: applyBakedInLinkIfNeeded)
         }
     }
 
     private func sendNow() {
         guard Uploader.isConfigured else {
             lastOK = false
-            lastMessage = "Set the server address and secret key first (gear button)."
+            lastMessage = "Paste the family connection link first (gear button)."
             showSettings = true
             return
         }

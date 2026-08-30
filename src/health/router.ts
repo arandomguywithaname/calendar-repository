@@ -118,6 +118,32 @@ export function healthRouter(): Router {
     router.get(`${base}/status`, handleStatus);
   }
 
+  // Secret-link ingest: the token lives inside the URL, so the phone needs
+  // exactly one thing pasted (no headers). Same pattern as /mcp/<token>.
+  const linkGuard = (req: Request, res: Response, next: NextFunction): void => {
+    const expected = ingestToken();
+    const supplied = typeof req.params.token === "string" ? req.params.token : "";
+    if (!expected) {
+      res.status(503).json({ error: "Ingest is disabled: set HEALTH_INGEST_TOKEN on the server first." });
+      return;
+    }
+    if (!supplied || !tokensMatch(supplied, expected)) {
+      res.status(401).json({ error: "Wrong link. Get the current one with `npm run link` on the computer." });
+      return;
+    }
+    next();
+  };
+  router.post("/ingest/:token", linkGuard, handleIngest);
+  // Someone will click the link in a chat — greet them instead of erroring.
+  router.get("/ingest/:token", linkGuard, (_req: Request, res: Response) => {
+    res
+      .type("text/plain")
+      .send(
+        "This is the secret SEND address. Don't share it.\n" +
+          "Paste it into the Vital app's settings (or into Health Auto Export as the REST API URL) — data sent here shows up on /health."
+      );
+  });
+
   // The Claude connector endpoint. With MCP_TOKEN set, the real endpoint
   // lives at /mcp/<token> (claude.ai custom connectors can't send custom
   // headers, so a secret path is the practical way to keep it private).

@@ -107,24 +107,32 @@
       <div class="stat"><div class="label">Connector endpoint</div><div class="value" id="stat-mcp">…</div></div>
     </div>
 
-    <h2>Automatic sync (recommended)</h2>
+    <h2>Connect a phone</h2>
     <p>
-      On the iPhone, install <strong>Health Auto Export</strong> and create an automation:
-      REST API → URL <code id="ingest-url">…/api/health/ingest</code>, format JSON, header
-      <code>Authorization: Bearer &lt;your ingest token&gt;</code>. Full steps are in
-      <code>APPLE_HEALTH.md</code> in the repository.
+      On the computer, run <code>npm run link</code> in the project folder — it prints the secret
+      <strong>connection link</strong>. Paste it as the one setting in the <strong>Vital</strong> app
+      (or as the REST API URL in Health Auto Export — no headers needed). Full steps are in
+      <code>APPLE_HEALTH.md</code>.
     </p>
 
-    <h2>Manual upload</h2>
-    <p>Export JSON from Health Auto Export (or use the sample file in <code>examples/</code>) and upload it here.</p>
-    <form id="upload-form">
-      <label for="token">Ingest token</label>
-      <input type="password" id="token" placeholder="HEALTH_INGEST_TOKEN" autocomplete="off" />
-      <label for="file">Health Auto Export JSON file</label>
-      <input type="file" id="file" accept=".json,application/json" />
-      <button type="submit" id="upload-btn">Upload</button>
-      <div class="result" id="result"></div>
-    </form>
+    <h2>Try it with demo data</h2>
+    <p>
+      On the computer: <code>npm run demo</code> — it sends 35 days of sample data here, so Claude
+      has something to talk about before any phone is connected. Real data for the same days
+      replaces it automatically later.
+    </p>
+
+    <details>
+      <summary style="cursor:pointer;color:#6b7280;font-size:14px;margin-top:8px">Manual upload (advanced)</summary>
+      <form id="upload-form" style="margin-top:8px">
+        <label for="token">Ingest token (the secret at the end of the connection link)</label>
+        <input type="password" id="token" placeholder="HEALTH_INGEST_TOKEN" autocomplete="off" />
+        <label for="file">Health Auto Export JSON file</label>
+        <input type="file" id="file" accept=".json,application/json" />
+        <button type="submit" id="upload-btn">Upload</button>
+        <div class="result" id="result"></div>
+      </form>
+    </details>
   </div>
 
   <script>
@@ -138,7 +146,6 @@
         $("stat-sync").textContent = s.lastSync ? new Date(s.lastSync).toLocaleString() : "never";
         $("stat-range").textContent = s.firstDate ? `${s.firstDate} → ${s.lastDate}` : "—";
         $("stat-mcp").textContent = s.mcpPath;
-        $("ingest-url").textContent = `${location.origin}/api/health/ingest`;
       } catch {
         $("stat-days").textContent = "?";
       }
