@@ -13,8 +13,6 @@ import BackgroundTasks
 ///     so this is best-effort by design — Apple's rules, not ours.
 @main
 struct VitalApp: App {
-    @Environment(\.scenePhase) private var scenePhase
-
     static let refreshTaskID = "app.vital.refresh"
 
     init() {
@@ -27,12 +25,11 @@ struct VitalApp: App {
         }
     }
 
+    // Note: scene-phase watching lives in ContentView (View.onChange), because
+    // Scene.onChange only exists on iOS 17+ and Vital targets iOS 16.
     var body: some Scene {
         WindowGroup {
             ContentView()
-        }
-        .onChange(of: scenePhase) { phase in
-            if phase == .background { Self.scheduleRefresh() }
         }
     }
 

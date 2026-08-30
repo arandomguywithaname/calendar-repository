@@ -149,7 +149,7 @@ final class HealthKitReader {
             case .asleepCore: night.core += hours
             case .asleepDeep: night.deep += hours
             case .asleepREM: night.rem += hours
-            case .asleepUnspecified, .asleep: night.unspecified += hours
+            case .asleepUnspecified: night.unspecified += hours
             case .awake: night.awake += hours
             case .inBed: night.inBed += hours
             default: break

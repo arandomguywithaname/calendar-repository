@@ -89,7 +89,7 @@ struct ContentView: View {
             }
             .navigationTitle("Vital")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                     }
@@ -111,6 +111,7 @@ struct ContentView: View {
             }
             .onChange(of: scenePhase) { phase in
                 if phase == .active { autoSyncIfDue() }
+                if phase == .background { VitalApp.scheduleRefresh() }
             }
         }
     }
