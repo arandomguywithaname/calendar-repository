@@ -41,7 +41,10 @@ workflows:
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
           # Fail loudly if nothing was fetched — silent emptiness here otherwise
           # surfaces later as a confusing "requires a provisioning profile" error.
-          if ! ls "$HOME"/Library/MobileDevice/"Provisioning Profiles"/*.mobileprovision >/dev/null 2>&1; then
+          # Profiles land in the classic location on older Xcode and in
+          # Library/Developer/Xcode/UserData on newer Xcode; accept either.
+          if ! ls "$HOME"/Library/MobileDevice/"Provisioning Profiles"/*.mobileprovision >/dev/null 2>&1 \
+             && ! ls "$HOME"/Library/Developer/Xcode/UserData/"Provisioning Profiles"/*.mobileprovision >/dev/null 2>&1; then
             echo "ERROR: no provisioning profiles were fetched."
             echo "Almost always this means CERTIFICATE_PRIVATE_KEY is missing from the"
             echo "appstore_credentials environment group — see ios/Vital/README.md step 4."
