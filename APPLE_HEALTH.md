@@ -108,6 +108,24 @@ Your endpoints become (using your app name):
 > ```
 > (Or just re-send history from Health Auto Export after a deploy — see step 3.)
 
+### macOS / Linux quickstart
+
+All the `npm run …` commands are identical on every OS — only setup differs. On a Mac or
+Linux machine the whole thing is:
+
+```bash
+# Node.js: from nodejs.org, or `brew install node` (macOS) / your distro's package manager
+git clone https://github.com/arandomguywithaname/calendar-repository.git   # or Download ZIP
+cd calendar-repository
+curl -L https://fly.io/install.sh | sh    # Fly CLI (one-time), then restart the shell
+fly auth login
+npm run deploy && npm run demo && npm run link
+```
+
+(For local runs: `cp .env.example .env`, any editor instead of Notepad, and `npm run dev`.
+Mac owners get one bonus: they can build the Vital iPhone app locally with Xcode — see
+`ios/Vital/README.md` — instead of using the GitHub robot builder.)
+
 ### Option B — run locally on any machine (requires [Node.js](https://nodejs.org), v20+)
 
 Put the tokens in a `.env` file (the server loads it automatically on every platform — no shell
