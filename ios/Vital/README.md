@@ -83,6 +83,13 @@ app record in App Store Connect, App Store Connect API key):
 Codemagic's free tier includes 500 macOS build minutes/month — plenty for this app.
 Use either robot builder; they produce the same result.
 
+> **If the build fails with “requires a provisioning profile with the HealthKit
+> feature”:** the App ID at Apple is missing the HealthKit capability (auto-registered
+> App IDs come without it). Fix in the browser: developer.apple.com → Identifiers →
+> your Vital App ID → tick **HealthKit** → Save; then delete any existing Vital profile
+> under **Profiles** (they’re snapshots — an old one stays HealthKit-less forever; the
+> next build recreates it fresh); then build again.
+
 ## Building WITH a Mac (alternative)
 
 Two ways to get a project:
