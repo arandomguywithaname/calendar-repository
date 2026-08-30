@@ -144,8 +144,10 @@ export function healthRouter(): Router {
     res
       .type("text/plain")
       .send(
-        `This is ${user ? user.name + "'s" : "the"} secret SEND address. Don't share it.\n` +
-          "Paste it into the Vital app's settings (or into Health Auto Export as the REST API URL) — data sent here shows up on /health."
+        `This is ${user ? user.name + "'s" : "the"} secret SEND address — and it's working. Don't share it.\n` +
+          "It belongs in the Vital app's settings (or in Health Auto Export as the REST API URL). Data sent here shows up on /health.\n" +
+          "\n" +
+          "Trying to connect Claude? That's the OTHER link — the one with /mcp/ in it — pasted into claude.ai → Settings → Connectors."
       );
   };
   router.get("/ingest/:token", linkGuard, greetSender);
@@ -178,8 +180,8 @@ export function healthRouter(): Router {
     next();
   };
   router.post("/mcp/:user/:sig", userMcpGuard, handleMcpPost);
-  router.get("/mcp/:user/:sig", userMcpGuard, (_req, res) => jsonRpcError(res, 405, -32000, "Method Not Allowed: POST only."));
-  router.delete("/mcp/:user/:sig", userMcpGuard, (_req, res) => jsonRpcError(res, 405, -32000, "Method Not Allowed: POST only."));
+  router.get("/mcp/:user/:sig", userMcpGuard, (_req, res) => jsonRpcError(res, 405, -32000, "This is the Claude connector address — paste it into claude.ai → Settings → Connectors → Add custom connector. Browsers cannot open it (POST only)."));
+  router.delete("/mcp/:user/:sig", userMcpGuard, (_req, res) => jsonRpcError(res, 405, -32000, "This is the Claude connector address — paste it into claude.ai → Settings → Connectors → Add custom connector. Browsers cannot open it (POST only)."));
 
   // The Claude connector endpoint. With MCP_TOKEN set, the real endpoint
   // lives at /mcp/<token> (claude.ai custom connectors can't send custom
@@ -200,8 +202,8 @@ export function healthRouter(): Router {
   for (const p of ["/mcp", "/mcp/:token"]) {
     router.post(p, guard, handleMcpPost);
     // Stateless server: no standalone SSE stream, no sessions to delete.
-    router.get(p, guard, (_req, res) => jsonRpcError(res, 405, -32000, "Method Not Allowed: POST only."));
-    router.delete(p, guard, (_req, res) => jsonRpcError(res, 405, -32000, "Method Not Allowed: POST only."));
+    router.get(p, guard, (_req, res) => jsonRpcError(res, 405, -32000, "This is the Claude connector address — paste it into claude.ai → Settings → Connectors → Add custom connector. Browsers cannot open it (POST only)."));
+    router.delete(p, guard, (_req, res) => jsonRpcError(res, 405, -32000, "This is the Claude connector address — paste it into claude.ai → Settings → Connectors → Add custom connector. Browsers cannot open it (POST only)."));
   }
   if (!mcpToken) {
     console.warn("MCP_TOKEN is not set — /mcp is unauthenticated. Set MCP_TOKEN before exposing this server publicly.");
