@@ -260,6 +260,16 @@ to receive pushes, or periodically upload a Health Auto Export JSON file on the 
 claude mcp add --transport http apple-health https://<your-app>.fly.dev/mcp/<MCP_TOKEN>
 ```
 
+## Customers: self-serve signup at /join
+
+For people outside the terminal entirely: send them to **`https://<your-app>.fly.dev/join`**.
+One tap mints their personal send link and Claude connector link (shown once — the page tells
+them to save both), with instructions on the same page. Handles get an unguessable random
+suffix, every person gets their own data file, and nobody can look up anyone else's links.
+Signup needs no admin action; a capacity cap (500 people) protects the small VM. For real
+customer volume, add a Fly volume (see above) so data and reserved handles survive redeploys —
+and remember every customer needs their own paid claude.ai plan for custom connectors.
+
 ## Many users (the whole family)
 
 One server handles everyone. Each person gets **personal links** derived from the server's

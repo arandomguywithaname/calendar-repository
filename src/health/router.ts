@@ -4,8 +4,9 @@ import express, { NextFunction, Request, Response, Router } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildHealthMcpServer } from "./mcp";
 import { ingestPayload } from "./ingest";
-import { loadStore, saveStore, sortedDates, userStoreCount } from "./store";
-import { HealthUser, verifyUser } from "./users";
+import { emptyStore, loadStore, saveStore, sortedDates, storePath, userStoreCount } from "./store";
+import { HealthUser, signature, slugify, verifyUser } from "./users";
+import * as fs from "fs";
 
 /**
  * HTTP surface of the Apple Health connector:
@@ -213,6 +214,50 @@ export function healthRouter(): Router {
     res.sendFile(path.join(__dirname, "../../public/health.html"));
   });
   router.get("/athlytic", (_req: Request, res: Response) => res.redirect("/health"));
+
+  // Self-serve signup: a visitor taps one button and the server mints their
+  // personal links — no terminal, no admin. Handles get an unguessable random
+  // suffix so the join endpoint can never be used to look up someone else's
+  // links, and each handle reserves its own empty data file.
+  const MAX_USERS = 500; // keeps one small VM honest during the beta
+  router.get("/join", (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, "../../public/join.html"));
+  });
+  router.post("/api/join", (req: Request, res: Response) => {
+    const ingest = ingestToken();
+    if (!ingest || !mcpToken) {
+      res.status(503).json({ error: "Signup isn't ready: the server needs HEALTH_INGEST_TOKEN and MCP_TOKEN set." });
+      return;
+    }
+    if (userStoreCount() >= MAX_USERS) {
+      res.status(503).json({ error: "The beta is full — ask the family to make room or run another server." });
+      return;
+    }
+    const wanted = typeof req.body?.name === "string" ? slugify(req.body.name) : undefined;
+    let slug = "";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const suffix = crypto.randomBytes(2).toString("hex");
+      const candidate = wanted ? `${wanted.slice(0, 24)}-${suffix}` : `vital-${crypto.randomBytes(3).toString("hex")}`;
+      if (!fs.existsSync(storePath(candidate))) {
+        slug = candidate;
+        break;
+      }
+    }
+    if (!slug) {
+      res.status(500).json({ error: "Couldn't pick a free name — try again." });
+      return;
+    }
+    saveStore(emptyStore(), slug); // reserve the handle
+    const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0];
+    const base = `${proto}://${req.get("host")}`;
+    const name = slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ");
+    console.log(`New signup: ${slug}`);
+    res.json({
+      name,
+      sendLink: `${base}/ingest/${slug}/${signature("ingest", ingest, slug)}`,
+      connectorLink: `${base}/mcp/${slug}/${signature("mcp", mcpToken, slug)}`,
+    });
+  });
 
   return router;
 }
