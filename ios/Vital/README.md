@@ -28,9 +28,39 @@ What's in the box:
 - `Sources/Uploader.swift` / `Payload.swift` — builds the exact JSON the server's
   `/api/health/ingest` expects (see `APPLE_HEALTH.md` §2b) and POSTs it.
 
-## Turning this into a running app (dad's part)
+## Building WITHOUT a Mac or Xcode (recommended — browser only)
 
-You need a Mac with Xcode (or a CI Mac later). Two ways to get a project:
+The repository has a robot builder: `.github/workflows/build-vital.yml` rents a Mac
+from GitHub, builds Vital, signs it, and uploads it to TestFlight. Dad's one-time
+setup, entirely in a web browser:
+
+1. **Apple Developer Program** approved ($99/year — already applied for per the plan).
+2. **developer.apple.com → Identifiers → +** → App ID for Vital (e.g.
+   `com.yourfamily.vital`) with the **HealthKit** capability ticked. Put the same
+   value into `bundleIdPrefix` in `ios/Vital/project.yml` (editable on GitHub with
+   the pencil button — use `com.yourfamily`, the `.vital` part is added by the
+   project name... i.e. prefix `com.yourfamily` → app id `com.yourfamily.Vital`).
+3. **appstoreconnect.apple.com → My Apps → +** → New App, name `Vital`, that bundle id.
+4. **App Store Connect → Users and Access → Integrations → App Store Connect API** →
+   create a key with the **App Manager/Admin** role; note the Key ID and Issuer ID and
+   download the `.p8` file.
+5. **GitHub repo → Settings → Secrets and variables → Actions**:
+   - Secrets: `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_PRIVATE_KEY` (the
+     full text of the `.p8` file), `APPLE_TEAM_ID` (from the developer.apple.com
+     membership page), and `VITAL_CONNECTION_LINK` (a personal link from
+     `npm run user` — as a secret so it stays out of the public repo).
+   - Variables: `VITAL_CI_ENABLED` = `true` (the workflow stays off until this).
+6. Push anything touching `ios/` (or press **Actions → Build Vital → Run workflow**
+   once available). ~15 minutes later the build appears in **TestFlight**, where you
+   invite family members by email as internal testers — installs are one tap, and the
+   baked-in connection link means zero setup on the phone.
+
+Expect the very first CI run to need a fix or two (nobody has compiled this Swift
+yet) — paste the red log to Claude.
+
+## Building WITH a Mac (alternative)
+
+Two ways to get a project:
 
 **Way A — XcodeGen (clean):**
 
