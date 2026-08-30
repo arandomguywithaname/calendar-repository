@@ -17,9 +17,13 @@ targets:
         NSHealthShareUsageDescription: >-
           Vital reads the health data you approve (sleep, heart, activity,
           workouts) and sends it only to your family's own server.
-        # Optional zero-config: paste the connection link from `npm run link`
-        # here before building, and installers never have to set anything up.
+        # Optional zero-config for FAMILY builds: paste the connection link from
+        # `npm run link` here before building, and installers never set anything up.
         VitalDefaultConnectionLink: ""
+        # Optional for CUSTOMER builds: just the server's public address (safe to
+        # commit — no secret). First launch then shows a Join button that signs
+        # the person up in-app via /api/join.
+        VitalServerURL: ""
         # Background refresh: iOS wakes the app between opens to send fresh
         # data. Timing is decided by iOS (best-effort, a few times a day).
         UIBackgroundModes: [fetch]

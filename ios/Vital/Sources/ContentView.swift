@@ -12,6 +12,12 @@ struct ContentView: View {
     @State private var lastOK = Uploader.lastOK
     @State private var days = 7
     @State private var showSettings = false
+    @State private var showJoin = false
+
+    /// Public server address baked into the build — enables in-app signup.
+    private var bakedServer: String {
+        (Bundle.main.object(forInfoDictionaryKey: "VitalServerURL") as? String) ?? ""
+    }
 
     var body: some View {
         NavigationStack {
@@ -92,9 +98,16 @@ struct ContentView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .sheet(isPresented: $showJoin) {
+                JoinView(server: bakedServer)
+            }
             .onAppear {
                 applyBakedInLinkIfNeeded()
-                autoSyncIfDue()
+                if !Uploader.isConfigured && !bakedServer.isEmpty {
+                    showJoin = true // first run: sign up right in the app
+                } else {
+                    autoSyncIfDue()
+                }
             }
             .onChange(of: scenePhase) { phase in
                 if phase == .active { autoSyncIfDue() }
@@ -121,9 +134,13 @@ struct ContentView: View {
 
     private func startSync(days: Int, manual: Bool) {
         if manual, !Uploader.isConfigured {
-            lastOK = false
-            lastMessage = "Paste the family connection link first (gear button)."
-            showSettings = true
+            if !bakedServer.isEmpty {
+                showJoin = true // one tap signs them up right here
+            } else {
+                lastOK = false
+                lastMessage = "Paste the family connection link first (gear button)."
+                showSettings = true
+            }
             return
         }
         guard !sending else { return }

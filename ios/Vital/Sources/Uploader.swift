@@ -39,6 +39,51 @@ enum Uploader {
         return serverURL + "/ingest/" + token
     }
 
+    /// The person's Claude connector link, remembered so Settings can re-show
+    /// it whenever they're ready to paste it into claude.ai.
+    static var connectorLink: String {
+        get { UserDefaults.standard.string(forKey: "connectorLink") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "connectorLink") }
+    }
+
+    struct JoinOutcome {
+        let ok: Bool
+        let message: String
+    }
+
+    /// In-app signup: asks the server's /api/join for personal links and
+    /// configures this install with them. Server address only — no secrets needed.
+    static func join(server: String, name: String) async -> JoinOutcome {
+        var base = server.trimmingCharacters(in: .whitespacesAndNewlines)
+        while base.hasSuffix("/") { base.removeLast() }
+        if !base.lowercased().hasPrefix("http") { base = "https://" + base }
+        guard let url = URL(string: base + "/api/join") else {
+            return JoinOutcome(ok: false, message: "That doesn't look like a server address.")
+        }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name])
+            request.timeoutInterval = 30
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            guard status == 200,
+                  let sendLink = reply?["sendLink"] as? String,
+                  let connector = reply?["connectorLink"] as? String,
+                  applyConnectionLink(sendLink) else {
+                let serverError = reply?["error"] as? String ?? "the server answered \(status)"
+                return JoinOutcome(ok: false, message: "Couldn't join: \(serverError)")
+            }
+            connectorLink = connector
+            let who = reply?["name"] as? String ?? name
+            return JoinOutcome(ok: true, message: "Welcome, \(who)!")
+        } catch {
+            return JoinOutcome(ok: false, message: "Couldn't reach the server: \(error.localizedDescription)")
+        }
+    }
+
     /// Parses a connection link and stores server + secret. False = not a valid link.
     static func applyConnectionLink(_ raw: String) -> Bool {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)

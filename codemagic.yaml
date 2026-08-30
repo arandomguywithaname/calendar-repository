@@ -1,0 +1,54 @@
+# Codemagic recipe for building the Vital iPhone app and shipping it to
+# TestFlight — an alternative "robot builder" to the GitHub Actions one in
+# .github/workflows/build-vital.yml. Connect this repository at codemagic.io
+# and this file is picked up automatically. Setup steps: ios/Vital/README.md.
+workflows:
+  vital-ios:
+    name: Vital → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    integrations:
+      app_store_connect: vital-asc-key # must match the API key name you add in Codemagic → Team → Integrations
+    environment:
+      groups:
+        - appstore_credentials # holds CERTIFICATE_PRIVATE_KEY (and optional VITAL_CONNECTION_LINK / VITAL_SERVER_URL)
+      vars:
+        BUNDLE_ID: "com.CHANGEME.family.Vital" # ← your registered App ID
+      xcode: latest
+    triggering:
+      events: [] # manual "Start new build" button only; add push triggers later if wanted
+    scripts:
+      - name: Generate the Xcode project
+        script: |
+          brew install xcodegen
+          cd ios/Vital
+          python3 - <<'EOF'
+          import os, pathlib
+          p = pathlib.Path("project.yml")
+          text = p.read_text()
+          link = os.environ.get("VITAL_CONNECTION_LINK", "")
+          server = os.environ.get("VITAL_SERVER_URL", "")
+          if link:
+              text = text.replace('VitalDefaultConnectionLink: ""', f'VitalDefaultConnectionLink: "{link}"')
+          if server:
+              text = text.replace('VitalServerURL: ""', f'VitalServerURL: "{server}"')
+          p.write_text(text)
+          EOF
+          xcodegen generate
+      - name: Set up code signing
+        script: |
+          cd ios/Vital
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain initialize
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Build the .ipa
+        script: |
+          cd ios/Vital
+          xcode-project build-ipa --project Vital.xcodeproj --scheme Vital
+    artifacts:
+      - ios/Vital/build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

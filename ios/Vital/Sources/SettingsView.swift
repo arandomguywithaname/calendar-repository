@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// One-time setup, one field: paste the family's connection link
 /// (`npm run link` on the computer prints it). The secret inside it goes to
@@ -30,6 +31,20 @@ struct SettingsView: View {
                         Label(problem, systemImage: "xmark.octagon.fill")
                             .foregroundStyle(.red)
                             .font(.subheadline)
+                    }
+                }
+                if !Uploader.connectorLink.isEmpty {
+                    Section {
+                        Text(Uploader.connectorLink)
+                            .font(.footnote.monospaced())
+                            .textSelection(.enabled)
+                        Button("Copy Claude link") {
+                            UIPasteboard.general.string = Uploader.connectorLink
+                        }
+                    } header: {
+                        Text("Your Claude link")
+                    } footer: {
+                        Text("Paste it on claude.ai → Settings → Connectors → Add custom connector (name: Vital).")
                     }
                 }
                 Section {

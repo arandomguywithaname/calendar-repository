@@ -58,6 +58,31 @@ setup, entirely in a web browser:
 Expect the very first CI run to need a fix or two (nobody has compiled this Swift
 yet) — paste the red log to Claude.
 
+## Robot builder option B — Codemagic (friendlier buttons, same idea)
+
+[Codemagic](https://codemagic.io) is a build service with a big "Start new build"
+button; the recipe (`codemagic.yaml` in the repo root) is already written. Browser-only
+setup — same Apple prerequisites as above (Developer account, App ID with HealthKit,
+app record in App Store Connect, App Store Connect API key):
+
+1. **codemagic.io → Sign up with GitHub**, authorize it.
+2. **Add application** → pick this repository → it finds `codemagic.yaml` by itself.
+3. **Team → Integrations → Developer Portal → App Store Connect**: add your API key
+   (Key ID, Issuer ID, the `.p8` file) and name it exactly `vital-asc-key`.
+4. **Team → Environment variables**: create a group `appstore_credentials` with
+   `CERTIFICATE_PRIVATE_KEY` — an RSA key Codemagic uses to create signing
+   certificates. Generate one on any computer with Node:
+   `node -e "console.log(require('crypto').generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}}).privateKey)"`
+   Optionally add `VITAL_CONNECTION_LINK` (family zero-config build) or
+   `VITAL_SERVER_URL` (customer build with the in-app Join button) to the same group,
+   marked secret.
+5. Edit `BUNDLE_ID` in `codemagic.yaml` to your registered App ID (GitHub pencil button).
+6. **Start new build** → pick the branch and the `Vital → TestFlight` workflow. The
+   build lands in TestFlight, where you invite testers by email.
+
+Codemagic's free tier includes 500 macOS build minutes/month — plenty for this app.
+Use either robot builder; they produce the same result.
+
 ## Building WITH a Mac (alternative)
 
 Two ways to get a project:
