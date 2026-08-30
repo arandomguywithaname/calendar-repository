@@ -146,6 +146,44 @@ For Claude Desktop only, no hosting is needed at all — see step 4, Option B.
 3. Tap **Update/Run** once to test — the server replies with how many data points and days it stored,
    and the `/health` page shows the sync status.
 
+## 2b. Or build your own iPhone app (no third-party apps at all)
+
+Apple Health never uploads anything by itself — health data leaves the phone only when an app
+you've granted HealthKit permission reads it and sends it. Health Auto Export is just one such
+app; **your own app can do the same job with no other company in between**, and this server
+needs zero changes for it. The contract your app implements:
+
+- `POST /api/health/ingest` with header `Authorization: Bearer <HEALTH_INGEST_TOKEN>` and a
+  JSON body in this shape (the same one Health Auto Export sends):
+
+  ```json
+  { "data": {
+      "metrics": [
+        { "name": "heart_rate_variability", "units": "ms",
+          "data": [ { "date": "2026-08-30 07:01:00 +0200", "qty": 54.2 } ] },
+        { "name": "step_count", "units": "steps",
+          "data": [ { "date": "2026-08-30 22:00:00 +0200", "qty": 9182 } ] },
+        { "name": "sleep_analysis", "units": "hr",
+          "data": [ { "date": "2026-08-30 07:00:00 +0200",
+                      "totalSleep": 7.4, "deep": 1.2, "rem": 1.6, "core": 4.6 } ] }
+      ],
+      "workouts": [
+        { "name": "Outdoor Run", "start": "2026-08-30 17:30:00 +0200",
+          "end": "2026-08-30 18:10:00 +0200",
+          "activeEnergyBurned": { "qty": 420, "units": "kcal" },
+          "heartRate": { "avg": 151, "max": 174 } }
+      ]
+  } }
+  ```
+
+  Dates are device-local `yyyy-MM-dd HH:mm:ss Z`; metric names are lowercase snake_case;
+  re-sending a day simply overwrites it, so the app can always send "everything since a week
+  ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
+  with their units.
+- The response (`{ "ok": true, "dataPoints": …, "daysTouched": …, "lastDate": … }`) is exactly
+  what a "last sent / success / error" screen needs, and `GET /api/health/status` returns the
+  same summary any time, without a token and without exposing any health values.
+
 ## 3. Seed history (do this once)
 
 Recovery scores compare each day against your rolling 42-day personal baseline, so the connector gets
