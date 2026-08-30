@@ -95,7 +95,7 @@ final class HealthKitReader {
                             _ options: HKStatisticsOptions,
                             _ unit: HKUnit,
                             from startDate: Date, to endDate: Date,
-                            extract: (HKStatistics) -> [String: Any]?) async throws -> [[String: Any]] {
+                            extract: @escaping (HKStatistics) -> [String: Any]?) async throws -> [[String: Any]] {
         let type = HKQuantityType(identifier)
         let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
         let descriptor = HKStatisticsCollectionQueryDescriptor(
