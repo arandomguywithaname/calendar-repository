@@ -11,7 +11,9 @@ export function dataDir(): string {
   return process.env.DATA_DIR || path.resolve(__dirname, "../../data");
 }
 
-export function storePath(): string {
+/** Each family member gets their own file; no slug = the original "default" user. */
+export function storePath(userSlug?: string): string {
+  if (userSlug) return path.join(dataDir(), "users", `${userSlug}.json`);
   return path.join(dataDir(), "apple-health.json");
 }
 
@@ -24,9 +26,10 @@ export function emptyStore(): HealthStore {
   return { version: 1, days: {} };
 }
 
-export function loadStore(): HealthStore {
-  let p = storePath();
+export function loadStore(userSlug?: string): HealthStore {
+  let p = storePath(userSlug);
   if (!fs.existsSync(p)) {
+    if (userSlug) return emptyStore();
     p = legacyStorePath();
     if (!fs.existsSync(p)) return emptyStore();
   }
@@ -41,12 +44,19 @@ export function loadStore(): HealthStore {
 }
 
 /** Atomic write (temp file + rename) so a crash mid-write can't corrupt the data. */
-export function saveStore(store: HealthStore): void {
-  const p = storePath();
+export function saveStore(store: HealthStore, userSlug?: string): void {
+  const p = storePath(userSlug);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const tmp = `${p}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(store, null, 1), "utf-8");
   fs.renameSync(tmp, p);
+}
+
+/** How many family members have their own store (excludes the default user). */
+export function userStoreCount(): number {
+  const dir = path.join(dataDir(), "users");
+  if (!fs.existsSync(dir)) return 0;
+  return fs.readdirSync(dir).filter((f) => f.endsWith(".json")).length;
 }
 
 /** Dates present in the store, ascending. */

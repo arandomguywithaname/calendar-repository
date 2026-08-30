@@ -21,4 +21,7 @@ Vital — your links (each contains a secret; share only inside the family)
 
   Status page (safe to open in any browser, shows no health values):
       ${base}/health
+
+More family members? \`npm run user -- Papa Tim\` prints personal links —
+each person's data stays separate.
 `);

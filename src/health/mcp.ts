@@ -3,6 +3,7 @@ import { z } from "zod";
 import { loadStore, sortedDates, storePath } from "./store";
 import { computeExertion, computeRecovery, computeTrend } from "./metrics";
 import { DayRecord, WorkoutRecord } from "./types";
+import { HealthUser } from "./users";
 
 /**
  * The MCP server Claude connects to (the Apple Health connector).
@@ -19,13 +20,13 @@ function json(result: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
 }
 
-function noData() {
+function noData(slug?: string) {
   return json({
     error: "No health data has been synced yet.",
     howToFix:
-      "Send data from the phone with the Health Auto Export app (Automations → REST API → POST to /api/health/ingest), " +
-      "or upload an export on the /health page. See APPLE_HEALTH.md in the repository.",
-    dataFile: storePath(),
+      "Send data from the phone with the Vital app (paste this person's connection link in its settings), " +
+      "or with Health Auto Export, or run `npm run demo` on the computer. See APPLE_HEALTH.md in the repository.",
+    dataFile: storePath(slug),
   });
 }
 
@@ -33,11 +34,11 @@ function latestDate(dates: string[]): string | undefined {
   return dates.length ? dates[dates.length - 1] : undefined;
 }
 
-function daySummary(dateArg?: string) {
-  const store = loadStore();
+function daySummary(slug: string | undefined, dateArg?: string) {
+  const store = loadStore(slug);
   const dates = sortedDates(store);
   const date = dateArg ?? latestDate(dates);
-  if (!date) return noData();
+  if (!date) return noData(slug);
   const day = store.days[date];
   if (!day) {
     return json({
@@ -107,15 +108,17 @@ const rawMetricInput: z.ZodRawShape = {
   days: z.number().int().min(1).max(365).optional().describe("How many days back (default 30)."),
 };
 
-export function buildHealthMcpServer(): McpServer {
+export function buildHealthMcpServer(user?: HealthUser): McpServer {
+  const slug = user?.slug;
+  const whose = user ? `${user.name}'s` : "one person's";
   const server = new McpServer(
     { name: "apple-health", version: "1.0.0" },
     {
       instructions:
-        "One person's Apple Health data: sleep, heart metrics, workouts, activity, and any other synced HealthKit " +
-        "metrics, plus recovery/exertion estimates computed from them (Apple Health has no cloud API, so the phone " +
-        "pushes this data to the server). Dates are YYYY-MM-DD in the user's local time. " +
-        "Start with get_data_status if unsure what's available.",
+        `${whose.charAt(0).toUpperCase() + whose.slice(1)} Apple Health data: sleep, heart metrics, workouts, activity, ` +
+        "and any other synced HealthKit metrics, plus recovery/exertion estimates computed from them (Apple Health " +
+        "has no cloud API, so the phone pushes this data to the server). Dates are YYYY-MM-DD in the user's local " +
+        "time. Start with get_data_status if unsure what's available.",
     }
   );
 
@@ -130,9 +133,9 @@ export function buildHealthMcpServer(): McpServer {
       inputSchema: {},
     },
     async () => {
-      const store = loadStore();
+      const store = loadStore(slug);
       const dates = sortedDates(store);
-      if (dates.length === 0) return noData();
+      if (dates.length === 0) return noData(slug);
       const counts: Record<string, number> = {};
       const bump = (k: string) => (counts[k] = (counts[k] || 0) + 1);
       let workouts = 0;
@@ -171,7 +174,7 @@ export function buildHealthMcpServer(): McpServer {
         "Defaults to the most recent day with data. Use this for questions like 'how recovered am I today?'.",
       inputSchema: dailySummaryInput,
     },
-    async ({ date }: { date?: string }) => daySummary(date)
+    async ({ date }: { date?: string }) => daySummary(slug, date)
   );
 
   addTool(
@@ -185,8 +188,8 @@ export function buildHealthMcpServer(): McpServer {
       inputSchema: trendsInput,
     },
     async ({ days }: { days?: number }) => {
-      const store = loadStore();
-      if (sortedDates(store).length === 0) return noData();
+      const store = loadStore(slug);
+      if (sortedDates(store).length === 0) return noData(slug);
       return json({ note: ESTIMATE_NOTE, days: computeTrend(store, days ?? 14) });
     }
   );
@@ -202,9 +205,9 @@ export function buildHealthMcpServer(): McpServer {
       inputSchema: workoutsInput,
     },
     async ({ start, end, limit }: { start?: string; end?: string; limit?: number }) => {
-      const store = loadStore();
+      const store = loadStore(slug);
       const dates = sortedDates(store);
-      if (dates.length === 0) return noData();
+      if (dates.length === 0) return noData(slug);
       const all: (WorkoutRecord & { date: string })[] = [];
       for (const date of dates) {
         if (start && date < start) continue;
@@ -226,9 +229,9 @@ export function buildHealthMcpServer(): McpServer {
       inputSchema: sleepInput,
     },
     async ({ days }: { days?: number }) => {
-      const store = loadStore();
+      const store = loadStore(slug);
       const dates = sortedDates(store).slice(-(days ?? 7));
-      if (dates.length === 0) return noData();
+      if (dates.length === 0) return noData(slug);
       const nights = dates
         .filter((d) => store.days[d].sleep)
         .map((d) => ({ date: d, ...store.days[d].sleep }));
@@ -251,9 +254,9 @@ export function buildHealthMcpServer(): McpServer {
       inputSchema: rawMetricInput,
     },
     async ({ name, days }: { name: string; days?: number }) => {
-      const store = loadStore();
+      const store = loadStore(slug);
       const dates = sortedDates(store).slice(-(days ?? 30));
-      if (dates.length === 0) return noData();
+      if (dates.length === 0) return noData(slug);
       const values = dates
         .map((date) => {
           const day = store.days[date] as DayRecord & Record<string, unknown>;

@@ -4,7 +4,8 @@ import express, { NextFunction, Request, Response, Router } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildHealthMcpServer } from "./mcp";
 import { ingestPayload } from "./ingest";
-import { loadStore, saveStore, sortedDates } from "./store";
+import { loadStore, saveStore, sortedDates, userStoreCount } from "./store";
+import { HealthUser, verifyUser } from "./users";
 
 /**
  * HTTP surface of the Apple Health connector:
@@ -65,7 +66,7 @@ function jsonRpcError(res: Response, status: number, code: number, message: stri
  * sees the latest synced data.
  */
 async function handleMcpPost(req: Request, res: Response): Promise<void> {
-  const server = buildHealthMcpServer();
+  const server = buildHealthMcpServer(res.locals.healthUser as HealthUser | undefined);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close();
@@ -85,13 +86,15 @@ export function healthRouter(): Router {
   const mcpToken = process.env.MCP_TOKEN;
 
   const handleIngest = (req: Request, res: Response) => {
+    const user = res.locals.healthUser as HealthUser | undefined;
     try {
-      const store = loadStore();
+      const store = loadStore(user?.slug);
       const summary = ingestPayload(store, req.body, "health-auto-export");
-      saveStore(store);
+      saveStore(store, user?.slug);
       const dates = sortedDates(store);
       console.log(
-        `Health ingest: ${summary.dataPoints} points, ${summary.daysTouched} days (${summary.firstDate}..${summary.lastDate})`
+        `Health ingest (${user?.name ?? "default"}): ${summary.dataPoints} points, ` +
+          `${summary.daysTouched} days (${summary.firstDate}..${summary.lastDate})`
       );
       res.json({ ok: true, ...summary, totalDaysStored: dates.length });
     } catch (err: any) {
@@ -110,6 +113,7 @@ export function healthRouter(): Router {
       lastSync: store.updatedAt ?? null,
       ingestConfigured: Boolean(ingestToken()),
       mcpPath: mcpToken ? "/mcp/<MCP_TOKEN>" : "/mcp",
+      familyMembers: userStoreCount(),
     });
   };
 
@@ -135,14 +139,47 @@ export function healthRouter(): Router {
   };
   router.post("/ingest/:token", linkGuard, handleIngest);
   // Someone will click the link in a chat — greet them instead of erroring.
-  router.get("/ingest/:token", linkGuard, (_req: Request, res: Response) => {
+  const greetSender = (_req: Request, res: Response) => {
+    const user = res.locals.healthUser as HealthUser | undefined;
     res
       .type("text/plain")
       .send(
-        "This is the secret SEND address. Don't share it.\n" +
+        `This is ${user ? user.name + "'s" : "the"} secret SEND address. Don't share it.\n` +
           "Paste it into the Vital app's settings (or into Health Auto Export as the REST API URL) — data sent here shows up on /health."
       );
-  });
+  };
+  router.get("/ingest/:token", linkGuard, greetSender);
+
+  // Per-person links, verified statelessly by signature (see users.ts):
+  //   /ingest/<name>/<sig>  and  /mcp/<name>/<sig> — printed by `npm run user`.
+  const userIngestGuard = (req: Request, res: Response, next: NextFunction): void => {
+    if (!ingestToken()) {
+      res.status(503).json({ error: "Ingest is disabled: set HEALTH_INGEST_TOKEN on the server first." });
+      return;
+    }
+    const user = verifyUser("ingest", ingestToken(), req.params.user, req.params.sig);
+    if (!user) {
+      res.status(401).json({ error: "Wrong link. Get the current one with `npm run user -- <Name>` on the computer." });
+      return;
+    }
+    res.locals.healthUser = user;
+    next();
+  };
+  router.post("/ingest/:user/:sig", userIngestGuard, handleIngest);
+  router.get("/ingest/:user/:sig", userIngestGuard, greetSender);
+
+  const userMcpGuard = (req: Request, res: Response, next: NextFunction): void => {
+    const user = verifyUser("mcp", mcpToken, req.params.user, req.params.sig);
+    if (!user) {
+      jsonRpcError(res, 401, -32000, "Unauthorized: get this person's connector link with `npm run user -- <Name>`.");
+      return;
+    }
+    res.locals.healthUser = user;
+    next();
+  };
+  router.post("/mcp/:user/:sig", userMcpGuard, handleMcpPost);
+  router.get("/mcp/:user/:sig", userMcpGuard, (_req, res) => jsonRpcError(res, 405, -32000, "Method Not Allowed: POST only."));
+  router.delete("/mcp/:user/:sig", userMcpGuard, (_req, res) => jsonRpcError(res, 405, -32000, "Method Not Allowed: POST only."));
 
   // The Claude connector endpoint. With MCP_TOKEN set, the real endpoint
   // lives at /mcp/<token> (claude.ai custom connectors can't send custom

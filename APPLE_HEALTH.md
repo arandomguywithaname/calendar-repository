@@ -242,6 +242,20 @@ to receive pushes, or periodically upload a Health Auto Export JSON file on the 
 claude mcp add --transport http apple-health https://<your-app>.fly.dev/mcp/<MCP_TOKEN>
 ```
 
+## Many users (the whole family)
+
+One server handles everyone. Each person gets **personal links** derived from the server's
+secrets — no registration, nothing stored, they survive redeploys:
+
+```
+npm run user -- Papa Tim
+```
+
+prints, for each name, a personal **phone link** (their Vital app / Health Auto Export
+setting) and a personal **connector link** (for *their own* claude.ai account). Each
+person's data lives in its own file on the server, and each connector can only see its
+own person's data. Adding someone later is just running the command with their name.
+
 ## What Claude can do with it
 
 Tools exposed by the connector:
