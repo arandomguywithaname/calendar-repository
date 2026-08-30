@@ -22,13 +22,14 @@ const ENV_PATH = path.join(ROOT, ".env");
 const FLY_TOML = path.join(ROOT, "fly.toml");
 const DEFAULT_APP = "calendar-repository"; // the name fly.toml ships with
 
+// One shell string (args are validated/generated, never free-form user text):
+// resolves the fly shim/exe the same way in cmd and bash without DEP0190 noise.
 function fly(args, opts = {}) {
-  // shell:true so the fly shim/exe resolves the same way in cmd and bash
-  return spawnSync("fly", args, { cwd: ROOT, shell: true, encoding: "utf-8", ...opts });
+  return spawnSync(["fly", ...args].join(" "), { cwd: ROOT, shell: true, encoding: "utf-8", ...opts });
 }
 
 function flyInteractive(args) {
-  return spawnSync("fly", args, { cwd: ROOT, shell: true, stdio: "inherit" });
+  return spawnSync(["fly", ...args].join(" "), { cwd: ROOT, shell: true, stdio: "inherit" });
 }
 
 function die(msg) {
@@ -159,8 +160,11 @@ async function main() {
     die(`fly secrets set failed:\n${(secrets.stderr || secrets.stdout || "").trim()}`);
   }
 
+  // --ha=false: exactly one machine. Health data lives in a JSON file on the
+  // machine's disk, so a second "high availability" machine would split the
+  // data between two disks and make reads randomly see nothing.
   console.log("Deploying (Fly builds the app on its servers — no local Node build needed)…\n");
-  if (flyInteractive(["deploy", "-a", app]).status !== 0) {
+  if (flyInteractive(["deploy", "-a", app, "--ha=false"]).status !== 0) {
     die("fly deploy failed — the output above says why. Fix and re-run `npm run deploy`.");
   }
 
