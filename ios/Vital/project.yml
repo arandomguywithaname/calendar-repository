@@ -2,7 +2,7 @@
 # Install XcodeGen with: brew install xcodegen
 name: Vital
 options:
-  bundleIdPrefix: com.CHANGEME.family   # ← set your own reverse-domain prefix
+  bundleIdPrefix: com.tim   # ← set your own reverse-domain prefix
 targets:
   Vital:
     type: application
