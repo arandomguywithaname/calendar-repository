@@ -148,6 +148,10 @@ For Claude Desktop only, no hosting is needed at all — see step 4, Option B.
 
 ## 2b. Or build your own iPhone app (no third-party apps at all)
 
+> This repo ships one: **Vital**, in [`ios/Vital/`](ios/Vital/README.md) — a SwiftUI +
+> HealthKit app implementing exactly the contract below, with a big "Send now" button,
+> last-sent status, and the secret key in the Keychain.
+
 Apple Health never uploads anything by itself — health data leaves the phone only when an app
 you've granted HealthKit permission reads it and sends it. Health Auto Export is just one such
 app; **your own app can do the same job with no other company in between**, and this server

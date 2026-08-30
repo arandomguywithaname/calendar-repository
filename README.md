@@ -4,7 +4,8 @@ An AI-powered agent that parses natural language (or images) into Google Calenda
 
 Also included: an **[Apple Health → Claude connector](APPLE_HEALTH.md)** — an MCP server that gives
 Claude access to your Apple Health data (sleep, HRV, heart rate, workouts, activity), with recovery
-and exertion estimates computed from it. See [APPLE_HEALTH.md](APPLE_HEALTH.md) for setup.
+and exertion estimates computed from it. See [APPLE_HEALTH.md](APPLE_HEALTH.md) for setup — and
+[`ios/Vital/`](ios/Vital/README.md) for **Vital**, the family's own iPhone app that feeds it.
 
 ## Example
 
