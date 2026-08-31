@@ -28,10 +28,14 @@ workflows:
           text = p.read_text()
           link = os.environ.get("VITAL_CONNECTION_LINK", "")
           server = os.environ.get("VITAL_SERVER_URL", "")
+          build = os.environ.get("BUILD_NUMBER", "")
           if link:
               text = text.replace('VitalDefaultConnectionLink: ""', f'VitalDefaultConnectionLink: "{link}"')
           if server:
               text = text.replace('VitalServerURL: ""', f'VitalServerURL: "{server}"')
+          if build.isdigit():
+              # Apple rejects a build number that was already uploaded.
+              text = text.replace('CURRENT_PROJECT_VERSION: "1"', f'CURRENT_PROJECT_VERSION: "{build}"')
           p.write_text(text)
           EOF
           xcodegen generate

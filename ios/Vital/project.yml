@@ -8,7 +8,7 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
-    sources: [Sources]
+    sources: [Sources, Assets.xcassets]
     info:
       path: Info.plist
       properties:
@@ -28,6 +28,11 @@ targets:
         # data. Timing is decided by iOS (best-effort, a few times a day).
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [app.vital.refresh]
+        # App Store / TestFlight upload requirements: an icon must exist
+        # (CFBundleIconName points at the asset catalog set), and declaring
+        # standard-encryption-only skips the export-compliance prompt.
+        CFBundleIconName: AppIcon
+        ITSAppUsesNonExemptEncryption: false
     entitlements:
       path: Vital.entitlements
       properties:
@@ -36,3 +41,8 @@ targets:
       base:
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.9"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Version 1.0 build 1 by default; CI bumps the build number so each
+        # TestFlight upload is unique (Apple rejects a repeated one).
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"

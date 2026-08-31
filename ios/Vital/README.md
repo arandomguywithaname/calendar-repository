@@ -58,6 +58,13 @@ setup, entirely in a web browser:
 Expect the very first CI run to need a fix or two (nobody has compiled this Swift
 yet) — paste the red log to Claude.
 
+## The app icon
+
+`Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` is a placeholder heart —
+Apple refuses any TestFlight upload from an app without an icon, so the pipeline
+needs one to exist. Replace it with Tim's drawing: any square PNG, 1024×1024,
+**no transparency** (Apple rejects app icons with an alpha channel), same filename.
+
 ## Robot builder option B — Codemagic (friendlier buttons, same idea)
 
 [Codemagic](https://codemagic.io) is a build service with a big "Start new build"
