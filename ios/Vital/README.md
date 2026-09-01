@@ -90,6 +90,12 @@ app record in App Store Connect, App Store Connect API key):
 Codemagic's free tier includes 500 macOS build minutes/month — plenty for this app.
 Use either robot builder; they produce the same result.
 
+> **If the upload fails with ITMS-90683 “Missing purpose string in
+> Info.plist … NSHealthUpdateUsageDescription”:** Apple demands *both* HealthKit
+> purpose strings from any app carrying the HealthKit entitlement, even one that
+> only reads and never writes. Both are in `project.yml`; don’t remove the
+> update one just because Vital never writes.
+
 > **If the build fails with “requires a provisioning profile with the HealthKit
 > feature”:** the App ID at Apple is missing the HealthKit capability (auto-registered
 > App IDs come without it). Fix in the browser: developer.apple.com → Identifiers →

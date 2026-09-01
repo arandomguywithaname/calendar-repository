@@ -17,6 +17,13 @@ targets:
         NSHealthShareUsageDescription: >-
           Vital reads the health data you approve (sleep, heart, activity,
           workouts) and sends it only to your family's own server.
+        # Apple rejects any upload from an app carrying the HealthKit
+        # entitlement unless BOTH purpose strings exist (ITMS-90683), even
+        # when the app only reads. Vital passes toShare: [] and never asks
+        # for write access, so this string is never actually shown.
+        NSHealthUpdateUsageDescription: >-
+          Vital never writes to Apple Health. It only reads the data you
+          approve, so it can be sent to your family's own server.
         # Optional zero-config for FAMILY builds: paste the connection link from
         # `npm run link` here before building, and installers never set anything up.
         VitalDefaultConnectionLink: ""
