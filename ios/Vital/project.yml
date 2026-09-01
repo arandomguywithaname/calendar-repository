@@ -14,6 +14,12 @@ targets:
       properties:
         CFBundleDisplayName: Vital
         UILaunchScreen: {}
+        # XcodeGen otherwise writes a literal CFBundleVersion of 1 here, and a
+        # literal in Info.plist beats the CURRENT_PROJECT_VERSION build setting
+        # — so every upload came out as 1.0 (1) and Apple rejects a repeated
+        # build number. Referencing the settings keeps CI's bump effective.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSHealthShareUsageDescription: >-
           Vital reads the health data you approve (sleep, heart, activity,
           workouts) and sends it only to your family's own server.

@@ -23,19 +23,22 @@ workflows:
           brew install xcodegen
           cd ios/Vital
           python3 - <<'EOF'
-          import os, pathlib
+          import datetime, os, pathlib
           p = pathlib.Path("project.yml")
           text = p.read_text()
           link = os.environ.get("VITAL_CONNECTION_LINK", "")
           server = os.environ.get("VITAL_SERVER_URL", "")
-          build = os.environ.get("BUILD_NUMBER", "")
           if link:
               text = text.replace('VitalDefaultConnectionLink: ""', f'VitalDefaultConnectionLink: "{link}"')
           if server:
               text = text.replace('VitalServerURL: ""', f'VitalServerURL: "{server}"')
-          if build.isdigit():
-              # Apple rejects a build number that was already uploaded.
-              text = text.replace('CURRENT_PROJECT_VERSION: "1"', f'CURRENT_PROJECT_VERSION: "{build}"')
+          # Apple rejects a build number already uploaded for this version, and
+          # requires each new one to be higher. Minutes since 2026-01-01 UTC is
+          # unique and monotonic without trusting any CI counter to be set.
+          epoch = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+          minutes = int((datetime.datetime.now(datetime.timezone.utc) - epoch).total_seconds() // 60)
+          text = text.replace('CURRENT_PROJECT_VERSION: "1"', f'CURRENT_PROJECT_VERSION: "{minutes}"')
+          print(f"Build number for this upload: {minutes}")
           p.write_text(text)
           EOF
           xcodegen generate
