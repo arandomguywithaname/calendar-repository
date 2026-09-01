@@ -67,3 +67,9 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Hand the build to the tester group at upload time. App Store Connect's
+        # "automatic distribution" only covers builds uploaded from Xcode, so a
+        # build that arrives through the API sits undistributed and testers see
+        # "No builds available" — naming the group here does the assignment.
+        beta_groups:
+          - Family
