@@ -24,7 +24,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Connection link")
                 } footer: {
-                    Text("The one secret link from `npm run link`. It contains the key, which is stored only in this phone's Keychain.")
+                    Text("Your personal link from Join, or the shared family link from `npm run link`. It contains the key, which is stored only in this phone's Keychain.")
                 }
                 if !problem.isEmpty {
                     Section {
@@ -69,7 +69,7 @@ struct SettingsView: View {
                         if Uploader.applyConnectionLink(link) {
                             dismiss()
                         } else {
-                            problem = "That doesn't look like a connection link — it should end with /ingest/ and a long secret."
+                            problem = "That doesn't look like a connection link — it should have /ingest/ and a long secret in it."
                         }
                     }
                 }
@@ -82,7 +82,7 @@ struct SettingsView: View {
 
     private func test() {
         guard Uploader.applyConnectionLink(link) else {
-            problem = "That doesn't look like a connection link — it should end with /ingest/ and a long secret."
+            problem = "That doesn't look like a connection link — it should have /ingest/ and a long secret in it."
             return
         }
         problem = ""

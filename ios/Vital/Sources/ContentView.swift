@@ -95,10 +95,10 @@ struct ContentView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSettings) {
+            .sheet(isPresented: $showSettings, onDismiss: { afterSetup() }) {
                 SettingsView()
             }
-            .sheet(isPresented: $showJoin) {
+            .sheet(isPresented: $showJoin, onDismiss: { afterSetup() }) {
                 JoinView(server: bakedServer)
             }
             .onAppear {
@@ -126,11 +126,23 @@ struct ContentView: View {
         _ = Uploader.applyConnectionLink(link)
     }
 
+    /// A sheet just closed, so setup may have finished (Join or Settings).
+    /// Pick up whatever it stored and send right away — a new person should
+    /// never have to press anything to see their first data arrive.
+    private func afterSetup() {
+        lastSync = Uploader.lastSync
+        lastMessage = Uploader.lastMessage
+        lastOK = Uploader.lastOK
+        autoSyncIfDue()
+    }
+
     /// The automatic refresh: fires on open/foreground, but only when the
     /// last send is old enough (SyncEngine decides) — never spams.
     private func autoSyncIfDue() {
         guard !sending, SyncEngine.isDue else { return }
-        startSync(days: 7, manual: false)
+        // The very first send seeds history so Claude has a baseline to compare
+        // against from day one; after that a week keeps everything current.
+        startSync(days: Uploader.lastSync == nil ? 90 : 7, manual: false)
     }
 
     private func startSync(days: Int, manual: Bool) {

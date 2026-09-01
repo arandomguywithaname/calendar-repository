@@ -71,10 +71,12 @@ enum Uploader {
             let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             guard status == 200,
                   let sendLink = reply?["sendLink"] as? String,
-                  let connector = reply?["connectorLink"] as? String,
-                  applyConnectionLink(sendLink) else {
+                  let connector = reply?["connectorLink"] as? String else {
                 let serverError = reply?["error"] as? String ?? "the server answered \(status)"
                 return JoinOutcome(ok: false, message: "Couldn't join: \(serverError)")
+            }
+            guard applyConnectionLink(sendLink) else {
+                return JoinOutcome(ok: false, message: "Couldn't join: the server sent a link this app didn't understand.")
             }
             connectorLink = connector
             let who = reply?["name"] as? String ?? name
@@ -85,16 +87,24 @@ enum Uploader {
     }
 
     /// Parses a connection link and stores server + secret. False = not a valid link.
+    ///
+    /// Two shapes are valid, and both end up as "everything after /ingest/":
+    ///   • the shared family link   /ingest/<secret>
+    ///   • a personal link          /ingest/<name>/<signature>
+    /// Personal links are what the Join button and `npm run user` hand out, so
+    /// this must accept the longer shape or multi-user setup can never work.
     static func applyConnectionLink(_ raw: String) -> Bool {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.lowercased().hasPrefix("http") { text = "https://" + text }
         guard let url = URL(string: text), let host = url.host else { return false }
         let parts = url.path.split(separator: "/").map(String.init)
-        guard parts.count == 2, parts[0] == "ingest", parts[1].count >= 8 else { return false }
+        guard parts.count == 2 || parts.count == 3, parts[0] == "ingest" else { return false }
+        let secret = parts.dropFirst().joined(separator: "/")
+        guard secret.count >= 8 else { return false }
         var base = (url.scheme ?? "https") + "://" + host
         if let port = url.port { base += ":\(port)" }
         serverURL = base
-        KeychainHelper.save(parts[1])
+        KeychainHelper.save(secret)
         return true
     }
 

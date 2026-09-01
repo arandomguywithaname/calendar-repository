@@ -140,7 +140,9 @@ The zero-config way: before building, paste the **connection link** (printed by
    answer questions about it immediately.
 
 No baked-in link? Then it's one extra step: gear button → paste the connection
-link → **Test connection** → Save.
+link → **Test connection** → Save. That field takes either shape of link — the
+shared family one (`/ingest/<secret>`) or a personal one from the Join button or
+`npm run user` (`/ingest/<name>/<signature>`).
 
 ## Honesty note from the robot programmer
 

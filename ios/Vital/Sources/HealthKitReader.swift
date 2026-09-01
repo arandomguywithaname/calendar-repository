@@ -20,6 +20,7 @@ final class HealthKitReader {
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.stepCount),
             HKQuantityType(.distanceWalkingRunning),
+            HKQuantityType(.distanceCycling),
             HKObjectType.workoutType(),
         ]
         types.insert(HKCategoryType(.sleepAnalysis))
@@ -41,17 +42,20 @@ final class HealthKitReader {
         var metrics: [[String: Any]] = []
 
         // Daily averages (gauge-style metrics).
-        let averaged: [(HKQuantityTypeIdentifier, String, String, HKUnit)] = [
-            (.heartRateVariabilitySDNN, "heart_rate_variability", "ms", HKUnit.secondUnit(with: .milli)),
-            (.restingHeartRate, "resting_heart_rate", "count/min", HKUnit.count().unitDivided(by: .minute())),
-            (.respiratoryRate, "respiratory_rate", "count/min", HKUnit.count().unitDivided(by: .minute())),
-            (.oxygenSaturation, "blood_oxygen_saturation", "%", HKUnit.percent()),
+        // The last element is a scale factor: HealthKit reports blood oxygen as a
+        // 0–1 fraction, while the server's contract (and Health Auto Export) uses
+        // percent — 97.5, not 0.975. Everything else is already in the right unit.
+        let averaged: [(HKQuantityTypeIdentifier, String, String, HKUnit, Double)] = [
+            (.heartRateVariabilitySDNN, "heart_rate_variability", "ms", HKUnit.secondUnit(with: .milli), 1),
+            (.restingHeartRate, "resting_heart_rate", "count/min", HKUnit.count().unitDivided(by: .minute()), 1),
+            (.respiratoryRate, "respiratory_rate", "count/min", HKUnit.count().unitDivided(by: .minute()), 1),
+            (.oxygenSaturation, "blood_oxygen_saturation", "%", HKUnit.percent(), 100),
             (.vo2Max, "vo2_max", "mL/kg/min",
-             HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute()))),
+             HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute())), 1),
         ]
-        for (identifier, name, units, unit) in averaged {
+        for (identifier, name, units, unit, scale) in averaged {
             let rows = try await dailyStats(identifier, .discreteAverage, unit, from: startDate, to: endDate) { stats in
-                stats.averageQuantity().map { ["qty": $0.doubleValue(for: unit)] }
+                stats.averageQuantity().map { ["qty": round2($0.doubleValue(for: unit) * scale)] }
             }
             if !rows.isEmpty { metrics.append(Payload.metric(name: name, units: units, rows: rows)) }
         }
@@ -238,6 +242,8 @@ final class HealthKitReader {
         default: return "Workout"
         }
     }
-
-    private func round2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
 }
+
+/// File scope on purpose: it is used inside the escaping statistics closures,
+/// where an instance method would drag `self` in for no reason.
+private func round2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
