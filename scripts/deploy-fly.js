@@ -21,6 +21,7 @@ const ROOT = path.resolve(__dirname, "..");
 const ENV_PATH = path.join(ROOT, ".env");
 const FLY_TOML = path.join(ROOT, "fly.toml");
 const DEFAULT_APP = "calendar-repository"; // the name fly.toml ships with
+const VOLUME_NAME = "health_data"; // must match [[mounts]] source in fly.toml
 
 // One shell string (args are validated/generated, never free-form user text):
 // resolves the fly shim/exe the same way in cmd and bash without DEP0190 noise.
@@ -160,9 +161,33 @@ async function main() {
     die(`fly secrets set failed:\n${(secrets.stderr || secrets.stdout || "").trim()}`);
   }
 
+  // 5. Persistent disk. fly.toml mounts a volume at DATA_DIR; without the
+  //    volume existing the deploy fails, and without the mount every deploy
+  //    would wipe the stored history. Create it once, keep it forever.
+  const region = (fs.readFileSync(FLY_TOML, "utf-8").match(/primary_region\s*=\s*['"]([^'"]+)['"]/) || [])[1] || "ams";
+  let haveVolume = false;
+  const listed = fly(["volumes", "list", "-a", app, "--json"]);
+  try {
+    haveVolume = JSON.parse(listed.stdout || "[]").some((v) => v && v.name === VOLUME_NAME);
+  } catch {
+    haveVolume = new RegExp(`\\b${VOLUME_NAME}\\b`).test(listed.stdout || "");
+  }
+  if (haveVolume) {
+    console.log(`Storage: volume '${VOLUME_NAME}' already exists — health data survives this deploy.`);
+  } else {
+    console.log(`\nCreating a 1 GB volume '${VOLUME_NAME}' in ${region} so health data survives redeploys…`);
+    const made = fly(["volumes", "create", VOLUME_NAME, "-a", app, "-r", region, "-s", "1", "--yes"]);
+    if (made.status !== 0) {
+      die(
+        `Couldn't create the volume:\n${(made.stderr || made.stdout || "").trim()}\n\n` +
+          `Create it by hand and re-run: fly volumes create ${VOLUME_NAME} -a ${app} -r ${region} -s 1`
+      );
+    }
+  }
+
   // --ha=false: exactly one machine. Health data lives in a JSON file on the
-  // machine's disk, so a second "high availability" machine would split the
-  // data between two disks and make reads randomly see nothing.
+  // mounted volume, and a volume attaches to one machine — a second "high
+  // availability" machine would get its own empty disk and serve nothing.
   console.log("Deploying (Fly builds the app on its servers — no local Node build needed)…\n");
   if (flyInteractive(["deploy", "-a", app, "--ha=false"]).status !== 0) {
     die("fly deploy failed — the output above says why. Fix and re-run `npm run deploy`.");

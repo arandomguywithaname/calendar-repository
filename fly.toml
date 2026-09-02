@@ -11,6 +11,10 @@ primary_region = 'ams'
 [env]
   # The web server reads PORT; must match internal_port below.
   PORT = '8080'
+  # Health data is a JSON file. Without this pointing at a mounted volume it
+  # would live in the machine's rootfs, which Fly recreates on every deploy —
+  # so shipping a change would silently erase everyone's history.
+  DATA_DIR = '/data'
 
 [http_service]
   internal_port = 8080
@@ -25,3 +29,10 @@ primary_region = 'ams'
   cpu_kind = 'shared'
   cpus = 1
   memory_mb = 256
+
+# One small volume, mounted at DATA_DIR. `npm run deploy` creates it if it is
+# missing. A volume attaches to a single machine, which is why the deploy uses
+# --ha=false — two machines would each hold half the data.
+[[mounts]]
+  source = 'health_data'
+  destination = '/data'

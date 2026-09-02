@@ -59,6 +59,27 @@ export function userStoreCount(): number {
   return fs.readdirSync(dir).filter((f) => f.endsWith(".json")).length;
 }
 
+/**
+ * Aggregate state of the per-person stores, for the public status page.
+ * Counts only — no names and no health values, because /health needs no
+ * password and listing who signed up would leak that.
+ */
+export function userStoreStats(): { connected: number; withData: number; lastSync: string | null } {
+  const dir = path.join(dataDir(), "users");
+  if (!fs.existsSync(dir)) return { connected: 0, withData: 0, lastSync: null };
+  let connected = 0;
+  let withData = 0;
+  let lastSync: string | null = null;
+  for (const file of fs.readdirSync(dir)) {
+    if (!file.endsWith(".json")) continue;
+    connected++;
+    const store = loadStore(file.slice(0, -".json".length));
+    if (Object.keys(store.days).length > 0) withData++;
+    if (store.updatedAt && (!lastSync || store.updatedAt > lastSync)) lastSync = store.updatedAt;
+  }
+  return { connected, withData, lastSync };
+}
+
 /** Dates present in the store, ascending. */
 export function sortedDates(store: HealthStore): string[] {
   return Object.keys(store.days).sort();

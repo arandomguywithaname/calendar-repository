@@ -107,6 +107,11 @@
       <div class="stat"><div class="label">Connector endpoint</div><div class="value" id="stat-mcp">…</div></div>
     </div>
 
+    <!-- The four counters above describe the SHARED store. Anyone who signed up
+         through /join gets a private one, so their data must be reported here or
+         this page reads "0 days" forever while data is in fact arriving. -->
+    <p id="people-line" style="display:none"></p>
+
     <h2>New here?</h2>
     <p>Get your own personal links in one tap — no computer needed: <a href="/join"><strong>Join Vital →</strong></a></p>
 
@@ -149,6 +154,19 @@
         $("stat-sync").textContent = s.lastSync ? new Date(s.lastSync).toLocaleString() : "never";
         $("stat-range").textContent = s.firstDate ? `${s.firstDate} → ${s.lastDate}` : "—";
         $("stat-mcp").textContent = s.mcpPath;
+
+        const people = s.people;
+        const line = $("people-line");
+        if (people && people.connected > 0) {
+          const when = people.lastSync ? new Date(people.lastSync).toLocaleString() : "nothing received yet";
+          line.textContent =
+            `Personal accounts: ${people.connected} signed up, ${people.withData} sending data. ` +
+            `Last personal data received: ${when}. ` +
+            `(Their data is private and counted separately from the numbers above.)`;
+          line.style.display = "";
+        } else {
+          line.style.display = "none";
+        }
       } catch {
         $("stat-days").textContent = "?";
       }

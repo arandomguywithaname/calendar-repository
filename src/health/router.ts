@@ -4,7 +4,7 @@ import express, { NextFunction, Request, Response, Router } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildHealthMcpServer } from "./mcp";
 import { ingestPayload } from "./ingest";
-import { emptyStore, loadStore, saveStore, sortedDates, storePath, userStoreCount } from "./store";
+import { emptyStore, loadStore, saveStore, sortedDates, storePath, userStoreCount, userStoreStats } from "./store";
 import { HealthUser, signature, slugify, verifyUser } from "./users";
 import * as fs from "fs";
 
@@ -115,6 +115,11 @@ export function healthRouter(): Router {
       ingestConfigured: Boolean(ingestToken()),
       mcpPath: mcpToken ? "/mcp/<MCP_TOKEN>" : "/mcp",
       familyMembers: userStoreCount(),
+      // The counters above describe the SHARED store only. Anyone who signed
+      // up through /join has their own private one, which is why a personal
+      // link arriving must be reported separately or the page reads "0 days"
+      // forever while data is in fact landing.
+      people: userStoreStats(),
     });
   };
 

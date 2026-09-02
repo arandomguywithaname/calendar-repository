@@ -95,18 +95,14 @@ Your endpoints become (using your app name):
 - Claude connector: `https://<your-app>.fly.dev/mcp/<MCP_TOKEN>`
 - Setup/status page: `https://<your-app>.fly.dev/health`
 
-> **Keeping data across deploys:** by default health data is stored in `data/apple-health.json`
-> inside the machine, which survives restarts but not `fly deploy`. For durable storage, create a
-> volume and point `DATA_DIR` at it:
+> **Keeping data across deploys — already handled.** `fly.toml` sets `DATA_DIR=/data` and mounts
+> a volume there, and `npm run deploy` creates that volume the first time if it is missing. Without
+> it the JSON store would sit in the machine's rootfs, which Fly recreates on every deploy, and
+> shipping any change would quietly erase everyone's history. To check it exists:
 > ```bash
-> fly volumes create health_data --size 1
-> # then add to fly.toml:
-> #   [mounts]
-> #     source = 'health_data'
-> #     destination = '/data'
-> fly secrets set DATA_DIR=/data
+> fly volumes list -a <your-app>
 > ```
-> (Or just re-send history from Health Auto Export after a deploy — see step 3.)
+> A volume attaches to one machine, which is why the deploy passes `--ha=false`.
 
 ### macOS / Linux quickstart
 
