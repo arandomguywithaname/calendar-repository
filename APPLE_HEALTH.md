@@ -95,6 +95,16 @@ Your endpoints become (using your app name):
 - Claude connector: `https://<your-app>.fly.dev/mcp/<MCP_TOKEN>`
 - Setup/status page: `https://<your-app>.fly.dev/health`
 
+> **Windows: `fly` not recognised after installing?** The installer creates the short `fly` name
+> with a symlink, and Windows only allows that with administrator rights — decline the UAC prompt
+> and you get a working `flyctl.exe` with no `fly`. Either use `flyctl` (the deploy script falls
+> back to it automatically), or make the short name yourself with a plain copy:
+> ```powershell
+> Copy-Item "$HOME\.fly\bin\flyctl.exe" "$HOME\.fly\bin\fly.exe"
+> ```
+> If neither name is found at all, the folder is missing from PATH:
+> `$env:PATH = "$HOME\.fly\bin;$env:PATH"`
+
 > **Keeping data across deploys — already handled.** `fly.toml` sets `DATA_DIR=/data` and mounts
 > a volume there, and `npm run deploy` creates that volume the first time if it is missing. Without
 > it the JSON store would sit in the machine's rootfs, which Fly recreates on every deploy, and

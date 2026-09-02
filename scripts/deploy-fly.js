@@ -23,14 +23,20 @@ const FLY_TOML = path.join(ROOT, "fly.toml");
 const DEFAULT_APP = "calendar-repository"; // the name fly.toml ships with
 const VOLUME_NAME = "health_data"; // must match [[mounts]] source in fly.toml
 
+// The real executable is `flyctl`; the short `fly` name is a symlink the
+// installer creates, and on Windows that step needs administrator rights. When
+// the UAC prompt is declined the install still leaves a working flyctl.exe, so
+// fall back to it rather than claiming Fly isn't installed.
+let FLY_BIN = "fly";
+
 // One shell string (args are validated/generated, never free-form user text):
 // resolves the fly shim/exe the same way in cmd and bash without DEP0190 noise.
 function fly(args, opts = {}) {
-  return spawnSync(["fly", ...args].join(" "), { cwd: ROOT, shell: true, encoding: "utf-8", ...opts });
+  return spawnSync([FLY_BIN, ...args].join(" "), { cwd: ROOT, shell: true, encoding: "utf-8", ...opts });
 }
 
 function flyInteractive(args) {
-  return spawnSync(["fly", ...args].join(" "), { cwd: ROOT, shell: true, stdio: "inherit" });
+  return spawnSync([FLY_BIN, ...args].join(" "), { cwd: ROOT, shell: true, stdio: "inherit" });
 }
 
 function die(msg) {
@@ -92,12 +98,19 @@ async function main() {
 
   // 1. Fly CLI present and logged in?
   if (fly(["version"]).status !== 0) {
-    die(
-      "The Fly CLI isn't installed (or isn't on PATH yet — reopen the terminal after installing).\n" +
-        '  Windows (run in PowerShell once): iwr https://fly.io/install.ps1 -useb | iex\n' +
-        "  macOS/Linux: curl -L https://fly.io/install.sh | sh\n" +
-        "Then run `fly auth login` and re-run `npm run deploy`."
-    );
+    FLY_BIN = "flyctl";
+    if (fly(["version"]).status !== 0) {
+      die(
+        "The Fly CLI isn't installed (or isn't on PATH yet — reopen the terminal after installing).\n" +
+          '  Windows (run in PowerShell once): iwr https://fly.io/install.ps1 -useb | iex\n' +
+          "  macOS/Linux: curl -L https://fly.io/install.sh | sh\n" +
+          "If it IS installed, the folder is probably missing from PATH. On Windows:\n" +
+          '  $env:PATH = "$HOME\\.fly\\bin;$env:PATH"\n' +
+          "Then run `fly auth login` (or `flyctl auth login`) and re-run `npm run deploy`."
+      );
+    }
+    console.log("Using `flyctl` — the short `fly` name is missing, which on Windows means the");
+    console.log("installer's symlink step was declined at the admin prompt. Harmless.\n");
   }
   if (fly(["auth", "whoami"]).status !== 0) {
     console.log("Not signed in to Fly yet — opening login…");
