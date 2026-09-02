@@ -1,0 +1,101 @@
+# The "robot builder" from the family plan: GitHub rents us a Mac with Xcode,
+# builds Vital, signs it, and uploads it to TestFlight. Nobody needs a Mac.
+#
+# It stays OFF until the repo variable VITAL_CI_ENABLED is set to 'true'
+# (Settings → Secrets and variables → Actions → Variables), so pushes don't
+# produce red failures before the Apple side is ready. Required secrets
+# (Settings → Secrets and variables → Actions → Secrets) are listed in
+# ios/Vital/README.md.
+name: Build Vital (TestFlight)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/build-vital.yml"
+
+jobs:
+  build:
+    if: ${{ vars.VITAL_CI_ENABLED == 'true' }}
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate the Xcode project
+        env:
+          CONNECTION_LINK: ${{ secrets.VITAL_CONNECTION_LINK }}
+        run: |
+          brew install xcodegen
+          cd ios/Vital
+          # Bake the family connection link into the build (kept out of the
+          # public repo — it lives only in the GitHub secret).
+          if [ -n "$CONNECTION_LINK" ]; then
+            python3 - "$CONNECTION_LINK" <<'EOF'
+          import sys, pathlib
+          p = pathlib.Path("project.yml")
+          p.write_text(p.read_text().replace('VitalDefaultConnectionLink: ""', f'VitalDefaultConnectionLink: "{sys.argv[1]}"'))
+          EOF
+          fi
+          xcodegen generate
+
+      - name: Write the App Store Connect API key
+        env:
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+        run: |
+          mkdir -p ~/private_keys
+          printf '%s' "$APPSTORE_PRIVATE_KEY" > ~/private_keys/AuthKey_"$APPSTORE_KEY_ID".p8
+
+      - name: Archive (build + cloud signing)
+        run: |
+          cd ios/Vital
+          xcodebuild archive \
+            -project Vital.xcodeproj -scheme Vital -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Vital.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.APPSTORE_KEY_ID }}.p8 \
+            -authenticationKeyID '${{ secrets.APPSTORE_KEY_ID }}' \
+            -authenticationKeyIssuerID '${{ secrets.APPSTORE_ISSUER_ID }}' \
+            DEVELOPMENT_TEAM='${{ secrets.APPLE_TEAM_ID }}' CODE_SIGN_STYLE=Automatic
+
+      - name: Export the .ipa
+        run: |
+          cd ios/Vital
+          xcodebuild -exportArchive \
+            -archivePath build/Vital.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.APPSTORE_KEY_ID }}.p8 \
+            -authenticationKeyID '${{ secrets.APPSTORE_KEY_ID }}' \
+            -authenticationKeyIssuerID '${{ secrets.APPSTORE_ISSUER_ID }}'
+
+      - name: Upload to TestFlight
+        env:
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+        run: |
+          cd ios/Vital
+          python3 - <<'EOF'
+          import json, os
+          json.dump({
+              "key_id": os.environ["APPSTORE_KEY_ID"],
+              "issuer_id": os.environ["APPSTORE_ISSUER_ID"],
+              "key": os.environ["APPSTORE_PRIVATE_KEY"],
+              "in_house": False,
+          }, open("asc-key.json", "w"))
+          EOF
+          fastlane pilot upload \
+            --ipa build/export/Vital.ipa \
+            --api_key_path asc-key.json \
+            --skip_waiting_for_build_processing true
+
+      - name: Keep the .ipa as a downloadable artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vital-ipa
+          path: ios/Vital/build/export/*.ipa
+          if-no-files-found: ignore

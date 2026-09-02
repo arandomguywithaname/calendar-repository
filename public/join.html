@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Vital</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+      color: #1a1a2e;
+    }
+    .card {
+      background: white; border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px; width: 100%; max-width: 640px;
+    }
+    h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+    h2 { font-size: 16px; font-weight: 700; margin: 26px 0 8px; }
+    .subtitle { color: #6b7280; font-size: 14.5px; margin-bottom: 24px; line-height: 1.5; }
+    p, li { color: #374151; font-size: 14.5px; line-height: 1.6; }
+    ol { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin: 14px 0 6px; }
+    input[type="text"] {
+      width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px;
+      font-size: 15px; outline: none; font-family: inherit;
+    }
+    input:focus { border-color: #d6336c; }
+    button.primary {
+      margin-top: 16px; background: #d6336c; color: white; border: none; border-radius: 10px;
+      padding: 14px 20px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+    }
+    button.primary:hover { background: #b02458; }
+    button.primary:disabled { background: #f1a7c1; cursor: not-allowed; }
+    .linkbox {
+      background: #f9fafb; border: 1.5px solid #e5e7eb; border-radius: 10px;
+      padding: 12px 14px; margin: 8px 0 4px;
+      font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+      word-break: break-all; color: #1a1a2e;
+    }
+    .copy {
+      background: white; color: #b02458; border: 1.5px solid #d6336c; border-radius: 8px;
+      padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; margin-bottom: 12px;
+    }
+    .copy:hover { background: #fbe7ee; }
+    .warn {
+      background: #fdf3e7; border-left: 4px solid #b0672e; border-radius: 8px;
+      padding: 10px 14px; font-size: 13.5px; margin: 16px 0; color: #374151;
+    }
+    .err { color: #b91c1c; font-size: 14px; margin-top: 10px; }
+    .hidden { display: none; }
+    a { color: #b02458; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="form-view">
+      <h1>Join Vital ♥</h1>
+      <p class="subtitle">
+        Your Apple Health data — sleep, heart, workouts — on this private server, answered by your
+        Claude. One button makes your personal links. No accounts, no passwords, nothing to install
+        on a computer.
+      </p>
+      <label for="name">Your first name (optional — it's what Claude will call you)</label>
+      <input type="text" id="name" maxlength="24" autocomplete="off" placeholder="e.g. Alex" />
+      <button class="primary" id="go">Create my Vital</button>
+      <div class="err" id="err"></div>
+    </div>
+
+    <div id="result-view" class="hidden">
+      <h1 id="hello">Welcome!</h1>
+      <p class="subtitle">These two links are yours alone. They’re shown <strong>once</strong> — copy
+      them somewhere safe right now (notes app, password manager).</p>
+
+      <h2>1 · Your send link — put health data in</h2>
+      <p>In the <strong>Vital</strong> app on your iPhone: gear button → paste this link →
+      <strong>Test connection</strong> → <strong>Save</strong>. Then press <strong>Send now</strong> and
+      allow the Health data you’re comfortable sharing — iOS asks about each type separately, and you
+      can decline any. The first send picks up 90 days of history.</p>
+      <p class="subtitle">Don’t have the Vital app? Install <strong>Health Auto Export — JSON+CSV</strong>
+      from the App Store instead and create an automation: type <strong>REST API</strong>, URL = this link,
+      format <strong>JSON</strong>, aggregation <strong>Days</strong>; send the last 90 days once.</p>
+      <div class="linkbox" id="send-link"></div>
+      <button class="copy" data-for="send-link">Copy send link</button>
+
+      <h2>2 · Your Claude link — let your Claude read it</h2>
+      <p>On claude.ai (paid plan): <strong>Settings → Connectors → Add custom connector</strong>,
+      name it <code>Vital</code>, paste this link. Then ask Claude: <em>“How did I sleep this week?”</em></p>
+      <div class="linkbox" id="mcp-link"></div>
+      <button class="copy" data-for="mcp-link">Copy Claude link</button>
+
+      <div class="warn">
+        Treat both links like passwords: anyone holding the send link can add data as you; anyone
+        holding the Claude link can read your data. Never paste them into chats or screenshots.
+        Your data lives only on this server, is never sold or shared, and only your links reach it.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    $("go").addEventListener("click", async () => {
+      $("go").disabled = true;
+      $("err").textContent = "";
+      try {
+        const res = await fetch("/api/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: $("name").value.trim() }),
+        });
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error || "Something went wrong.");
+        $("hello").textContent = "Welcome, " + out.name + "!";
+        $("send-link").textContent = out.sendLink;
+        $("mcp-link").textContent = out.connectorLink;
+        $("form-view").classList.add("hidden");
+        $("result-view").classList.remove("hidden");
+      } catch (e) {
+        $("err").textContent = e.message;
+        $("go").disabled = false;
+      }
+    });
+    document.querySelectorAll(".copy").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const text = $(btn.dataset.for).textContent;
+        try {
+          navigator.clipboard.writeText(text).then(
+            () => { btn.textContent = "Copied!"; setTimeout(() => (btn.textContent = "Copy"), 1500); },
+            () => { btn.textContent = "Select it manually"; }
+          );
+        } catch { btn.textContent = "Select it manually"; }
+      });
+    });
+  </script>
+</body>
+</html>

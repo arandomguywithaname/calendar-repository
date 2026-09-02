@@ -1,0 +1,78 @@
+# Codemagic recipe for building the Vital iPhone app and shipping it to
+# TestFlight — an alternative "robot builder" to the GitHub Actions one in
+# .github/workflows/build-vital.yml. Connect this repository at codemagic.io
+# and this file is picked up automatically. Setup steps: ios/Vital/README.md.
+workflows:
+  vital-ios:
+    name: Vital → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    integrations:
+      app_store_connect: vital-asc-key # must match the API key name you add in Codemagic → Team → Integrations
+    environment:
+      groups:
+        - appstore_credentials # holds CERTIFICATE_PRIVATE_KEY (and optional VITAL_CONNECTION_LINK / VITAL_SERVER_URL)
+      vars:
+        BUNDLE_ID: "com.tim.Vital" # ← your registered App ID
+      xcode: latest
+    triggering:
+      events: [] # manual "Start new build" button only; add push triggers later if wanted
+    scripts:
+      - name: Generate the Xcode project
+        script: |
+          brew install xcodegen
+          cd ios/Vital
+          python3 - <<'EOF'
+          import datetime, os, pathlib
+          p = pathlib.Path("project.yml")
+          text = p.read_text()
+          link = os.environ.get("VITAL_CONNECTION_LINK", "")
+          server = os.environ.get("VITAL_SERVER_URL", "")
+          if link:
+              text = text.replace('VitalDefaultConnectionLink: ""', f'VitalDefaultConnectionLink: "{link}"')
+          if server:
+              text = text.replace('VitalServerURL: ""', f'VitalServerURL: "{server}"')
+          # Apple rejects a build number already uploaded for this version, and
+          # requires each new one to be higher. Minutes since 2026-01-01 UTC is
+          # unique and monotonic without trusting any CI counter to be set.
+          epoch = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+          minutes = int((datetime.datetime.now(datetime.timezone.utc) - epoch).total_seconds() // 60)
+          text = text.replace('CURRENT_PROJECT_VERSION: "1"', f'CURRENT_PROJECT_VERSION: "{minutes}"')
+          print(f"Build number for this upload: {minutes}")
+          p.write_text(text)
+          EOF
+          xcodegen generate
+      - name: Set up code signing
+        script: |
+          cd ios/Vital
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          # Fail loudly if nothing was fetched — silent emptiness here otherwise
+          # surfaces later as a confusing "requires a provisioning profile" error.
+          # Profiles land in the classic location on older Xcode and in
+          # Library/Developer/Xcode/UserData on newer Xcode; accept either.
+          if ! ls "$HOME"/Library/MobileDevice/"Provisioning Profiles"/*.mobileprovision >/dev/null 2>&1 \
+             && ! ls "$HOME"/Library/Developer/Xcode/UserData/"Provisioning Profiles"/*.mobileprovision >/dev/null 2>&1; then
+            echo "ERROR: no provisioning profiles were fetched."
+            echo "Almost always this means CERTIFICATE_PRIVATE_KEY is missing from the"
+            echo "appstore_credentials environment group — see ios/Vital/README.md step 4."
+            exit 1
+          fi
+          keychain initialize
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Build the .ipa
+        script: |
+          cd ios/Vital
+          xcode-project build-ipa --project Vital.xcodeproj --scheme Vital
+    artifacts:
+      - ios/Vital/build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # Hand the build to the tester group at upload time. App Store Connect's
+        # "automatic distribution" only covers builds uploaded from Xcode, so a
+        # build that arrives through the API sits undistributed and testers see
+        # "No builds available" — naming the group here does the assignment.
+        beta_groups:
+          - Family
