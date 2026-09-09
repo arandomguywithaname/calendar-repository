@@ -126,7 +126,9 @@ enum Uploader {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try Payload.encode(payload)
-            request.timeoutInterval = 60
+            // "All" sends years at once — megabytes over a phone connection.
+            // A minute is plenty for a week and nowhere near enough for that.
+            request.timeoutInterval = 300
 
             let (data, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0

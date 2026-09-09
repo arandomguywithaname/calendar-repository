@@ -13,8 +13,11 @@ Vital is the left square of the project diagram: it reads Apple Health **on the 
 What's in the box:
 
 - `Sources/ContentView.swift` — the main screen, built to Tim's spec: last sent time,
-  success or error, and one big **Send now** button (plus a 7/30/90-day picker — use
-  90 once at the start to seed history).
+  success or error, and one big **Send now** button, plus a 7/30/90/**All** picker.
+  **All** counts from September 2014 (when HealthKit shipped, so nothing predates it)
+  — about 12 years, roughly 40,000 daily values and a 2 MB upload, which is why the
+  send timeout is 300s rather than 60s. Use it once at the start; a week is plenty
+  afterwards.
 - **Automatic updates:** the app re-sends by itself every time it's opened (if the last
   send is 4+ hours old), and registers an iOS background-refresh task that sends between
   opens. Background timing is decided by iOS (best-effort, typically a few times a day) —

@@ -14,6 +14,19 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showJoin = false
 
+    /// "All" in days: HealthKit shipped with iOS 8 in September 2014, so nothing
+    /// can exist before that and counting from there really is everything.
+    private var allDays: Int {
+        var start = DateComponents()
+        start.year = 2014
+        start.month = 9
+        start.day = 1
+        let calendar = Calendar.current
+        guard let from = calendar.date(from: start),
+              let days = calendar.dateComponents([.day], from: from, to: Date()).day else { return 4000 }
+        return max(90, days)
+    }
+
     /// Public server address baked into the build — enables in-app signup.
     private var bakedServer: String {
         (Bundle.main.object(forInfoDictionaryKey: "VitalServerURL") as? String) ?? ""
@@ -52,12 +65,21 @@ struct ContentView: View {
                 .padding(.horizontal)
 
                 Picker("How many days", selection: $days) {
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                    Text("90 days").tag(90)
+                    Text("7").tag(7)
+                    Text("30").tag(30)
+                    Text("90").tag(90)
+                    Text("All").tag(allDays)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 40)
+
+                if days == allDays {
+                    Text("Everything Apple Health has — years of it. Expect this one to take a minute.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
 
                 Button(action: { startSync(days: days, manual: true) }) {
                     HStack {
