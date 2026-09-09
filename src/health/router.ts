@@ -228,6 +228,12 @@ export function healthRouter(): Router {
   router.get("/join", (_req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, "../../public/join.html"));
   });
+
+  // The page to send someone who has never heard of this. /join is the button
+  // at the end of it; /health is for people already set up.
+  router.get("/vital", (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, "../../public/vital.html"));
+  });
   router.post("/api/join", (req: Request, res: Response) => {
     const ingest = ingestToken();
     if (!ingest || !mcpToken) {
