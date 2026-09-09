@@ -48,9 +48,31 @@ function calendarWindow(end: string, days: number): string[] {
  * reporting today's recovery as though the day were over is how a lunchtime sync
  * gets read as a full day's verdict.
  */
-function isPartial(store: HealthStore, date: string): boolean {
-  const lastSync = store.updatedAt?.slice(0, 10);
-  return lastSync !== undefined && date >= lastSync;
+export function isPartial(store: HealthStore, date: string): boolean {
+  // Deliberately not "is this today?" — the server has no idea what day it is
+  // where the person lives. Comparing a stored date against the server's own
+  // UTC date gets it wrong by a day for anyone west of Greenwich, who syncs in
+  // their evening and lands on the next UTC day. The timezone-free truth is
+  // that a sync can only ever capture the day it ran up to the moment it ran,
+  // so the most recent day on record is the one that may still be incomplete.
+  const dates = sortedDates(store);
+  return dates.length > 0 && date === dates[dates.length - 1];
+}
+
+/** How fresh the data is. Every answer carries this, because the alternative is
+ *  a four-day-old snapshot read back as though it were this morning. */
+export function freshness(store: HealthStore) {
+  const lastSync = store.updatedAt;
+  if (!lastSync) return { dataAsOf: null };
+  const ageHours = (Date.now() - Date.parse(lastSync)) / 3600000;
+  if (!Number.isFinite(ageHours)) return { dataAsOf: lastSync };
+  const out: Record<string, unknown> = { dataAsOf: lastSync, syncedHoursAgo: Math.round(ageHours) };
+  if (ageHours >= 24) {
+    out.staleNote =
+      `The phone last synced ${Math.floor(ageHours / 24)} day(s) ago, so nothing below reflects ` +
+      "anything since then. Say so rather than presenting it as current.";
+  }
+  return out;
 }
 
 /** Dates in the window with nothing stored — the difference between "did not
@@ -89,6 +111,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
   const exertion = computeExertion(store, date);
   const partial = isPartial(store, date);
   return json({
+    ...freshness(store),
     date,
     partial,
     ...(partial
@@ -240,6 +263,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const window = calendarWindow(last, span);
       const missingDates = missingIn(store, window);
       return json({
+        ...freshness(store),
         note: ESTIMATE_NOTE,
         requestedDays: span,
         window: { first: window[0], last: window[window.length - 1] },
@@ -272,7 +296,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         for (const w of store.days[date].workouts) all.push({ date, ...w });
       }
       all.sort((a, b) => (a.start < b.start ? 1 : -1));
-      return json({ totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
+      return json({ ...freshness(store), totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
     }
   );
 
@@ -300,6 +324,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const totals = sound.map((n) => n.totalSleepHours).filter((v): v is number => v !== undefined);
       const avg = totals.length ? Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 100) / 100 : null;
       return json({
+        ...freshness(store),
         requestedNights: span,
         window: { first: window[0], last: window[window.length - 1] },
         nightsFound: nights.length,
@@ -339,7 +364,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       if (values.length === 0) {
         return json({ error: `No values stored for metric '${name}'.`, hint: "Call get_data_status to see available metrics." });
       }
-      return json({ metric: name, units: store.units?.[name], values });
+      return json({ ...freshness(store), metric: name, units: store.units?.[name], values });
     }
   );
 

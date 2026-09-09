@@ -60,13 +60,19 @@ final class HealthKitReader {
         }
 
         // Daily sums (count-style metrics).
-        let summed: [(HKQuantityTypeIdentifier, String, String, HKUnit)] = [
-            (.activeEnergyBurned, "active_energy", "kcal", HKUnit.kilocalorie()),
-            (.stepCount, "step_count", "steps", HKUnit.count()),
+        // The last element says how to round: steps are counted things and come
+        // back from HealthKit as floats often enough to matter (11623.858733),
+        // which reads back as "11,623.86 steps". Energy needs one decimal, not six.
+        let summed: [(HKQuantityTypeIdentifier, String, String, HKUnit, Bool)] = [
+            (.activeEnergyBurned, "active_energy", "kcal", HKUnit.kilocalorie(), false),
+            (.stepCount, "step_count", "steps", HKUnit.count(), true),
         ]
-        for (identifier, name, units, unit) in summed {
+        for (identifier, name, units, unit, whole) in summed {
             let rows = try await dailyStats(identifier, .cumulativeSum, unit, from: startDate, to: endDate) { stats in
-                stats.sumQuantity().map { ["qty": $0.doubleValue(for: unit)] }
+                stats.sumQuantity().map { q in
+                    let v = q.doubleValue(for: unit)
+                    return ["qty": whole ? v.rounded() : (v * 10).rounded() / 10]
+                }
             }
             if !rows.isEmpty { metrics.append(Payload.metric(name: name, units: units, rows: rows)) }
         }
