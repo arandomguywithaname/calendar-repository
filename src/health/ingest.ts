@@ -165,9 +165,15 @@ function parseWorkout(w: any): { date: string; workout: WorkoutRecord } | undefi
  */
 export function ingestPayload(store: HealthStore, payload: any, source?: string): IngestSummary {
   const body = payload?.data && typeof payload.data === "object" ? payload.data : payload;
-  const metrics: any[] = Array.isArray(body?.metrics) ? body.metrics : [];
-  const workouts: any[] = Array.isArray(body?.workouts) ? body.workouts : [];
-  if (metrics.length === 0 && workouts.length === 0) {
+  const hasMetrics = Array.isArray(body?.metrics);
+  const hasWorkouts = Array.isArray(body?.workouts);
+  const metrics: any[] = hasMetrics ? body.metrics : [];
+  const workouts: any[] = hasWorkouts ? body.workouts : [];
+  // Reject only a payload of the wrong shape. A correctly formed export with
+  // nothing in it is what a phone sends when Health access was declined or the
+  // range holds no data, and answering that with an error puts a developer
+  // message on the person's screen instead of something they can act on.
+  if (!hasMetrics && !hasWorkouts) {
     throw new Error(
       'No "metrics" or "workouts" found. Expected a Health Auto Export JSON payload: {"data": {"metrics": [...], "workouts": [...]}}'
     );

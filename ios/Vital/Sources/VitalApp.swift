@@ -1,5 +1,6 @@
 import SwiftUI
 import BackgroundTasks
+import Foundation
 
 /// Vital — reads Apple Health on this phone and sends it to our own server.
 /// Named by Tim. Apple Health never uploads anything itself; this app is the
@@ -39,15 +40,31 @@ struct VitalApp: App {
         try? BGTaskScheduler.shared.submit(request) // duplicate submissions are fine to ignore
     }
 
+    /// setTaskCompleted must be called exactly once. iOS can fire the expiration
+    /// handler while the sync is still in flight, and calling it twice is an API
+    /// misuse that kills the app — so whichever arrives first wins.
+    private final class Once {
+        private let lock = NSLock()
+        private var used = false
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if used { return false }
+            used = true
+            return true
+        }
+    }
+
     private static func handleRefresh(_ task: BGAppRefreshTask) {
         scheduleRefresh() // keep the chain going for next time
+        let finish = Once()
         let work = Task {
             _ = await SyncEngine.sync(days: 7)
-            task.setTaskCompleted(success: true)
+            if finish.claim() { task.setTaskCompleted(success: true) }
         }
         task.expirationHandler = {
             work.cancel()
-            task.setTaskCompleted(success: false)
+            if finish.claim() { task.setTaskCompleted(success: false) }
         }
     }
 }

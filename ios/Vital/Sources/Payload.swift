@@ -26,6 +26,16 @@ enum Payload {
         ["data": ["metrics": metrics, "workouts": workouts]]
     }
 
+    /// True when Health handed back nothing at all. That is exactly what a
+    /// declined permission looks like: HealthKit deliberately reports no error
+    /// for it, so an empty payload is the only signal the app ever gets.
+    static func isEmpty(_ body: [String: Any]) -> Bool {
+        guard let data = body["data"] as? [String: Any] else { return true }
+        let metrics = (data["metrics"] as? [[String: Any]]) ?? []
+        let workouts = (data["workouts"] as? [[String: Any]]) ?? []
+        return metrics.isEmpty && workouts.isEmpty
+    }
+
     static func encode(_ dictionary: [String: Any]) throws -> Data {
         try JSONSerialization.data(withJSONObject: dictionary, options: [])
     }

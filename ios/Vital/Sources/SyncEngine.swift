@@ -25,13 +25,21 @@ enum SyncEngine {
         do {
             try await reader.requestPermission()
             let payload = try await reader.buildPayload(days: days)
+            guard !Payload.isEmpty(payload) else {
+                return record("No Health data came back. Open Settings → Health → Data Access "
+                    + "& Devices → Vital and switch on what you're happy to share.")
+            }
             return await Uploader.send(payload: payload)
         } catch {
-            let result = Uploader.Result(ok: false, message: "Health access problem: \(error.localizedDescription)")
-            Uploader.lastSync = Date()
-            Uploader.lastOK = false
-            Uploader.lastMessage = result.message
-            return result
+            return record("Health access problem: \(error.localizedDescription)")
         }
+    }
+
+    /// Remembers a failure so the main screen shows it after the app is reopened.
+    private static func record(_ message: String) -> Uploader.Result {
+        Uploader.lastSync = Date()
+        Uploader.lastOK = false
+        Uploader.lastMessage = message
+        return Uploader.Result(ok: false, message: message)
     }
 }

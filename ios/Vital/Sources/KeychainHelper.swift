@@ -18,6 +18,11 @@ enum KeychainHelper {
         SecItemDelete(query as CFDictionary)
         var attributes = query
         attributes[kSecValueData as String] = data
+        // Without this the item defaults to "only while unlocked", and the
+        // background refresh — which iOS runs with the phone in a pocket —
+        // reads nil, decides the app was never set up and silently sends
+        // nothing. AfterFirstUnlock keeps it readable until the next reboot.
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
