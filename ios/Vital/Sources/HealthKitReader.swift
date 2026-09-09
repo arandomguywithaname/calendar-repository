@@ -46,7 +46,6 @@ final class HealthKitReader {
         // 0–1 fraction, while the server's contract (and Health Auto Export) uses
         // percent — 97.5, not 0.975. Everything else is already in the right unit.
         let averaged: [(HKQuantityTypeIdentifier, String, String, HKUnit, Double)] = [
-            (.heartRateVariabilitySDNN, "heart_rate_variability", "ms", HKUnit.secondUnit(with: .milli), 1),
             (.restingHeartRate, "resting_heart_rate", "count/min", HKUnit.count().unitDivided(by: .minute()), 1),
             (.respiratoryRate, "respiratory_rate", "count/min", HKUnit.count().unitDivided(by: .minute()), 1),
             (.oxygenSaturation, "blood_oxygen_saturation", "%", HKUnit.percent(), 100),
@@ -84,6 +83,11 @@ final class HealthKitReader {
         }
         if !hrRows.isEmpty { metrics.append(Payload.metric(name: "heart_rate", units: "count/min", rows: hrRows)) }
 
+        let hrv = try await hrvRows(from: startDate, to: endDate)
+        if !hrv.isEmpty {
+            metrics.append(Payload.metric(name: "heart_rate_variability", units: "ms", rows: hrv))
+        }
+
         if let sleepMetric = try await sleepMetric(from: startDate, to: endDate) {
             metrics.append(sleepMetric)
         }
@@ -119,6 +123,63 @@ final class HealthKitReader {
             }
         }
         return rows
+    }
+
+    // MARK: - Heart rate variability
+
+    /// HRV as the median of one device's overnight readings.
+    ///
+    /// Averaging every reading in a day blends measurement regimes: a watch
+    /// samples opportunistically while you move about, and a strap or ring
+    /// measures at rest overnight and reads systematically higher. Mixing them
+    /// makes the 42-day baseline a fiction, and a daily mean then swings on how
+    /// active the day was rather than on how recovered the person is. So: one
+    /// device, readings taken at night, and the median rather than the mean,
+    /// because a single startled reading should not move the number.
+    private func hrvRows(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
+        let type = HKQuantityType(.heartRateVariabilitySDNN)
+        let unit = HKUnit.secondUnit(with: .milli)
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [HKSamplePredicate.quantitySample(type: type, predicate: predicate)],
+            sortDescriptors: [SortDescriptor(\.startDate)]
+        )
+        let samples = try await descriptor.result(for: store)
+        guard !samples.isEmpty else { return [] }
+
+        let calendar = Calendar.current
+        var byNight: [String: [String: [Double]]] = [:]
+        for sample in samples {
+            let hour = calendar.component(.hour, from: sample.startDate)
+            // Keep the night: from 22:00 to 11:00. A reading before midnight
+            // belongs to the night that ends the following morning.
+            guard hour >= 22 || hour < 11 else { continue }
+            let attributed = hour >= 22
+                ? (calendar.date(byAdding: .day, value: 1, to: sample.startDate) ?? sample.startDate)
+                : sample.startDate
+            let key = Self.dayKey.string(from: attributed)
+            let source = sample.sourceRevision.source.bundleIdentifier
+            var devices = byNight[key] ?? [:]
+            devices[source, default: []].append(sample.quantity.doubleValue(for: unit))
+            byNight[key] = devices
+        }
+
+        let tzSuffix = String(Payload.dateFormatter.string(from: Date()).suffix(5))
+        var rows: [[String: Any]] = []
+        for (key, devices) in byNight.sorted(by: { $0.key < $1.key }) {
+            // Whichever device took the most readings is the one that was
+            // actually worn to bed.
+            guard let readings = devices.values.max(by: { $0.count < $1.count }),
+                  !readings.isEmpty else { continue }
+            rows.append(["date": "\(key) 12:00:00 \(tzSuffix)", "qty": round2(median(readings))])
+        }
+        return rows
+    }
+
+    private func median(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 
     // MARK: - Sleep

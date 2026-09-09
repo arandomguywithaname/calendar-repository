@@ -31,6 +31,13 @@ export interface SleepRecord {
   awakeHours?: number;
   sleepStart?: string;
   sleepEnd?: string;
+  /**
+   * Why this night's numbers don't add up, if they don't — e.g. stages summing
+   * to more hours than lie between sleepStart and sleepEnd. A night with this
+   * set is not trustworthy, and anything reading it should say so rather than
+   * quietly averaging it in.
+   */
+  suspect?: string[];
 }
 
 /** Everything known about one calendar day. */

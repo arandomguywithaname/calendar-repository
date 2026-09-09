@@ -28,6 +28,65 @@ function normalizeName(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
+/**
+ * "2026-10-25 07:30:00 +0100" → epoch milliseconds. The UTC offset is carried
+ * in the string, so the arithmetic stays right across a clock change: the night
+ * Spain leaves summer time really is 25 hours long, and subtracting local wall
+ * clock readings would quietly lose that hour.
+ */
+export function parseStamp(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?\s*([+-]\d{2}):?(\d{2})?/);
+  if (!m) return undefined;
+  const [, y, mo, d, h, mi, s, offH, offM] = m;
+  const utc = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s ?? 0));
+  const sign = offH.startsWith("-") ? -1 : 1;
+  const offsetMin = sign * (Math.abs(Number(offH)) * 60 + Number(offM ?? 0));
+  return utc - offsetMin * 60000;
+}
+
+/** Hours between two of those stamps, when both parse. */
+function hoursBetween(from: unknown, to: unknown): number | undefined {
+  const a = parseStamp(from);
+  const b = parseStamp(to);
+  if (a === undefined || b === undefined || b <= a) return undefined;
+  return (b - a) / 3600000;
+}
+
+/**
+ * Sleep arithmetic that has to hold for a real night. Anything here failing
+ * means the numbers are wrong, not merely unusual — most often because two
+ * devices recorded the same hours, or because a wake-up was never written and
+ * the record runs to the end of the day.
+ */
+function checkSleep(sleep: SleepRecord): string[] {
+  const problems: string[] = [];
+  const r = (v: number) => Math.round(v * 100) / 100;
+  const total = sleep.totalSleepHours;
+  const window = hoursBetween(sleep.sleepStart, sleep.sleepEnd);
+  const stages = [sleep.coreHours, sleep.deepHours, sleep.remHours].filter(
+    (v): v is number => typeof v === "number"
+  );
+  const stageSum = stages.reduce((a, b) => a + b, 0);
+
+  if (total !== undefined && (total <= 0 || total > 14)) {
+    problems.push(`total sleep of ${r(total)}h is outside anything a night can be`);
+  }
+  if (window !== undefined && window > 16) {
+    problems.push(`sleepStart to sleepEnd spans ${r(window)}h, so one of them is wrong`);
+  }
+  if (total !== undefined && window !== undefined && total > window + 0.25) {
+    problems.push(`total sleep of ${r(total)}h exceeds the ${r(window)}h between sleepStart and sleepEnd`);
+  }
+  if (total !== undefined && sleep.inBedHours !== undefined && total > sleep.inBedHours + 0.25) {
+    problems.push(`total sleep of ${r(total)}h exceeds the ${r(sleep.inBedHours)}h spent in bed`);
+  }
+  if (stages.length > 0 && total !== undefined && Math.abs(stageSum - total) > Math.max(0.5, total * 0.15)) {
+    problems.push(`stages add up to ${r(stageSum)}h but total sleep says ${r(total)}h`);
+  }
+  return problems;
+}
+
 /** "2026-08-26 07:01:12 +0200" → "2026-08-26" (device-local day). */
 function localDay(dateStr: unknown): string | undefined {
   if (typeof dateStr !== "string") return undefined;
@@ -203,7 +262,11 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
       if (name === "sleep_analysis") {
         const sleep = parseSleepRow(row, units);
         if (Object.keys(sleep).length > 0) {
-          getDay(store, date).sleep = { ...store.days[date].sleep, ...sleep };
+          const merged: SleepRecord = { ...store.days[date]?.sleep, ...sleep };
+          delete merged.suspect; // recomputed below against the merged numbers
+          const problems = checkSleep(merged);
+          if (problems.length > 0) merged.suspect = problems;
+          getDay(store, date).sleep = merged;
           touched.add(date);
           summary.dataPoints++;
         }
@@ -263,7 +326,11 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
           day.wristTemperatureC = round(value, 2);
           break;
         case "active_energy":
-          day.activeEnergyKcal = round(value, 0);
+          // A watch that was not worn produces no samples, and a day with a
+          // genuine zero active energy does not exist. Storing the zero makes
+          // "nothing was measured" indistinguishable from "you burned nothing",
+          // so leave the field absent instead.
+          if (value > 0) day.activeEnergyKcal = round(value, 0);
           break;
         case "step_count":
           day.steps = round(value, 0);

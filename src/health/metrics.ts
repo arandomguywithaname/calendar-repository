@@ -64,6 +64,10 @@ function deviationScore(value: number, base: Baseline, direction: 1 | -1, minStd
 export interface RecoveryResult {
   score: number; // 0–100
   band: "low" | "moderate" | "high";
+  /** "limited" when the score rests on thin or discarded inputs. */
+  confidence: "ok" | "limited";
+  /** What was thrown out or is too thin to lean on. */
+  caveats?: string[];
   components: {
     hrvScore?: number;
     restingHrScore?: number;
@@ -109,8 +113,15 @@ export function computeRecovery(store: HealthStore, date: string): RecoveryResul
     }
   }
 
+  const caveats: string[] = [];
   const sleepHours = day.sleep?.totalSleepHours;
-  if (sleepHours !== undefined) {
+  const sleepSuspect = day.sleep?.suspect ?? [];
+  if (sleepHours !== undefined && sleepSuspect.length > 0) {
+    // A night whose own numbers contradict each other must not raise the score:
+    // 15 hours of "sleep" scoring 95 is the model eating a poisoned input and
+    // answering confidently anyway.
+    caveats.push(`sleep was left out — ${sleepSuspect[0]}`);
+  } else if (sleepHours !== undefined) {
     // 7.5h of sleep scores 100; each missing hour costs ~13 points.
     const s = clamp((sleepHours / 7.5) * 100, 0, 100);
     components.sleepScore = round(s, 0);
@@ -122,7 +133,18 @@ export function computeRecovery(store: HealthStore, date: string): RecoveryResul
   const totalWeight = parts.reduce((a, p) => a + p.weight, 0);
   const score = Math.round(parts.reduce((a, p) => a + p.score * p.weight, 0) / totalWeight);
   const band = score >= 67 ? "high" : score >= 34 ? "moderate" : "low";
-  return { score, band, components, inputs };
+
+  if (components.hrvScore === undefined) caveats.push("no HRV for this day, so the largest input is missing");
+  if (parts.length < 2) caveats.push("only one input was available");
+  const result: RecoveryResult = {
+    score,
+    band,
+    confidence: caveats.length > 0 ? "limited" : "ok",
+    components,
+    inputs,
+  };
+  if (caveats.length > 0) result.caveats = caveats;
+  return result;
 }
 
 export interface ExertionResult {
@@ -170,6 +192,21 @@ function dayLoad(day: DayRecord, hrMax: number, hrRest: number): number {
   return load;
 }
 
+/**
+ * Turn a day's raw training load into a 0-10 score, relative to what a hard day
+ * usually costs this person (their 75th-percentile load).
+ *
+ * A straight line clipped at 10 threw away the top of the range: loads of 19
+ * and 59 both came out as exactly 10.0 once p75 dipped. This curve keeps a
+ * typical hard day at 7 and approaches 10 without ever arriving, so the hardest
+ * days stay distinguishable from each other. ln(10/3) is what makes a load
+ * equal to the baseline score exactly 7.0.
+ */
+export function exertionScore(load: number, baseline: number): number {
+  const shape = Math.log(10 / 3);
+  return round(clamp(10 * (1 - Math.exp((-shape * load) / Math.max(baseline, 10))), 0, 10), 1);
+}
+
 export function computeExertion(store: HealthStore, date: string): ExertionResult | undefined {
   const day = store.days[date];
   if (!day) return undefined;
@@ -187,10 +224,8 @@ export function computeExertion(store: HealthStore, date: string): ExertionResul
   if (historyLoads.length >= MIN_BASELINE_SAMPLES) {
     p75 = historyLoads[Math.min(historyLoads.length - 1, Math.floor(historyLoads.length * 0.75))];
   }
-  const score = round(clamp((load / Math.max(p75, 10)) * 7, 0, 10), 1);
-
   const result: ExertionResult = {
-    score,
+    score: exertionScore(load, p75),
     trainingLoad: round(load, 1),
     loadBaseline: round(p75, 1),
   };
