@@ -25,6 +25,11 @@ What's in the box:
   all three triggers (button, open, background) go through.
 - `Sources/SettingsView.swift` — one-time setup: server URL + secret key, with a
   **Test connection** button. The key is stored in the phone's Keychain, never in code.
+- **Two devices, one night:** an iPhone and an Apple Watch both write sleep into
+  Health, so adding every sample up double-counts the same hours (15 hours of sleep
+  instead of 7). `sleepMetric` groups each night by the device that wrote it, keeps
+  one device's account — preferring the one that breaks sleep into stages, which is
+  the watch — and merges overlapping stretches instead of summing them.
 - `Sources/HealthKitReader.swift` — asks permission for each data type separately
   (sleep, heart rate, HRV, resting HR, respiration, SpO₂, VO₂max, energy, steps,
   workouts) and aggregates the last N days.

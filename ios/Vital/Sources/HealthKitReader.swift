@@ -123,6 +123,24 @@ final class HealthKitReader {
 
     // MARK: - Sleep
 
+    /// One night as a single device recorded it, in hours.
+    private struct Night {
+        var core = 0.0, deep = 0.0, rem = 0.0, unspecified = 0.0, awake = 0.0, inBed = 0.0
+        var start: Date?, end: Date?
+        var asleep: Double { core + deep + rem + unspecified }
+        /// A watch splits sleep into stages; a phone usually logs one flat block.
+        var staged: Bool { core > 0 || deep > 0 || rem > 0 }
+    }
+
+    private struct Span { var start: Date; var end: Date }
+
+    private static let dayKey: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
     private func sleepMetric(from startDate: Date, to endDate: Date) async throws -> [String: Any]? {
         let type = HKCategoryType(.sleepAnalysis)
         let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
@@ -133,44 +151,33 @@ final class HealthKitReader {
         let samples = try await descriptor.result(for: store)
         guard !samples.isEmpty else { return nil }
 
-        struct Night {
-            var core = 0.0, deep = 0.0, rem = 0.0, unspecified = 0.0, awake = 0.0, inBed = 0.0
-            var start: Date?, end: Date?
-        }
-        var nights: [String: Night] = [:] // key: wake-day "yyyy-MM-dd"
-        let dayKey: DateFormatter = {
-            let f = DateFormatter()
-            f.dateFormat = "yyyy-MM-dd"
-            f.locale = Locale(identifier: "en_US_POSIX")
-            return f
-        }()
-
+        // An iPhone and an Apple Watch both record the same night, so adding up
+        // every sample counts those hours twice — 15 hours of sleep instead of 7.
+        // Group by night and by which device wrote each sample, then keep just
+        // one device's account of each night.
+        var byNight: [String: [String: [HKCategorySample]]] = [:]
         for sample in samples {
-            let hours = sample.endDate.timeIntervalSince(sample.startDate) / 3600
-            let key = dayKey.string(from: sample.endDate)
-            var night = nights[key] ?? Night()
-            switch HKCategoryValueSleepAnalysis(rawValue: sample.value) {
-            case .asleepCore: night.core += hours
-            case .asleepDeep: night.deep += hours
-            case .asleepREM: night.rem += hours
-            case .asleepUnspecified: night.unspecified += hours
-            case .awake: night.awake += hours
-            case .inBed: night.inBed += hours
-            default: break
-            }
-            if night.start == nil || sample.startDate < night.start! { night.start = sample.startDate }
-            if night.end == nil || sample.endDate > night.end! { night.end = sample.endDate }
-            nights[key] = night
+            let key = Self.dayKey.string(from: sample.endDate)
+            let source = sample.sourceRevision.source.bundleIdentifier
+            var sources = byNight[key] ?? [:]
+            sources[source, default: []].append(sample)
+            byNight[key] = sources
         }
 
         var rows: [[String: Any]] = []
         let tzSuffix = String(Payload.dateFormatter.string(from: Date()).suffix(5))
-        for (key, night) in nights.sorted(by: { $0.key < $1.key }) {
-            let total = night.core + night.deep + night.rem + night.unspecified
-            guard total > 0 || night.inBed > 0 else { continue }
+        for (key, bySource) in byNight.sorted(by: { $0.key < $1.key }) {
+            // Prefer the device that breaks the night into stages; between two
+            // that both do, the one that saw more of it.
+            let candidates = bySource.values.map { nightTotals($0) }
+            guard let night = candidates.max(by: { a, b in
+                if a.staged != b.staged { return b.staged }
+                return a.asleep < b.asleep
+            }) else { continue }
+            guard night.asleep > 0 || night.inBed > 0 else { continue }
             var row: [String: Any] = [
                 "date": "\(key) 12:00:00 \(tzSuffix)",
-                "totalSleep": round2(total),
+                "totalSleep": round2(night.asleep),
                 "core": round2(night.core + night.unspecified),
                 "deep": round2(night.deep),
                 "rem": round2(night.rem),
@@ -183,6 +190,50 @@ final class HealthKitReader {
         }
         guard !rows.isEmpty else { return nil }
         return Payload.metric(name: "sleep_analysis", units: "hr", rows: rows)
+    }
+
+    /// Totals for one device's samples. Overlapping stretches of the same stage
+    /// are merged rather than added — a device can log the same minutes twice.
+    private func nightTotals(_ samples: [HKCategorySample]) -> Night {
+        var spans: [Int: [Span]] = [:]
+        var night = Night()
+        for sample in samples {
+            spans[sample.value, default: []].append(Span(start: sample.startDate, end: sample.endDate))
+            if night.start == nil || sample.startDate < night.start! { night.start = sample.startDate }
+            if night.end == nil || sample.endDate > night.end! { night.end = sample.endDate }
+        }
+        for (value, list) in spans {
+            let hours = Self.mergedHours(list)
+            switch HKCategoryValueSleepAnalysis(rawValue: value) {
+            case .asleepCore: night.core = hours
+            case .asleepDeep: night.deep = hours
+            case .asleepREM: night.rem = hours
+            case .asleepUnspecified: night.unspecified = hours
+            case .awake: night.awake = hours
+            case .inBed: night.inBed = hours
+            default: break
+            }
+        }
+        return night
+    }
+
+    /// How much wall-clock time a set of spans covers between them, in hours.
+    private static func mergedHours(_ spans: [Span]) -> Double {
+        let sorted = spans.sorted { $0.start < $1.start }
+        var seconds = 0.0
+        var current: Span?
+        for span in sorted {
+            guard var open = current else { current = span; continue }
+            if span.start <= open.end {
+                if span.end > open.end { open.end = span.end }
+                current = open
+            } else {
+                seconds += open.end.timeIntervalSince(open.start)
+                current = span
+            }
+        }
+        if let open = current { seconds += open.end.timeIntervalSince(open.start) }
+        return seconds / 3600
     }
 
     // MARK: - Workouts
