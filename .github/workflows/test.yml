@@ -1,0 +1,43 @@
+# Runs the connector's tests on every push, so a regression is caught here
+# rather than on dad's phone.
+#
+# Unlike the Vital build, this one needs no Mac, no secrets and no setup —
+# it just installs the packages and runs `npm test`. If it ever goes red,
+# read the failing test's name: each one is written to say what broke.
+name: Tests
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "test/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "test/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # `npm ci` installs exactly what package-lock.json pins, so the test run
+      # matches what we develop against.
+      - run: npm ci
+
+      # `npm test` compiles with tsc first, so a type error fails here too.
+      - run: npm test
