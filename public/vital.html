@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vital — ask Claude about your own health</title>
+  <meta name="description" content="Vital sends your Apple Health data to a server you control, so Claude can answer questions about your sleep, training and recovery." />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8; color: #1a1a2e; padding: 24px 20px 56px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    .card {
+      background: white; border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px 36px; margin-bottom: 20px;
+    }
+    .hero { text-align: center; padding-top: 48px; }
+    .mark { font-size: 44px; line-height: 1; }
+    h1 { font-size: 30px; font-weight: 800; margin: 14px 0 12px; letter-spacing: -0.5px; }
+    h2 { font-size: 19px; font-weight: 700; margin-bottom: 14px; letter-spacing: -0.2px; }
+    .lede { color: #4b5563; font-size: 16.5px; line-height: 1.6; max-width: 30em; margin: 0 auto; }
+    p, li { color: #374151; font-size: 15px; line-height: 1.65; }
+    p + p { margin-top: 12px; }
+    .cta {
+      display: inline-block; margin-top: 26px; background: #d6336c; color: white;
+      text-decoration: none; border-radius: 10px; padding: 15px 30px;
+      font-size: 16px; font-weight: 700;
+    }
+    .cta:hover { background: #b02458; }
+    .cta-note { display: block; margin-top: 12px; color: #6b7280; font-size: 13px; }
+
+    .flow { display: flex; align-items: stretch; gap: 10px; margin: 4px 0 6px; flex-wrap: wrap; }
+    .flow .box {
+      flex: 1 1 180px; background: #f9fafb; border: 1.5px solid #e5e7eb;
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .flow .box b { display: block; font-size: 14px; margin-bottom: 4px; }
+    .flow .box span { font-size: 13.5px; color: #6b7280; line-height: 1.5; }
+
+    ol.steps { list-style: none; counter-reset: s; }
+    ol.steps li {
+      counter-increment: s; position: relative; padding-left: 40px; margin-bottom: 16px;
+    }
+    ol.steps li::before {
+      content: counter(s); position: absolute; left: 0; top: -1px;
+      width: 26px; height: 26px; border-radius: 50%; background: #d6336c; color: white;
+      font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    ol.steps b { font-weight: 700; }
+
+    .asks { list-style: none; }
+    .asks li {
+      background: #fbe7ee; border-radius: 12px; padding: 11px 16px; margin-bottom: 9px;
+      font-size: 15px; color: #7a1b3f;
+    }
+
+    ul.plain { list-style: none; }
+    ul.plain li { padding-left: 24px; position: relative; margin-bottom: 10px; }
+    ul.plain li::before {
+      content: "•"; position: absolute; left: 6px; color: #d6336c; font-weight: 700;
+    }
+    .req li::before { content: "—"; left: 2px; color: #9ca3af; }
+
+    .fineprint { color: #6b7280; font-size: 13.5px; line-height: 1.6; text-align: center; }
+    a { color: #b02458; }
+    @media (max-width: 560px) {
+      .card { padding: 28px 22px; }
+      h1 { font-size: 25px; }
+      .hero { padding-top: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="card hero">
+      <div class="mark">♥</div>
+      <h1>Ask Claude about your own health</h1>
+      <p class="lede">
+        Your iPhone already records how you slept, how hard you trained and what your heart did
+        about it. Vital sends that to a server <em>you</em> control, so Claude can answer questions
+        about it — in words, not charts.
+      </p>
+      <a class="cta" href="/join">Create your Vital →</a>
+      <span class="cta-note">Free · takes about a minute · no account, no password</span>
+    </div>
+
+    <div class="card">
+      <h2>The problem Vital solves</h2>
+      <p>
+        Apple Health is a superb diary and a terrible advisor. It holds years of sleep, heart rate,
+        HRV and workouts, and shows you a wall of graphs — but it can't tell you whether this week
+        was worse than last, or why you feel flat on Thursday.
+      </p>
+      <p>
+        It also can't send anything anywhere: Apple deliberately gives Health no cloud API, so the
+        data never leaves the phone by itself. Vital is the bridge that carries it out — to your own
+        server, and nowhere else.
+      </p>
+      <div class="flow" style="margin-top:18px">
+        <div class="box"><b>Your iPhone</b><span>Vital reads the Health data you approve</span></div>
+        <div class="box"><b>Your server</b><span>Daily summaries, stored where you decide</span></div>
+        <div class="box"><b>Your Claude</b><span>Reads it and answers your questions</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><b>Install Vital and allow what you're comfortable with.</b> iOS asks about each kind of
+          data separately — sleep, heart, workouts — and you can decline any of them.</li>
+        <li><b>Press Send once.</b> It uploads your history, then keeps itself current: every time
+          you open the app, plus quietly in the background. Nothing to remember.</li>
+        <li><b>Paste one link into claude.ai.</b> Settings → Connectors → Add custom connector.
+          After that you just ask.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Things people actually ask it</h2>
+      <ul class="asks">
+        <li>How did I sleep this week compared to last?</li>
+        <li>Am I recovered enough to train hard today?</li>
+        <li>My HRV has been dropping — when did that start?</li>
+        <li>What happened to my resting heart rate after I got ill?</li>
+        <li>Which workouts left me most wrecked the next morning?</li>
+      </ul>
+      <p style="margin-top:14px">
+        Vital also computes a recovery score and a training-load score, both measured against
+        <em>your own</em> 42-day baseline rather than a population average — because a resting heart
+        rate of 48 means something different for you than for anyone else.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Where your data actually goes</h2>
+      <ul class="plain">
+        <li><b>To your server, not ours.</b> There is no company behind this holding your health
+          records. The server is yours; we can't read it and nobody is selling anything.</li>
+        <li><b>Two links, both yours.</b> One lets your phone write data in; the other lets your
+          Claude read it. Nothing else on the internet can reach your data.</li>
+        <li><b>Vital never writes to Apple Health.</b> It only reads, and only what you approved.</li>
+        <li><b>Daily summaries, not raw samples.</b> Roughly nine numbers a day — enough for real
+          answers, far less than a copy of everything.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>What you need</h2>
+      <ul class="plain req">
+        <li>An iPhone with Apple Health (the data you already have — nothing new to track).</li>
+        <li>A paid claude.ai plan, since custom connectors need one.</li>
+        <li>An invite: Vital is in TestFlight while we polish it, so it isn't in the App Store yet.</li>
+      </ul>
+    </div>
+
+    <div class="card hero" style="padding-top:36px">
+      <h2 style="font-size:22px">Your data has been sitting there for years.</h2>
+      <p class="lede" style="font-size:15.5px">Give it something to say.</p>
+      <a class="cta" href="/join">Create your Vital →</a>
+    </div>
+
+    <p class="fineprint">
+      Vital is a family-built project, not a medical device. Its scores are estimates from your own
+      data and are not medical advice — if something worries you, talk to a doctor.<br />
+      Already set up? <a href="/health">Check your server's status</a>.
+    </p>
+
+  </div>
+</body>
+</html>

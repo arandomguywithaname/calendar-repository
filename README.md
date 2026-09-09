@@ -2,6 +2,11 @@
 
 An AI-powered agent that parses natural language (or images) into Google Calendar events using Claude.
 
+Also included: an **[Apple Health → Claude connector](APPLE_HEALTH.md)** — an MCP server that gives
+Claude access to your Apple Health data (sleep, HRV, heart rate, workouts, activity), with recovery
+and exertion estimates computed from it. See [APPLE_HEALTH.md](APPLE_HEALTH.md) for setup — and
+[`ios/Vital/`](ios/Vital/README.md) for **Vital**, the family's own iPhone app that feeds it.
+
 ## Example
 
 ```
@@ -55,7 +60,14 @@ Edit `contacts.json` to map @mentions to email addresses:
 ### 4. Run
 
 ```bash
-npm run dev
+npm run dev        # compiles and starts the web app + Apple Health connector at http://localhost:3000
+```
+
+All of these work in Windows Command Prompt, PowerShell, and bash alike. Other ways to run:
+
+```bash
+npm run build && npm start   # compile once, then run with plain node (what the Dockerfile/Fly.io use)
+npm run dev:cli              # the interactive command-line agent instead of the web app
 ```
 
 ## Features
@@ -76,4 +88,11 @@ src/
   parser.ts    — Claude API integration for NL/image → structured event
   calendar.ts  — Google Calendar API integration
   index.ts     — CLI entrypoint
+  server.ts    — Express web server (also mounts the Apple Health connector)
+  health/      — Apple Health → Claude connector (MCP server, see APPLE_HEALTH.md)
+    ingest.ts  — parses Health Auto Export payloads
+    metrics.ts — recovery/exertion estimates from personal baselines
+    mcp.ts     — the MCP tools Claude calls
+    router.ts  — /api/health/ingest + /mcp endpoints
+    stdio.ts   — local stdio entry for Claude Desktop
 ```
