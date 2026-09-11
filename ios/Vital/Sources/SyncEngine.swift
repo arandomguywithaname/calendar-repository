@@ -1,4 +1,5 @@
 import Foundation
+import HealthKit
 
 /// One place that performs a sync, whoever asks: the big button, the
 /// automatic on-open refresh, or the background task.
@@ -30,6 +31,17 @@ enum SyncEngine {
                     + "& Devices → Vital and switch on what you're happy to share.")
             }
             return await Uploader.send(payload: payload)
+        } catch let error as NSError where error.domain == HKError.errorDomain
+            && error.code == HKError.errorDatabaseInaccessible.rawValue {
+            // Not a fault, and nothing the person can act on: HealthKit is
+            // encrypted and stops being readable about ten minutes after the
+            // phone locks, until the next unlock. Background refresh lands in
+            // that window routinely. Leave the last real result on screen
+            // instead of replacing it with an error about a locked phone.
+            return Uploader.Result(
+                ok: false,
+                message: "Phone was locked, so Health data was sealed. Will try again later."
+            )
         } catch {
             return record("Health access problem: \(error.localizedDescription)")
         }

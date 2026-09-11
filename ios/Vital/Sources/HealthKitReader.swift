@@ -60,13 +60,19 @@ final class HealthKitReader {
         }
 
         // Daily sums (count-style metrics).
-        let summed: [(HKQuantityTypeIdentifier, String, String, HKUnit)] = [
-            (.activeEnergyBurned, "active_energy", "kcal", HKUnit.kilocalorie()),
-            (.stepCount, "step_count", "steps", HKUnit.count()),
+        // The last element says how to round: steps are counted things and come
+        // back from HealthKit as floats often enough to matter (11623.858733),
+        // which reads back as "11,623.86 steps". Energy needs one decimal, not six.
+        let summed: [(HKQuantityTypeIdentifier, String, String, HKUnit, Bool)] = [
+            (.activeEnergyBurned, "active_energy", "kcal", HKUnit.kilocalorie(), false),
+            (.stepCount, "step_count", "steps", HKUnit.count(), true),
         ]
-        for (identifier, name, units, unit) in summed {
+        for (identifier, name, units, unit, whole) in summed {
             let rows = try await dailyStats(identifier, .cumulativeSum, unit, from: startDate, to: endDate) { stats in
-                stats.sumQuantity().map { ["qty": $0.doubleValue(for: unit)] }
+                stats.sumQuantity().map { q in
+                    let v = q.doubleValue(for: unit)
+                    return ["qty": whole ? v.rounded() : (v * 10).rounded() / 10]
+                }
             }
             if !rows.isEmpty { metrics.append(Payload.metric(name: name, units: units, rows: rows)) }
         }
@@ -125,6 +131,44 @@ final class HealthKitReader {
         return rows
     }
 
+    // MARK: - Reading long histories
+
+    /// Splits a date range into windows to read one at a time.
+    ///
+    /// The statistics queries above hand back one aggregate per day whatever
+    /// the range, but the three sample queries below hand back every sample.
+    /// Over "All" — twelve years — that is tens of thousands of objects alive
+    /// at once, and the sleep grouping then holds every one of them in nested
+    /// dictionaries while it works. A phone kills an app that asks for that
+    /// much, with no crash the person can see: the app simply disappears.
+    ///
+    /// Each window starts a day before the last one ended, so a night that
+    /// straddles a seam is seen whole by the later window. Rows are keyed by
+    /// date afterwards, so seeing a day twice is harmless.
+    private static func windows(from: Date, to: Date, days: Int = 60) -> [(start: Date, end: Date)] {
+        guard from < to else { return [] }
+        let step = TimeInterval(days * 86_400)
+        let overlap = TimeInterval(86_400)
+        var out: [(start: Date, end: Date)] = []
+        var cursor = from
+        while cursor < to {
+            let end = min(cursor.addingTimeInterval(step), to)
+            out.append((start: max(from, cursor.addingTimeInterval(-overlap)), end: end))
+            cursor = end
+        }
+        return out
+    }
+
+    /// Merge rows from several windows, keeping one per date.
+    private static func mergedByDate(_ rows: [[String: Any]]) -> [[String: Any]] {
+        var byDate: [String: [String: Any]] = [:]
+        for row in rows {
+            guard let key = row["date"] as? String else { continue }
+            byDate[key] = row
+        }
+        return byDate.keys.sorted().compactMap { byDate[$0] }
+    }
+
     // MARK: - Heart rate variability
 
     /// HRV as the median of one device's overnight readings.
@@ -137,6 +181,14 @@ final class HealthKitReader {
     /// device, readings taken at night, and the median rather than the mean,
     /// because a single startled reading should not move the number.
     private func hrvRows(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
+        var rows: [[String: Any]] = []
+        for window in Self.windows(from: startDate, to: endDate) {
+            rows += try await hrvRowsIn(from: window.start, to: window.end)
+        }
+        return Self.mergedByDate(rows)
+    }
+
+    private func hrvRowsIn(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
         let type = HKQuantityType(.heartRateVariabilitySDNN)
         let unit = HKUnit.secondUnit(with: .milli)
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
@@ -203,6 +255,16 @@ final class HealthKitReader {
     }()
 
     private func sleepMetric(from startDate: Date, to endDate: Date) async throws -> [String: Any]? {
+        var rows: [[String: Any]] = []
+        for window in Self.windows(from: startDate, to: endDate) {
+            rows += try await sleepRowsIn(from: window.start, to: window.end)
+        }
+        let merged = Self.mergedByDate(rows)
+        guard !merged.isEmpty else { return nil }
+        return Payload.metric(name: "sleep_analysis", units: "hr", rows: merged)
+    }
+
+    private func sleepRowsIn(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
         let type = HKCategoryType(.sleepAnalysis)
         let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
         let descriptor = HKSampleQueryDescriptor(
@@ -210,7 +272,7 @@ final class HealthKitReader {
             sortDescriptors: [SortDescriptor(\.startDate)]
         )
         let samples = try await descriptor.result(for: store)
-        guard !samples.isEmpty else { return nil }
+        guard !samples.isEmpty else { return [] }
 
         // An iPhone and an Apple Watch both record the same night, so adding up
         // every sample counts those hours twice — 15 hours of sleep instead of 7.
@@ -249,8 +311,7 @@ final class HealthKitReader {
             if let e = night.end { row["sleepEnd"] = Payload.date(e) }
             rows.append(row)
         }
-        guard !rows.isEmpty else { return nil }
-        return Payload.metric(name: "sleep_analysis", units: "hr", rows: rows)
+        return rows
     }
 
     /// Totals for one device's samples. Overlapping stretches of the same stage
@@ -300,6 +361,20 @@ final class HealthKitReader {
     // MARK: - Workouts
 
     private func workoutRows(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
+        var seen = Set<String>()
+        var rows: [[String: Any]] = []
+        for window in Self.windows(from: startDate, to: endDate) {
+            for row in try await workoutRowsIn(from: window.start, to: window.end) {
+                // The windows overlap by a day, so a workout near a seam is
+                // read twice. Its uuid is stable, so keep the first.
+                guard let id = row["id"] as? String, seen.insert(id).inserted else { continue }
+                rows.append(row)
+            }
+        }
+        return rows
+    }
+
+    private func workoutRowsIn(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
         let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
         let descriptor = HKSampleQueryDescriptor(
             predicates: [HKSamplePredicate.workout(datePredicate)],

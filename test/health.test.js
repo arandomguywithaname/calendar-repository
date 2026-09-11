@@ -11,7 +11,7 @@ const assert = require("assert");
 const { ingestPayload, parseStamp } = require("../dist/health/ingest");
 const { emptyStore } = require("../dist/health/store");
 const { computeRecovery, computeExertion, exertionScore } = require("../dist/health/metrics");
-const { noRecoveryReason } = require("../dist/health/mcp");
+const { noRecoveryReason, isPartial, freshness } = require("../dist/health/mcp");
 
 let passed = 0;
 const failures = [];
@@ -278,6 +278,43 @@ test("a real day of training is reported alongside its raw load", () => {
   const e = computeExertion(store, "2026-09-09");
   assert.ok(e.trainingLoad > 0, "the raw load must stay visible next to the score");
   assert.ok(e.score > 0 && e.score <= 10);
+});
+
+group("freshness and partial days survive timezones");
+
+function storeAt(dates, updatedAt) {
+  const store = emptyStore();
+  for (const d of dates) store.days[d] = { date: d, workouts: [], other: {} };
+  store.updatedAt = updatedAt;
+  return store;
+}
+
+test("the newest day on record is the partial one", () => {
+  const store = storeAt(["2026-09-07", "2026-09-08", "2026-09-09"], "2026-09-09T10:00:00.000Z");
+  assert.strictEqual(isPartial(store, "2026-09-09"), true);
+  assert.strictEqual(isPartial(store, "2026-09-08"), false);
+});
+
+test("a user west of Greenwich still gets today flagged", () => {
+  // 18:00 on the 9th in California is 02:00 UTC on the 10th. Comparing the
+  // stored date against the server's UTC date said "2026-09-09 >= 2026-09-10"
+  // — false — and reported a day still being lived as complete.
+  const store = storeAt(["2026-09-08", "2026-09-09"], "2026-09-10T02:00:00.000Z");
+  assert.strictEqual(isPartial(store, "2026-09-09"), true, "today must not read as a finished day");
+});
+
+test("data older than a day says so out loud", () => {
+  const old = freshness(storeAt(["2026-09-01"], new Date(Date.now() - 4 * 86400000).toISOString()));
+  assert.ok(old.staleNote && /day\(s\) ago/.test(old.staleNote), "four-day-old data must carry a warning");
+  const fresh = freshness(storeAt(["2026-09-09"], new Date(Date.now() - 3600000).toISOString()));
+  assert.strictEqual(fresh.staleNote, undefined, "an hour old is not stale");
+  assert.strictEqual(fresh.syncedHoursAgo, 1);
+});
+
+test("a store that never synced does not invent a timestamp", () => {
+  const s = freshness(emptyStore());
+  assert.strictEqual(s.dataAsOf, null);
+  assert.strictEqual(s.staleNote, undefined);
 });
 
 console.log(

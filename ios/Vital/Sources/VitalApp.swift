@@ -12,6 +12,8 @@ import Foundation
 ///  2. Bonus: a background refresh task asks iOS to wake the app between
 ///     opens. iOS decides the actual timing (typically a few times a day),
 ///     so this is best-effort by design — Apple's rules, not ours.
+///  3. Bonus: HealthKit wakes the app itself when a watch writes something
+///     new (see HealthObserver), which usually beats both of the above.
 @main
 struct VitalApp: App {
     static let refreshTaskID = "app.vital.refresh"
@@ -24,6 +26,11 @@ struct VitalApp: App {
             }
             Self.handleRefresh(refresh)
         }
+        // Registered here rather than on first screen: iOS launches the app in
+        // the background to deliver a HealthKit update, and the observer has to
+        // already exist at that moment or the delivery is dropped. init() runs
+        // on those launches; a view's onAppear does not.
+        HealthObserver.start()
     }
 
     // Note: scene-phase watching lives in ContentView (View.onChange), because
