@@ -7,6 +7,12 @@ Claude access to your Apple Health data (sleep, HRV, heart rate, workouts, activ
 and exertion estimates computed from it. See [APPLE_HEALTH.md](APPLE_HEALTH.md) for setup — and
 [`ios/Vital/`](ios/Vital/README.md) for **Vital**, the family's own iPhone app that feeds it.
 
+Also included: a **[Browser → Claude connector](BROWSER.md)** — an MCP server that lets Claude use
+your own Chrome, so it can work with shops and sites that have no API (Amazon, Decathlon, order
+histories, booking pages). It does **not** bypass CAPTCHAs: when a challenge, login or 2FA prompt
+appears it hands the window to you, waits while you clear it, and carries on. It also refuses to
+press the button that pays. See [BROWSER.md](BROWSER.md) for setup.
+
 ## Example
 
 ```
@@ -80,6 +86,10 @@ npm run dev:cli              # the interactive command-line agent instead of the
 - **Recurrence** — supports recurring events (e.g., "every Tuesday")
 - **Reminders** — configurable email/popup reminders
 
+Plus two connectors that give Claude access to things it otherwise cannot reach:
+**[Apple Health](APPLE_HEALTH.md)** (your health data) and **[the browser](BROWSER.md)**
+(shops and other sites with no API).
+
 ## Architecture
 
 ```
@@ -95,4 +105,10 @@ src/
     mcp.ts     — the MCP tools Claude calls
     router.ts  — /api/health/ingest + /mcp endpoints
     stdio.ts   — local stdio entry for Claude Desktop
+  browser/     — Browser → Claude connector (MCP server, see BROWSER.md)
+    guards.ts  — CAPTCHA/login/bot-wall detection and the purchase guard
+    session.ts — attaches to your Chrome, or launches its own profile
+    snapshot.ts— page reading, element refs, product extraction
+    mcp.ts     — the MCP tools Claude calls
+    stdio.ts   — local stdio entry (must run on the machine with the screen)
 ```
