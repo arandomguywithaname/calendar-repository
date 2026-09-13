@@ -39,12 +39,23 @@ enum HealthObserver {
     private static var queries: [HKObserverQuery] = []
     private static let gate = SyncGate()
 
-    /// Call once per launch, as early as possible — including the launches iOS
-    /// performs in the background specifically to deliver an update.
+    /// Call at every launch, as early as possible — including the launches iOS
+    /// performs in the background specifically to deliver an update — and again
+    /// once setup finishes.
+    ///
+    /// Safe to call repeatedly. The observers are registered once, but the
+    /// background-delivery request is re-sent each time: at first launch it is
+    /// refused, because Health access has not been granted yet. That grant only
+    /// happens later, during the first sync.
     static func start() {
-        guard HKHealthStore.isHealthDataAvailable(), queries.isEmpty else { return }
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        let needsObservers = queries.isEmpty
 
         for type in watched {
+            guard needsObservers else {
+                store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
+                continue
+            }
             let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completionHandler, error in
                 // Even on error: iOS reads a missing completionHandler as the
                 // app having failed to cope, and stops delivering to it.

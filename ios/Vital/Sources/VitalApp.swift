@@ -31,6 +31,11 @@ struct VitalApp: App {
         // already exist at that moment or the delivery is dropped. init() runs
         // on those launches; a view's onAppear does not.
         HealthObserver.start()
+        // Arm the background refresh on every launch, not only when the app is
+        // next backgrounded. A pending request does not survive a force-quit,
+        // and someone who sets Vital up and then swipes it away would have had
+        // nothing scheduled at all — the very case this is meant to cover.
+        if Uploader.isConfigured { Self.scheduleRefresh() }
     }
 
     // Note: scene-phase watching lives in ContentView (View.onChange), because

@@ -6,9 +6,11 @@ import HealthKit
 enum SyncEngine {
     static let reader = HealthKitReader()
 
-    /// Auto-sync policy: worth syncing if configured and the last send is
-    /// older than this. Keeps app-open refreshes from spamming the server.
-    static let autoSyncInterval: TimeInterval = 4 * 3600
+    /// How stale the data has to be before an automatic sync is worth doing.
+    /// Also what the background task asks iOS for. Two hours: often enough
+    /// that a night's sleep is on the server by breakfast, rare enough that
+    /// iOS keeps granting the wake-ups.
+    static let autoSyncInterval: TimeInterval = 2 * 3600
 
     static var isDue: Bool {
         guard Uploader.isConfigured else { return false }

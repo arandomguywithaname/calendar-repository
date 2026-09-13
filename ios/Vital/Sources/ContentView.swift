@@ -155,6 +155,14 @@ struct ContentView: View {
         lastSync = Uploader.lastSync
         lastMessage = Uploader.lastMessage
         lastOK = Uploader.lastOK
+        // Connecting is the moment the automatic side has to start, and both
+        // halves of it need arming here. The background refresh was previously
+        // only requested when the app was next backgrounded; and HealthKit
+        // background delivery asked for at launch was refused, because nobody
+        // had granted Health access yet — that happens during this first sync.
+        // Without these two lines, "connect once and forget" quietly wasn't.
+        VitalApp.scheduleRefresh()
+        HealthObserver.start()
         autoSyncIfDue()
     }
 
