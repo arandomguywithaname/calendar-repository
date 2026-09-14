@@ -1,0 +1,36 @@
+# Fly.io config for your personal Hands backend. Edit `app` to a unique name.
+app = "hands-CHANGEME"
+primary_region = "mad"          # pick one near you: mad, lhr, ams, iad, sjc…
+
+[build]
+
+[env]
+  HANDS_PORT = "8080"
+  HANDS_ROBOTS = "warn"         # off | warn | enforce
+  HANDS_MIN_GAP = "15"
+  HANDS_PER_DOMAIN_PER_HOUR = "30"
+  HANDS_GLOBAL_PER_HOUR = "90"
+  # HANDS_ALLOW_DOMAINS = "amazon.es amazon.com"   # uncomment to restrict to sites you name
+  # HANDS_LOCALE = "es-ES"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"    # stay up so scheduled checks can run
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.checks]
+    [http_service.checks.health]
+      method = "get"
+      path = "/health"
+      interval = "30s"
+      timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb"             # Chromium wants ~1 GB; bump to 2048 if pages are heavy
+
+[[mounts]]
+  source = "hands_data"          # persists the SQLite history + saved recipes
+  destination = "/data"
