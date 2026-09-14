@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from hands.browser import detect_block  # noqa: E402
+from hands.policy import detect_block  # noqa: E402
 from hands.extract import extract, jsonld_products, readable  # noqa: E402
 from hands.parse import parse_price  # noqa: E402
 

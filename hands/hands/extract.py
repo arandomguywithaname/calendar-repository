@@ -1,9 +1,11 @@
 """
-Turning HTML into plain data, three ways:
+Turning HTML into plain data:
 
-  readable(html)            -> title, text (markdown-ish), links   — for any page
+  readable(html)            -> title, text (markdown-ish), links   — for any page (the `read` tool)
   extract(html, schema)     -> records by CSS selectors            — for any page, no code
-  jsonld_products(html)     -> schema.org Product/Offer data       — most shops publish this
+  jsonld_products(html)     -> v0.2's flat Product list. Superseded by structured.extract_product,
+                               which also reads microdata and OpenGraph and normalises the fields;
+                               kept so existing callers and tests keep working.
 """
 
 from __future__ import annotations
