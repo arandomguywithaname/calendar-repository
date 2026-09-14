@@ -9,8 +9,20 @@ a structured calendar event via the Claude API, then creates that event in Googl
 Calendar. There are two front doors over the same core — an interactive CLI and a
 small Express web app.
 
-TypeScript, CommonJS, compiled with `tsc` to `dist/`. No framework, no test runner,
-no linter, no CI.
+It has since grown two **Claude connectors** (MCP servers) that share the same build:
+`src/health/` (Apple Health data, see APPLE_HEALTH.md) and `src/browser/` (drives the user's own
+browser so Claude can use sites with no API, see BROWSER.md).
+
+TypeScript, CommonJS, compiled with `tsc` to `dist/`. No framework and no linter. Tests are plain
+Node scripts under `test/`, run by `npm test` and by the `Tests` GitHub workflow.
+
+**`hands/` is a separate project that happens to live in this repository:** a Python MCP server
+("Hands") that reads public shop pages over plain HTTP and returns structured product data. It has
+its own `README.md`, `CLOUD.md`, `Dockerfile`, `fly.toml`, `requirements.txt`, venv and pytest suite,
+and its own Fly.io app. Nothing in `src/` imports it and `npm test` does not run it. Work on it from
+inside `hands/` (`cd hands && .venv/bin/pytest -q`); do not merge its Dockerfile or fly.toml with the
+root ones. Its principles (public pages only, honest User-Agent, stop on a block, no browser, no
+per-shop code) are in `hands/README.md` and are not up for relaxing.
 
 ## Layout
 
@@ -21,8 +33,29 @@ src/
   calendar.ts  Google Calendar API: CalendarEvent -> created event
   index.ts     CLI entrypoint (readline prompts, confirm, create)
   server.ts    Express entrypoint: static /public + POST /api/parse, POST /api/create
+  health/      Apple Health -> Claude connector (see APPLE_HEALTH.md)
+    ingest.ts    parses Health Auto Export payloads into the store
+    metrics.ts   recovery/exertion estimates from personal baselines
+    store.ts     the JSON store on disk (DATA_DIR)
+    mcp.ts       the MCP tools
+    router.ts    /api/health/ingest + the /mcp endpoint, mounted by server.ts
+    stdio.ts     local stdio entry
+  browser/     Browser -> Claude connector (see BROWSER.md)
+    guards.ts    CAPTCHA/bot-wall/login detection + the purchase guard (pure, tested)
+    session.ts   attaches to the user's Chrome over CDP, or launches its own profile
+    snapshot.ts  page reading, data-cc-ref element refs, structured-data product extraction
+    mcp.ts       the MCP tools
+    stdio.ts     local stdio entry (must run on the machine with the screen)
+    identity.ts  }  agent identity (Web Bot Auth request signing), the principal's
+    mandate.ts   }  delegation record, and robots.txt. WRITTEN BUT NOT WIRED UP —
+    robots.ts    }  nothing imports these three yet. See BROWSER.md "Agent identity".
 public/
   index.html   Entire frontend — markup, CSS, and vanilla JS in one file (no build step)
+test/          Plain-node tests: health.test.js, browser.test.js (npm test)
+hands/         Hands — Python MCP server, its own project (see hands/README.md); pytest, not npm test
+  hands/         fetch.py policy.py structured.py extract.py parse.py store.py server.py
+  tests/         pytest suite, offline; fixtures/ holds the HTML cases
+  Dockerfile, fly.toml, requirements.txt — for the Hands Fly app, NOT the calendar app's
 contacts.json  @mention -> email map, committed at repo root
 .env.example   Template for the required secrets (.env itself is gitignored)
 tsconfig.json  strict: true, target es2020, module commonjs, rootDir src -> outDir dist
@@ -52,14 +85,18 @@ npm run web         # tsc && node dist/server.js  (web UI on :3000, recompiles f
 npm run start       # node dist/index.js          (no recompile)
 npm run web:start   # node dist/server.js         (no recompile)
 npx tsc --noEmit    # typecheck only
+npm test            # tsc + the health and browser rule tests (plain node, no framework)
+npm run browser:setup  # installs Playwright + Chromium, for the browser connector only
+npm run mcp:browser    # runs the browser connector on stdio
 ```
 
 `npm run dev` and `npm run web` compile before running, so there is no watch mode —
 restart after every edit. `PORT` overrides the web server's default 3000.
 
-There are **no tests and no lint config**. The only automated check available is
-`npx tsc --noEmit`; run it before committing. Do not add a test runner, linter, or CI
-workflow unless asked.
+There is **no lint config**. Tests are plain Node scripts under `test/` with no framework —
+`npm test` compiles first, so a type error fails there too. Run it before committing, and add
+cases to the existing files rather than introducing a test runner. Do not add a linter or a new
+CI workflow unless asked.
 
 ## Environment
 
@@ -116,6 +153,26 @@ no Meet link.
 **Optional fields go out as `undefined`, never `null`.** Empty arrays and empty strings
 are normalized to `undefined` before being handed to the Google API. Follow that pattern
 for any new field.
+
+**The browser connector never defeats a challenge.** `src/browser/` drives a real, visible
+browser and hands CAPTCHAs, bot walls, logins and one-time codes to the human at the keyboard.
+Do not add a solver service, a stealth/anti-detection plugin, fingerprint or user-agent spoofing,
+proxy rotation, or a headless mode — every one of those turns an assistive tool into an evasion
+tool, and the design depends on a person being present. The rules and the reasoning live at the
+top of `src/browser/guards.ts`; the tests in `test/browser.test.js` pin them down.
+
+**Purchases are guarded, not blocked by accident.** `isPurchaseControl()` refuses clicks on
+order/payment buttons in six languages. If you add a shop in a new language, add its checkout
+wording there and a case to the test — a missed phrase means Claude can spend someone's money.
+
+**Playwright is not a dependency.** `src/browser/session.ts` lazily `require`s it and explains how
+to install it if missing. Keep it out of `package.json` — the Docker image and the Fly.io deploy
+must not pull a browser. `npm run browser:setup` installs it on a developer's machine.
+
+**Element refs are per-snapshot.** `snapshot.ts` tags the DOM with `data-cc-ref="e12"` and clears
+the tags on the next snapshot. Anything that navigates or re-renders invalidates every ref; the
+tool descriptions tell Claude to re-snapshot, and the click/type tools return a clear error
+rather than acting on the wrong element.
 
 **`public/index.html` is hand-written and self-contained.** No bundler, no npm
 dependency, no framework — plain `fetch`, `FormData`, and `innerHTML`. Keep it that way.

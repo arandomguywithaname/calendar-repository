@@ -1,0 +1,15 @@
+{
+  "name": "amazon-search",
+  "note": "Amazon results page. Fetch https://www.amazon.<tld>/s?k=<query> then extract with this recipe.",
+  "saved_at": 0,
+  "items": "div[data-component-type=\"s-search-result\"]",
+  "fields": {
+    "asin": {"css": "", "attr": "data-asin"},
+    "title": {"css": "h2 a span"},
+    "url": {"css": "h2 a", "attr": "href"},
+    "price": {"css": "span.a-price:not(.a-text-price) span.a-offscreen", "type": "price"},
+    "list_price": {"css": "span.a-price.a-text-price span.a-offscreen", "type": "price"},
+    "rating": {"css": "span.a-icon-alt", "type": "rating"},
+    "reviews": {"css": "span.a-size-base.s-underline-text", "type": "int"}
+  }
+}
