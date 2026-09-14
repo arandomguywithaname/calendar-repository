@@ -16,6 +16,14 @@ browser so Claude can use sites with no API, see BROWSER.md).
 TypeScript, CommonJS, compiled with `tsc` to `dist/`. No framework and no linter. Tests are plain
 Node scripts under `test/`, run by `npm test` and by the `Tests` GitHub workflow.
 
+**`hands/` is a separate project that happens to live in this repository:** a Python MCP server
+("Hands") that reads public shop pages over plain HTTP and returns structured product data. It has
+its own `README.md`, `CLOUD.md`, `Dockerfile`, `fly.toml`, `requirements.txt`, venv and pytest suite,
+and its own Fly.io app. Nothing in `src/` imports it and `npm test` does not run it. Work on it from
+inside `hands/` (`cd hands && .venv/bin/pytest -q`); do not merge its Dockerfile or fly.toml with the
+root ones. Its principles (public pages only, honest User-Agent, stop on a block, no browser, no
+per-shop code) are in `hands/README.md` and are not up for relaxing.
+
 ## Layout
 
 ```
@@ -44,6 +52,10 @@ src/
 public/
   index.html   Entire frontend — markup, CSS, and vanilla JS in one file (no build step)
 test/          Plain-node tests: health.test.js, browser.test.js (npm test)
+hands/         Hands — Python MCP server, its own project (see hands/README.md); pytest, not npm test
+  hands/         fetch.py policy.py structured.py extract.py parse.py store.py server.py
+  tests/         pytest suite, offline; fixtures/ holds the HTML cases
+  Dockerfile, fly.toml, requirements.txt — for the Hands Fly app, NOT the calendar app's
 contacts.json  @mention -> email map, committed at repo root
 .env.example   Template for the required secrets (.env itself is gitignored)
 tsconfig.json  strict: true, target es2020, module commonjs, rootDir src -> outDir dist

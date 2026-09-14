@@ -10,6 +10,7 @@ primary_region = "mad"          # pick one near you: mad, lhr, ams, iad, sjc…
   HANDS_MIN_GAP = "15"
   HANDS_PER_DOMAIN_PER_HOUR = "30"
   HANDS_GLOBAL_PER_HOUR = "90"
+  HANDS_CACHE_TTL = "600"
   # HANDS_ALLOW_DOMAINS = "amazon.es amazon.com"   # uncomment to restrict to sites you name
   # HANDS_LOCALE = "es-ES"
 
@@ -29,7 +30,7 @@ primary_region = "mad"          # pick one near you: mad, lhr, ams, iad, sjc…
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "1024mb"             # Chromium wants ~1 GB; bump to 2048 if pages are heavy
+  memory = "512mb"              # no Chromium any more; 512 MB is plenty
 
 [[mounts]]
   source = "hands_data"          # persists the SQLite history + saved recipes
