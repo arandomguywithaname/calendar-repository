@@ -202,6 +202,36 @@ connector that will help you do that, and getting caught trying usually means a 
 **Prices look wrong** — `browser_extract_products` reads the site's structured data, which is
 occasionally stale or excludes delivery. For anything you are about to pay for, check the page.
 
+## Agent identity — built, not connected
+
+`src/browser/identity.ts`, `mandate.ts` and `robots.ts` are a start on a different question:
+not "how do I get past the door" but **"how does an agent say who sent it"**.
+
+- `identity.ts` implements [Web Bot Auth](https://blog.cloudflare.com/web-bot-auth/) — an Ed25519
+  key, a JWK thumbprint as the key id, and RFC 9421 HTTP Message Signatures, so a request can
+  carry `Signature-Agent` / `Signature-Input` / `Signature` headers a site can verify. It also
+  produces the JWKS to publish at `/.well-known/http-message-signatures-directory`.
+- `mandate.ts` is the delegation half: a compact JWS signed by *your* key saying "I authorised
+  this agent key, for these hosts, for this purpose, until this date". `Agent-Mandate` is this
+  project's own header, not a standard, and your key is self-asserted — it proves the same person
+  authorised the agent across sessions, not who that person is.
+- `robots.ts` exists so the mandate's `respectsRobotsTxt: true` is a checked fact, not a claim.
+
+**Nothing imports these yet.** The code that would attach the headers to real requests is not
+written into `session.ts`, so today this changes nothing about how the connector behaves.
+
+Two honest reasons it stopped there. First, attaching headers means intercepting and rewriting the
+browser's outbound requests, which is the same primitive whether you are adding a signature or
+forging one — worth being deliberate about. Second and more important: **almost nobody verifies
+these yet.** A signature only means something where a site or its CDN has chosen to check your
+specific key, which in practice means an allowlist you have to be admitted to. A key you generated
+locally is not on one. The credential is real; the lock it fits is mostly not installed.
+
+One thing worth keeping from the attempt: an earlier draft also appended an honest product token
+to the browser's User-Agent. That was dropped on purpose. Identity belongs in something a site can
+verify, not in a string anyone can type — and any code that rewrites the User-Agent is
+indistinguishable from the spoofing this project refuses to do. Don't add it back.
+
 ## Deliberately not included
 
 No CAPTCHA-solving service. No stealth or anti-detection plugin. No fingerprint, user-agent or

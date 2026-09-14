@@ -38,6 +38,9 @@ src/
     snapshot.ts  page reading, data-cc-ref element refs, structured-data product extraction
     mcp.ts       the MCP tools
     stdio.ts     local stdio entry (must run on the machine with the screen)
+    identity.ts  }  agent identity (Web Bot Auth request signing), the principal's
+    mandate.ts   }  delegation record, and robots.txt. WRITTEN BUT NOT WIRED UP —
+    robots.ts    }  nothing imports these three yet. See BROWSER.md "Agent identity".
 public/
   index.html   Entire frontend — markup, CSS, and vanilla JS in one file (no build step)
 test/          Plain-node tests: health.test.js, browser.test.js (npm test)
