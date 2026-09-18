@@ -133,9 +133,10 @@ final class HealthKitReader {
 
     /// The earliest date HealthKit will answer for. Asking it beats the old
     /// hardcoded September 2014: it is the real floor, and it stays right if
-    /// Apple ever moves it.
+    /// Apple ever moves it. An instance method, not a class one — the compiler
+    /// had to point that out.
     var earliestDate: Date {
-        HKHealthStore.earliestPermittedSampleDate()
+        store.earliestPermittedSampleDate()
     }
 
     func requestPermission() async throws {
