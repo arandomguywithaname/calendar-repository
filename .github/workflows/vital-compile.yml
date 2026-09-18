@@ -16,11 +16,13 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/vital-compile.yml"
-  pull_request:
-    paths:
-      - "ios/**"
-      - ".github/workflows/vital-compile.yml"
   workflow_dispatch:
+
+# Deliberately no `pull_request:` trigger. It would build the merge commit as
+# well as the branch, so every push to a branch with a PR open would rent two
+# Mac runners instead of one — and macOS minutes bill at ten times the Linux
+# rate. The branch build is what matters here; base drifting underneath is what
+# the merge-conflict notice is for.
 
 # A newer push makes an in-flight run pointless; don't pay a Mac runner for it.
 concurrency:

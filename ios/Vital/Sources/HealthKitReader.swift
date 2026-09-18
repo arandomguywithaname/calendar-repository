@@ -115,6 +115,7 @@ final class HealthKitReader {
             types.insert(HKQuantityType(metric.id))
         }
         types.insert(HKCategoryType(.sleepAnalysis))
+        for event in Self.heartEventTypes { types.insert(HKCategoryType(event.id)) }
         return types
     }
 
@@ -196,8 +197,9 @@ final class HealthKitReader {
         }
 
         let workouts = try await workoutRows(from: startDate, to: endDate)
+        let events = try await heartEventRows(from: startDate, to: endDate)
 
-        return Payload.body(metrics: metrics, workouts: workouts)
+        return Payload.body(metrics: metrics, workouts: workouts, heartEvents: events)
     }
 
     // MARK: - Daily quantity statistics
@@ -527,8 +529,108 @@ final class HealthKitReader {
                 if let v = hr.minimumQuantity() { heartRate["min"] = v.doubleValue(for: bpm) }
                 if !heartRate.isEmpty { row["heartRate"] = heartRate }
             }
+
+            // A workout is one sample, so unlike the aggregated dailies it has
+            // a real answer to "who recorded this, and where" — no de-duplication
+            // stands in the way of saying so.
+            row["source"] = workout.sourceRevision.source.bundleIdentifier
+            if let device = Self.describe(workout.device) { row["device"] = device }
+            if let zone = workout.metadata?[HKMetadataKeyTimeZone] as? String { row["timeZone"] = zone }
+
+            // Laps, pauses and segments: the shape of the session rather than
+            // its totals. Capped, because a long interval session can write
+            // hundreds and nothing downstream needs them all.
+            if let events = workout.workoutEvents, !events.isEmpty {
+                row["segments"] = events.prefix(Self.maxSegments).map { event -> [String: Any] in
+                    var segment: [String: Any] = [
+                        "type": Self.name(for: event.type),
+                        "start": Payload.date(event.dateInterval.start),
+                    ]
+                    if event.dateInterval.duration > 0 {
+                        segment["end"] = Payload.date(event.dateInterval.end)
+                        segment["duration"] = event.dateInterval.duration
+                    }
+                    return segment
+                }
+            }
             return row
         }
+    }
+
+    /// At most this many segments per workout.
+    private static let maxSegments = 200
+
+    /// "Apple Watch (Watch7,1)" — enough to tell two watches apart without
+    /// carrying the whole HKDevice.
+    private static func describe(_ device: HKDevice?) -> String? {
+        guard let device else { return nil }
+        var parts: [String] = []
+        if let name = device.name { parts.append(name) }
+        else if let model = device.model { parts.append(model) }
+        if let hardware = device.hardwareVersion { parts.append("(\(hardware))") }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    private static func name(for type: HKWorkoutEventType) -> String {
+        switch type {
+        case .pause: return "pause"
+        case .resume: return "resume"
+        case .lap: return "lap"
+        case .marker: return "marker"
+        case .motionPaused: return "motionPaused"
+        case .motionResumed: return "motionResumed"
+        case .segment: return "segment"
+        case .pauseOrResumeRequest: return "pauseOrResumeRequest"
+        @unknown default: return "other"
+        }
+    }
+
+    // MARK: - Heart events
+
+    /// The three things a watch raises on its own rather than measuring on a
+    /// schedule. Rare, individually meaningful, and worth a timestamp each —
+    /// a daily average would erase them.
+    private static let heartEventTypes: [(id: HKCategoryTypeIdentifier, name: String)] = [
+        (.highHeartRateEvent, "high_heart_rate"),
+        (.lowHeartRateEvent, "low_heart_rate"),
+        (.irregularHeartRhythmEvent, "irregular_heart_rhythm"),
+    ]
+
+    private func heartEventRows(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        var rows: [[String: Any]] = []
+        var seen = Set<String>()
+        for event in Self.heartEventTypes {
+            for window in Self.windows(from: startDate, to: endDate) {
+                let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end)
+                let descriptor = HKSampleQueryDescriptor(
+                    predicates: [HKSamplePredicate.categorySample(type: HKCategoryType(event.id),
+                                                                 predicate: predicate)],
+                    sortDescriptors: [SortDescriptor(\.startDate)]
+                )
+                for sample in try await descriptor.result(for: store) {
+                    // Windows overlap by a day, so an event near a seam is read
+                    // twice; its uuid is stable.
+                    guard seen.insert(sample.uuid.uuidString).inserted else { continue }
+                    var row: [String: Any] = [
+                        "type": event.name,
+                        "id": sample.uuid.uuidString,
+                        "start": Payload.date(sample.startDate),
+                        "source": sample.sourceRevision.source.bundleIdentifier,
+                    ]
+                    if sample.endDate > sample.startDate { row["end"] = Payload.date(sample.endDate) }
+                    if let device = Self.describe(sample.device) { row["device"] = device }
+                    if let zone = sample.metadata?[HKMetadataKeyTimeZone] as? String { row["timeZone"] = zone }
+                    // The rate the watch was watching for — without it "high"
+                    // is a word rather than a number.
+                    if let threshold = sample.metadata?[HKMetadataKeyHeartRateEventThreshold] as? HKQuantity {
+                        row["thresholdBpm"] = round2(threshold.doubleValue(for: bpm))
+                    }
+                    rows.append(row)
+                }
+            }
+        }
+        return rows.sorted { ($0["start"] as? String ?? "") < ($1["start"] as? String ?? "") }
     }
 
     private static func name(for type: HKWorkoutActivityType) -> String {

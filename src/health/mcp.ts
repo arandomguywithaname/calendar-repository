@@ -135,6 +135,14 @@ function daySummary(slug: string | undefined, dateArg?: string) {
       activeEnergyKcal: day.activeEnergyKcal ?? null,
       workouts: day.workouts,
     },
+    // Everything else synced for this day — body composition, basal energy,
+    // flights, exercise minutes, running form and so on. Without this they
+    // would only be reachable one at a time through get_raw_metric, so a
+    // question like "how was my day" would silently miss most of what was
+    // measured.
+    ...(Object.keys(day.other).length > 0 ? { otherMetrics: day.other } : {}),
+    // Rare enough that listing them costs nothing and omitting one matters.
+    ...(day.heartEvents?.length ? { heartEvents: day.heartEvents } : {}),
   });
 }
 
@@ -206,6 +214,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const counts: Record<string, number> = {};
       const bump = (k: string) => (counts[k] = (counts[k] || 0) + 1);
       let workouts = 0;
+      let heartEvents = 0;
       for (const d of dates) {
         const day = store.days[d];
         if (day.hrvMs !== undefined) bump("hrv");
@@ -216,6 +225,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         if (day.respiratoryRate !== undefined) bump("respiratoryRate");
         if (day.vo2Max !== undefined) bump("vo2Max");
         workouts += day.workouts.length;
+        heartEvents += day.heartEvents?.length ?? 0;
         for (const k of Object.keys(day.other)) bump(`other:${k}`);
       }
       return json({
@@ -224,6 +234,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         lastDate: latestDate(dates),
         lastSync: store.updatedAt ?? null,
         totalWorkouts: workouts,
+        totalHeartEvents: heartEvents,
         daysWithMetric: counts,
         metricUnits: store.units ?? {},
         // Only metrics where one device was deliberately chosen over another

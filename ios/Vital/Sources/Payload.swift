@@ -31,8 +31,11 @@ enum Payload {
     }
 
     /// Wraps everything into the top-level body.
-    static func body(metrics: [[String: Any]], workouts: [[String: Any]]) -> [String: Any] {
-        ["data": ["metrics": metrics, "workouts": workouts]]
+    static func body(metrics: [[String: Any]], workouts: [[String: Any]],
+                     heartEvents: [[String: Any]] = []) -> [String: Any] {
+        var data: [String: Any] = ["metrics": metrics, "workouts": workouts]
+        if !heartEvents.isEmpty { data["heartEvents"] = heartEvents }
+        return ["data": data]
     }
 
     /// True when Health handed back nothing at all. That is exactly what a

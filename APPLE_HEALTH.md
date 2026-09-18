@@ -203,7 +203,15 @@ needs zero changes for it. The contract your app implements:
         { "name": "Outdoor Run", "start": "2026-08-30 17:30:00 +0200",
           "end": "2026-08-30 18:10:00 +0200",
           "activeEnergyBurned": { "qty": 420, "units": "kcal" },
-          "heartRate": { "avg": 151, "max": 174 } }
+          "heartRate": { "avg": 151, "max": 174 },
+          "source": "com.apple.health.WATCH", "device": "Apple Watch (Watch7,1)",
+          "timeZone": "Europe/Riga",
+          "segments": [ { "type": "lap", "start": "2026-08-30 17:40:00 +0200",
+                          "end": "2026-08-30 17:45:00 +0200", "duration": 300 } ] }
+      ],
+      "heartEvents": [
+        { "type": "high_heart_rate", "id": "…", "start": "2026-08-30 14:02:00 +0200",
+          "source": "com.apple.health.WATCH", "thresholdBpm": 120 }
       ]
   } }
   ```
@@ -212,6 +220,15 @@ needs zero changes for it. The contract your app implements:
   re-sending a day simply overwrites it, so the app can always send "everything since a week
   ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
   with their units, and `get_data_status` lists them.
+
+  `heartEvents` is optional — the three things a watch raises on its own
+  (`high_heart_rate`, `low_heart_rate`, `irregular_heart_rhythm`). A payload without the key
+  is a phone with nothing to report or an older build, not a malformed one. Each event keeps
+  its own timestamp rather than being folded into a daily number, and re-sending a range
+  cannot duplicate one: they are replaced by `id`, or by type and timestamp when there is no
+  id. A workout likewise carries `source`, `device`, `timeZone` and its `segments` (laps,
+  pauses), because a workout is a single sample and really does belong to one device and one
+  place — unlike a daily total.
 
   `source` is optional and means "this figure is one device's account, and here is which
   device". Set it only where the sender genuinely chose between devices — a phone and a watch

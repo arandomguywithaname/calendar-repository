@@ -413,6 +413,102 @@ test("a night recorded by one device only lists no rivals", () => {
   assert.strictEqual(sleep.sources, undefined);
 });
 
+group("sample-level detail survives the trip");
+
+test("a workout carries who recorded it, on what, and where", () => {
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: {
+      metrics: [],
+      workouts: [
+        {
+          id: "W1",
+          name: "Outdoor Run",
+          start: "2026-09-01 17:30:00 +0200",
+          end: "2026-09-01 18:10:00 +0200",
+          source: "com.apple.health.WATCH",
+          device: "Apple Watch (Watch7,1)",
+          timeZone: "Europe/Riga",
+          segments: [
+            { type: "lap", start: "2026-09-01 17:35:00 +0200", end: "2026-09-01 17:40:00 +0200", duration: 300 },
+            { type: "pause", start: "2026-09-01 17:50:00 +0200" },
+          ],
+        },
+      ],
+    },
+  });
+  const w = store.days["2026-09-01"].workouts[0];
+  assert.strictEqual(w.source, "com.apple.health.WATCH");
+  assert.strictEqual(w.device, "Apple Watch (Watch7,1)");
+  assert.strictEqual(w.timeZone, "Europe/Riga");
+  assert.strictEqual(w.segments.length, 2);
+  assert.strictEqual(w.segments[0].durationSec, 300);
+  assert.strictEqual(w.segments[1].end, undefined, "an instant event has no end");
+});
+
+/** Ingest heart events and hand back the day they landed on. */
+function withEvents(events) {
+  const store = emptyStore();
+  ingestPayload(store, { data: { metrics: [], workouts: [], heartEvents: events } });
+  return store;
+}
+
+test("a watch-raised heart event keeps its own timestamp and threshold", () => {
+  const store = withEvents([
+    {
+      type: "high_heart_rate",
+      id: "E1",
+      start: "2026-09-01 14:02:00 +0200",
+      source: "com.apple.health.WATCH",
+      thresholdBpm: 120,
+    },
+  ]);
+  const e = store.days["2026-09-01"].heartEvents[0];
+  assert.strictEqual(e.type, "high_heart_rate");
+  assert.strictEqual(e.thresholdBpm, 120);
+  assert.strictEqual(e.start, "2026-09-01 14:02:00 +0200");
+});
+
+test("re-sending a range does not duplicate an event", () => {
+  // Every sync re-reads the last few days, so the same event arrives again and
+  // again. Two identical entries would read as two episodes.
+  const store = emptyStore();
+  const payload = {
+    data: {
+      metrics: [],
+      workouts: [],
+      heartEvents: [{ type: "irregular_heart_rhythm", id: "E9", start: "2026-09-02 03:00:00 +0200" }],
+    },
+  };
+  ingestPayload(store, payload);
+  ingestPayload(store, payload);
+  assert.strictEqual(store.days["2026-09-02"].heartEvents.length, 1);
+});
+
+test("an event with no id still cannot duplicate itself", () => {
+  const store = emptyStore();
+  const payload = {
+    data: {
+      metrics: [],
+      workouts: [],
+      heartEvents: [{ type: "low_heart_rate", start: "2026-09-03 04:00:00 +0200" }],
+    },
+  };
+  ingestPayload(store, payload);
+  ingestPayload(store, payload);
+  assert.strictEqual(store.days["2026-09-03"].heartEvents.length, 1);
+});
+
+test("a payload with no heartEvents is still a valid payload", () => {
+  // Older builds of the app send none, and a phone with nothing to report
+  // sends none either. Neither is malformed.
+  const store = emptyStore();
+  assert.doesNotThrow(() =>
+    ingestPayload(store, { data: { metrics: [], workouts: [{ name: "Walk", start: "2026-09-04 09:00:00 +0200" }] } })
+  );
+  assert.strictEqual(store.days["2026-09-04"].heartEvents, undefined);
+});
+
 console.log(
   "\n" +
     (failures.length === 0

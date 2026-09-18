@@ -7,6 +7,14 @@
  * Claude over MCP, including recovery/exertion estimates computed from it.
  */
 
+/** A lap, pause or segment inside a workout — the shape of the session. */
+export interface WorkoutSegment {
+  type: string; // lap | pause | resume | segment | marker | motionPaused | …
+  start: string;
+  end?: string;
+  durationSec?: number;
+}
+
 /** A single workout session, normalized from Health Auto Export. */
 export interface WorkoutRecord {
   id?: string;
@@ -19,6 +27,32 @@ export interface WorkoutRecord {
   avgHeartRate?: number;
   maxHeartRate?: number;
   elevationUpM?: number;
+  /**
+   * A workout is one sample, so unlike a daily total it really does belong to
+   * one device and one place: who recorded it, on what, and the timezone it
+   * happened in.
+   */
+  source?: string;
+  device?: string;
+  timeZone?: string;
+  segments?: WorkoutSegment[];
+}
+
+/**
+ * Something the watch raised on its own — a high or low heart rate, or an
+ * irregular rhythm. Rare and individually meaningful, so each keeps its own
+ * timestamp instead of being folded into a daily number.
+ */
+export interface HeartEventRecord {
+  type: string; // high_heart_rate | low_heart_rate | irregular_heart_rhythm
+  id?: string;
+  start: string;
+  end?: string;
+  source?: string;
+  device?: string;
+  timeZone?: string;
+  /** The rate the watch was watching for; without it "high" is a word, not a number. */
+  thresholdBpm?: number;
 }
 
 /** One night of sleep, normalized. All durations are in hours. */
@@ -64,6 +98,8 @@ export interface DayRecord {
   steps?: number;
   sleep?: SleepRecord;
   workouts: WorkoutRecord[];
+  /** Watch-raised heart events on this day, if any. */
+  heartEvents?: HeartEventRecord[];
   /** Any other daily-aggregated metrics we don't model explicitly, keyed by normalized name. */
   other: { [metric: string]: number };
 }

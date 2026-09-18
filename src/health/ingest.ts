@@ -1,4 +1,12 @@
-import { DayRecord, HealthStore, IngestSummary, SleepRecord, WorkoutRecord } from "./types";
+import {
+  DayRecord,
+  HealthStore,
+  HeartEventRecord,
+  IngestSummary,
+  SleepRecord,
+  WorkoutRecord,
+  WorkoutSegment,
+} from "./types";
 
 /**
  * Parser for the JSON that the Health Auto Export iOS app POSTs to a
@@ -221,7 +229,40 @@ function parseWorkout(w: any): { date: string; workout: WorkoutRecord } | undefi
   const elev = qtyOf(w.elevationUp) ?? qtyOf(w.elevation);
   if (elev !== undefined) workout.elevationUpM = round(elev, 0);
 
+  if (typeof w.source === "string") workout.source = w.source;
+  if (typeof w.device === "string") workout.device = w.device;
+  if (typeof w.timeZone === "string") workout.timeZone = w.timeZone;
+
+  if (Array.isArray(w.segments)) {
+    const segments: WorkoutSegment[] = [];
+    for (const raw of w.segments) {
+      if (typeof raw?.type !== "string" || typeof raw?.start !== "string") continue;
+      const segment: WorkoutSegment = { type: raw.type, start: raw.start };
+      if (typeof raw.end === "string") segment.end = raw.end;
+      const seconds = num(raw.duration);
+      if (seconds !== undefined) segment.durationSec = round(seconds, 1);
+      segments.push(segment);
+    }
+    if (segments.length > 0) workout.segments = segments;
+  }
+
   return { date, workout };
+}
+
+function parseHeartEvent(raw: any): { date: string; event: HeartEventRecord } | undefined {
+  const date = localDay(raw?.start);
+  const type = typeof raw?.type === "string" ? raw.type : undefined;
+  if (!date || !type) return undefined;
+
+  const event: HeartEventRecord = { type, start: raw.start };
+  if (typeof raw.id === "string") event.id = raw.id;
+  if (typeof raw.end === "string") event.end = raw.end;
+  if (typeof raw.source === "string") event.source = raw.source;
+  if (typeof raw.device === "string") event.device = raw.device;
+  if (typeof raw.timeZone === "string") event.timeZone = raw.timeZone;
+  const threshold = num(raw.thresholdBpm);
+  if (threshold !== undefined) event.thresholdBpm = round(threshold, 0);
+  return { date, event };
 }
 
 /**
@@ -234,6 +275,9 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   const hasWorkouts = Array.isArray(body?.workouts);
   const metrics: any[] = hasMetrics ? body.metrics : [];
   const workouts: any[] = hasWorkouts ? body.workouts : [];
+  // Optional and newer than the rest of the contract: a payload without it is
+  // not malformed, it is a phone that has nothing to report or an older build.
+  const heartEvents: any[] = Array.isArray(body?.heartEvents) ? body.heartEvents : [];
   // Reject only a payload of the wrong shape. A correctly formed export with
   // nothing in it is what a phone sends when Health access was declined or the
   // range holds no data, and answering that with an error puts a developer
@@ -369,6 +413,22 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
       day.workouts.push(parsed.workout);
       summary.workoutsAdded++;
     }
+    touched.add(parsed.date);
+    summary.dataPoints++;
+  }
+
+  // Heart events: replace-by-identity, so re-sending a range cannot duplicate
+  // one. An event with no uuid falls back to its type and timestamp, which is
+  // as unique as such an event gets.
+  for (const raw of heartEvents) {
+    const parsed = parseHeartEvent(raw);
+    if (!parsed) continue;
+    const day = getDay(store, parsed.date);
+    if (!day.heartEvents) day.heartEvents = [];
+    const key = (e: HeartEventRecord) => e.id || `${e.type}|${e.start}`;
+    const existing = day.heartEvents.findIndex((e) => key(e) === key(parsed.event));
+    if (existing >= 0) day.heartEvents[existing] = parsed.event;
+    else day.heartEvents.push(parsed.event);
     touched.add(parsed.date);
     summary.dataPoints++;
   }
