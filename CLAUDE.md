@@ -51,7 +51,7 @@ npm run dev         # tsc && node dist/index.js   (CLI, recompiles first)
 npm run web         # tsc && node dist/server.js  (web UI on :3000, recompiles first)
 npm run start       # node dist/index.js          (no recompile)
 npm run web:start   # node dist/server.js         (no recompile)
-npm test            # tsc && node test/health.test.js  (34 tests, plain Node/assert)
+npm test            # tsc && node test/health.test.js  (plain Node/assert, no framework)
 npx tsc --noEmit    # typecheck only
 ```
 
