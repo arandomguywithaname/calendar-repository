@@ -255,6 +255,14 @@ needs zero changes for it. The contract your app implements:
 
 ## 3. Seed history (do this once)
 
+> Vital does this by itself now. It remembers which metrics it has already sent a full
+> history for, so when an update teaches it to read something new it backfills just those,
+> once, a year at a time — without which the server would hold twelve years of steps beside
+> seven days of body mass and nothing would ever close the gap. It runs only in the
+> foreground, where there is time, and resumes where it left off if the app is backgrounded
+> partway. Pressing **All** by hand still works and does the same thing for everything.
+
+
 Recovery scores compare each day against your rolling 42-day personal baseline, so the connector gets
 good after it has some history (it needs ≥5 days to score at all). In Health Auto Export, do a one-time
 manual export of the **last 60–90 days** to the same endpoint (or export to a JSON file and upload it on

@@ -121,6 +121,23 @@ final class HealthKitReader {
 
     static var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
+    /// Every metric name this build can produce. Compared against what has
+    /// already been sent, the difference is what a new version owes history for.
+    var knownMetricNames: Set<String> {
+        var names = Set((averagedMetrics + summedMetrics).map { $0.name })
+        names.insert("heart_rate")
+        names.insert("heart_rate_variability")
+        names.insert("sleep_analysis")
+        return names
+    }
+
+    /// The earliest date HealthKit will answer for. Asking it beats the old
+    /// hardcoded September 2014: it is the real floor, and it stays right if
+    /// Apple ever moves it.
+    var earliestDate: Date {
+        HKHealthStore.earliestPermittedSampleDate()
+    }
+
     func requestPermission() async throws {
         try await store.requestAuthorization(toShare: [], read: readTypes)
     }
@@ -130,6 +147,24 @@ final class HealthKitReader {
         let calendar = Calendar.current
         let endDate = Date()
         let startDate = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -(days - 1), to: endDate)!)
+        return try await buildPayload(from: startDate, to: endDate, only: nil)
+    }
+
+    /// The whole history of just these metrics, and nothing else.
+    ///
+    /// Only the daily figures: those come from statistics queries, one number
+    /// per day however long the range, so twelve years of them stays small.
+    /// Workouts, heart events and heart-rate curves are left out on purpose —
+    /// they are per-sample or windowed, and reading twelve years of them is the
+    /// unbounded read that used to kill the app.
+    func buildBackfill(names: Set<String>, from: Date, to: Date) async throws -> [String: Any] {
+        try await buildPayload(from: from, to: to, only: names)
+    }
+
+    private func buildPayload(from startDate: Date, to endDate: Date,
+                              only names: Set<String>?) async throws -> [String: Any] {
+        let wanted: (String) -> Bool = { names?.contains($0) ?? true }
+        let historyOnly = names != nil
 
         var metrics: [[String: Any]] = []
 
@@ -141,7 +176,7 @@ final class HealthKitReader {
         // stops steps being counted twice, and the price of it is that the
         // answer belongs to no single device. Where Vital does pick a device on
         // purpose — HRV and sleep, below — it says which one it picked.
-        for metric in averagedMetrics {
+        for metric in averagedMetrics where wanted(metric.name) {
             // Asking a cumulative type for a discrete average raises an
             // Objective-C exception, which Swift cannot catch: the app would
             // die on the spot, looking to the person exactly like the memory
@@ -158,7 +193,7 @@ final class HealthKitReader {
             }
         }
 
-        for metric in summedMetrics {
+        for metric in summedMetrics where wanted(metric.name) {
             // Same guard, the other way round.
             guard HKQuantityType(metric.id).aggregationStyle == .cumulative else { continue }
             let unit = metric.unit
@@ -176,8 +211,9 @@ final class HealthKitReader {
 
         // Heart rate: min/avg/max per day.
         let bpm = HKUnit.count().unitDivided(by: .minute())
-        let hrRows = try await dailyStats(.heartRate, [.discreteMin, .discreteAverage, .discreteMax], bpm,
-                                          from: startDate, to: endDate) { stats in
+        let hrRows = !wanted("heart_rate") ? [] : try await dailyStats(
+            .heartRate, [.discreteMin, .discreteAverage, .discreteMax], bpm,
+            from: startDate, to: endDate) { stats in
             var row: [String: Any] = [:]
             if let v = stats.minimumQuantity() { row["Min"] = v.doubleValue(for: bpm) }
             if let v = stats.averageQuantity() { row["Avg"] = v.doubleValue(for: bpm) }
@@ -186,18 +222,19 @@ final class HealthKitReader {
         }
         if !hrRows.isEmpty { metrics.append(Payload.metric(name: "heart_rate", units: "count/min", rows: hrRows)) }
 
-        let hrv = try await hrvRows(from: startDate, to: endDate)
+        let hrv = !wanted("heart_rate_variability") ? [] : try await hrvRows(from: startDate, to: endDate)
         if !hrv.isEmpty {
             metrics.append(Payload.metric(name: "heart_rate_variability", units: "ms", rows: hrv,
                                           source: Self.commonSource(hrv)))
         }
 
-        if let sleepMetric = try await sleepMetric(from: startDate, to: endDate) {
+        if wanted("sleep_analysis"), let sleepMetric = try await sleepMetric(from: startDate, to: endDate) {
             metrics.append(sleepMetric)
         }
 
-        let workouts = try await workoutRows(from: startDate, to: endDate)
-        let events = try await heartEventRows(from: startDate, to: endDate)
+        // A backfill carries daily figures only — see buildBackfill.
+        let workouts = historyOnly ? [] : try await workoutRows(from: startDate, to: endDate)
+        let events = historyOnly ? [] : try await heartEventRows(from: startDate, to: endDate)
 
         return Payload.body(metrics: metrics, workouts: workouts, heartEvents: events)
     }

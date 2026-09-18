@@ -189,7 +189,9 @@ struct ContentView: View {
         guard !sending else { return }
         sending = true
         Task {
-            let result = await SyncEngine.sync(days: days)
+            // Foreground: a spinner is on screen and there is time, so this is
+            // where history for newly-read metrics is allowed to be filled in.
+            let result = await SyncEngine.sync(days: days, allowBackfill: true)
             lastOK = result.ok
             lastMessage = result.message
             lastSync = Uploader.lastSync
