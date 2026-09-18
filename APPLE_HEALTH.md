@@ -207,7 +207,8 @@ needs zero changes for it. The contract your app implements:
           "source": "com.apple.health.WATCH", "device": "Apple Watch (Watch7,1)",
           "timeZone": "Europe/Riga",
           "segments": [ { "type": "lap", "start": "2026-08-30 17:40:00 +0200",
-                          "end": "2026-08-30 17:45:00 +0200", "duration": 300 } ] }
+                          "end": "2026-08-30 17:45:00 +0200", "duration": 300 } ],
+          "heartRateSeries": [ { "t": "2026-08-30 17:31:00 +0200", "bpm": 138 }, … ] }
       ],
       "heartEvents": [
         { "type": "high_heart_rate", "id": "…", "start": "2026-08-30 14:02:00 +0200",
@@ -220,6 +221,17 @@ needs zero changes for it. The contract your app implements:
   re-sending a day simply overwrites it, so the app can always send "everything since a week
   ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
   with their units, and `get_data_status` lists them.
+
+  `heartRateSeries` is optional, and may sit on a workout or on a sleep row. It is a curve:
+  one bucket **average** per minute inside a workout, one per five minutes across a night —
+  not raw samples. That is deliberate. A statistics query returns one number per bucket
+  however densely the watch sampled, so the cost is fixed by the length of the session and
+  cannot run away; and it de-duplicates, so a phone and a watch recording the same workout
+  cannot hand back two overlapping curves. Only roughly the last two weeks carry curves, and
+  each is capped — the daily figures reach back as far as HealthKit does, curves do not.
+  The server re-applies the cap on the way in, and keeps curves out of every tool answer
+  except `get_heart_rate_curve`; the others report `heartRateCurvePoints` so the curve is
+  still discoverable.
 
   `heartEvents` is optional — the three things a watch raises on its own
   (`high_heart_rate`, `low_heart_rate`, `irregular_heart_rhythm`). A payload without the key
@@ -328,6 +340,7 @@ Tools exposed by the connector:
 | `get_trends` | “How has my sleep/HRV/training load looked this month?” |
 | `get_workouts` | “What did my runs look like last week?” |
 | `get_sleep` | “Am I sleeping enough?” |
+| `get_heart_rate_curve` | “Show me the shape: the peaks in that run, the dip overnight” (last ~2 weeks) |
 | `get_raw_metric` | Any individual stored metric, day by day, with units |
 
 ### How the scores work (and their limits)

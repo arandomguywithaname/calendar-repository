@@ -405,6 +405,7 @@ final class HealthKitReader {
 
         var rows: [[String: Any]] = []
         let tzSuffix = String(Payload.dateFormatter.string(from: Date()).suffix(5))
+        let cutoff = curveCutoff
         for (key, bySource) in byNight.sorted(by: { $0.key < $1.key }) {
             // Prefer the device that breaks the night into stages; between two
             // that both do, the one that saw more of it.
@@ -432,6 +433,15 @@ final class HealthKitReader {
             // like a night with only one device in the room.
             row["source"] = best.source
             if bySource.count > 1 { row["sources"] = bySource.keys.sorted() }
+
+            // The overnight heart-rate curve, for recent nights only. Five
+            // minutes a bucket: the shape of the night — the dip, and when it
+            // came — not the beat-to-beat detail, which nothing downstream can
+            // use and which would cost twenty times as much to carry.
+            if let from = night.start, let to = night.end, to >= cutoff {
+                let curve = try await heartRateCurve(from: from, to: to, minutes: 5, cap: 240)
+                if !curve.isEmpty { row["heartRateSeries"] = curve }
+            }
             rows.append(row)
         }
         return rows
@@ -505,8 +515,10 @@ final class HealthKitReader {
         )
         let workouts = try await descriptor.result(for: store)
         let bpm = HKUnit.count().unitDivided(by: .minute())
+        let cutoff = curveCutoff
 
-        return workouts.map { workout in
+        var out: [[String: Any]] = []
+        for workout in workouts {
             var row: [String: Any] = [
                 "id": workout.uuid.uuidString,
                 "name": Self.name(for: workout.workoutActivityType),
@@ -553,8 +565,16 @@ final class HealthKitReader {
                     return segment
                 }
             }
-            return row
+
+            // The curve, for recent workouts only.
+            if workout.endDate >= cutoff {
+                let curve = try await heartRateCurve(from: workout.startDate, to: workout.endDate,
+                                                     minutes: 1, cap: 240)
+                if !curve.isEmpty { row["heartRateSeries"] = curve }
+            }
+            out.append(row)
         }
+        return out
     }
 
     /// At most this many segments per workout.
@@ -583,6 +603,55 @@ final class HealthKitReader {
         case .pauseOrResumeRequest: return "pauseOrResumeRequest"
         @unknown default: return "other"
         }
+    }
+
+    // MARK: - Heart rate curves
+
+    /// How far back heart-rate curves are carried. The daily figures reach as
+    /// far as HealthKit does; these deliberately do not. A curve for every
+    /// workout and every night over twelve years is hundreds of thousands of
+    /// points — the same unbounded read that was killing the app, in a new
+    /// costume. Fourteen days is what anyone actually asks about.
+    static let curveWindowDays = 14
+
+    private var curveCutoff: Date {
+        Calendar.current.date(byAdding: .day, value: -Self.curveWindowDays, to: Date()) ?? .distantFuture
+    }
+
+    /// One average per bucket across a bounded stretch of time.
+    ///
+    /// Deliberately not raw samples, which is what the design this follows
+    /// asked for. Two reasons, both learned here. Memory: a statistics query
+    /// returns one number per bucket however many samples went into it, so the
+    /// cost is fixed by how long the workout was and cannot grow with how
+    /// densely the watch happened to sample. And de-duplication: a phone and a
+    /// watch both recording the same workout would otherwise hand back two
+    /// overlapping curves, the way they once handed back fifteen hours of
+    /// sleep. A minute-by-minute average answers everything a curve is asked —
+    /// where the peaks were, how fast it came down — at a fraction of the size.
+    private func heartRateCurve(from start: Date, to end: Date,
+                                minutes: Int, cap: Int) async throws -> [[String: Any]] {
+        guard start < end else { return [] }
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        let descriptor = HKStatisticsCollectionQueryDescriptor(
+            predicate: HKSamplePredicate.quantitySample(
+                type: HKQuantityType(.heartRate),
+                predicate: HKQuery.predicateForSamples(withStart: start, end: end)
+            ),
+            options: .discreteAverage,
+            anchorDate: start,
+            intervalComponents: DateComponents(minute: minutes)
+        )
+        let collection = try await descriptor.result(for: store)
+        var points: [[String: Any]] = []
+        collection.enumerateStatistics(from: start, to: end) { stats, stop in
+            guard let value = stats.averageQuantity()?.doubleValue(for: bpm) else { return }
+            points.append(["t": Payload.date(stats.startDate), "bpm": value.rounded()])
+            // A belt-and-braces stop: the bucket size already bounds this, but
+            // a workout left running for days would otherwise still run away.
+            if points.count >= cap { stop.pointee = true }
+        }
+        return points
     }
 
     // MARK: - Heart events

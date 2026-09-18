@@ -7,6 +7,17 @@
  * Claude over MCP, including recovery/exertion estimates computed from it.
  */
 
+/**
+ * One point on a heart-rate curve: a bucket average, not a raw sample. One
+ * minute a bucket inside a workout, five across a night — enough to see where
+ * the peaks were and how fast it came down, without carrying beat-to-beat
+ * detail nothing downstream can use.
+ */
+export interface HeartRatePoint {
+  t: string; // device-local timestamp of the bucket's start
+  bpm: number;
+}
+
 /** A lap, pause or segment inside a workout — the shape of the session. */
 export interface WorkoutSegment {
   type: string; // lap | pause | resume | segment | marker | motionPaused | …
@@ -36,6 +47,8 @@ export interface WorkoutRecord {
   device?: string;
   timeZone?: string;
   segments?: WorkoutSegment[];
+  /** Minute-by-minute heart rate through the session. Recent workouts only. */
+  heartRateSeries?: HeartRatePoint[];
 }
 
 /**
@@ -73,6 +86,8 @@ export interface SleepRecord {
   source?: string;
   /** Every device that recorded this night, when more than one did. */
   sources?: string[];
+  /** Heart rate across the night in five-minute buckets. Recent nights only. */
+  heartRateSeries?: HeartRatePoint[];
   /**
    * Why this night's numbers don't add up, if they don't — e.g. stages summing
    * to more hours than lie between sleepStart and sleepEnd. A night with this

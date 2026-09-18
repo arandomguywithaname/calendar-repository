@@ -11,7 +11,7 @@ const assert = require("assert");
 const { ingestPayload, parseStamp } = require("../dist/health/ingest");
 const { emptyStore } = require("../dist/health/store");
 const { computeRecovery, computeExertion, exertionScore } = require("../dist/health/metrics");
-const { noRecoveryReason, isPartial, freshness } = require("../dist/health/mcp");
+const { noRecoveryReason, isPartial, freshness, withoutCurve } = require("../dist/health/mcp");
 
 let passed = 0;
 const failures = [];
@@ -507,6 +507,77 @@ test("a payload with no heartEvents is still a valid payload", () => {
     ingestPayload(store, { data: { metrics: [], workouts: [{ name: "Walk", start: "2026-09-04 09:00:00 +0200" }] } })
   );
   assert.strictEqual(store.days["2026-09-04"].heartEvents, undefined);
+});
+
+group("heart-rate curves are carried but never dumped");
+
+const curve = (n) =>
+  Array.from({ length: n }, (_, i) => ({ t: `2026-09-05 01:${String(i % 60).padStart(2, "0")}:00 +0200`, bpm: 60 + (i % 20) }));
+
+test("a curve rides along with its workout and its night", () => {
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: {
+      metrics: [
+        {
+          name: "sleep_analysis",
+          units: "hr",
+          data: [{ date: "2026-09-05 12:00:00 +0200", totalSleep: 7, core: 7, heartRateSeries: curve(12) }],
+        },
+      ],
+      workouts: [
+        { id: "W2", name: "Walking", start: "2026-09-05 09:00:00 +0200", heartRateSeries: curve(30) },
+      ],
+    },
+  });
+  const day = store.days["2026-09-05"];
+  assert.strictEqual(day.sleep.heartRateSeries.length, 12);
+  assert.strictEqual(day.workouts[0].heartRateSeries.length, 30);
+  assert.strictEqual(day.workouts[0].heartRateSeries[0].bpm, 60);
+});
+
+test("a runaway curve is cut down at the door", () => {
+  // The phone caps its own curves, but the endpoint accepts whatever is posted
+  // to it, and the store is read whole into memory on every question anyone
+  // asks — so one oversized curve would be paid for forever.
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: { metrics: [], workouts: [{ name: "Run", start: "2026-09-06 09:00:00 +0200", heartRateSeries: curve(900) }] },
+  });
+  assert.strictEqual(store.days["2026-09-06"].workouts[0].heartRateSeries.length, 480);
+});
+
+test("points without a timestamp or a number are skipped, not stored", () => {
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: {
+      metrics: [],
+      workouts: [
+        {
+          name: "Run",
+          start: "2026-09-07 09:00:00 +0200",
+          heartRateSeries: [{ t: "2026-09-07 09:01:00 +0200", bpm: 130 }, { bpm: 99 }, { t: "2026-09-07 09:03:00 +0200" }],
+        },
+      ],
+    },
+  });
+  assert.strictEqual(store.days["2026-09-07"].workouts[0].heartRateSeries.length, 1);
+});
+
+test("the ordinary answers carry a count, never the curve", () => {
+  // Left in, a couple of hundred points would ride along in every daily
+  // summary, workout listing and sleep query — thousands of tokens of numbers
+  // nobody asked to see, crowding out the answer.
+  const slim = withoutCurve({ name: "Run", start: "x", heartRateSeries: curve(200) });
+  assert.strictEqual(slim.heartRateSeries, undefined, "the curve must not survive");
+  assert.strictEqual(slim.heartRateCurvePoints, 200, "but something must say it exists");
+  assert.strictEqual(slim.name, "Run", "and the rest of the record is untouched");
+});
+
+test("a record with no curve gains no empty count", () => {
+  const slim = withoutCurve({ name: "Walk", start: "x" });
+  assert.ok(!("heartRateCurvePoints" in slim), "nothing to point at, so nothing to say");
+  assert.ok(!("heartRateSeries" in slim));
 });
 
 console.log(

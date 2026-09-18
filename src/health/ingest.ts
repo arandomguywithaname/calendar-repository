@@ -2,6 +2,7 @@ import {
   DayRecord,
   HealthStore,
   HeartEventRecord,
+  HeartRatePoint,
   IngestSummary,
   SleepRecord,
   WorkoutRecord,
@@ -177,6 +178,8 @@ function parseSleepRow(row: any, units?: string): SleepRecord {
   if (awake !== undefined) sleep.awakeHours = awake;
   if (typeof row.sleepStart === "string") sleep.sleepStart = row.sleepStart;
   if (typeof row.sleepEnd === "string") sleep.sleepEnd = row.sleepEnd;
+  const curve = parseHeartRateSeries(row.heartRateSeries);
+  if (curve) sleep.heartRateSeries = curve;
   if (typeof row.source === "string") sleep.source = row.source;
   if (Array.isArray(row.sources)) {
     const list = row.sources.filter((v: unknown): v is string => typeof v === "string");
@@ -246,7 +249,31 @@ function parseWorkout(w: any): { date: string; workout: WorkoutRecord } | undefi
     if (segments.length > 0) workout.segments = segments;
   }
 
+  const curve = parseHeartRateSeries(w.heartRateSeries);
+  if (curve) workout.heartRateSeries = curve;
+
   return { date, workout };
+}
+
+/**
+ * A heart-rate curve, defensively. The phone caps each one, but the endpoint
+ * accepts anything anyone posts, so the cap is re-applied here — a store file
+ * is loaded whole into memory on every read, and one runaway curve would be
+ * paid for on every question anyone ever asks.
+ */
+const MAX_CURVE_POINTS = 480;
+
+function parseHeartRateSeries(raw: unknown): HeartRatePoint[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const points: HeartRatePoint[] = [];
+  for (const p of raw) {
+    if (typeof p?.t !== "string") continue;
+    const bpm = num(p.bpm) ?? num(p.qty);
+    if (bpm === undefined) continue;
+    points.push({ t: p.t, bpm: round(bpm, 0) });
+    if (points.length >= MAX_CURVE_POINTS) break;
+  }
+  return points.length > 0 ? points : undefined;
 }
 
 function parseHeartEvent(raw: any): { date: string; event: HeartEventRecord } | undefined {

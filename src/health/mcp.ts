@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadStore, sortedDates, storePath } from "./store";
 import { computeExertion, computeRecovery, computeTrend } from "./metrics";
-import { DayRecord, HealthStore, WorkoutRecord } from "./types";
+import { DayRecord, HealthStore, HeartRatePoint, WorkoutRecord } from "./types";
 import { HealthUser } from "./users";
 
 /**
@@ -120,7 +120,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     note: ESTIMATE_NOTE,
     recovery: recovery ?? noRecoveryReason(day),
     exertion: exertion ?? "insufficient data",
-    sleep: day.sleep ?? null,
+    sleep: day.sleep ? withoutCurve(day.sleep) : null,
     vitals: {
       hrvMs: day.hrvMs ?? null,
       restingHeartRate: day.restingHeartRate ?? null,
@@ -133,7 +133,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     activity: {
       steps: day.steps ?? null,
       activeEnergyKcal: day.activeEnergyKcal ?? null,
-      workouts: day.workouts,
+      workouts: day.workouts.map(withoutCurve),
     },
     // Everything else synced for this day — body composition, basal energy,
     // flights, exercise minutes, running form and so on. Without this they
@@ -144,6 +144,23 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     // Rare enough that listing them costs nothing and omitting one matters.
     ...(day.heartEvents?.length ? { heartEvents: day.heartEvents } : {}),
   });
+}
+
+/**
+ * The same record with its heart-rate curve taken out, and a count left in its
+ * place.
+ *
+ * A workout's curve is a couple of hundred points. Left in, it would ride along
+ * in every daily summary, every workout listing and every sleep query — turning
+ * "how did I sleep" into thousands of tokens of numbers nobody asked to see,
+ * and crowding out the answer. The count is there so the curve is discoverable:
+ * something has to say it exists, or get_heart_rate_curve would only ever be
+ * called by someone who already knew.
+ */
+export function withoutCurve<T extends { heartRateSeries?: HeartRatePoint[] }>(record: T) {
+  const { heartRateSeries, ...rest } = record;
+  if (!heartRateSeries?.length) return rest;
+  return { ...rest, heartRateCurvePoints: heartRateSeries.length };
 }
 
 type ToolResult = { content: { type: "text"; text: string }[] };
@@ -177,6 +194,12 @@ const workoutsInput: z.ZodRawShape = {
 };
 const sleepInput: z.ZodRawShape = {
   days: z.number().int().min(1).max(90).optional().describe("How many nights back (default 7)."),
+};
+const heartRateCurveInput: z.ZodRawShape = {
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+    .describe("Day to read, YYYY-MM-DD. Omit for the latest day with data."),
+  which: z.enum(["all", "sleep", "workouts"]).optional()
+    .describe("Which curves to return (default all). Each is a few hundred points."),
 };
 const rawMetricInput: z.ZodRawShape = {
   name: z.string().describe("Metric name, e.g. 'hrvMs' or an 'other' key like 'flights_climbed'."),
@@ -226,6 +249,9 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         if (day.vo2Max !== undefined) bump("vo2Max");
         workouts += day.workouts.length;
         heartEvents += day.heartEvents?.length ?? 0;
+        if (day.sleep?.heartRateSeries?.length || day.workouts.some((w) => w.heartRateSeries?.length)) {
+          bump("heartRateCurve");
+        }
         for (const k of Object.keys(day.other)) bump(`other:${k}`);
       }
       return json({
@@ -309,7 +335,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       for (const date of dates) {
         if (start && date < start) continue;
         if (end && date > end) continue;
-        for (const w of store.days[date].workouts) all.push({ date, ...w });
+        for (const w of store.days[date].workouts) all.push({ date, ...withoutCurve(w) });
       }
       all.sort((a, b) => (a.start < b.start ? 1 : -1));
       return json({ ...freshness(store), totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
@@ -333,7 +359,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const window = calendarWindow(latestDate(stored)!, span);
       const nights = window
         .filter((d) => store.days[d]?.sleep)
-        .map((d) => ({ date: d, ...store.days[d].sleep }));
+        .map((d) => ({ date: d, ...withoutCurve(store.days[d].sleep!) }));
       // Nights whose own numbers contradict each other are listed but kept out
       // of the average: an average over broken values is broken to two decimals.
       const sound = nights.filter((n) => !(n.suspect && n.suspect.length));
@@ -349,6 +375,64 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         averageSleepHours: avg,
         averagedOver: totals.length,
         nights,
+      });
+    }
+  );
+
+  addTool(
+    server,
+    "get_heart_rate_curve",
+    {
+      title: "Heart rate curve",
+      description:
+        "Heart rate through one day's workouts and night's sleep as a series of points — one per minute inside a " +
+        "workout, one per five minutes across a night. Use it for the shape rather than the totals: where the peaks " +
+        "were, how fast it came down afterwards, how deep the overnight dip went and when. Kept out of the other " +
+        "tools' answers because each curve is a few hundred numbers; they report heartRateCurvePoints where one " +
+        "exists. Only roughly the last two weeks carry curves.",
+      inputSchema: heartRateCurveInput,
+    },
+    async ({ date, which }: { date?: string; which?: "all" | "sleep" | "workouts" }) => {
+      const store = loadStore(slug);
+      const dates = sortedDates(store);
+      const day = date ?? latestDate(dates);
+      if (!day) return noData(slug);
+      const record = store.days[day];
+      if (!record) {
+        return json({
+          error: `No data stored for ${day}.`,
+          availableRange: { first: dates[0], last: latestDate(dates) },
+        });
+      }
+      const want = which ?? "all";
+      const sleepCurve = want === "workouts" ? undefined : record.sleep?.heartRateSeries;
+      const workouts =
+        want === "sleep"
+          ? []
+          : record.workouts
+              .filter((w) => w.heartRateSeries?.length)
+              .map((w) => ({
+                id: w.id ?? null,
+                name: w.name,
+                start: w.start,
+                bucketMinutes: 1,
+                points: w.heartRateSeries,
+              }));
+      const empty = !sleepCurve?.length && workouts.length === 0;
+      return json({
+        ...freshness(store),
+        date: day,
+        // Say why it is empty rather than returning a bare pair of nulls, which
+        // reads as "your heart stopped" instead of "nothing was recorded".
+        ...(empty
+          ? {
+              note:
+                "No heart-rate curve stored for this day. Curves are kept only for roughly the last two weeks, and " +
+                "only where a watch recorded heart rate during sleep or a workout.",
+            }
+          : {}),
+        sleep: sleepCurve?.length ? { bucketMinutes: 5, points: sleepCurve } : null,
+        workouts,
       });
     }
   );
