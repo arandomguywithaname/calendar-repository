@@ -32,6 +32,14 @@ export interface SleepRecord {
   sleepStart?: string;
   sleepEnd?: string;
   /**
+   * Bundle identifier of the device whose account of this night was used
+   * (e.g. "com.apple.health.<uuid>" for the watch). Nights are never summed
+   * across devices — one is chosen — and this says which.
+   */
+  source?: string;
+  /** Every device that recorded this night, when more than one did. */
+  sources?: string[];
+  /**
    * Why this night's numbers don't add up, if they don't — e.g. stages summing
    * to more hours than lie between sleepStart and sleepEnd. A night with this
    * set is not trustworthy, and anything reading it should say so rather than
@@ -68,6 +76,13 @@ export interface HealthStore {
   days: { [date: string]: DayRecord };
   /** Units per metric as last reported by the phone (e.g. { flights_climbed: "count" }). */
   units?: { [metric: string]: string };
+  /**
+   * Device behind each metric, where there is one — the bundle identifier the
+   * phone reported alongside it. Only metrics for which Vital deliberately
+   * picked one device (sleep, HRV) carry this; a figure HealthKit aggregated
+   * across every source is absent here rather than attributed to a guess.
+   */
+  sources?: { [metric: string]: string };
 }
 
 /** Result summary returned to the ingest caller (shown in Health Auto Export). */

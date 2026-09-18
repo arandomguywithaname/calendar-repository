@@ -225,6 +225,11 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         lastSync: store.updatedAt ?? null,
         totalWorkouts: workouts,
         daysWithMetric: counts,
+        metricUnits: store.units ?? {},
+        // Only metrics where one device was deliberately chosen over another
+        // appear here. A metric HealthKit aggregated across every source is
+        // absent rather than credited to one of them.
+        metricSources: store.sources ?? {},
         note: ESTIMATE_NOTE,
       });
     }

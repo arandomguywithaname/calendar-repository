@@ -7,22 +7,113 @@ final class HealthKitReader {
 
     let store = HKHealthStore()
 
+    /// One daily-aggregated metric: where it comes from, what the server calls
+    /// it, and how to turn the quantity into a number.
+    private struct Daily {
+        let id: HKQuantityTypeIdentifier
+        let name: String
+        let units: String
+        let unit: HKUnit
+        /// HealthKit reports some fractions as 0–1 where the server's contract
+        /// uses percent — blood oxygen arrives as 0.975, not 97.5.
+        var scale: Double = 1
+        /// Counted things come back as floats often enough to matter:
+        /// 11623.858733 reads back to a person as "11,623.86 steps".
+        var whole: Bool = false
+    }
+
+    private static let vo2Unit = HKUnit.literUnit(with: .milli)
+        .unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute()))
+
+    /// Effort in METs: kilocalories per kilogram per hour.
+    private static let effortUnit = HKUnit.kilocalorie()
+        .unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .hour()))
+
+    /// Metrics whose daily figure is an average of that day's readings.
+    ///
+    /// Everything here is a *discrete* HealthKit type. Asking for a cumulative
+    /// sum of one of these throws, so the split between this table and the next
+    /// is not cosmetic — check the type's aggregation style before adding a row.
+    private var averagedMetrics: [Daily] {
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        let kg = HKUnit.gramUnit(with: .kilo)
+        let cm = HKUnit.meterUnit(with: .centi)
+        var list: [Daily] = [
+            Daily(id: .restingHeartRate, name: "resting_heart_rate", units: "count/min", unit: bpm),
+            Daily(id: .respiratoryRate, name: "respiratory_rate", units: "count/min", unit: bpm),
+            Daily(id: .oxygenSaturation, name: "blood_oxygen_saturation", units: "%", unit: .percent(), scale: 100),
+            Daily(id: .vo2Max, name: "vo2_max", units: "mL/kg/min", unit: Self.vo2Unit),
+
+            // Body composition. A scale or a hand-entered figure, so most days
+            // hold nothing and only the days with a reading produce a row.
+            Daily(id: .bodyMass, name: "body_mass", units: "kg", unit: kg),
+            Daily(id: .leanBodyMass, name: "lean_body_mass", units: "kg", unit: kg),
+            Daily(id: .bodyFatPercentage, name: "body_fat_percentage", units: "%", unit: .percent(), scale: 100),
+            Daily(id: .bodyMassIndex, name: "body_mass_index", units: "count", unit: .count()),
+            Daily(id: .waistCircumference, name: "waist_circumference", units: "cm", unit: cm),
+            Daily(id: .height, name: "height", units: "cm", unit: cm),
+
+            // Cardio and recovery.
+            Daily(id: .walkingHeartRateAverage, name: "walking_heart_rate_average", units: "count/min", unit: bpm),
+            Daily(id: .heartRateRecoveryOneMinute, name: "heart_rate_recovery_one_minute", units: "count/min", unit: bpm),
+
+            // Running form — written by the watch during outdoor runs only.
+            Daily(id: .runningSpeed, name: "running_speed", units: "m/s", unit: HKUnit.meter().unitDivided(by: .second())),
+            Daily(id: .runningPower, name: "running_power", units: "W", unit: .watt()),
+            Daily(id: .runningStrideLength, name: "running_stride_length", units: "m", unit: .meter()),
+            Daily(id: .runningGroundContactTime, name: "running_ground_contact_time", units: "ms",
+                  unit: HKUnit.secondUnit(with: .milli)),
+            Daily(id: .runningVerticalOscillation, name: "running_vertical_oscillation", units: "cm", unit: cm),
+
+            // Overnight wrist temperature: the server already understands this
+            // name and files it as the day's wristTemperatureC.
+            Daily(id: .appleSleepingWristTemperature, name: "apple_sleeping_wrist_temperature",
+                  units: "degC", unit: .degreeCelsius()),
+        ]
+        if #available(iOS 17.0, *) {
+            list.append(Daily(id: .physicalEffort, name: "physical_effort", units: "kcal/hr*kg", unit: Self.effortUnit))
+        }
+        return list
+    }
+
+    /// Metrics whose daily figure is the sum of that day's readings. All
+    /// cumulative types — see the note above before adding one.
+    private var summedMetrics: [Daily] {
+        let km = HKUnit.meterUnit(with: .kilo)
+        var list: [Daily] = [
+            Daily(id: .activeEnergyBurned, name: "active_energy", units: "kcal", unit: .kilocalorie()),
+            Daily(id: .basalEnergyBurned, name: "basal_energy_burned", units: "kcal", unit: .kilocalorie()),
+            Daily(id: .stepCount, name: "step_count", units: "steps", unit: .count(), whole: true),
+            Daily(id: .flightsClimbed, name: "flights_climbed", units: "count", unit: .count(), whole: true),
+            // Distance was already asked for and used inside workouts, but never
+            // reported as a day of its own.
+            Daily(id: .distanceWalkingRunning, name: "walking_running_distance", units: "km", unit: km),
+            Daily(id: .distanceCycling, name: "cycling_distance", units: "km", unit: km),
+            Daily(id: .appleExerciseTime, name: "apple_exercise_time", units: "min", unit: .minute(), whole: true),
+            Daily(id: .appleStandTime, name: "apple_stand_time", units: "min", unit: .minute(), whole: true),
+        ]
+        if #available(iOS 17.0, *) {
+            list.append(Daily(id: .timeInDaylight, name: "time_in_daylight", units: "min", unit: .minute(), whole: true))
+        }
+        return list
+    }
+
     /// Everything Vital asks permission for — the phone shows each one
     /// separately and dad approves them one by one (project rule #1).
+    ///
+    /// Derived from the tables above rather than listed again, because a metric
+    /// added to a table but missing here would not error: HealthKit answers an
+    /// unauthorized read with no samples and no error, so the metric would
+    /// simply never appear and nothing would say why.
     private var readTypes: Set<HKObjectType> {
         var types: Set<HKObjectType> = [
             HKQuantityType(.heartRate),
             HKQuantityType(.heartRateVariabilitySDNN),
-            HKQuantityType(.restingHeartRate),
-            HKQuantityType(.respiratoryRate),
-            HKQuantityType(.oxygenSaturation),
-            HKQuantityType(.vo2Max),
-            HKQuantityType(.activeEnergyBurned),
-            HKQuantityType(.stepCount),
-            HKQuantityType(.distanceWalkingRunning),
-            HKQuantityType(.distanceCycling),
             HKObjectType.workoutType(),
         ]
+        for metric in averagedMetrics + summedMetrics {
+            types.insert(HKQuantityType(metric.id))
+        }
         types.insert(HKCategoryType(.sleepAnalysis))
         return types
     }
@@ -41,40 +132,45 @@ final class HealthKitReader {
 
         var metrics: [[String: Any]] = []
 
-        // Daily averages (gauge-style metrics).
-        // The last element is a scale factor: HealthKit reports blood oxygen as a
-        // 0–1 fraction, while the server's contract (and Health Auto Export) uses
-        // percent — 97.5, not 0.975. Everything else is already in the right unit.
-        let averaged: [(HKQuantityTypeIdentifier, String, String, HKUnit, Double)] = [
-            (.restingHeartRate, "resting_heart_rate", "count/min", HKUnit.count().unitDivided(by: .minute()), 1),
-            (.respiratoryRate, "respiratory_rate", "count/min", HKUnit.count().unitDivided(by: .minute()), 1),
-            (.oxygenSaturation, "blood_oxygen_saturation", "%", HKUnit.percent(), 100),
-            (.vo2Max, "vo2_max", "mL/kg/min",
-             HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute())), 1),
-        ]
-        for (identifier, name, units, unit, scale) in averaged {
-            let rows = try await dailyStats(identifier, .discreteAverage, unit, from: startDate, to: endDate) { stats in
+        // Daily averages (gauge-style metrics), then daily sums (count-style).
+        //
+        // No source is attached to either: these come from
+        // HKStatisticsCollectionQuery, which is the API that de-duplicates a
+        // phone and a watch both recording the same day. That is exactly what
+        // stops steps being counted twice, and the price of it is that the
+        // answer belongs to no single device. Where Vital does pick a device on
+        // purpose — HRV and sleep, below — it says which one it picked.
+        for metric in averagedMetrics {
+            // Asking a cumulative type for a discrete average raises an
+            // Objective-C exception, which Swift cannot catch: the app would
+            // die on the spot, looking to the person exactly like the memory
+            // kill fixed earlier. A wrongly classified metric should go missing
+            // instead, so check what HealthKit says the type is.
+            guard HKQuantityType(metric.id).aggregationStyle != .cumulative else { continue }
+            let unit = metric.unit
+            let scale = metric.scale
+            let rows = try await dailyStats(metric.id, .discreteAverage, unit, from: startDate, to: endDate) { stats in
                 stats.averageQuantity().map { ["qty": round2($0.doubleValue(for: unit) * scale)] }
             }
-            if !rows.isEmpty { metrics.append(Payload.metric(name: name, units: units, rows: rows)) }
+            if !rows.isEmpty {
+                metrics.append(Payload.metric(name: metric.name, units: metric.units, rows: rows))
+            }
         }
 
-        // Daily sums (count-style metrics).
-        // The last element says how to round: steps are counted things and come
-        // back from HealthKit as floats often enough to matter (11623.858733),
-        // which reads back as "11,623.86 steps". Energy needs one decimal, not six.
-        let summed: [(HKQuantityTypeIdentifier, String, String, HKUnit, Bool)] = [
-            (.activeEnergyBurned, "active_energy", "kcal", HKUnit.kilocalorie(), false),
-            (.stepCount, "step_count", "steps", HKUnit.count(), true),
-        ]
-        for (identifier, name, units, unit, whole) in summed {
-            let rows = try await dailyStats(identifier, .cumulativeSum, unit, from: startDate, to: endDate) { stats in
+        for metric in summedMetrics {
+            // Same guard, the other way round.
+            guard HKQuantityType(metric.id).aggregationStyle == .cumulative else { continue }
+            let unit = metric.unit
+            let whole = metric.whole
+            let rows = try await dailyStats(metric.id, .cumulativeSum, unit, from: startDate, to: endDate) { stats in
                 stats.sumQuantity().map { q in
                     let v = q.doubleValue(for: unit)
                     return ["qty": whole ? v.rounded() : (v * 10).rounded() / 10]
                 }
             }
-            if !rows.isEmpty { metrics.append(Payload.metric(name: name, units: units, rows: rows)) }
+            if !rows.isEmpty {
+                metrics.append(Payload.metric(name: metric.name, units: metric.units, rows: rows))
+            }
         }
 
         // Heart rate: min/avg/max per day.
@@ -91,7 +187,8 @@ final class HealthKitReader {
 
         let hrv = try await hrvRows(from: startDate, to: endDate)
         if !hrv.isEmpty {
-            metrics.append(Payload.metric(name: "heart_rate_variability", units: "ms", rows: hrv))
+            metrics.append(Payload.metric(name: "heart_rate_variability", units: "ms", rows: hrv,
+                                          source: Self.commonSource(hrv)))
         }
 
         if let sleepMetric = try await sleepMetric(from: startDate, to: endDate) {
@@ -221,11 +318,27 @@ final class HealthKitReader {
         for (key, devices) in byNight.sorted(by: { $0.key < $1.key }) {
             // Whichever device took the most readings is the one that was
             // actually worn to bed.
-            guard let readings = devices.values.max(by: { $0.count < $1.count }),
-                  !readings.isEmpty else { continue }
-            rows.append(["date": "\(key) 12:00:00 \(tzSuffix)", "qty": round2(median(readings))])
+            guard let best = devices.max(by: { $0.value.count < $1.value.count }),
+                  !best.value.isEmpty else { continue }
+            var row: [String: Any] = [
+                "date": "\(key) 12:00:00 \(tzSuffix)",
+                "qty": round2(median(best.value)),
+                "source": best.key,
+            ]
+            // Say so when something else was also recording that night: a
+            // number that silently dropped a second device reads the same as
+            // one that never had a choice to make.
+            if devices.count > 1 { row["sources"] = devices.keys.sorted() }
+            rows.append(row)
         }
         return rows
+    }
+
+    /// The one source behind every row, when they agree — otherwise nil,
+    /// because a window covering two devices has no single answer.
+    private static func commonSource(_ rows: [[String: Any]]) -> String? {
+        let sources = Set(rows.compactMap { $0["source"] as? String })
+        return sources.count == 1 ? sources.first : nil
     }
 
     private func median(_ values: [Double]) -> Double {
@@ -261,7 +374,8 @@ final class HealthKitReader {
         }
         let merged = Self.mergedByDate(rows)
         guard !merged.isEmpty else { return nil }
-        return Payload.metric(name: "sleep_analysis", units: "hr", rows: merged)
+        return Payload.metric(name: "sleep_analysis", units: "hr", rows: merged,
+                              source: Self.commonSource(merged))
     }
 
     private func sleepRowsIn(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
@@ -292,11 +406,12 @@ final class HealthKitReader {
         for (key, bySource) in byNight.sorted(by: { $0.key < $1.key }) {
             // Prefer the device that breaks the night into stages; between two
             // that both do, the one that saw more of it.
-            let candidates = bySource.values.map { nightTotals($0) }
-            guard let night = candidates.max(by: { a, b in
-                if a.staged != b.staged { return b.staged }
-                return a.asleep < b.asleep
+            let candidates = bySource.map { (source: $0.key, night: nightTotals($0.value)) }
+            guard let best = candidates.max(by: { a, b in
+                if a.night.staged != b.night.staged { return b.night.staged }
+                return a.night.asleep < b.night.asleep
             }) else { continue }
+            let night = best.night
             guard night.asleep > 0 || night.inBed > 0 else { continue }
             var row: [String: Any] = [
                 "date": "\(key) 12:00:00 \(tzSuffix)",
@@ -309,6 +424,12 @@ final class HealthKitReader {
             if night.inBed > 0 { row["inBed"] = round2(night.inBed) }
             if let s = night.start { row["sleepStart"] = Payload.date(s) }
             if let e = night.end { row["sleepEnd"] = Payload.date(e) }
+            // Which device this night is, and what else was recording it. The
+            // choice was already being made here; it was just never reported,
+            // so a night where the phone won and the watch lost looked exactly
+            // like a night with only one device in the room.
+            row["source"] = best.source
+            if bySource.count > 1 { row["sources"] = bySource.keys.sorted() }
             rows.append(row)
         }
         return rows

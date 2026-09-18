@@ -193,9 +193,11 @@ needs zero changes for it. The contract your app implements:
           "data": [ { "date": "2026-08-30 07:01:00 +0200", "qty": 54.2 } ] },
         { "name": "step_count", "units": "steps",
           "data": [ { "date": "2026-08-30 22:00:00 +0200", "qty": 9182 } ] },
-        { "name": "sleep_analysis", "units": "hr",
+        { "name": "sleep_analysis", "units": "hr", "source": "com.apple.health.WATCH",
           "data": [ { "date": "2026-08-30 07:00:00 +0200",
-                      "totalSleep": 7.4, "deep": 1.2, "rem": 1.6, "core": 4.6 } ] }
+                      "totalSleep": 7.4, "deep": 1.2, "rem": 1.6, "core": 4.6,
+                      "source": "com.apple.health.WATCH",
+                      "sources": ["com.apple.health.WATCH", "com.apple.Health"] } ] }
       ],
       "workouts": [
         { "name": "Outdoor Run", "start": "2026-08-30 17:30:00 +0200",
@@ -209,7 +211,15 @@ needs zero changes for it. The contract your app implements:
   Dates are device-local `yyyy-MM-dd HH:mm:ss Z`; metric names are lowercase snake_case;
   re-sending a day simply overwrites it, so the app can always send "everything since a week
   ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
-  with their units.
+  with their units, and `get_data_status` lists them.
+
+  `source` is optional and means "this figure is one device's account, and here is which
+  device". Set it only where the sender genuinely chose between devices — a phone and a watch
+  both record the night, and the hours are taken from one of them, never added together.
+  Leave it off for a figure aggregated across every source, which is what HealthKit's
+  statistics queries return: naming one device there would be a guess. On a sleep row,
+  `source` is the device whose night was used and `sources` lists everything that recorded it,
+  so a night where one device was dropped is distinguishable from one with no rival.
 - The response (`{ "ok": true, "dataPoints": …, "daysTouched": …, "lastDate": … }`) is exactly
   what a "last sent / success / error" screen needs, and `GET /api/health/status` returns the
   same summary any time, without a token and without exposing any health values.

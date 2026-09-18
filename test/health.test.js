@@ -317,6 +317,102 @@ test("a store that never synced does not invent a timestamp", () => {
   assert.strictEqual(s.staleNote, undefined);
 });
 
+group("the wider set of HealthKit types arrives intact");
+
+/** Ingest a payload of plain daily metrics and hand back the store. */
+function ingestMetrics(metrics) {
+  const store = emptyStore();
+  ingestPayload(store, { data: { metrics, workouts: [] } });
+  return store;
+}
+
+const day = (d, qty) => ({ date: d + " 12:00:00 +0200", qty });
+
+test("body composition lands where Claude can find it", () => {
+  const store = ingestMetrics([
+    { name: "body_mass", units: "kg", data: [day("2026-09-01", 78.4)] },
+    { name: "body_fat_percentage", units: "%", data: [day("2026-09-01", 18.2)] },
+    { name: "waist_circumference", units: "cm", data: [day("2026-09-01", 84)] },
+  ]);
+  const other = store.days["2026-09-01"].other;
+  assert.strictEqual(other.body_mass, 78.4);
+  assert.strictEqual(other.body_fat_percentage, 18.2);
+  assert.strictEqual(other.waist_circumference, 84);
+  assert.strictEqual(store.units.body_mass, "kg", "units must survive so the number means something");
+});
+
+test("time in daylight is summed across the day, not averaged", () => {
+  // Two readings for one date is what a second sync of the same day produces.
+  // Averaging them would halve the answer, which is why time_in_daylight had
+  // to join SUM_METRICS rather than fall through to the default.
+  const store = ingestMetrics([
+    {
+      name: "time_in_daylight",
+      units: "min",
+      data: [day("2026-09-01", 30), day("2026-09-01", 50)],
+    },
+  ]);
+  assert.strictEqual(store.days["2026-09-01"].other.time_in_daylight, 80);
+});
+
+test("a body measurement taken twice in a day averages instead", () => {
+  const store = ingestMetrics([
+    { name: "body_mass", units: "kg", data: [day("2026-09-01", 78), day("2026-09-01", 80)] },
+  ]);
+  assert.strictEqual(store.days["2026-09-01"].other.body_mass, 79);
+});
+
+test("overnight wrist temperature becomes a first-class field", () => {
+  const store = ingestMetrics([
+    { name: "apple_sleeping_wrist_temperature", units: "degC", data: [day("2026-09-01", 35.62)] },
+  ]);
+  assert.strictEqual(store.days["2026-09-01"].wristTemperatureC, 35.62);
+});
+
+group("a number says which device it came from");
+
+test("the device behind a metric is remembered", () => {
+  const store = ingestMetrics([
+    {
+      name: "heart_rate_variability",
+      units: "ms",
+      source: "com.apple.health.WATCH",
+      data: [day("2026-09-01", 62)],
+    },
+  ]);
+  assert.strictEqual(store.sources.heart_rate_variability, "com.apple.health.WATCH");
+});
+
+test("a metric HealthKit aggregated across devices names none", () => {
+  // The daily figures come from HKStatisticsCollectionQuery, which merges every
+  // source on purpose — that is what stops steps being counted twice. Such a
+  // metric must stay absent here rather than be credited to one device.
+  const store = ingestMetrics([{ name: "step_count", units: "steps", data: [day("2026-09-01", 9000)] }]);
+  assert.strictEqual((store.sources || {}).step_count, undefined);
+});
+
+test("the night says whose account of it was used", () => {
+  const sleep = night("2026-09-01", {
+    totalSleep: 7.4,
+    core: 4.1,
+    deep: 1.1,
+    rem: 2.2,
+    sleepStart: "2026-08-31 23:10:00 +0200",
+    sleepEnd: "2026-09-01 07:00:00 +0200",
+    source: "com.apple.health.WATCH",
+    sources: ["com.apple.health.WATCH", "com.apple.Health"],
+  });
+  assert.strictEqual(sleep.source, "com.apple.health.WATCH");
+  assert.deepStrictEqual(sleep.sources, ["com.apple.health.WATCH", "com.apple.Health"]);
+  assert.strictEqual(sleep.suspect, undefined, "naming the sources must not make a sound night suspect");
+});
+
+test("a night recorded by one device only lists no rivals", () => {
+  const sleep = night("2026-09-02", { totalSleep: 7, core: 7, source: "com.apple.Health" });
+  assert.strictEqual(sleep.source, "com.apple.Health");
+  assert.strictEqual(sleep.sources, undefined);
+});
+
 console.log(
   "\n" +
     (failures.length === 0

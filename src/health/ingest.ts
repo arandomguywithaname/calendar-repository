@@ -123,6 +123,7 @@ const SUM_METRICS = new Set([
   "flights_climbed",
   "apple_exercise_time",
   "apple_stand_time",
+  "time_in_daylight",
 ]);
 
 interface Acc {
@@ -168,6 +169,11 @@ function parseSleepRow(row: any, units?: string): SleepRecord {
   if (awake !== undefined) sleep.awakeHours = awake;
   if (typeof row.sleepStart === "string") sleep.sleepStart = row.sleepStart;
   if (typeof row.sleepEnd === "string") sleep.sleepEnd = row.sleepEnd;
+  if (typeof row.source === "string") sleep.source = row.source;
+  if (Array.isArray(row.sources)) {
+    const list = row.sources.filter((v: unknown): v is string => typeof v === "string");
+    if (list.length > 0) sleep.sources = list;
+  }
   return sleep;
 }
 
@@ -245,6 +251,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   // metric -> date -> accumulated value (avg or sum resolved at the end)
   const accs = new Map<string, Map<string, Acc>>();
   const unitsSeen: { [metric: string]: string } = {};
+  const sourcesSeen: { [metric: string]: string } = {};
   // heart_rate keeps Min/Avg/Max; hold separate accumulators
   const hrAcc = new Map<string, { min: Acc; avg: Acc; max: Acc }>();
 
@@ -254,6 +261,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
     seen.add(name);
     const units: string | undefined = typeof metric.units === "string" ? metric.units : undefined;
     if (units) unitsSeen[name] = units;
+    if (typeof metric.source === "string" && metric.source) sourcesSeen[name] = metric.source;
 
     for (const row of metric.data) {
       const date = localDay(row?.date);
@@ -372,6 +380,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   summary.metricsSeen = [...seen].sort();
 
   store.units = { ...store.units, ...unitsSeen };
+  store.sources = { ...store.sources, ...sourcesSeen };
   store.updatedAt = new Date().toISOString();
   store.lastIngestSource = source || "api";
   return summary;
