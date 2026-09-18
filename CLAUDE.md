@@ -51,15 +51,34 @@ npm run dev         # tsc && node dist/index.js   (CLI, recompiles first)
 npm run web         # tsc && node dist/server.js  (web UI on :3000, recompiles first)
 npm run start       # node dist/index.js          (no recompile)
 npm run web:start   # node dist/server.js         (no recompile)
+npm test            # tsc && node test/health.test.js  (34 tests, plain Node/assert)
 npx tsc --noEmit    # typecheck only
 ```
 
 `npm run dev` and `npm run web` compile before running, so there is no watch mode —
 restart after every edit. `PORT` overrides the web server's default 3000.
 
-There are **no tests and no lint config**. The only automated check available is
-`npx tsc --noEmit`; run it before committing. Do not add a test runner, linter, or CI
-workflow unless asked.
+There is **no lint config**. There is a test suite: `npm test` runs `test/health.test.js`,
+plain Node and `assert`, no framework. Run it and `npx tsc --noEmit` before committing.
+Every case in it is a bug that reached a real phone or the edge that would have caused the
+next one — when you change sleep parsing or the scores, those numbers must keep holding.
+Prefer adding a case there to adding a framework.
+
+Three CI workflows exist, all of them asked for:
+
+- `.github/workflows/test.yml` — `npm ci && npm test` on every push.
+- `.github/workflows/vital-compile.yml` — builds the iPhone app on pushes touching `ios/**`.
+  No signing, no secrets, no upload; it only answers "does the Swift still compile", because
+  nothing else does. Swift cannot be built in the agent environment these changes are usually
+  written in, so this is the only check standing between a typo and a wasted release.
+- `.github/workflows/build-vital.yml` — the real TestFlight build. Stays off unless the repo
+  variable `VITAL_CI_ENABLED` is `true`, and needs the Apple secrets.
+
+`codemagic.yaml` is the TestFlight builder actually in use, and it is deliberately manual
+(`triggering: events: []`) — someone presses "Start new build". Do not switch it to build on
+push without asking: every push would then ship a build to whoever is testing.
+
+Do not add a linter, another test runner, or a fourth workflow unless asked.
 
 ## Environment
 
