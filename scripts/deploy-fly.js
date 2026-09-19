@@ -14,6 +14,7 @@
 const { spawnSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const readline = require("readline");
 
@@ -57,6 +58,34 @@ function ask(question) {
   });
 }
 
+/** Names of the Fly apps on this account. Best-effort: an empty list just
+ *  means we fall through to creating one. */
+function listApps() {
+  const out = fly(["apps", "list", "--json"]);
+  if (out.status !== 0) return [];
+  try {
+    return JSON.parse(out.stdout)
+      .map((a) => a.Name || a.name)
+      .filter(Boolean)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Which secrets an app already holds, by name. */
+function listSecrets(app) {
+  const out = fly(["secrets", "list", "-a", app, "--json"]);
+  if (out.status !== 0) return null; // couldn't tell
+  try {
+    return JSON.parse(out.stdout)
+      .map((x) => x.Name || x.name)
+      .filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 /** Minimal .env reader/updater that preserves unrelated lines. */
 function readEnv() {
   if (!fs.existsSync(ENV_PATH)) return {};
@@ -97,6 +126,21 @@ async function main() {
   console.log("Apple Health connector — Fly.io deploy\n");
 
   // 1. Fly CLI present and logged in?
+  // A stray copy of these files directly in the home folder makes the whole
+  // home folder the Docker build context — Desktop, AppData and Downloads all
+  // uploaded to Fly on every deploy, which times out long before it finishes.
+  // It also means `npm run deploy` typed in the wrong terminal quietly builds
+  // the wrong thing. Neither is ever what someone meant.
+  if (path.resolve(ROOT) === path.resolve(os.homedir())) {
+    die(
+      `This copy of the project sits directly in your home folder:\n  ${ROOT}\n\n` +
+        "Deploying from here would upload your entire home folder — Desktop, Downloads,\n" +
+        "AppData and all — to Fly's builder, which never finishes.\n\n" +
+        "The project needs a folder of its own. If you already have one (e.g. ~/vital),\n" +
+        "change into it and run `npm run deploy` there."
+    );
+  }
+
   if (fly(["version"]).status !== 0) {
     FLY_BIN = "flyctl";
     if (fly(["version"]).status !== 0) {
@@ -121,6 +165,7 @@ async function main() {
   const env = readEnv();
   let ingestToken = env.HEALTH_INGEST_TOKEN || env.ATHLYTIC_INGEST_TOKEN;
   let mcpToken = env.MCP_TOKEN;
+  const freshTokens = !ingestToken || !mcpToken;
   if (!ingestToken) {
     ingestToken = crypto.randomBytes(24).toString("hex");
     upsertEnv("HEALTH_INGEST_TOKEN", ingestToken);
@@ -144,9 +189,31 @@ async function main() {
     );
     if (keep && !/^y(es)?$/i.test(keep)) app = null;
   } else {
-    app = null; // never deploy to the placeholder name without asking
+    // fly.toml still carries the placeholder name. The real name is only ever
+    // written to this file locally and is never committed, so a fresh clone
+    // always lands here — including on a machine that already runs this
+    // project. Creating a new app at this point is almost never what someone
+    // wants: they end up with a second, empty server while their phone keeps
+    // talking to the first one. So offer what already exists first.
+    app = null;
+    const existing = listApps();
+    if (existing.length) {
+      console.log("\nThis folder doesn't say which Fly app to deploy to yet.");
+      console.log("Apps already on your account:\n");
+      existing.forEach((name, i) => console.log(`  ${i + 1}. ${name}`));
+      const pick = await ask(
+        "\nDeploy to one of these? Type its number, or press Enter to create a NEW app: "
+      );
+      const index = Number(pick) - 1;
+      if (pick.trim() && Number.isInteger(index) && index >= 0 && index < existing.length) {
+        app = existing[index];
+        setAppName(app);
+        console.log(`Deploying to '${app}' and remembering it in fly.toml.`);
+      }
+    }
   }
 
+  const appIsNew = !app;
   for (let attempt = 0; !app; attempt++) {
     if (attempt >= 5) die("Couldn't create a Fly app after several tries — create one with `fly apps create <name>`, put the name in fly.toml, and re-run.");
     const suggestion = `apple-health-${crypto.randomBytes(2).toString("hex")}`;
@@ -167,6 +234,29 @@ async function main() {
   }
 
   // 4. Secrets, then deploy.
+  //
+  // Both links people actually use — the one in the phone and the connector in
+  // claude.ai — carry a token inside the URL. Pushing different tokens to an
+  // app that already has them silently breaks both, with no error anywhere:
+  // the phone just stops uploading. That happens whenever .env is missing, as
+  // it is in any fresh clone, because tokens were then generated a moment ago.
+  if (freshTokens && !appIsNew) {
+    const held = listSecrets(app);
+    const clashes = held === null || held.includes("HEALTH_INGEST_TOKEN") || held.includes("MCP_TOKEN");
+    if (clashes) {
+      console.log(`\n'${app}' already has its tokens set, but this folder had no .env,`);
+      console.log("so brand-new ones were just generated. Deploying them would replace the");
+      console.log("working tokens and break the link already saved on the phone and the");
+      console.log("connector already added in claude.ai.\n");
+      console.log("To keep the current links: stop here, copy .env from the folder you");
+      console.log("deployed from before into this one, and run `npm run deploy` again.\n");
+      const go = await ask("Or replace the tokens and re-share new links with everyone? [y/N] ");
+      if (!/^y(es)?$/i.test((go || "").trim())) {
+        die("Stopped before deploying. Nothing on Fly was changed.");
+      }
+    }
+  }
+
   console.log("\nSetting secrets…");
   const secrets = fly(["secrets", "set", "-a", app, `HEALTH_INGEST_TOKEN=${ingestToken}`, `MCP_TOKEN=${mcpToken}`]);
   // A brand-new app has no machines yet; "no change" also comes back non-zero on some versions.

@@ -1,0 +1,60 @@
+# Does the iPhone app still compile?
+#
+# Nothing else answers that on a push. Codemagic only builds when someone
+# presses its button (codemagic.yaml sets `events: []`), and build-vital.yml
+# stays off unless VITAL_CI_ENABLED is set — so a Swift mistake used to survive
+# until a human went looking for it, and then cost a whole TestFlight round trip
+# to find.
+#
+# This builds and stops. No signing, no Apple secrets, no .ipa, no upload:
+# nothing here can reach TestFlight or anyone's phone. It exists purely so a
+# typo fails in five minutes instead of in front of the person testing the app.
+name: Compile Vital
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/vital-compile.yml"
+  workflow_dispatch:
+
+# Deliberately no `pull_request:` trigger. It would build the merge commit as
+# well as the branch, so every push to a branch with a PR open would rent two
+# Mac runners instead of one — and macOS minutes bill at ten times the Linux
+# rate. The branch build is what matters here; base drifting underneath is what
+# the merge-conflict notice is for.
+
+# A newer push makes an in-flight run pointless; don't pay a Mac runner for it.
+concurrency:
+  group: compile-vital-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Vital.xcodeproj is generated, not committed — project.yml is the source
+      # of truth, so a mistake in it fails here too.
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          cd ios/Vital
+          xcodegen generate
+
+      # Release, to match what Codemagic and the App Store actually build:
+      # the point is to fail wherever they would fail.
+      - name: Build
+        run: |
+          cd ios/Vital
+          xcodebuild build \
+            -project Vital.xcodeproj \
+            -scheme Vital \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            EXPANDED_CODE_SIGN_IDENTITY=""

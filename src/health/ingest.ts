@@ -1,4 +1,13 @@
-import { DayRecord, HealthStore, IngestSummary, SleepRecord, WorkoutRecord } from "./types";
+import {
+  DayRecord,
+  HealthStore,
+  HeartEventRecord,
+  HeartRatePoint,
+  IngestSummary,
+  SleepRecord,
+  WorkoutRecord,
+  WorkoutSegment,
+} from "./types";
 
 /**
  * Parser for the JSON that the Health Auto Export iOS app POSTs to a
@@ -123,6 +132,10 @@ const SUM_METRICS = new Set([
   "flights_climbed",
   "apple_exercise_time",
   "apple_stand_time",
+  "time_in_daylight",
+  // Drinks are counted, not averaged: two rows of 1 on one date is two drinks,
+  // and averaging them would report one.
+  "number_of_alcoholic_beverages",
 ]);
 
 interface Acc {
@@ -168,6 +181,13 @@ function parseSleepRow(row: any, units?: string): SleepRecord {
   if (awake !== undefined) sleep.awakeHours = awake;
   if (typeof row.sleepStart === "string") sleep.sleepStart = row.sleepStart;
   if (typeof row.sleepEnd === "string") sleep.sleepEnd = row.sleepEnd;
+  const curve = parseHeartRateSeries(row.heartRateSeries);
+  if (curve) sleep.heartRateSeries = curve;
+  if (typeof row.source === "string") sleep.source = row.source;
+  if (Array.isArray(row.sources)) {
+    const list = row.sources.filter((v: unknown): v is string => typeof v === "string");
+    if (list.length > 0) sleep.sources = list;
+  }
   return sleep;
 }
 
@@ -215,7 +235,64 @@ function parseWorkout(w: any): { date: string; workout: WorkoutRecord } | undefi
   const elev = qtyOf(w.elevationUp) ?? qtyOf(w.elevation);
   if (elev !== undefined) workout.elevationUpM = round(elev, 0);
 
+  if (typeof w.source === "string") workout.source = w.source;
+  if (typeof w.device === "string") workout.device = w.device;
+  if (typeof w.timeZone === "string") workout.timeZone = w.timeZone;
+
+  if (Array.isArray(w.segments)) {
+    const segments: WorkoutSegment[] = [];
+    for (const raw of w.segments) {
+      if (typeof raw?.type !== "string" || typeof raw?.start !== "string") continue;
+      const segment: WorkoutSegment = { type: raw.type, start: raw.start };
+      if (typeof raw.end === "string") segment.end = raw.end;
+      const seconds = num(raw.duration);
+      if (seconds !== undefined) segment.durationSec = round(seconds, 1);
+      segments.push(segment);
+    }
+    if (segments.length > 0) workout.segments = segments;
+  }
+
+  const curve = parseHeartRateSeries(w.heartRateSeries);
+  if (curve) workout.heartRateSeries = curve;
+
   return { date, workout };
+}
+
+/**
+ * A heart-rate curve, defensively. The phone caps each one, but the endpoint
+ * accepts anything anyone posts, so the cap is re-applied here — a store file
+ * is loaded whole into memory on every read, and one runaway curve would be
+ * paid for on every question anyone ever asks.
+ */
+const MAX_CURVE_POINTS = 480;
+
+function parseHeartRateSeries(raw: unknown): HeartRatePoint[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const points: HeartRatePoint[] = [];
+  for (const p of raw) {
+    if (typeof p?.t !== "string") continue;
+    const bpm = num(p.bpm) ?? num(p.qty);
+    if (bpm === undefined) continue;
+    points.push({ t: p.t, bpm: round(bpm, 0) });
+    if (points.length >= MAX_CURVE_POINTS) break;
+  }
+  return points.length > 0 ? points : undefined;
+}
+
+function parseHeartEvent(raw: any): { date: string; event: HeartEventRecord } | undefined {
+  const date = localDay(raw?.start);
+  const type = typeof raw?.type === "string" ? raw.type : undefined;
+  if (!date || !type) return undefined;
+
+  const event: HeartEventRecord = { type, start: raw.start };
+  if (typeof raw.id === "string") event.id = raw.id;
+  if (typeof raw.end === "string") event.end = raw.end;
+  if (typeof raw.source === "string") event.source = raw.source;
+  if (typeof raw.device === "string") event.device = raw.device;
+  if (typeof raw.timeZone === "string") event.timeZone = raw.timeZone;
+  const threshold = num(raw.thresholdBpm);
+  if (threshold !== undefined) event.thresholdBpm = round(threshold, 0);
+  return { date, event };
 }
 
 /**
@@ -228,6 +305,9 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   const hasWorkouts = Array.isArray(body?.workouts);
   const metrics: any[] = hasMetrics ? body.metrics : [];
   const workouts: any[] = hasWorkouts ? body.workouts : [];
+  // Optional and newer than the rest of the contract: a payload without it is
+  // not malformed, it is a phone that has nothing to report or an older build.
+  const heartEvents: any[] = Array.isArray(body?.heartEvents) ? body.heartEvents : [];
   // Reject only a payload of the wrong shape. A correctly formed export with
   // nothing in it is what a phone sends when Health access was declined or the
   // range holds no data, and answering that with an error puts a developer
@@ -245,6 +325,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   // metric -> date -> accumulated value (avg or sum resolved at the end)
   const accs = new Map<string, Map<string, Acc>>();
   const unitsSeen: { [metric: string]: string } = {};
+  const sourcesSeen: { [metric: string]: string } = {};
   // heart_rate keeps Min/Avg/Max; hold separate accumulators
   const hrAcc = new Map<string, { min: Acc; avg: Acc; max: Acc }>();
 
@@ -254,6 +335,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
     seen.add(name);
     const units: string | undefined = typeof metric.units === "string" ? metric.units : undefined;
     if (units) unitsSeen[name] = units;
+    if (typeof metric.source === "string" && metric.source) sourcesSeen[name] = metric.source;
 
     for (const row of metric.data) {
       const date = localDay(row?.date);
@@ -365,6 +447,22 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
     summary.dataPoints++;
   }
 
+  // Heart events: replace-by-identity, so re-sending a range cannot duplicate
+  // one. An event with no uuid falls back to its type and timestamp, which is
+  // as unique as such an event gets.
+  for (const raw of heartEvents) {
+    const parsed = parseHeartEvent(raw);
+    if (!parsed) continue;
+    const day = getDay(store, parsed.date);
+    if (!day.heartEvents) day.heartEvents = [];
+    const key = (e: HeartEventRecord) => e.id || `${e.type}|${e.start}`;
+    const existing = day.heartEvents.findIndex((e) => key(e) === key(parsed.event));
+    if (existing >= 0) day.heartEvents[existing] = parsed.event;
+    else day.heartEvents.push(parsed.event);
+    touched.add(parsed.date);
+    summary.dataPoints++;
+  }
+
   const dates = [...touched].sort();
   summary.daysTouched = dates.length;
   summary.firstDate = dates[0];
@@ -372,6 +470,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   summary.metricsSeen = [...seen].sort();
 
   store.units = { ...store.units, ...unitsSeen };
+  store.sources = { ...store.sources, ...sourcesSeen };
   store.updatedAt = new Date().toISOString();
   store.lastIngestSource = source || "api";
   return summary;

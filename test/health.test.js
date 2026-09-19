@@ -11,7 +11,7 @@ const assert = require("assert");
 const { ingestPayload, parseStamp } = require("../dist/health/ingest");
 const { emptyStore } = require("../dist/health/store");
 const { computeRecovery, computeExertion, exertionScore } = require("../dist/health/metrics");
-const { noRecoveryReason } = require("../dist/health/mcp");
+const { noRecoveryReason, isPartial, freshness, withoutCurve, coverage } = require("../dist/health/mcp");
 
 let passed = 0;
 const failures = [];
@@ -278,6 +278,354 @@ test("a real day of training is reported alongside its raw load", () => {
   const e = computeExertion(store, "2026-09-09");
   assert.ok(e.trainingLoad > 0, "the raw load must stay visible next to the score");
   assert.ok(e.score > 0 && e.score <= 10);
+});
+
+group("freshness and partial days survive timezones");
+
+function storeAt(dates, updatedAt) {
+  const store = emptyStore();
+  for (const d of dates) store.days[d] = { date: d, workouts: [], other: {} };
+  store.updatedAt = updatedAt;
+  return store;
+}
+
+test("the newest day on record is the partial one", () => {
+  const store = storeAt(["2026-09-07", "2026-09-08", "2026-09-09"], "2026-09-09T10:00:00.000Z");
+  assert.strictEqual(isPartial(store, "2026-09-09"), true);
+  assert.strictEqual(isPartial(store, "2026-09-08"), false);
+});
+
+test("a user west of Greenwich still gets today flagged", () => {
+  // 18:00 on the 9th in California is 02:00 UTC on the 10th. Comparing the
+  // stored date against the server's UTC date said "2026-09-09 >= 2026-09-10"
+  // — false — and reported a day still being lived as complete.
+  const store = storeAt(["2026-09-08", "2026-09-09"], "2026-09-10T02:00:00.000Z");
+  assert.strictEqual(isPartial(store, "2026-09-09"), true, "today must not read as a finished day");
+});
+
+test("data older than a day says so out loud", () => {
+  const old = freshness(storeAt(["2026-09-01"], new Date(Date.now() - 4 * 86400000).toISOString()));
+  assert.ok(old.staleNote && /day\(s\) ago/.test(old.staleNote), "four-day-old data must carry a warning");
+  const fresh = freshness(storeAt(["2026-09-09"], new Date(Date.now() - 3600000).toISOString()));
+  assert.strictEqual(fresh.staleNote, undefined, "an hour old is not stale");
+  assert.strictEqual(fresh.syncedHoursAgo, 1);
+});
+
+test("a store that never synced does not invent a timestamp", () => {
+  const s = freshness(emptyStore());
+  assert.strictEqual(s.dataAsOf, null);
+  assert.strictEqual(s.staleNote, undefined);
+});
+
+group("the wider set of HealthKit types arrives intact");
+
+/** Ingest a payload of plain daily metrics and hand back the store. */
+function ingestMetrics(metrics) {
+  const store = emptyStore();
+  ingestPayload(store, { data: { metrics, workouts: [] } });
+  return store;
+}
+
+const day = (d, qty) => ({ date: d + " 12:00:00 +0200", qty });
+
+test("body composition lands where Claude can find it", () => {
+  const store = ingestMetrics([
+    { name: "body_mass", units: "kg", data: [day("2026-09-01", 78.4)] },
+    { name: "body_fat_percentage", units: "%", data: [day("2026-09-01", 18.2)] },
+    { name: "waist_circumference", units: "cm", data: [day("2026-09-01", 84)] },
+  ]);
+  const other = store.days["2026-09-01"].other;
+  assert.strictEqual(other.body_mass, 78.4);
+  assert.strictEqual(other.body_fat_percentage, 18.2);
+  assert.strictEqual(other.waist_circumference, 84);
+  assert.strictEqual(store.units.body_mass, "kg", "units must survive so the number means something");
+});
+
+test("time in daylight is summed across the day, not averaged", () => {
+  // Two readings for one date is what a second sync of the same day produces.
+  // Averaging them would halve the answer, which is why time_in_daylight had
+  // to join SUM_METRICS rather than fall through to the default.
+  const store = ingestMetrics([
+    {
+      name: "time_in_daylight",
+      units: "min",
+      data: [day("2026-09-01", 30), day("2026-09-01", 50)],
+    },
+  ]);
+  assert.strictEqual(store.days["2026-09-01"].other.time_in_daylight, 80);
+});
+
+test("a body measurement taken twice in a day averages instead", () => {
+  const store = ingestMetrics([
+    { name: "body_mass", units: "kg", data: [day("2026-09-01", 78), day("2026-09-01", 80)] },
+  ]);
+  assert.strictEqual(store.days["2026-09-01"].other.body_mass, 79);
+});
+
+test("overnight wrist temperature becomes a first-class field", () => {
+  const store = ingestMetrics([
+    { name: "apple_sleeping_wrist_temperature", units: "degC", data: [day("2026-09-01", 35.62)] },
+  ]);
+  assert.strictEqual(store.days["2026-09-01"].wristTemperatureC, 35.62);
+});
+
+group("a number says which device it came from");
+
+test("the device behind a metric is remembered", () => {
+  const store = ingestMetrics([
+    {
+      name: "heart_rate_variability",
+      units: "ms",
+      source: "com.apple.health.WATCH",
+      data: [day("2026-09-01", 62)],
+    },
+  ]);
+  assert.strictEqual(store.sources.heart_rate_variability, "com.apple.health.WATCH");
+});
+
+test("a metric HealthKit aggregated across devices names none", () => {
+  // The daily figures come from HKStatisticsCollectionQuery, which merges every
+  // source on purpose — that is what stops steps being counted twice. Such a
+  // metric must stay absent here rather than be credited to one device.
+  const store = ingestMetrics([{ name: "step_count", units: "steps", data: [day("2026-09-01", 9000)] }]);
+  assert.strictEqual((store.sources || {}).step_count, undefined);
+});
+
+test("the night says whose account of it was used", () => {
+  const sleep = night("2026-09-01", {
+    totalSleep: 7.4,
+    core: 4.1,
+    deep: 1.1,
+    rem: 2.2,
+    sleepStart: "2026-08-31 23:10:00 +0200",
+    sleepEnd: "2026-09-01 07:00:00 +0200",
+    source: "com.apple.health.WATCH",
+    sources: ["com.apple.health.WATCH", "com.apple.Health"],
+  });
+  assert.strictEqual(sleep.source, "com.apple.health.WATCH");
+  assert.deepStrictEqual(sleep.sources, ["com.apple.health.WATCH", "com.apple.Health"]);
+  assert.strictEqual(sleep.suspect, undefined, "naming the sources must not make a sound night suspect");
+});
+
+test("a night recorded by one device only lists no rivals", () => {
+  const sleep = night("2026-09-02", { totalSleep: 7, core: 7, source: "com.apple.Health" });
+  assert.strictEqual(sleep.source, "com.apple.Health");
+  assert.strictEqual(sleep.sources, undefined);
+});
+
+group("sample-level detail survives the trip");
+
+test("a workout carries who recorded it, on what, and where", () => {
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: {
+      metrics: [],
+      workouts: [
+        {
+          id: "W1",
+          name: "Outdoor Run",
+          start: "2026-09-01 17:30:00 +0200",
+          end: "2026-09-01 18:10:00 +0200",
+          source: "com.apple.health.WATCH",
+          device: "Apple Watch (Watch7,1)",
+          timeZone: "Europe/Riga",
+          segments: [
+            { type: "lap", start: "2026-09-01 17:35:00 +0200", end: "2026-09-01 17:40:00 +0200", duration: 300 },
+            { type: "pause", start: "2026-09-01 17:50:00 +0200" },
+          ],
+        },
+      ],
+    },
+  });
+  const w = store.days["2026-09-01"].workouts[0];
+  assert.strictEqual(w.source, "com.apple.health.WATCH");
+  assert.strictEqual(w.device, "Apple Watch (Watch7,1)");
+  assert.strictEqual(w.timeZone, "Europe/Riga");
+  assert.strictEqual(w.segments.length, 2);
+  assert.strictEqual(w.segments[0].durationSec, 300);
+  assert.strictEqual(w.segments[1].end, undefined, "an instant event has no end");
+});
+
+/** Ingest heart events and hand back the day they landed on. */
+function withEvents(events) {
+  const store = emptyStore();
+  ingestPayload(store, { data: { metrics: [], workouts: [], heartEvents: events } });
+  return store;
+}
+
+test("a watch-raised heart event keeps its own timestamp and threshold", () => {
+  const store = withEvents([
+    {
+      type: "high_heart_rate",
+      id: "E1",
+      start: "2026-09-01 14:02:00 +0200",
+      source: "com.apple.health.WATCH",
+      thresholdBpm: 120,
+    },
+  ]);
+  const e = store.days["2026-09-01"].heartEvents[0];
+  assert.strictEqual(e.type, "high_heart_rate");
+  assert.strictEqual(e.thresholdBpm, 120);
+  assert.strictEqual(e.start, "2026-09-01 14:02:00 +0200");
+});
+
+test("re-sending a range does not duplicate an event", () => {
+  // Every sync re-reads the last few days, so the same event arrives again and
+  // again. Two identical entries would read as two episodes.
+  const store = emptyStore();
+  const payload = {
+    data: {
+      metrics: [],
+      workouts: [],
+      heartEvents: [{ type: "irregular_heart_rhythm", id: "E9", start: "2026-09-02 03:00:00 +0200" }],
+    },
+  };
+  ingestPayload(store, payload);
+  ingestPayload(store, payload);
+  assert.strictEqual(store.days["2026-09-02"].heartEvents.length, 1);
+});
+
+test("an event with no id still cannot duplicate itself", () => {
+  const store = emptyStore();
+  const payload = {
+    data: {
+      metrics: [],
+      workouts: [],
+      heartEvents: [{ type: "low_heart_rate", start: "2026-09-03 04:00:00 +0200" }],
+    },
+  };
+  ingestPayload(store, payload);
+  ingestPayload(store, payload);
+  assert.strictEqual(store.days["2026-09-03"].heartEvents.length, 1);
+});
+
+test("a payload with no heartEvents is still a valid payload", () => {
+  // Older builds of the app send none, and a phone with nothing to report
+  // sends none either. Neither is malformed.
+  const store = emptyStore();
+  assert.doesNotThrow(() =>
+    ingestPayload(store, { data: { metrics: [], workouts: [{ name: "Walk", start: "2026-09-04 09:00:00 +0200" }] } })
+  );
+  assert.strictEqual(store.days["2026-09-04"].heartEvents, undefined);
+});
+
+group("heart-rate curves are carried but never dumped");
+
+const curve = (n) =>
+  Array.from({ length: n }, (_, i) => ({ t: `2026-09-05 01:${String(i % 60).padStart(2, "0")}:00 +0200`, bpm: 60 + (i % 20) }));
+
+test("a curve rides along with its workout and its night", () => {
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: {
+      metrics: [
+        {
+          name: "sleep_analysis",
+          units: "hr",
+          data: [{ date: "2026-09-05 12:00:00 +0200", totalSleep: 7, core: 7, heartRateSeries: curve(12) }],
+        },
+      ],
+      workouts: [
+        { id: "W2", name: "Walking", start: "2026-09-05 09:00:00 +0200", heartRateSeries: curve(30) },
+      ],
+    },
+  });
+  const day = store.days["2026-09-05"];
+  assert.strictEqual(day.sleep.heartRateSeries.length, 12);
+  assert.strictEqual(day.workouts[0].heartRateSeries.length, 30);
+  assert.strictEqual(day.workouts[0].heartRateSeries[0].bpm, 60);
+});
+
+test("a runaway curve is cut down at the door", () => {
+  // The phone caps its own curves, but the endpoint accepts whatever is posted
+  // to it, and the store is read whole into memory on every question anyone
+  // asks — so one oversized curve would be paid for forever.
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: { metrics: [], workouts: [{ name: "Run", start: "2026-09-06 09:00:00 +0200", heartRateSeries: curve(900) }] },
+  });
+  assert.strictEqual(store.days["2026-09-06"].workouts[0].heartRateSeries.length, 480);
+});
+
+test("points without a timestamp or a number are skipped, not stored", () => {
+  const store = emptyStore();
+  ingestPayload(store, {
+    data: {
+      metrics: [],
+      workouts: [
+        {
+          name: "Run",
+          start: "2026-09-07 09:00:00 +0200",
+          heartRateSeries: [{ t: "2026-09-07 09:01:00 +0200", bpm: 130 }, { bpm: 99 }, { t: "2026-09-07 09:03:00 +0200" }],
+        },
+      ],
+    },
+  });
+  assert.strictEqual(store.days["2026-09-07"].workouts[0].heartRateSeries.length, 1);
+});
+
+test("the ordinary answers carry a count, never the curve", () => {
+  // Left in, a couple of hundred points would ride along in every daily
+  // summary, workout listing and sleep query — thousands of tokens of numbers
+  // nobody asked to see, crowding out the answer.
+  const slim = withoutCurve({ name: "Run", start: "x", heartRateSeries: curve(200) });
+  assert.strictEqual(slim.heartRateSeries, undefined, "the curve must not survive");
+  assert.strictEqual(slim.heartRateCurvePoints, 200, "but something must say it exists");
+  assert.strictEqual(slim.name, "Run", "and the rest of the record is untouched");
+});
+
+test("a record with no curve gains no empty count", () => {
+  const slim = withoutCurve({ name: "Walk", start: "x" });
+  assert.ok(!("heartRateCurvePoints" in slim), "nothing to point at, so nothing to say");
+  assert.ok(!("heartRateSeries" in slim));
+});
+
+group("drinks, and not mistaking silence for none");
+
+test("drinks are counted across the day, not averaged", () => {
+  // Two drinks logged separately on one evening is two drinks. Averaging the
+  // rows would report one, which is the difference between a quiet night and
+  // a reason yesterday's HRV fell over.
+  const store = ingestMetrics([
+    {
+      name: "number_of_alcoholic_beverages",
+      units: "count",
+      data: [day("2026-09-10", 1), day("2026-09-10", 1), day("2026-09-10", 2)],
+    },
+  ]);
+  assert.strictEqual(store.days["2026-09-10"].other.number_of_alcoholic_beverages, 4);
+});
+
+test("a day nobody wrote anything down is reported as a gap, not a zero", () => {
+  const dates = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"];
+  const c = coverage("number_of_alcoholic_beverages", dates, [
+    { date: "2026-09-02", value: 3 },
+  ]);
+  assert.strictEqual(c.daysInWindow, 4);
+  assert.strictEqual(c.daysWithValue, 1);
+  assert.strictEqual(c.daysWithoutValue, 3, "three silent days must be counted, not dropped");
+  assert.deepStrictEqual(c.datesWithoutValue, ["2026-09-01", "2026-09-03", "2026-09-04"]);
+  assert.ok(/not the same as zero/.test(c.missingNote), "and said out loud");
+});
+
+test("a fully covered window carries no warning", () => {
+  const dates = ["2026-09-01", "2026-09-02"];
+  const c = coverage("steps", dates, [
+    { date: "2026-09-01", value: 9000 },
+    { date: "2026-09-02", value: 8000 },
+  ]);
+  assert.strictEqual(c.daysWithoutValue, 0);
+  assert.strictEqual(c.missingNote, undefined, "nothing missing, nothing to caveat");
+  assert.strictEqual(c.datesWithoutValue, undefined);
+});
+
+test("a long run of gaps is counted but not printed", () => {
+  // A year of missing days is a number, not a list to paste into an answer.
+  const dates = Array.from({ length: 100 }, (_, i) => `2026-01-${String(i + 1).padStart(3, "0")}`);
+  const c = coverage("body_mass", dates, [{ date: dates[0], value: 78 }]);
+  assert.strictEqual(c.daysWithoutValue, 99);
+  assert.strictEqual(c.datesWithoutValue, undefined, "too many to list");
+  assert.ok(c.missingNote, "but still stated");
 });
 
 console.log(

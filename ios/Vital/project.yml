@@ -50,6 +50,13 @@ targets:
       path: Vital.entitlements
       properties:
         com.apple.developer.healthkit: true
+        # Required since iOS 15 for HKObserverQuery to fire while the app is in
+        # the background. Without it enableBackgroundDelivery reports success
+        # and then simply never delivers — nothing errors, the data just stays
+        # a day old. Adding an entitlement changes what the provisioning
+        # profile must carry, so the first build after this needs a reissued
+        # profile (Codemagic's fetch-signing-files --create handles that).
+        com.apple.developer.healthkit.background-delivery: true
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"

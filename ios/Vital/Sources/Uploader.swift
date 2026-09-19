@@ -29,6 +29,39 @@ enum Uploader {
         set { UserDefaults.standard.set(newValue, forKey: "lastOK") }
     }
 
+    /// Metric names that have already been sent with a full history behind them.
+    ///
+    /// A routine send covers a week. So when an update teaches Vital to read
+    /// something new — body mass, flights climbed, running power — the server
+    /// gets a week of it and nothing before, beside twelve years of steps, and
+    /// no ordinary sync ever fills the gap. Nothing errors; the metric is just
+    /// permanently thin, and only someone who knew to press "All" would fix it.
+    /// This is how the app knows which ones it still owes history for.
+    static var backfilledMetrics: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "backfilledMetrics") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue).sorted(), forKey: "backfilledMetrics") }
+    }
+
+    /// How far a backfill in progress has got, and what it is for.
+    ///
+    /// Reading a whole timeline takes longer than someone will stare at a
+    /// spinner, and putting the app in the background suspends the work — so
+    /// being interrupted is the normal case, not the rare one. Without a
+    /// cursor every attempt would start at 2014 again and a person who always
+    /// backgrounds the app after a minute would never finish one.
+    static var backfillCursor: Date? {
+        get { UserDefaults.standard.object(forKey: "backfillCursor") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "backfillCursor") }
+    }
+
+    /// The metric set that cursor belongs to. If an update owes history for a
+    /// different set, resuming mid-timeline would silently skip the early years
+    /// of whatever is new, so the run starts over instead.
+    static var backfillOwed: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "backfillOwed") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue).sorted(), forKey: "backfillOwed") }
+    }
+
     static var isConfigured: Bool {
         !serverURL.isEmpty && KeychainHelper.load()?.isEmpty == false
     }

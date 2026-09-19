@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadStore, sortedDates, storePath } from "./store";
 import { computeExertion, computeRecovery, computeTrend } from "./metrics";
-import { DayRecord, HealthStore, WorkoutRecord } from "./types";
+import { DayRecord, HealthStore, HeartRatePoint, WorkoutRecord } from "./types";
 import { HealthUser } from "./users";
 
 /**
@@ -48,9 +48,31 @@ function calendarWindow(end: string, days: number): string[] {
  * reporting today's recovery as though the day were over is how a lunchtime sync
  * gets read as a full day's verdict.
  */
-function isPartial(store: HealthStore, date: string): boolean {
-  const lastSync = store.updatedAt?.slice(0, 10);
-  return lastSync !== undefined && date >= lastSync;
+export function isPartial(store: HealthStore, date: string): boolean {
+  // Deliberately not "is this today?" — the server has no idea what day it is
+  // where the person lives. Comparing a stored date against the server's own
+  // UTC date gets it wrong by a day for anyone west of Greenwich, who syncs in
+  // their evening and lands on the next UTC day. The timezone-free truth is
+  // that a sync can only ever capture the day it ran up to the moment it ran,
+  // so the most recent day on record is the one that may still be incomplete.
+  const dates = sortedDates(store);
+  return dates.length > 0 && date === dates[dates.length - 1];
+}
+
+/** How fresh the data is. Every answer carries this, because the alternative is
+ *  a four-day-old snapshot read back as though it were this morning. */
+export function freshness(store: HealthStore) {
+  const lastSync = store.updatedAt;
+  if (!lastSync) return { dataAsOf: null };
+  const ageHours = (Date.now() - Date.parse(lastSync)) / 3600000;
+  if (!Number.isFinite(ageHours)) return { dataAsOf: lastSync };
+  const out: Record<string, unknown> = { dataAsOf: lastSync, syncedHoursAgo: Math.round(ageHours) };
+  if (ageHours >= 24) {
+    out.staleNote =
+      `The phone last synced ${Math.floor(ageHours / 24)} day(s) ago, so nothing below reflects ` +
+      "anything since then. Say so rather than presenting it as current.";
+  }
+  return out;
 }
 
 /** Dates in the window with nothing stored — the difference between "did not
@@ -89,6 +111,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
   const exertion = computeExertion(store, date);
   const partial = isPartial(store, date);
   return json({
+    ...freshness(store),
     date,
     partial,
     ...(partial
@@ -97,7 +120,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     note: ESTIMATE_NOTE,
     recovery: recovery ?? noRecoveryReason(day),
     exertion: exertion ?? "insufficient data",
-    sleep: day.sleep ?? null,
+    sleep: day.sleep ? withoutCurve(day.sleep) : null,
     vitals: {
       hrvMs: day.hrvMs ?? null,
       restingHeartRate: day.restingHeartRate ?? null,
@@ -110,9 +133,67 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     activity: {
       steps: day.steps ?? null,
       activeEnergyKcal: day.activeEnergyKcal ?? null,
-      workouts: day.workouts,
+      workouts: day.workouts.map(withoutCurve),
     },
+    // Everything else synced for this day — body composition, basal energy,
+    // flights, exercise minutes, running form and so on. Without this they
+    // would only be reachable one at a time through get_raw_metric, so a
+    // question like "how was my day" would silently miss most of what was
+    // measured.
+    ...(Object.keys(day.other).length > 0 ? { otherMetrics: day.other } : {}),
+    // Rare enough that listing them costs nothing and omitting one matters.
+    ...(day.heartEvents?.length ? { heartEvents: day.heartEvents } : {}),
   });
+}
+
+/**
+ * The same record with its heart-rate curve taken out, and a count left in its
+ * place.
+ *
+ * A workout's curve is a couple of hundred points. Left in, it would ride along
+ * in every daily summary, every workout listing and every sleep query — turning
+ * "how did I sleep" into thousands of tokens of numbers nobody asked to see,
+ * and crowding out the answer. The count is there so the curve is discoverable:
+ * something has to say it exists, or get_heart_rate_curve would only ever be
+ * called by someone who already knew.
+ */
+export function withoutCurve<T extends { heartRateSeries?: HeartRatePoint[] }>(record: T) {
+  const { heartRateSeries, ...rest } = record;
+  if (!heartRateSeries?.length) return rest;
+  return { ...rest, heartRateCurvePoints: heartRateSeries.length };
+}
+
+/**
+ * How much of the window this metric actually covers.
+ *
+ * Handing back only the days that hold a value reads as a series of zeros:
+ * four drinks logged in a month looks like twenty-six sober days, when it may
+ * be twenty-six days nobody wrote anything down. For anything a person enters
+ * by hand that distinction decides the answer, so the gap is stated rather
+ * than left to be inferred from a short list.
+ */
+export function coverage(
+  name: string,
+  dates: string[],
+  values: { date: string; value: number }[]
+) {
+  const found = new Set(values.map((v) => v.date));
+  const missing = dates.filter((d) => !found.has(d));
+  if (missing.length === 0) {
+    return { daysInWindow: dates.length, daysWithValue: values.length, daysWithoutValue: 0 };
+  }
+  return {
+    daysInWindow: dates.length,
+    daysWithValue: values.length,
+    daysWithoutValue: missing.length,
+    // Listed while short enough to read; a count alone otherwise, because a
+    // year of gaps is not something to print into an answer.
+    ...(missing.length <= 31 ? { datesWithoutValue: missing } : {}),
+    missingNote:
+      `${missing.length} of these ${dates.length} days hold other health data but no '${name}'. ` +
+      "That means it was not recorded, which is not the same as zero — especially for a metric a " +
+      "person enters by hand.",
+  };
 }
 
 type ToolResult = { content: { type: "text"; text: string }[] };
@@ -146,6 +227,12 @@ const workoutsInput: z.ZodRawShape = {
 };
 const sleepInput: z.ZodRawShape = {
   days: z.number().int().min(1).max(90).optional().describe("How many nights back (default 7)."),
+};
+const heartRateCurveInput: z.ZodRawShape = {
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+    .describe("Day to read, YYYY-MM-DD. Omit for the latest day with data."),
+  which: z.enum(["all", "sleep", "workouts"]).optional()
+    .describe("Which curves to return (default all). Each is a few hundred points."),
 };
 const rawMetricInput: z.ZodRawShape = {
   name: z.string().describe("Metric name, e.g. 'hrvMs' or an 'other' key like 'flights_climbed'."),
@@ -183,6 +270,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const counts: Record<string, number> = {};
       const bump = (k: string) => (counts[k] = (counts[k] || 0) + 1);
       let workouts = 0;
+      let heartEvents = 0;
       for (const d of dates) {
         const day = store.days[d];
         if (day.hrvMs !== undefined) bump("hrv");
@@ -193,6 +281,10 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         if (day.respiratoryRate !== undefined) bump("respiratoryRate");
         if (day.vo2Max !== undefined) bump("vo2Max");
         workouts += day.workouts.length;
+        heartEvents += day.heartEvents?.length ?? 0;
+        if (day.sleep?.heartRateSeries?.length || day.workouts.some((w) => w.heartRateSeries?.length)) {
+          bump("heartRateCurve");
+        }
         for (const k of Object.keys(day.other)) bump(`other:${k}`);
       }
       return json({
@@ -201,7 +293,13 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         lastDate: latestDate(dates),
         lastSync: store.updatedAt ?? null,
         totalWorkouts: workouts,
+        totalHeartEvents: heartEvents,
         daysWithMetric: counts,
+        metricUnits: store.units ?? {},
+        // Only metrics where one device was deliberately chosen over another
+        // appear here. A metric HealthKit aggregated across every source is
+        // absent rather than credited to one of them.
+        metricSources: store.sources ?? {},
         note: ESTIMATE_NOTE,
       });
     }
@@ -240,6 +338,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const window = calendarWindow(last, span);
       const missingDates = missingIn(store, window);
       return json({
+        ...freshness(store),
         note: ESTIMATE_NOTE,
         requestedDays: span,
         window: { first: window[0], last: window[window.length - 1] },
@@ -269,10 +368,10 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       for (const date of dates) {
         if (start && date < start) continue;
         if (end && date > end) continue;
-        for (const w of store.days[date].workouts) all.push({ date, ...w });
+        for (const w of store.days[date].workouts) all.push({ date, ...withoutCurve(w) });
       }
       all.sort((a, b) => (a.start < b.start ? 1 : -1));
-      return json({ totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
+      return json({ ...freshness(store), totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
     }
   );
 
@@ -293,13 +392,14 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const window = calendarWindow(latestDate(stored)!, span);
       const nights = window
         .filter((d) => store.days[d]?.sleep)
-        .map((d) => ({ date: d, ...store.days[d].sleep }));
+        .map((d) => ({ date: d, ...withoutCurve(store.days[d].sleep!) }));
       // Nights whose own numbers contradict each other are listed but kept out
       // of the average: an average over broken values is broken to two decimals.
       const sound = nights.filter((n) => !(n.suspect && n.suspect.length));
       const totals = sound.map((n) => n.totalSleepHours).filter((v): v is number => v !== undefined);
       const avg = totals.length ? Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 100) / 100 : null;
       return json({
+        ...freshness(store),
         requestedNights: span,
         window: { first: window[0], last: window[window.length - 1] },
         nightsFound: nights.length,
@@ -314,14 +414,74 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
 
   addTool(
     server,
+    "get_heart_rate_curve",
+    {
+      title: "Heart rate curve",
+      description:
+        "Heart rate through one day's workouts and night's sleep as a series of points — one per minute inside a " +
+        "workout, one per five minutes across a night. Use it for the shape rather than the totals: where the peaks " +
+        "were, how fast it came down afterwards, how deep the overnight dip went and when. Kept out of the other " +
+        "tools' answers because each curve is a few hundred numbers; they report heartRateCurvePoints where one " +
+        "exists. Only roughly the last two weeks carry curves.",
+      inputSchema: heartRateCurveInput,
+    },
+    async ({ date, which }: { date?: string; which?: "all" | "sleep" | "workouts" }) => {
+      const store = loadStore(slug);
+      const dates = sortedDates(store);
+      const day = date ?? latestDate(dates);
+      if (!day) return noData(slug);
+      const record = store.days[day];
+      if (!record) {
+        return json({
+          error: `No data stored for ${day}.`,
+          availableRange: { first: dates[0], last: latestDate(dates) },
+        });
+      }
+      const want = which ?? "all";
+      const sleepCurve = want === "workouts" ? undefined : record.sleep?.heartRateSeries;
+      const workouts =
+        want === "sleep"
+          ? []
+          : record.workouts
+              .filter((w) => w.heartRateSeries?.length)
+              .map((w) => ({
+                id: w.id ?? null,
+                name: w.name,
+                start: w.start,
+                bucketMinutes: 1,
+                points: w.heartRateSeries,
+              }));
+      const empty = !sleepCurve?.length && workouts.length === 0;
+      return json({
+        ...freshness(store),
+        date: day,
+        // Say why it is empty rather than returning a bare pair of nulls, which
+        // reads as "your heart stopped" instead of "nothing was recorded".
+        ...(empty
+          ? {
+              note:
+                "No heart-rate curve stored for this day. Curves are kept only for roughly the last two weeks, and " +
+                "only where a watch recorded heart rate during sleep or a workout.",
+            }
+          : {}),
+        sleep: sleepCurve?.length ? { bucketMinutes: 5, points: sleepCurve } : null,
+        workouts,
+      });
+    }
+  );
+
+  addTool(
+    server,
     "get_raw_metric",
     {
       title: "Raw metric",
       description:
         "Daily values for one stored metric over the last N days. Valid names: hrvMs, restingHeartRate, heartRateAvg, " +
         "heartRateMax, respiratoryRate, bloodOxygenPct, vo2Max, wristTemperatureC, activeEnergyKcal, steps — " +
-        "plus anything listed under 'other:*' by get_data_status (e.g. mindful_minutes). Escape hatch when the " +
-        "summary tools don't cover a metric.",
+        "plus anything listed under 'other:*' by get_data_status (e.g. flights_climbed, " +
+        "number_of_alcoholic_beverages). Escape hatch when the summary tools don't cover a metric. " +
+        "Read daysWithoutValue before drawing a conclusion: a missing day means nothing was recorded, which is " +
+        "not the same as a zero — most of all for anything a person logs by hand.",
       inputSchema: rawMetricInput,
     },
     async ({ name, days }: { name: string; days?: number }) => {
@@ -339,7 +499,13 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       if (values.length === 0) {
         return json({ error: `No values stored for metric '${name}'.`, hint: "Call get_data_status to see available metrics." });
       }
-      return json({ metric: name, units: store.units?.[name], values });
+      return json({
+        ...freshness(store),
+        metric: name,
+        units: store.units?.[name],
+        ...coverage(name, dates, values),
+        values,
+      });
     }
   );
 

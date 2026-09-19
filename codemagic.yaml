@@ -70,9 +70,11 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # Hand the build to the tester group at upload time. App Store Connect's
-        # "automatic distribution" only covers builds uploaded from Xcode, so a
-        # build that arrives through the API sits undistributed and testers see
-        # "No builds available" — naming the group here does the assignment.
-        beta_groups:
-          - Family
+        # Deliberately no `beta_groups:` here. "Family" is an INTERNAL group,
+        # and internal groups receive every build automatically once App Store
+        # Connect finishes processing it — there is nothing to assign. Asking
+        # for the assignment anyway fails the whole build at the last step:
+        #   Cannot add internal group to a build.
+        # even though the .ipa was built, uploaded and processed successfully.
+        # Only EXTERNAL groups need naming here (and those also need Beta App
+        # Review for the first build of each version).
