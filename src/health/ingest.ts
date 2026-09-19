@@ -133,6 +133,9 @@ const SUM_METRICS = new Set([
   "apple_exercise_time",
   "apple_stand_time",
   "time_in_daylight",
+  // Drinks are counted, not averaged: two rows of 1 on one date is two drinks,
+  // and averaging them would report one.
+  "number_of_alcoholic_beverages",
 ]);
 
 interface Acc {

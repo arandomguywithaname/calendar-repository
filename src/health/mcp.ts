@@ -163,6 +163,39 @@ export function withoutCurve<T extends { heartRateSeries?: HeartRatePoint[] }>(r
   return { ...rest, heartRateCurvePoints: heartRateSeries.length };
 }
 
+/**
+ * How much of the window this metric actually covers.
+ *
+ * Handing back only the days that hold a value reads as a series of zeros:
+ * four drinks logged in a month looks like twenty-six sober days, when it may
+ * be twenty-six days nobody wrote anything down. For anything a person enters
+ * by hand that distinction decides the answer, so the gap is stated rather
+ * than left to be inferred from a short list.
+ */
+export function coverage(
+  name: string,
+  dates: string[],
+  values: { date: string; value: number }[]
+) {
+  const found = new Set(values.map((v) => v.date));
+  const missing = dates.filter((d) => !found.has(d));
+  if (missing.length === 0) {
+    return { daysInWindow: dates.length, daysWithValue: values.length, daysWithoutValue: 0 };
+  }
+  return {
+    daysInWindow: dates.length,
+    daysWithValue: values.length,
+    daysWithoutValue: missing.length,
+    // Listed while short enough to read; a count alone otherwise, because a
+    // year of gaps is not something to print into an answer.
+    ...(missing.length <= 31 ? { datesWithoutValue: missing } : {}),
+    missingNote:
+      `${missing.length} of these ${dates.length} days hold other health data but no '${name}'. ` +
+      "That means it was not recorded, which is not the same as zero — especially for a metric a " +
+      "person enters by hand.",
+  };
+}
+
 type ToolResult = { content: { type: "text"; text: string }[] };
 
 // server.registerTool's generic inference overflows TypeScript's instantiation
@@ -445,8 +478,10 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       description:
         "Daily values for one stored metric over the last N days. Valid names: hrvMs, restingHeartRate, heartRateAvg, " +
         "heartRateMax, respiratoryRate, bloodOxygenPct, vo2Max, wristTemperatureC, activeEnergyKcal, steps — " +
-        "plus anything listed under 'other:*' by get_data_status (e.g. mindful_minutes). Escape hatch when the " +
-        "summary tools don't cover a metric.",
+        "plus anything listed under 'other:*' by get_data_status (e.g. flights_climbed, " +
+        "number_of_alcoholic_beverages). Escape hatch when the summary tools don't cover a metric. " +
+        "Read daysWithoutValue before drawing a conclusion: a missing day means nothing was recorded, which is " +
+        "not the same as a zero — most of all for anything a person logs by hand.",
       inputSchema: rawMetricInput,
     },
     async ({ name, days }: { name: string; days?: number }) => {
@@ -464,7 +499,13 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       if (values.length === 0) {
         return json({ error: `No values stored for metric '${name}'.`, hint: "Call get_data_status to see available metrics." });
       }
-      return json({ ...freshness(store), metric: name, units: store.units?.[name], values });
+      return json({
+        ...freshness(store),
+        metric: name,
+        units: store.units?.[name],
+        ...coverage(name, dates, values),
+        values,
+      });
     }
   );
 

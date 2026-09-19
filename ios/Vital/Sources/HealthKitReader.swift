@@ -91,6 +91,12 @@ final class HealthKitReader {
             Daily(id: .distanceCycling, name: "cycling_distance", units: "km", unit: km),
             Daily(id: .appleExerciseTime, name: "apple_exercise_time", units: "min", unit: .minute(), whole: true),
             Daily(id: .appleStandTime, name: "apple_stand_time", units: "min", unit: .minute(), whole: true),
+            // Drinks, as logged in the Health app or by a tracking app. One of
+            // the few things a person enters by hand that moves HRV and sleep
+            // as much as training does, so it is worth having next to them.
+            // iOS 15, which this build's 16.0 floor already clears.
+            Daily(id: .numberOfAlcoholicBeverages, name: "number_of_alcoholic_beverages",
+                  units: "count", unit: .count(), whole: true),
         ]
         if #available(iOS 17.0, *) {
             list.append(Daily(id: .timeInDaylight, name: "time_in_daylight", units: "min", unit: .minute(), whole: true))

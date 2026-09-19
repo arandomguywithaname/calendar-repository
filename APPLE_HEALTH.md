@@ -349,7 +349,7 @@ Tools exposed by the connector:
 | `get_workouts` | “What did my runs look like last week?” |
 | `get_sleep` | “Am I sleeping enough?” |
 | `get_heart_rate_curve` | “Show me the shape: the peaks in that run, the dip overnight” (last ~2 weeks) |
-| `get_raw_metric` | Any individual stored metric, day by day, with units |
+| `get_raw_metric` | Any individual stored metric, day by day, with units — and how many days of the window had no value at all |
 
 ### How the scores work (and their limits)
 

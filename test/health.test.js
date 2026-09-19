@@ -11,7 +11,7 @@ const assert = require("assert");
 const { ingestPayload, parseStamp } = require("../dist/health/ingest");
 const { emptyStore } = require("../dist/health/store");
 const { computeRecovery, computeExertion, exertionScore } = require("../dist/health/metrics");
-const { noRecoveryReason, isPartial, freshness, withoutCurve } = require("../dist/health/mcp");
+const { noRecoveryReason, isPartial, freshness, withoutCurve, coverage } = require("../dist/health/mcp");
 
 let passed = 0;
 const failures = [];
@@ -578,6 +578,54 @@ test("a record with no curve gains no empty count", () => {
   const slim = withoutCurve({ name: "Walk", start: "x" });
   assert.ok(!("heartRateCurvePoints" in slim), "nothing to point at, so nothing to say");
   assert.ok(!("heartRateSeries" in slim));
+});
+
+group("drinks, and not mistaking silence for none");
+
+test("drinks are counted across the day, not averaged", () => {
+  // Two drinks logged separately on one evening is two drinks. Averaging the
+  // rows would report one, which is the difference between a quiet night and
+  // a reason yesterday's HRV fell over.
+  const store = ingestMetrics([
+    {
+      name: "number_of_alcoholic_beverages",
+      units: "count",
+      data: [day("2026-09-10", 1), day("2026-09-10", 1), day("2026-09-10", 2)],
+    },
+  ]);
+  assert.strictEqual(store.days["2026-09-10"].other.number_of_alcoholic_beverages, 4);
+});
+
+test("a day nobody wrote anything down is reported as a gap, not a zero", () => {
+  const dates = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"];
+  const c = coverage("number_of_alcoholic_beverages", dates, [
+    { date: "2026-09-02", value: 3 },
+  ]);
+  assert.strictEqual(c.daysInWindow, 4);
+  assert.strictEqual(c.daysWithValue, 1);
+  assert.strictEqual(c.daysWithoutValue, 3, "three silent days must be counted, not dropped");
+  assert.deepStrictEqual(c.datesWithoutValue, ["2026-09-01", "2026-09-03", "2026-09-04"]);
+  assert.ok(/not the same as zero/.test(c.missingNote), "and said out loud");
+});
+
+test("a fully covered window carries no warning", () => {
+  const dates = ["2026-09-01", "2026-09-02"];
+  const c = coverage("steps", dates, [
+    { date: "2026-09-01", value: 9000 },
+    { date: "2026-09-02", value: 8000 },
+  ]);
+  assert.strictEqual(c.daysWithoutValue, 0);
+  assert.strictEqual(c.missingNote, undefined, "nothing missing, nothing to caveat");
+  assert.strictEqual(c.datesWithoutValue, undefined);
+});
+
+test("a long run of gaps is counted but not printed", () => {
+  // A year of missing days is a number, not a list to paste into an answer.
+  const dates = Array.from({ length: 100 }, (_, i) => `2026-01-${String(i + 1).padStart(3, "0")}`);
+  const c = coverage("body_mass", dates, [{ date: dates[0], value: 78 }]);
+  assert.strictEqual(c.daysWithoutValue, 99);
+  assert.strictEqual(c.datesWithoutValue, undefined, "too many to list");
+  assert.ok(c.missingNote, "but still stated");
 });
 
 console.log(
