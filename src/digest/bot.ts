@@ -296,6 +296,21 @@ const SUSPENDED_NOTICE =
   "This bot is paused for your account — the subscription is inactive. Your digests and settings are kept and come back the moment it's resumed. /pay renews the subscription; anything else, contact the person who runs the bot.";
 
 /**
+ * Telegram killed the MTProto session — the session was removed from the
+ * account's device list, or it expired. The only cure is signing in again, so
+ * every path that touches MTProto turns this one error into the same plain
+ * instruction rather than leaking `AUTH_KEY_UNREGISTERED` at the person.
+ */
+const DEAD_SESSION = /AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i;
+const RECONNECT_NOTICE =
+  "Telegram signed me out — that happens when the session is removed from your account's device list, or it simply expires. Send /connect to sign in again (or /qr to scan). Your digests and settings are kept.";
+
+async function handleDeadSession(userId: string, chatId: number | string): Promise<void> {
+  await clearAccount(userId);
+  await send(chatId, RECONNECT_NOTICE).catch(() => {});
+}
+
+/**
  * The client's checkout link. Their Telegram id rides in it, which is the
  * whole trick: when Stripe reports the checkout done, the id comes back and
  * the webhook knows whose switch to flip.
@@ -1110,9 +1125,8 @@ async function onChannelDigest(userId: string, chatId: number, query: string): P
     await send(chatId, renderDigest(digest) + queueFooter(backlog), readButton(digest));
   } catch (err: any) {
     const message = err?.errorMessage || err?.message || String(err);
-    if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(message)) {
-      await clearAccount(userId);
-      await send(chatId, "Telegram invalidated my session — that happens if you end the session from your account's device list. /connect to sign in again.");
+    if (DEAD_SESSION.test(message)) {
+      await handleDeadSession(userId, chatId);
       return;
     }
     await send(chatId, `Couldn't build that channel's digest: ${escapeHtml(message)}`);
@@ -1148,9 +1162,8 @@ async function onDigest(userId: string, chatId: number, args: string[]): Promise
     await deliverNextStep(userId, chatId, false);
   } catch (err: any) {
     const message = err?.errorMessage || err?.message || String(err);
-    if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(message)) {
-      await clearAccount(userId);
-      await send(chatId, "Telegram invalidated my session — that happens if you end the session from your account's device list. /connect to sign in again.");
+    if (DEAD_SESSION.test(message)) {
+      await handleDeadSession(userId, chatId);
       return;
     }
     await send(chatId, `Couldn't build a digest: ${escapeHtml(message)}`);
@@ -1516,12 +1529,16 @@ async function handleCallback(query: any): Promise<void> {
     await send(chatId, escapeHtml(result));
     void noteEngagement(userId, chatId);
   } catch (err: any) {
-    console.error(`read-mark failed for ${userId}:`, err);
+    const message = err?.errorMessage || err?.message || String(err);
     await answer();
-    await send(
-      chatId,
-      `Couldn't mark those read: ${escapeHtml(err?.errorMessage || err?.message || String(err))}`
-    ).catch(() => {});
+    // A dead session surfaces here the same as anywhere else — say "reconnect",
+    // not the raw AUTH_KEY error, since pressing ✓ is often where it first shows.
+    if (DEAD_SESSION.test(message)) {
+      await handleDeadSession(userId, chatId);
+    } else {
+      console.error(`read-mark failed for ${userId}:`, err);
+      await send(chatId, `Couldn't mark those read: ${escapeHtml(message)}`).catch(() => {});
+    }
   } finally {
     busy.delete(userId);
   }
