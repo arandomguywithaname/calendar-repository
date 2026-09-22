@@ -1,4 +1,5 @@
 import SwiftUI
+import HealthKit
 
 /// Vital's main screen — Tim's design: when data was last sent,
 /// whether it worked, and one big "Send now" button.
@@ -13,6 +14,10 @@ struct ContentView: View {
     @State private var days = 7
     @State private var showSettings = false
     @State private var showJoin = false
+    @State private var loggingDrink = false
+    @State private var drinkMessage = ""
+    /// The last drink written, kept only so it can be taken back.
+    @State private var lastDrink: HKQuantitySample?
 
     /// "All" in days: HealthKit shipped with iOS 8 in September 2014, so nothing
     /// can exist before that and counting from there really is everything.
@@ -100,6 +105,42 @@ struct ContentView: View {
                 .disabled(sending)
                 .padding(.horizontal, 32)
 
+                // One tap, one drink, written to Apple Health there and then.
+                // Deliberately quieter than Send now — it is used far more
+                // often but matters far less if it is missed.
+                VStack(spacing: 6) {
+                    Button(action: logDrink) {
+                        HStack {
+                            if loggingDrink {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "wineglass")
+                            }
+                            Text("Had a drink")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.purple)
+                    .disabled(loggingDrink)
+                    .padding(.horizontal, 32)
+
+                    if !drinkMessage.isEmpty {
+                        HStack(spacing: 14) {
+                            Text(drinkMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            if lastDrink != nil {
+                                Button("Undo", action: undoDrink)
+                                    .font(.footnote.weight(.semibold))
+                            }
+                        }
+                        .padding(.horizontal, 32)
+                    }
+                }
+
                 Spacer()
 
                 Text("Vital reads Apple Health on this phone and sends it only to our own server. It updates automatically when you open the app.")
@@ -173,6 +214,57 @@ struct ContentView: View {
         // The very first send seeds history so Claude has a baseline to compare
         // against from day one; after that a week keeps everything current.
         startSync(days: Uploader.lastSync == nil ? 90 : 7, manual: false)
+    }
+
+    /// Writes one drink to Apple Health, then sends it on.
+    ///
+    /// The send is immediate rather than left to the next window: the point of
+    /// the button is that the drink is written down, and "it will turn up in a
+    /// couple of hours" is not what pressing a button feels like it promised.
+    private func logDrink() {
+        guard !loggingDrink else { return }
+        loggingDrink = true
+        drinkMessage = ""
+        Task {
+            do {
+                let sample = try await DrinkLogger.log()
+                lastDrink = sample
+                drinkMessage = "Drink recorded."
+                loggingDrink = false
+                // Only worth a sync if there is somewhere to send it; the write
+                // to Health has already happened either way.
+                if Uploader.isConfigured {
+                    let result = await SyncEngine.sync(days: 2)
+                    lastOK = result.ok
+                    lastMessage = result.message
+                    lastSync = Uploader.lastSync
+                }
+            } catch {
+                drinkMessage = error.localizedDescription
+                loggingDrink = false
+            }
+        }
+    }
+
+    private func undoDrink() {
+        guard let sample = lastDrink else { return }
+        lastDrink = nil
+        Task {
+            do {
+                try await DrinkLogger.undo(sample)
+                drinkMessage = "Removed."
+                // Re-send so the server forgets it too — it overwrites days, so
+                // the drink simply stops being there.
+                if Uploader.isConfigured {
+                    let result = await SyncEngine.sync(days: 2)
+                    lastOK = result.ok
+                    lastMessage = result.message
+                    lastSync = Uploader.lastSync
+                }
+            } catch {
+                drinkMessage = "Couldn't remove it: \(error.localizedDescription)"
+            }
+        }
     }
 
     private func startSync(days: Int, manual: Bool) {

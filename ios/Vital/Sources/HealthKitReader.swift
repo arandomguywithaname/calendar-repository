@@ -2,7 +2,10 @@ import Foundation
 import HealthKit
 
 /// Reads the last N days of Apple Health data and shapes it into the
-/// server's ingest payload. Read-only: Vital never writes to Health.
+/// server's ingest payload.
+///
+/// Strictly read-only — it still passes an empty share set. The one thing in
+/// the app that writes is DrinkLogger, and it writes one type.
 final class HealthKitReader {
 
     let store = HKHealthStore()

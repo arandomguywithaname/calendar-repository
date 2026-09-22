@@ -222,6 +222,14 @@ needs zero changes for it. The contract your app implements:
   ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
   with their units, and `get_data_status` lists them.
 
+  Vital's **"Had a drink"** button is the one thing it writes. A tap saves one standard
+  drink to Apple Health at that moment and sends it on straight away, with an Undo beside it
+  because a tap writes to a permanent health record. It goes into Apple Health rather than a
+  private tally on purpose: the drink then shows up in the Health app next to everything else,
+  survives Vital being reinstalled, and comes back through the reader that already exists —
+  so it reaches the server by the same path as a night's sleep, with no change to the payload
+  or the server at all.
+
   `heartRateSeries` is optional, and may sit on a workout or on a sleep row. It is a curve:
   one bucket **average** per minute inside a workout, one per five minutes across a night —
   not raw samples. That is deliberate. A statistics query returns one number per bucket
