@@ -222,9 +222,11 @@ needs zero changes for it. The contract your app implements:
   ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
   with their units, and `get_data_status` lists them.
 
-  Vital's **"Had a drink"** button is the one thing it writes. A tap saves one standard
-  drink to Apple Health at that moment and sends it on straight away, with an Undo beside it
-  because a tap writes to a permanent health record. It goes into Apple Health rather than a
+  Vital's **"Had a drink"** button is the one thing it writes. Each tap saves one standard
+  drink to Apple Health at that moment — three drinks is three taps — and the button shows
+  the day's running total read back from Health. Undo sits beside it and removes them one at
+  a time, because a tap writes to a permanent health record. The send waits a few seconds
+  after the last tap rather than firing on each one. It goes into Apple Health rather than a
   private tally on purpose: the drink then shows up in the Health app next to everything else,
   survives Vital being reinstalled, and comes back through the reader that already exists —
   so it reaches the server by the same path as a night's sleep, with no change to the payload

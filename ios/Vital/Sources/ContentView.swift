@@ -14,10 +14,15 @@ struct ContentView: View {
     @State private var days = 7
     @State private var showSettings = false
     @State private var showJoin = false
-    @State private var loggingDrink = false
     @State private var drinkMessage = ""
-    /// The last drink written, kept only so it can be taken back.
-    @State private var lastDrink: HKQuantitySample?
+    /// Today's total, read back from Apple Health.
+    @State private var drinksToday = 0
+    /// The drinks this app wrote, newest last, so they can be taken back one
+    /// at a time. HealthKit only lets an app delete its own samples, so this
+    /// is also exactly the set Undo is allowed to touch.
+    @State private var myDrinks: [HKQuantitySample] = []
+    /// Sends after the tapping stops — see scheduleDrinkSync.
+    @State private var drinkSyncTask: Task<Void, Never>?
 
     /// "All" in days: HealthKit shipped with iOS 8 in September 2014, so nothing
     /// can exist before that and counting from there really is everything.
@@ -109,13 +114,13 @@ struct ContentView: View {
                 // Deliberately quieter than Send now — it is used far more
                 // often but matters far less if it is missed.
                 VStack(spacing: 6) {
+                    // Never disabled. Three drinks is three taps, and a button
+                    // that locks itself while it talks to the server would
+                    // swallow the second and third — the write to Health is
+                    // instant, so there is nothing to wait for.
                     Button(action: logDrink) {
                         HStack {
-                            if loggingDrink {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "wineglass")
-                            }
+                            Image(systemName: "wineglass")
                             Text("Had a drink")
                         }
                         .frame(maxWidth: .infinity)
@@ -123,22 +128,20 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(.purple)
-                    .disabled(loggingDrink)
                     .padding(.horizontal, 32)
 
-                    if !drinkMessage.isEmpty {
-                        HStack(spacing: 14) {
-                            Text(drinkMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                            if lastDrink != nil {
-                                Button("Undo", action: undoDrink)
-                                    .font(.footnote.weight(.semibold))
-                            }
+                    HStack(spacing: 14) {
+                        Text(drinkMessage.isEmpty ? drinkCountText : drinkMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if !myDrinks.isEmpty {
+                            Button("Undo", action: undoDrink)
+                                .font(.footnote.weight(.semibold))
                         }
-                        .padding(.horizontal, 32)
                     }
+                    .padding(.horizontal, 32)
+                    .frame(minHeight: 18)
                 }
 
                 Spacer()
@@ -165,6 +168,7 @@ struct ContentView: View {
                 JoinView(server: bakedServer)
             }
             .onAppear {
+                refreshDrinkCount()
                 applyBakedInLinkIfNeeded()
                 if !Uploader.isConfigured && !bakedServer.isEmpty {
                     showJoin = true // first run: sign up right in the app
@@ -173,7 +177,10 @@ struct ContentView: View {
                 }
             }
             .onChange(of: scenePhase) { phase in
-                if phase == .active { autoSyncIfDue() }
+                if phase == .active {
+                    refreshDrinkCount()
+                    autoSyncIfDue()
+                }
                 if phase == .background { VitalApp.scheduleRefresh() }
             }
         }
@@ -216,55 +223,73 @@ struct ContentView: View {
         startSync(days: Uploader.lastSync == nil ? 90 : 7, manual: false)
     }
 
-    /// Writes one drink to Apple Health, then sends it on.
-    ///
-    /// The send is immediate rather than left to the next window: the point of
-    /// the button is that the drink is written down, and "it will turn up in a
-    /// couple of hours" is not what pressing a button feels like it promised.
+    /// "2 drinks today". The larger of what Health reports and what this app
+    /// wrote, so the number still climbs with each tap if the *read*
+    /// permission was declined while the write was allowed — otherwise the
+    /// button would sit there reading "0 drinks today" and look broken.
+    private var drinkCountText: String {
+        let n = max(drinksToday, myDrinks.count)
+        if n == 0 { return "Tap after a drink and it goes into Apple Health." }
+        return n == 1 ? "1 drink today" : "\(n) drinks today"
+    }
+
+    /// Writes one drink to Apple Health. Tap it again for another.
     private func logDrink() {
-        guard !loggingDrink else { return }
-        loggingDrink = true
         drinkMessage = ""
         Task {
             do {
                 let sample = try await DrinkLogger.log()
-                lastDrink = sample
-                drinkMessage = "Drink recorded."
-                loggingDrink = false
-                // Only worth a sync if there is somewhere to send it; the write
-                // to Health has already happened either way.
-                if Uploader.isConfigured {
-                    let result = await SyncEngine.sync(days: 2)
-                    lastOK = result.ok
-                    lastMessage = result.message
-                    lastSync = Uploader.lastSync
-                }
+                myDrinks.append(sample)
+                drinksToday = await DrinkLogger.countToday()
+                scheduleDrinkSync()
             } catch {
                 drinkMessage = error.localizedDescription
-                loggingDrink = false
             }
         }
     }
 
+    /// Removes the last drink this app wrote, and can be pressed as many times
+    /// as there are drinks to take back.
     private func undoDrink() {
-        guard let sample = lastDrink else { return }
-        lastDrink = nil
+        guard let sample = myDrinks.popLast() else { return }
+        drinkMessage = ""
         Task {
             do {
                 try await DrinkLogger.undo(sample)
-                drinkMessage = "Removed."
-                // Re-send so the server forgets it too — it overwrites days, so
-                // the drink simply stops being there.
-                if Uploader.isConfigured {
-                    let result = await SyncEngine.sync(days: 2)
-                    lastOK = result.ok
-                    lastMessage = result.message
-                    lastSync = Uploader.lastSync
-                }
+                drinksToday = await DrinkLogger.countToday()
+                scheduleDrinkSync()
             } catch {
+                // Put it back: it is still in Health, so Undo should still
+                // offer to remove it.
+                myDrinks.append(sample)
                 drinkMessage = "Couldn't remove it: \(error.localizedDescription)"
             }
         }
+    }
+
+    /// Sends once the tapping stops.
+    ///
+    /// Someone having a few over an evening presses this several times in a
+    /// row, and a sync per tap would be several uploads of the same day for no
+    /// gain. The wait is short because the point of the button is that the
+    /// drink is written down — "it will turn up in a couple of hours" is not
+    /// what pressing a button feels like it promised. Each tap replaces the
+    /// pending send, so the timer starts again rather than stacking up.
+    private func scheduleDrinkSync() {
+        drinkSyncTask?.cancel()
+        guard Uploader.isConfigured else { return }
+        drinkSyncTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            let result = await SyncEngine.sync(days: 2)
+            lastOK = result.ok
+            lastMessage = result.message
+            lastSync = Uploader.lastSync
+        }
+    }
+
+    private func refreshDrinkCount() {
+        Task { drinksToday = await DrinkLogger.countToday() }
     }
 
     private func startSync(days: Int, manual: Bool) {

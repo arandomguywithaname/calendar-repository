@@ -62,6 +62,31 @@ enum DrinkLogger {
         return sample
     }
 
+    /// How many drinks today, read back from Apple Health.
+    ///
+    /// Read rather than counted in the app, so the number survives the app
+    /// being closed and includes anything logged elsewhere — the honest answer
+    /// to "how many have I had today" rather than "how many times did I press
+    /// this button since it last launched". Returns zero rather than throwing:
+    /// this only ever decorates a button, and a failed read must not stop a
+    /// drink being recorded.
+    static func countToday() async -> Int {
+        guard HKHealthStore.isHealthDataAvailable() else { return 0 }
+        let start = Calendar.current.startOfDay(for: Date())
+        let now = Date()
+        guard start < now else { return 0 }
+        let descriptor = HKStatisticsQueryDescriptor(
+            predicate: HKSamplePredicate.quantitySample(
+                type: type,
+                predicate: HKQuery.predicateForSamples(withStart: start, end: now)
+            ),
+            options: .cumulativeSum
+        )
+        guard let stats = try? await descriptor.result(for: store),
+              let sum = stats?.sumQuantity() else { return 0 }
+        return Int(sum.doubleValue(for: .count()).rounded())
+    }
+
     /// Takes one back.
     ///
     /// Not a nicety: one tap writes to a permanent health record, the button
