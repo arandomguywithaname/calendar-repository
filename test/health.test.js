@@ -11,7 +11,16 @@ const assert = require("assert");
 const { ingestPayload, parseStamp } = require("../dist/health/ingest");
 const { emptyStore } = require("../dist/health/store");
 const { computeRecovery, computeExertion, exertionScore } = require("../dist/health/metrics");
-const { noRecoveryReason, isPartial, freshness, withoutCurve, coverage } = require("../dist/health/mcp");
+const {
+  noRecoveryReason,
+  isPartial,
+  freshness,
+  withoutCurve,
+  coverage,
+  applyDrinkLabel,
+  collectDrinks,
+  alcoholGrams,
+} = require("../dist/health/mcp");
 
 let passed = 0;
 const failures = [];
@@ -626,6 +635,129 @@ test("a long run of gaps is counted but not printed", () => {
   assert.strictEqual(c.daysWithoutValue, 99);
   assert.strictEqual(c.datesWithoutValue, undefined, "too many to list");
   assert.ok(c.missingNote, "but still stated");
+});
+
+group("drinks");
+
+/** Ingest drink rows as the phone sends them. */
+function withDrinks(drinks) {
+  const store = emptyStore();
+  ingestPayload(store, { data: { metrics: [], workouts: [], drinks } });
+  return store;
+}
+
+const tap = (id, at) => ({ id, at, count: 1, source: "com.tim.vital" });
+
+test("a tap arrives as its own record, not just a daily total", () => {
+  const store = withDrinks([tap("D1", "2026-09-20 21:10:00 +0300")]);
+  const d = store.days["2026-09-20"].drinks[0];
+  assert.strictEqual(d.id, "D1");
+  assert.strictEqual(d.at, "2026-09-20 21:10:00 +0300");
+  assert.strictEqual(d.count, 1);
+  assert.strictEqual(d.kind, undefined, "the button asks nothing, so nothing is claimed about it yet");
+});
+
+test("re-sending the same day does not wipe what the drink was", () => {
+  // The phone re-uploads the last days on every single sync and knows nothing
+  // about the type. Overwriting here would erase the answer within minutes of
+  // it being given, every time.
+  const store = withDrinks([tap("D1", "2026-09-20 21:10:00 +0300")]);
+  applyDrinkLabel(store, { kind: "champagne" }, {}, "2026-09-20T18:20:00Z");
+  ingestPayload(store, {
+    data: { metrics: [], workouts: [], drinks: [tap("D1", "2026-09-20 21:10:00 +0300")] },
+  });
+  const drinks = store.days["2026-09-20"].drinks;
+  assert.strictEqual(drinks.length, 1, "and does not duplicate it either");
+  assert.strictEqual(drinks[0].kind, "champagne");
+  assert.strictEqual(drinks[0].labelledAt, "2026-09-20T18:20:00Z");
+});
+
+test("naming a drink invents no size, strength or calorie figure", () => {
+  const store = withDrinks([tap("D1", "2026-09-20 21:10:00 +0300")]);
+  applyDrinkLabel(store, { kind: "beer" }, {}, "t");
+  const d = store.days["2026-09-20"].drinks[0];
+  assert.strictEqual(d.kind, "beer");
+  assert.strictEqual(d.volumeMl, undefined, "no typical glass is assumed");
+  assert.strictEqual(d.abvPct, undefined);
+  assert.strictEqual(d.alcoholGrams, undefined, "and no number is made up for an 'average beer'");
+});
+
+test("alcohol is computed only from numbers that were actually given", () => {
+  assert.strictEqual(alcoholGrams(500, 5), 19.7);
+  const store = withDrinks([tap("D1", "2026-09-20 21:10:00 +0300")]);
+  applyDrinkLabel(store, { kind: "beer", volumeMl: 500, abvPct: 5 }, {}, "t");
+  assert.strictEqual(store.days["2026-09-20"].drinks[0].alcoholGrams, 19.7);
+
+  const half = withDrinks([tap("D2", "2026-09-20 21:10:00 +0300")]);
+  applyDrinkLabel(half, { kind: "beer", volumeMl: 500 }, {}, "t");
+  assert.strictEqual(
+    half.days["2026-09-20"].drinks[0].alcoholGrams,
+    undefined,
+    "a volume with no strength cannot produce one"
+  );
+});
+
+test("with no id it takes the most recent drink that has no type", () => {
+  const store = withDrinks([
+    tap("OLD", "2026-09-19 22:00:00 +0300"),
+    tap("NEW", "2026-09-20 22:00:00 +0300"),
+  ]);
+  const result = applyDrinkLabel(store, { kind: "wine" }, {}, "t");
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(store.days["2026-09-20"].drinks[0].kind, "wine");
+  assert.strictEqual(store.days["2026-09-19"].drinks[0].kind, undefined);
+  assert.strictEqual(result.stillWithoutAType, 1);
+});
+
+test("howMany covers a round without touching the one before it", () => {
+  const store = withDrinks([
+    tap("A", "2026-09-20 20:00:00 +0300"),
+    tap("B", "2026-09-20 21:00:00 +0300"),
+    tap("C", "2026-09-20 22:00:00 +0300"),
+  ]);
+  applyDrinkLabel(store, { kind: "champagne" }, { howMany: 2 }, "t");
+  const byId = Object.fromEntries(store.days["2026-09-20"].drinks.map((d) => [d.id, d.kind]));
+  assert.deepStrictEqual(byId, { A: undefined, B: "champagne", C: "champagne" });
+});
+
+test("a later remark cannot quietly rewrite an earlier night", () => {
+  const store = withDrinks([
+    tap("OLD", "2026-09-19 22:00:00 +0300"),
+    tap("NEW", "2026-09-20 22:00:00 +0300"),
+  ]);
+  applyDrinkLabel(store, { kind: "wine" }, {}, "t");
+  applyDrinkLabel(store, { kind: "beer" }, {}, "t");
+  const third = applyDrinkLabel(store, { kind: "whisky" }, {}, "t");
+  assert.strictEqual(third.ok, false, "nothing is left untyped, so nothing is overwritten by guesswork");
+  assert.ok(/id/.test(third.howToFix), "it says how to correct one on purpose");
+  assert.strictEqual(store.days["2026-09-20"].drinks[0].kind, "wine");
+  assert.strictEqual(store.days["2026-09-19"].drinks[0].kind, "beer");
+});
+
+test("correcting a drink by id drops the measurements that went with the old answer", () => {
+  const store = withDrinks([tap("D1", "2026-09-20 21:10:00 +0300")]);
+  applyDrinkLabel(store, { kind: "beer", volumeMl: 500, abvPct: 5 }, {}, "t");
+  applyDrinkLabel(store, { kind: "whisky" }, { id: "D1" }, "t");
+  const d = store.days["2026-09-20"].drinks[0];
+  assert.strictEqual(d.kind, "whisky");
+  assert.strictEqual(d.volumeMl, undefined, "half a litre does not stay attached to a whisky");
+  assert.strictEqual(d.alcoholGrams, undefined);
+});
+
+test("drinks order by the instant they happened, not by the clock on the wall", () => {
+  // 23:30 in Riga is 20:30 UTC; 22:00 in London is 21:00 UTC and therefore
+  // later. Sorted as text, the trip abroad lands in the wrong order.
+  const store = withDrinks([
+    tap("RIGA", "2026-09-20 23:30:00 +0300"),
+    tap("LONDON", "2026-09-20 22:00:00 +0100"),
+  ]);
+  assert.deepStrictEqual(collectDrinks(store).map((e) => e.drink.id), ["LONDON", "RIGA"]);
+});
+
+test("with nothing logged it says where the drink has to be tapped", () => {
+  const result = applyDrinkLabel(emptyStore(), { kind: "beer" }, {}, "t");
+  assert.strictEqual(result.ok, false);
+  assert.ok(/button/.test(result.howToFix), "the phone records it; this only describes it");
 });
 
 console.log(

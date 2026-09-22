@@ -87,6 +87,33 @@ enum DrinkLogger {
         return Int(sum.doubleValue(for: .count()).rounded())
     }
 
+    /// The drinks this app wrote today, oldest first.
+    ///
+    /// Undo used to last only as long as the app stayed open, because the
+    /// samples it was allowed to remove were held in memory and went with it.
+    /// Tapping the button, locking the phone and coming back later is the
+    /// normal way this gets used, not an edge case, so the list is read back
+    /// out of Health instead. `HKSource.default()` is this app, and its own
+    /// samples are exactly the set HealthKit permits it to delete — asking for
+    /// anything wider would build an Undo button that fails when pressed.
+    static func ownDrinksToday() async -> [HKQuantitySample] {
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
+        let start = Calendar.current.startOfDay(for: Date())
+        let now = Date()
+        guard start < now else { return [] }
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            HKQuery.predicateForSamples(withStart: start, end: now),
+            HKQuery.predicateForObjects(from: HKSource.default()),
+        ])
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [HKSamplePredicate.quantitySample(type: type, predicate: predicate)],
+            sortDescriptors: [SortDescriptor(\.startDate)]
+        )
+        // Reading is the permission most likely to be refused, and a refusal
+        // here costs only the Undo button rather than the tap itself.
+        return (try? await descriptor.result(for: store)) ?? []
+    }
+
     /// Takes one back.
     ///
     /// Not a nicety: one tap writes to a permanent health record, the button

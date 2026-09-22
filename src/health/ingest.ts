@@ -1,5 +1,6 @@
 import {
   DayRecord,
+  DrinkRecord,
   HealthStore,
   HeartEventRecord,
   HeartRatePoint,
@@ -279,6 +280,29 @@ function parseHeartRateSeries(raw: unknown): HeartRatePoint[] | undefined {
   return points.length > 0 ? points : undefined;
 }
 
+/**
+ * Fields the phone can never send, because it does not know them: what the
+ * drink was. They are said in conversation and stored against the drink, so a
+ * re-sent day has to leave them alone — the phone re-uploads the same dates on
+ * every sync, and a plain overwrite would quietly wipe the answer every time.
+ */
+const DRINK_LABELS = ["kind", "volumeMl", "abvPct", "alcoholGrams", "note", "labelledAt"] as const;
+
+function parseDrink(raw: any): { date: string; drink: DrinkRecord } | undefined {
+  const at = typeof raw?.at === "string" ? raw.at : typeof raw?.start === "string" ? raw.start : undefined;
+  const date = localDay(at);
+  if (!date || !at) return undefined;
+
+  // One tap is one drink; a sample from elsewhere may say otherwise.
+  const count = num(raw.count) ?? num(raw.qty) ?? 1;
+  const drink: DrinkRecord = { at, count: round(count, 2) };
+  if (typeof raw.id === "string") drink.id = raw.id;
+  if (typeof raw.source === "string") drink.source = raw.source;
+  if (typeof raw.device === "string") drink.device = raw.device;
+  if (typeof raw.timeZone === "string") drink.timeZone = raw.timeZone;
+  return { date, drink };
+}
+
 function parseHeartEvent(raw: any): { date: string; event: HeartEventRecord } | undefined {
   const date = localDay(raw?.start);
   const type = typeof raw?.type === "string" ? raw.type : undefined;
@@ -308,6 +332,7 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
   // Optional and newer than the rest of the contract: a payload without it is
   // not malformed, it is a phone that has nothing to report or an older build.
   const heartEvents: any[] = Array.isArray(body?.heartEvents) ? body.heartEvents : [];
+  const drinks: any[] = Array.isArray(body?.drinks) ? body.drinks : [];
   // Reject only a payload of the wrong shape. A correctly formed export with
   // nothing in it is what a phone sends when Health access was declined or the
   // range holds no data, and answering that with an error puts a developer
@@ -461,6 +486,37 @@ export function ingestPayload(store: HealthStore, payload: any, source?: string)
     else day.heartEvents.push(parsed.event);
     touched.add(parsed.date);
     summary.dataPoints++;
+  }
+
+  // Drinks: merge-by-identity rather than replace-by-identity, which is the
+  // one place those differ in this file. A drink carries something the phone
+  // never sent — what it actually was — and that has to survive the next sync
+  // re-sending the same day.
+  for (const raw of drinks) {
+    const parsed = parseDrink(raw);
+    if (!parsed) continue;
+    const day = getDay(store, parsed.date);
+    if (!day.drinks) day.drinks = [];
+    const key = (d: DrinkRecord) => d.id || `${d.at}|${d.count}`;
+    const existing = day.drinks.findIndex((d) => key(d) === key(parsed.drink));
+    if (existing >= 0) {
+      const kept: Partial<DrinkRecord> = {};
+      for (const field of DRINK_LABELS) {
+        const value = day.drinks[existing][field];
+        if (value !== undefined) (kept as Record<string, unknown>)[field] = value;
+      }
+      day.drinks[existing] = { ...parsed.drink, ...kept };
+    } else {
+      day.drinks.push(parsed.drink);
+    }
+    touched.add(parsed.date);
+    summary.dataPoints++;
+  }
+  for (const date of touched) {
+    const day = store.days[date];
+    if (day?.drinks) {
+      day.drinks.sort((a, b) => (parseStamp(a.at) ?? 0) - (parseStamp(b.at) ?? 0));
+    }
   }
 
   const dates = [...touched].sort();

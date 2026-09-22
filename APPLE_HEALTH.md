@@ -213,6 +213,10 @@ needs zero changes for it. The contract your app implements:
       "heartEvents": [
         { "type": "high_heart_rate", "id": "…", "start": "2026-08-30 14:02:00 +0200",
           "source": "com.apple.health.WATCH", "thresholdBpm": 120 }
+      ],
+      "drinks": [
+        { "id": "…", "at": "2026-08-30 21:10:00 +0200", "count": 1,
+          "source": "com.tim.vital", "timeZone": "Europe/Riga" }
       ]
   } }
   ```
@@ -225,12 +229,32 @@ needs zero changes for it. The contract your app implements:
   Vital's **"Had a drink"** button is the one thing it writes. Each tap saves one standard
   drink to Apple Health at that moment — three drinks is three taps — and the button shows
   the day's running total read back from Health. Undo sits beside it and removes them one at
-  a time, because a tap writes to a permanent health record. The send waits a few seconds
-  after the last tap rather than firing on each one. It goes into Apple Health rather than a
-  private tally on purpose: the drink then shows up in the Health app next to everything else,
-  survives Vital being reinstalled, and comes back through the reader that already exists —
-  so it reaches the server by the same path as a night's sleep, with no change to the payload
-  or the server at all.
+  a time, because a tap writes to a permanent health record; the removable set is read back
+  out of Health on every appearance, so Undo is still there after the phone has been locked
+  and picked up again, and it covers exactly the samples HealthKit permits this app to
+  delete (its own). The send waits a few seconds after the last tap rather than firing on
+  each one. It goes into Apple Health rather than a private tally on purpose: the drink then
+  shows up in the Health app next to everything else, survives Vital being reinstalled, and
+  comes back through the reader that already exists — so it reaches the server by the same
+  path as a night's sleep.
+
+  **The button asks nothing else.** It is not a champagne button and not a beer button: one
+  tap is one drink, whatever it was. What it actually *was* is said afterwards, in Claude —
+  "that was a beer", "the last two were champagne" — and `set_drink_type` attaches it to that
+  particular drink. That split is the whole design: someone holding a glass will press one
+  button and no more, and a picker would simply go unused. Nothing is ever inferred from the
+  name. A "beer" carries no volume, no strength and no calorie figure unless the person gave
+  one, because a made-up number for an average beer reads back a week later as though it had
+  been measured.
+
+  `drinks` is optional and carries one entry per drink, alongside the daily
+  `number_of_alcoholic_beverages` total rather than instead of it — a total cannot be talked
+  about afterwards, and "the one at nine" needs something to attach to. Read from Apple
+  Health rather than from anything Vital keeps, so a drink logged in the Health app or
+  another tracker arrives the same way. This is the one block the server **merges** rather
+  than replaces: `kind`, `volumeMl`, `abvPct`, `alcoholGrams`, `note` and `labelledAt` are
+  never sent by the phone, so a re-sent day keeps them. Without that the phone would erase
+  the answer within minutes of it being given, on every sync.
 
   `heartRateSeries` is optional, and may sit on a workout or on a sleep row. It is a curve:
   one bucket **average** per minute inside a workout, one per five minutes across a night —
@@ -359,6 +383,8 @@ Tools exposed by the connector:
 | `get_workouts` | “What did my runs look like last week?” |
 | `get_sleep` | “Am I sleeping enough?” |
 | `get_heart_rate_curve` | “Show me the shape: the peaks in that run, the dip overnight” (last ~2 weeks) |
+| `get_drinks` | “What has he been drinking this week?” — one entry per tap, with what each one was |
+| `set_drink_type` | Records what a logged drink was (“that was a beer”), against that particular drink |
 | `get_raw_metric` | Any individual stored metric, day by day, with units — and how many days of the window had no value at all |
 
 ### How the scores work (and their limits)

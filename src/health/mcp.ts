@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadStore, sortedDates, storePath } from "./store";
+import { loadStore, saveStore, sortedDates, storePath } from "./store";
+import { parseStamp } from "./ingest";
 import { computeExertion, computeRecovery, computeTrend } from "./metrics";
-import { DayRecord, HealthStore, HeartRatePoint, WorkoutRecord } from "./types";
+import { DayRecord, DrinkRecord, HealthStore, HeartRatePoint, WorkoutRecord } from "./types";
 import { HealthUser } from "./users";
 
 /**
@@ -143,6 +144,17 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     ...(Object.keys(day.other).length > 0 ? { otherMetrics: day.other } : {}),
     // Rare enough that listing them costs nothing and omitting one matters.
     ...(day.heartEvents?.length ? { heartEvents: day.heartEvents } : {}),
+    // A handful of entries at most, and the thing most likely to explain a bad
+    // night sitting directly above it. Anything still showing kind: null was
+    // tapped but never described — ask what it was rather than assuming.
+    ...(day.drinks?.length
+      ? {
+          drinks: {
+            total: Math.round(day.drinks.reduce((sum, d) => sum + d.count, 0) * 100) / 100,
+            items: day.drinks.map((drink) => briefDrink({ date, drink })),
+          },
+        }
+      : {}),
   });
 }
 
@@ -196,6 +208,134 @@ export function coverage(
   };
 }
 
+/**
+ * Grams of pure alcohol in a serving. Ethanol is 0.789 g/ml, so this is
+ * arithmetic on two numbers the person actually gave — it is computed only
+ * when both are present, and nothing here ever decides what "a beer" holds or
+ * how strong it is. An average stood in for a real glass is exactly what this
+ * whole path exists to avoid.
+ */
+export function alcoholGrams(volumeMl: number, abvPct: number): number {
+  return Math.round(volumeMl * (abvPct / 100) * 0.789 * 10) / 10;
+}
+
+/**
+ * Every drink on record, newest first. Each entry still points at the record
+ * inside the store, so writing a type here writes it there.
+ */
+export function collectDrinks(store: HealthStore): { date: string; drink: DrinkRecord }[] {
+  const out: { date: string; drink: DrinkRecord }[] = [];
+  for (const date of sortedDates(store)) {
+    for (const drink of store.days[date].drinks ?? []) out.push({ date, drink });
+  }
+  // By real instant, not by string: the timestamps carry their UTC offset, and
+  // one logged abroad would sort into the wrong place read as text.
+  out.sort((a, b) => (parseStamp(b.drink.at) ?? 0) - (parseStamp(a.drink.at) ?? 0));
+  return out;
+}
+
+function briefDrink(entry: { date: string; drink: DrinkRecord }) {
+  const d = entry.drink;
+  return {
+    id: d.id ?? null,
+    date: entry.date,
+    at: d.at,
+    count: d.count,
+    kind: d.kind ?? null,
+    ...(d.volumeMl !== undefined ? { volumeMl: d.volumeMl } : {}),
+    ...(d.abvPct !== undefined ? { abvPct: d.abvPct } : {}),
+    ...(d.alcoholGrams !== undefined ? { alcoholGrams: d.alcoholGrams } : {}),
+    ...(d.note ? { note: d.note } : {}),
+  };
+}
+
+export interface DrinkLabel {
+  kind: string;
+  volumeMl?: number;
+  abvPct?: number;
+  note?: string;
+}
+
+const NOTHING_LOGGED =
+  "The drink has to be tapped on the phone first: the 'Had a drink' button in Vital writes it to Apple " +
+  "Health, and the phone sends it a few seconds later. If it was only just tapped, the sync may not have " +
+  "landed yet.";
+
+/**
+ * Record what a drink was.
+ *
+ * The button deliberately asks nothing — one tap, one drink — because that is
+ * the only thing someone with a glass in their hand will reliably do. The kind
+ * is added here afterwards, in conversation, where saying "that was a beer, a
+ * half litre" costs nothing.
+ *
+ * With no id it takes the most recent drinks that have no type yet, which is
+ * what "that was a beer" means straight after tapping. It will not silently
+ * overwrite a drink that already has one: changing an answer takes that
+ * drink's id, so a second remark about tonight cannot rewrite last night.
+ */
+export function applyDrinkLabel(
+  store: HealthStore,
+  label: DrinkLabel,
+  target: { id?: string; howMany?: number },
+  now: string
+) {
+  const all = collectDrinks(store);
+  if (all.length === 0) {
+    return { ok: false as const, error: "No drinks have been recorded.", howToFix: NOTHING_LOGGED, drinks: [] };
+  }
+
+  let targets: { date: string; drink: DrinkRecord }[];
+  if (target.id) {
+    const one = all.find((e) => e.drink.id === target.id || e.drink.at === target.id);
+    if (!one) {
+      return {
+        ok: false as const,
+        error: `No recorded drink matches '${target.id}'.`,
+        howToFix: "Call get_drinks and pass one of the ids it returns.",
+        drinks: all.slice(0, 10).map(briefDrink),
+      };
+    }
+    targets = [one];
+  } else {
+    const untyped = all.filter((e) => !e.drink.kind);
+    if (untyped.length === 0) {
+      return {
+        ok: false as const,
+        error: "Every drink on record already has a type, so there is nothing this would apply to.",
+        howToFix:
+          "If this is a correction, call get_drinks and pass the id of the drink to change. If it is a new " +
+          "drink, it has to be tapped on the phone first — this tool describes drinks, it does not add them.",
+        drinks: all.slice(0, 10).map(briefDrink),
+      };
+    }
+    targets = untyped.slice(0, Math.max(1, Math.min(target.howMany ?? 1, untyped.length)));
+  }
+
+  for (const { drink } of targets) {
+    // Each call states the whole thing, so an earlier volume or strength is
+    // dropped rather than left attached to a different drink's name.
+    drink.kind = label.kind.trim();
+    delete drink.volumeMl;
+    delete drink.abvPct;
+    delete drink.alcoholGrams;
+    delete drink.note;
+    if (label.volumeMl !== undefined) drink.volumeMl = label.volumeMl;
+    if (label.abvPct !== undefined) drink.abvPct = label.abvPct;
+    if (label.volumeMl !== undefined && label.abvPct !== undefined) {
+      drink.alcoholGrams = alcoholGrams(label.volumeMl, label.abvPct);
+    }
+    if (label.note) drink.note = label.note;
+    drink.labelledAt = now;
+  }
+
+  return {
+    ok: true as const,
+    labelled: targets.map(briefDrink),
+    stillWithoutAType: all.filter((e) => !e.drink.kind).length,
+  };
+}
+
 type ToolResult = { content: { type: "text"; text: string }[] };
 
 // server.registerTool's generic inference overflows TypeScript's instantiation
@@ -234,6 +374,25 @@ const heartRateCurveInput: z.ZodRawShape = {
   which: z.enum(["all", "sleep", "workouts"]).optional()
     .describe("Which curves to return (default all). Each is a few hundred points."),
 };
+const drinksInput: z.ZodRawShape = {
+  days: z.number().int().min(1).max(365).optional().describe("How many days back to list (default 30)."),
+};
+const setDrinkTypeInput: z.ZodRawShape = {
+  kind: z.string().min(1).max(60)
+    .describe("What it was, in the person's own words: 'beer', 'champagne', 'red wine', 'whisky'."),
+  id: z.string().optional()
+    .describe(
+      "The drink to describe, from get_drinks. Omit to take the most recent drink(s) that have no type yet — " +
+      "which is what 'that was a beer' means right after tapping. Required to change a drink already described."
+    ),
+  howMany: z.number().int().min(1).max(20).optional()
+    .describe("Apply to this many of the most recent untyped drinks (default 1). Ignored when id is given."),
+  volumeMl: z.number().min(1).max(5000).optional()
+    .describe("Serving size in ml — ONLY if the person said it. Never fill in a typical size."),
+  abvPct: z.number().min(0).max(100).optional()
+    .describe("Strength in percent — ONLY if the person said it. Never fill in a typical strength."),
+  note: z.string().max(280).optional().describe("Anything else worth keeping, e.g. 'with dinner'."),
+};
 const rawMetricInput: z.ZodRawShape = {
   name: z.string().describe("Metric name, e.g. 'hrvMs' or an 'other' key like 'flights_climbed'."),
   days: z.number().int().min(1).max(365).optional().describe("How many days back (default 30)."),
@@ -247,7 +406,8 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
     {
       instructions:
         `${whose.charAt(0).toUpperCase() + whose.slice(1)} Apple Health data: sleep, heart metrics, workouts, activity, ` +
-        "and any other synced HealthKit metrics, plus recovery/exertion estimates computed from them (Apple Health " +
+        "and any other synced HealthKit metrics, plus drinks logged by tapping a button on the phone, plus " +
+        "recovery/exertion estimates computed from them (Apple Health " +
         "has no cloud API, so the phone pushes this data to the server). Dates are YYYY-MM-DD in the user's local " +
         "time. Start with get_data_status if unsure what's available.",
     }
@@ -271,6 +431,8 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const bump = (k: string) => (counts[k] = (counts[k] || 0) + 1);
       let workouts = 0;
       let heartEvents = 0;
+      let drinks = 0;
+      let drinksWithoutAType = 0;
       for (const d of dates) {
         const day = store.days[d];
         if (day.hrvMs !== undefined) bump("hrv");
@@ -282,6 +444,10 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         if (day.vo2Max !== undefined) bump("vo2Max");
         workouts += day.workouts.length;
         heartEvents += day.heartEvents?.length ?? 0;
+        for (const drink of day.drinks ?? []) {
+          drinks += drink.count;
+          if (!drink.kind) drinksWithoutAType++;
+        }
         if (day.sleep?.heartRateSeries?.length || day.workouts.some((w) => w.heartRateSeries?.length)) {
           bump("heartRateCurve");
         }
@@ -294,6 +460,8 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         lastSync: store.updatedAt ?? null,
         totalWorkouts: workouts,
         totalHeartEvents: heartEvents,
+        totalDrinks: Math.round(drinks * 100) / 100,
+        drinksWithoutAType,
         daysWithMetric: counts,
         metricUnits: store.units ?? {},
         // Only metrics where one device was deliberately chosen over another
@@ -472,14 +640,94 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
 
   addTool(
     server,
+    "get_drinks",
+    {
+      title: "Drinks",
+      description:
+        "Every drink logged on the phone over the last N days: when it was, and what it was if that has been " +
+        "said. The phone records only the tap — one tap, one drink, no type — so entries with kind: null are " +
+        "drinks nobody has described yet. Use set_drink_type to fill those in. A day with no entries means " +
+        "nothing was logged, which is not the same as nothing drunk: the button only records what someone " +
+        "pressed it for.",
+      inputSchema: drinksInput,
+    },
+    async ({ days }: { days?: number }) => {
+      const store = loadStore(slug);
+      const stored = sortedDates(store);
+      if (stored.length === 0) return noData(slug);
+      const window = calendarWindow(latestDate(stored)!, days ?? 30);
+      const first = window[0];
+      const last = window[window.length - 1];
+      const inWindow = collectDrinks(store).filter((e) => e.date >= first && e.date <= last);
+      const byDate: Record<string, number> = {};
+      for (const e of inWindow) byDate[e.date] = Math.round((byDate[e.date] ?? 0) * 100 + e.drink.count * 100) / 100;
+      const untyped = inWindow.filter((e) => !e.drink.kind);
+      return json({
+        ...freshness(store),
+        window: { first, last },
+        totalDrinks: Math.round(inWindow.reduce((sum, e) => sum + e.drink.count, 0) * 100) / 100,
+        daysWithADrink: Object.keys(byDate).length,
+        perDay: byDate,
+        withoutAType: untyped.length,
+        ...(untyped.length > 0
+          ? {
+              askNote:
+                `${untyped.length} of these were tapped but never described. If it matters to the answer, ask ` +
+                "what they were and record it with set_drink_type rather than guessing.",
+            }
+          : {}),
+        drinks: inWindow.map(briefDrink),
+      });
+    }
+  );
+
+  addTool(
+    server,
+    "set_drink_type",
+    {
+      title: "Set what a drink was",
+      description:
+        "Record what a logged drink actually was. The button on the phone deliberately asks nothing — one tap, " +
+        "one drink — so the type is added here afterwards: 'that was a beer', 'the last two were champagne'. " +
+        "With no id it describes the most recent drink(s) that have no type yet, so it can be called straight " +
+        "after someone says what they had.\n\n" +
+        "Record only what the person actually said. Do NOT fill in a typical volume, strength or calorie " +
+        "figure for a kind of drink — a made-up number for an 'average beer' is worse than no number, because " +
+        "it reads back later as though it were measured. Pass volumeMl and abvPct only when they were stated, " +
+        "and grams of alcohol are then computed from them. Each call states the whole thing: passing kind " +
+        "alone clears any volume or strength recorded for that drink before.\n\n" +
+        "This describes drinks; it does not add them. A drink that was never tapped on the phone is not here.",
+      inputSchema: setDrinkTypeInput,
+    },
+    async (args: DrinkLabel & { id?: string; howMany?: number }) => {
+      const store = loadStore(slug);
+      const result = applyDrinkLabel(
+        store,
+        { kind: args.kind, volumeMl: args.volumeMl, abvPct: args.abvPct, note: args.note },
+        { id: args.id, howMany: args.howMany },
+        new Date().toISOString()
+      );
+      if (!result.ok) return json(result);
+      // The only write this server makes. Load, change and save run with no
+      // await between them, so an ingest arriving from the phone cannot
+      // interleave and be lost — Node gives that for free here, and it would
+      // stop being true the moment an await appeared in the middle.
+      saveStore(store, slug);
+      return json(result);
+    }
+  );
+
+  addTool(
+    server,
     "get_raw_metric",
     {
       title: "Raw metric",
       description:
         "Daily values for one stored metric over the last N days. Valid names: hrvMs, restingHeartRate, heartRateAvg, " +
         "heartRateMax, respiratoryRate, bloodOxygenPct, vo2Max, wristTemperatureC, activeEnergyKcal, steps — " +
-        "plus anything listed under 'other:*' by get_data_status (e.g. flights_climbed, " +
-        "number_of_alcoholic_beverages). Escape hatch when the summary tools don't cover a metric. " +
+        "plus anything listed under 'other:*' by get_data_status (e.g. flights_climbed). Escape hatch when the " +
+        "summary tools don't cover a metric. For alcohol use get_drinks, which has one entry per drink rather " +
+        "than a daily total. " +
         "Read daysWithoutValue before drawing a conclusion: a missing day means nothing was recorded, which is " +
         "not the same as a zero — most of all for anything a person logs by hand.",
       inputSchema: rawMetricInput,

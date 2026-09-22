@@ -97,6 +97,40 @@ export interface SleepRecord {
   suspect?: string[];
 }
 
+/**
+ * One drink, as it was tapped.
+ *
+ * The phone sends the timestamp, the count and where it came from. What it
+ * actually *was* — beer, champagne, whisky — is not something Apple Health
+ * records and not something the button asks for: it is said afterwards, in
+ * conversation, and stored here against the same drink. Nothing is ever
+ * inferred from the name; a "beer" carries no volume or strength unless the
+ * person gave one.
+ */
+export interface DrinkRecord {
+  /** HealthKit sample uuid, which is also what lets the phone re-send a day
+   *  without the label being lost. */
+  id?: string;
+  at: string; // device-local timestamp of the drink
+  /** Standard drinks this sample recorded — one tap is 1. */
+  count: number;
+  source?: string;
+  device?: string;
+  timeZone?: string;
+
+  // Everything below is written in conversation, never by the phone.
+  /** What it was, in the person's own words: "beer", "champagne", "whisky". */
+  kind?: string;
+  volumeMl?: number;
+  abvPct?: number;
+  /** Grams of pure alcohol — computed only when both volume and strength were
+   *  given, so it is arithmetic rather than an average of anything. */
+  alcoholGrams?: number;
+  note?: string;
+  /** When the type was added, so a label can be told from a measurement. */
+  labelledAt?: string;
+}
+
 /** Everything known about one calendar day. */
 export interface DayRecord {
   date: string; // YYYY-MM-DD (device-local)
@@ -115,6 +149,8 @@ export interface DayRecord {
   workouts: WorkoutRecord[];
   /** Watch-raised heart events on this day, if any. */
   heartEvents?: HeartEventRecord[];
+  /** Drinks logged on this day, one entry per tap. */
+  drinks?: DrinkRecord[];
   /** Any other daily-aggregated metrics we don't model explicitly, keyed by normalized name. */
   other: { [metric: string]: number };
 }

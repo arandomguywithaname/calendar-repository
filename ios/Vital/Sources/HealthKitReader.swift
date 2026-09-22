@@ -245,8 +245,9 @@ final class HealthKitReader {
         // A backfill carries daily figures only — see buildBackfill.
         let workouts = historyOnly ? [] : try await workoutRows(from: startDate, to: endDate)
         let events = historyOnly ? [] : try await heartEventRows(from: startDate, to: endDate)
+        let drinks = historyOnly ? [] : try await drinkRows(from: startDate, to: endDate)
 
-        return Payload.body(metrics: metrics, workouts: workouts, heartEvents: events)
+        return Payload.body(metrics: metrics, workouts: workouts, heartEvents: events, drinks: drinks)
     }
 
     // MARK: - Daily quantity statistics
@@ -747,6 +748,47 @@ final class HealthKitReader {
             }
         }
         return rows.sorted { ($0["start"] as? String ?? "") < ($1["start"] as? String ?? "") }
+    }
+
+    // MARK: - Drinks
+
+    /// Every drink in the range, one row each.
+    ///
+    /// The daily total already goes up as `number_of_alcoholic_beverages`, and
+    /// this does not replace it — it sits alongside it, because a total cannot
+    /// be talked about afterwards. "That one at nine was champagne" needs a
+    /// particular drink to attach to, and a uuid is what survives the same day
+    /// being re-sent on every sync without the answer being overwritten.
+    ///
+    /// Read from Apple Health rather than from anything Vital keeps, so a drink
+    /// logged in the Health app or another tracker arrives the same way as one
+    /// tapped here.
+    private func drinkRows(from startDate: Date, to endDate: Date) async throws -> [[String: Any]] {
+        let type = HKQuantityType(.numberOfAlcoholicBeverages)
+        var rows: [[String: Any]] = []
+        var seen = Set<String>()
+        for window in Self.windows(from: startDate, to: endDate) {
+            let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end)
+            let descriptor = HKSampleQueryDescriptor(
+                predicates: [HKSamplePredicate.quantitySample(type: type, predicate: predicate)],
+                sortDescriptors: [SortDescriptor(\.startDate)]
+            )
+            for sample in try await descriptor.result(for: store) {
+                // Windows overlap by a day; the uuid is what makes the seam
+                // harmless.
+                guard seen.insert(sample.uuid.uuidString).inserted else { continue }
+                var row: [String: Any] = [
+                    "id": sample.uuid.uuidString,
+                    "at": Payload.date(sample.startDate),
+                    "count": round2(sample.quantity.doubleValue(for: .count())),
+                    "source": sample.sourceRevision.source.bundleIdentifier,
+                ]
+                if let device = Self.describe(sample.device) { row["device"] = device }
+                if let zone = sample.metadata?[HKMetadataKeyTimeZone] as? String { row["timeZone"] = zone }
+                rows.append(row)
+            }
+        }
+        return rows.sorted { ($0["at"] as? String ?? "") < ($1["at"] as? String ?? "") }
     }
 
     private static func name(for type: HKWorkoutActivityType) -> String {
