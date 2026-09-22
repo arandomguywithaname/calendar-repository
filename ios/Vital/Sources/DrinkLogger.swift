@@ -82,9 +82,12 @@ enum DrinkLogger {
             ),
             options: .cumulativeSum
         )
+        // One `guard let` covers both ways this comes back empty: `try?` on a
+        // call that already returns an optional flattens to a single level, so
+        // a thrown error and "no samples today" arrive the same way.
         guard let stats = try? await descriptor.result(for: store),
-              let sum = stats?.sumQuantity() else { return 0 }
-        return Int(sum.doubleValue(for: .count()).rounded())
+              let sum = stats.sumQuantity() else { return 0 }
+        return Int(sum.doubleValue(for: HKUnit.count()).rounded())
     }
 
     /// The drinks this app wrote today, oldest first.
