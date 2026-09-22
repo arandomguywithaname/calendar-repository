@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadStore, sortedDates, storePath } from "./store";
+import { loadStore, saveStore, sortedDates, storePath } from "./store";
+import { parseStamp } from "./ingest";
 import { computeExertion, computeRecovery, computeTrend } from "./metrics";
-import { DayRecord, HealthStore, WorkoutRecord } from "./types";
+import { DayRecord, DrinkRecord, HealthStore, HeartRatePoint, WorkoutRecord } from "./types";
 import { HealthUser } from "./users";
 
 /**
@@ -48,9 +49,31 @@ function calendarWindow(end: string, days: number): string[] {
  * reporting today's recovery as though the day were over is how a lunchtime sync
  * gets read as a full day's verdict.
  */
-function isPartial(store: HealthStore, date: string): boolean {
-  const lastSync = store.updatedAt?.slice(0, 10);
-  return lastSync !== undefined && date >= lastSync;
+export function isPartial(store: HealthStore, date: string): boolean {
+  // Deliberately not "is this today?" — the server has no idea what day it is
+  // where the person lives. Comparing a stored date against the server's own
+  // UTC date gets it wrong by a day for anyone west of Greenwich, who syncs in
+  // their evening and lands on the next UTC day. The timezone-free truth is
+  // that a sync can only ever capture the day it ran up to the moment it ran,
+  // so the most recent day on record is the one that may still be incomplete.
+  const dates = sortedDates(store);
+  return dates.length > 0 && date === dates[dates.length - 1];
+}
+
+/** How fresh the data is. Every answer carries this, because the alternative is
+ *  a four-day-old snapshot read back as though it were this morning. */
+export function freshness(store: HealthStore) {
+  const lastSync = store.updatedAt;
+  if (!lastSync) return { dataAsOf: null };
+  const ageHours = (Date.now() - Date.parse(lastSync)) / 3600000;
+  if (!Number.isFinite(ageHours)) return { dataAsOf: lastSync };
+  const out: Record<string, unknown> = { dataAsOf: lastSync, syncedHoursAgo: Math.round(ageHours) };
+  if (ageHours >= 24) {
+    out.staleNote =
+      `The phone last synced ${Math.floor(ageHours / 24)} day(s) ago, so nothing below reflects ` +
+      "anything since then. Say so rather than presenting it as current.";
+  }
+  return out;
 }
 
 /** Dates in the window with nothing stored — the difference between "did not
@@ -89,6 +112,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
   const exertion = computeExertion(store, date);
   const partial = isPartial(store, date);
   return json({
+    ...freshness(store),
     date,
     partial,
     ...(partial
@@ -97,7 +121,7 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     note: ESTIMATE_NOTE,
     recovery: recovery ?? noRecoveryReason(day),
     exertion: exertion ?? "insufficient data",
-    sleep: day.sleep ?? null,
+    sleep: day.sleep ? withoutCurve(day.sleep) : null,
     vitals: {
       hrvMs: day.hrvMs ?? null,
       restingHeartRate: day.restingHeartRate ?? null,
@@ -110,9 +134,206 @@ function daySummary(slug: string | undefined, dateArg?: string) {
     activity: {
       steps: day.steps ?? null,
       activeEnergyKcal: day.activeEnergyKcal ?? null,
-      workouts: day.workouts,
+      workouts: day.workouts.map(withoutCurve),
     },
+    // Everything else synced for this day — body composition, basal energy,
+    // flights, exercise minutes, running form and so on. Without this they
+    // would only be reachable one at a time through get_raw_metric, so a
+    // question like "how was my day" would silently miss most of what was
+    // measured.
+    ...(Object.keys(day.other).length > 0 ? { otherMetrics: day.other } : {}),
+    // Rare enough that listing them costs nothing and omitting one matters.
+    ...(day.heartEvents?.length ? { heartEvents: day.heartEvents } : {}),
+    // A handful of entries at most, and the thing most likely to explain a bad
+    // night sitting directly above it. Anything still showing kind: null was
+    // tapped but never described — ask what it was rather than assuming.
+    ...(day.drinks?.length
+      ? {
+          drinks: {
+            total: Math.round(day.drinks.reduce((sum, d) => sum + d.count, 0) * 100) / 100,
+            items: day.drinks.map((drink) => briefDrink({ date, drink })),
+          },
+        }
+      : {}),
   });
+}
+
+/**
+ * The same record with its heart-rate curve taken out, and a count left in its
+ * place.
+ *
+ * A workout's curve is a couple of hundred points. Left in, it would ride along
+ * in every daily summary, every workout listing and every sleep query — turning
+ * "how did I sleep" into thousands of tokens of numbers nobody asked to see,
+ * and crowding out the answer. The count is there so the curve is discoverable:
+ * something has to say it exists, or get_heart_rate_curve would only ever be
+ * called by someone who already knew.
+ */
+export function withoutCurve<T extends { heartRateSeries?: HeartRatePoint[] }>(record: T) {
+  const { heartRateSeries, ...rest } = record;
+  if (!heartRateSeries?.length) return rest;
+  return { ...rest, heartRateCurvePoints: heartRateSeries.length };
+}
+
+/**
+ * How much of the window this metric actually covers.
+ *
+ * Handing back only the days that hold a value reads as a series of zeros:
+ * four drinks logged in a month looks like twenty-six sober days, when it may
+ * be twenty-six days nobody wrote anything down. For anything a person enters
+ * by hand that distinction decides the answer, so the gap is stated rather
+ * than left to be inferred from a short list.
+ */
+export function coverage(
+  name: string,
+  dates: string[],
+  values: { date: string; value: number }[]
+) {
+  const found = new Set(values.map((v) => v.date));
+  const missing = dates.filter((d) => !found.has(d));
+  if (missing.length === 0) {
+    return { daysInWindow: dates.length, daysWithValue: values.length, daysWithoutValue: 0 };
+  }
+  return {
+    daysInWindow: dates.length,
+    daysWithValue: values.length,
+    daysWithoutValue: missing.length,
+    // Listed while short enough to read; a count alone otherwise, because a
+    // year of gaps is not something to print into an answer.
+    ...(missing.length <= 31 ? { datesWithoutValue: missing } : {}),
+    missingNote:
+      `${missing.length} of these ${dates.length} days hold other health data but no '${name}'. ` +
+      "That means it was not recorded, which is not the same as zero — especially for a metric a " +
+      "person enters by hand.",
+  };
+}
+
+/**
+ * Grams of pure alcohol in a serving. Ethanol is 0.789 g/ml, so this is
+ * arithmetic on two numbers the person actually gave — it is computed only
+ * when both are present, and nothing here ever decides what "a beer" holds or
+ * how strong it is. An average stood in for a real glass is exactly what this
+ * whole path exists to avoid.
+ */
+export function alcoholGrams(volumeMl: number, abvPct: number): number {
+  return Math.round(volumeMl * (abvPct / 100) * 0.789 * 10) / 10;
+}
+
+/**
+ * Every drink on record, newest first. Each entry still points at the record
+ * inside the store, so writing a type here writes it there.
+ */
+export function collectDrinks(store: HealthStore): { date: string; drink: DrinkRecord }[] {
+  const out: { date: string; drink: DrinkRecord }[] = [];
+  for (const date of sortedDates(store)) {
+    for (const drink of store.days[date].drinks ?? []) out.push({ date, drink });
+  }
+  // By real instant, not by string: the timestamps carry their UTC offset, and
+  // one logged abroad would sort into the wrong place read as text.
+  out.sort((a, b) => (parseStamp(b.drink.at) ?? 0) - (parseStamp(a.drink.at) ?? 0));
+  return out;
+}
+
+function briefDrink(entry: { date: string; drink: DrinkRecord }) {
+  const d = entry.drink;
+  return {
+    id: d.id ?? null,
+    date: entry.date,
+    at: d.at,
+    count: d.count,
+    kind: d.kind ?? null,
+    ...(d.volumeMl !== undefined ? { volumeMl: d.volumeMl } : {}),
+    ...(d.abvPct !== undefined ? { abvPct: d.abvPct } : {}),
+    ...(d.alcoholGrams !== undefined ? { alcoholGrams: d.alcoholGrams } : {}),
+    ...(d.note ? { note: d.note } : {}),
+  };
+}
+
+export interface DrinkLabel {
+  kind: string;
+  volumeMl?: number;
+  abvPct?: number;
+  note?: string;
+}
+
+const NOTHING_LOGGED =
+  "The drink has to be tapped on the phone first: the 'Had a drink' button in Vital writes it to Apple " +
+  "Health, and the phone sends it a few seconds later. If it was only just tapped, the sync may not have " +
+  "landed yet.";
+
+/**
+ * Record what a drink was.
+ *
+ * The button deliberately asks nothing — one tap, one drink — because that is
+ * the only thing someone with a glass in their hand will reliably do. The kind
+ * is added here afterwards, in conversation, where saying "that was a beer, a
+ * half litre" costs nothing.
+ *
+ * With no id it takes the most recent drinks that have no type yet, which is
+ * what "that was a beer" means straight after tapping. It will not silently
+ * overwrite a drink that already has one: changing an answer takes that
+ * drink's id, so a second remark about tonight cannot rewrite last night.
+ */
+export function applyDrinkLabel(
+  store: HealthStore,
+  label: DrinkLabel,
+  target: { id?: string; howMany?: number },
+  now: string
+) {
+  const all = collectDrinks(store);
+  if (all.length === 0) {
+    return { ok: false as const, error: "No drinks have been recorded.", howToFix: NOTHING_LOGGED, drinks: [] };
+  }
+
+  let targets: { date: string; drink: DrinkRecord }[];
+  if (target.id) {
+    const one = all.find((e) => e.drink.id === target.id || e.drink.at === target.id);
+    if (!one) {
+      return {
+        ok: false as const,
+        error: `No recorded drink matches '${target.id}'.`,
+        howToFix: "Call get_drinks and pass one of the ids it returns.",
+        drinks: all.slice(0, 10).map(briefDrink),
+      };
+    }
+    targets = [one];
+  } else {
+    const untyped = all.filter((e) => !e.drink.kind);
+    if (untyped.length === 0) {
+      return {
+        ok: false as const,
+        error: "Every drink on record already has a type, so there is nothing this would apply to.",
+        howToFix:
+          "If this is a correction, call get_drinks and pass the id of the drink to change. If it is a new " +
+          "drink, it has to be tapped on the phone first — this tool describes drinks, it does not add them.",
+        drinks: all.slice(0, 10).map(briefDrink),
+      };
+    }
+    targets = untyped.slice(0, Math.max(1, Math.min(target.howMany ?? 1, untyped.length)));
+  }
+
+  for (const { drink } of targets) {
+    // Each call states the whole thing, so an earlier volume or strength is
+    // dropped rather than left attached to a different drink's name.
+    drink.kind = label.kind.trim();
+    delete drink.volumeMl;
+    delete drink.abvPct;
+    delete drink.alcoholGrams;
+    delete drink.note;
+    if (label.volumeMl !== undefined) drink.volumeMl = label.volumeMl;
+    if (label.abvPct !== undefined) drink.abvPct = label.abvPct;
+    if (label.volumeMl !== undefined && label.abvPct !== undefined) {
+      drink.alcoholGrams = alcoholGrams(label.volumeMl, label.abvPct);
+    }
+    if (label.note) drink.note = label.note;
+    drink.labelledAt = now;
+  }
+
+  return {
+    ok: true as const,
+    labelled: targets.map(briefDrink),
+    stillWithoutAType: all.filter((e) => !e.drink.kind).length,
+  };
 }
 
 type ToolResult = { content: { type: "text"; text: string }[] };
@@ -147,6 +368,31 @@ const workoutsInput: z.ZodRawShape = {
 const sleepInput: z.ZodRawShape = {
   days: z.number().int().min(1).max(90).optional().describe("How many nights back (default 7)."),
 };
+const heartRateCurveInput: z.ZodRawShape = {
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+    .describe("Day to read, YYYY-MM-DD. Omit for the latest day with data."),
+  which: z.enum(["all", "sleep", "workouts"]).optional()
+    .describe("Which curves to return (default all). Each is a few hundred points."),
+};
+const drinksInput: z.ZodRawShape = {
+  days: z.number().int().min(1).max(365).optional().describe("How many days back to list (default 30)."),
+};
+const setDrinkTypeInput: z.ZodRawShape = {
+  kind: z.string().min(1).max(60)
+    .describe("What it was, in the person's own words: 'beer', 'champagne', 'red wine', 'whisky'."),
+  id: z.string().optional()
+    .describe(
+      "The drink to describe, from get_drinks. Omit to take the most recent drink(s) that have no type yet — " +
+      "which is what 'that was a beer' means right after tapping. Required to change a drink already described."
+    ),
+  howMany: z.number().int().min(1).max(20).optional()
+    .describe("Apply to this many of the most recent untyped drinks (default 1). Ignored when id is given."),
+  volumeMl: z.number().min(1).max(5000).optional()
+    .describe("Serving size in ml — ONLY if the person said it. Never fill in a typical size."),
+  abvPct: z.number().min(0).max(100).optional()
+    .describe("Strength in percent — ONLY if the person said it. Never fill in a typical strength."),
+  note: z.string().max(280).optional().describe("Anything else worth keeping, e.g. 'with dinner'."),
+};
 const rawMetricInput: z.ZodRawShape = {
   name: z.string().describe("Metric name, e.g. 'hrvMs' or an 'other' key like 'flights_climbed'."),
   days: z.number().int().min(1).max(365).optional().describe("How many days back (default 30)."),
@@ -160,7 +406,8 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
     {
       instructions:
         `${whose.charAt(0).toUpperCase() + whose.slice(1)} Apple Health data: sleep, heart metrics, workouts, activity, ` +
-        "and any other synced HealthKit metrics, plus recovery/exertion estimates computed from them (Apple Health " +
+        "and any other synced HealthKit metrics, plus drinks logged by tapping a button on the phone, plus " +
+        "recovery/exertion estimates computed from them (Apple Health " +
         "has no cloud API, so the phone pushes this data to the server). Dates are YYYY-MM-DD in the user's local " +
         "time. Start with get_data_status if unsure what's available.",
     }
@@ -183,6 +430,9 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const counts: Record<string, number> = {};
       const bump = (k: string) => (counts[k] = (counts[k] || 0) + 1);
       let workouts = 0;
+      let heartEvents = 0;
+      let drinks = 0;
+      let drinksWithoutAType = 0;
       for (const d of dates) {
         const day = store.days[d];
         if (day.hrvMs !== undefined) bump("hrv");
@@ -193,6 +443,14 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         if (day.respiratoryRate !== undefined) bump("respiratoryRate");
         if (day.vo2Max !== undefined) bump("vo2Max");
         workouts += day.workouts.length;
+        heartEvents += day.heartEvents?.length ?? 0;
+        for (const drink of day.drinks ?? []) {
+          drinks += drink.count;
+          if (!drink.kind) drinksWithoutAType++;
+        }
+        if (day.sleep?.heartRateSeries?.length || day.workouts.some((w) => w.heartRateSeries?.length)) {
+          bump("heartRateCurve");
+        }
         for (const k of Object.keys(day.other)) bump(`other:${k}`);
       }
       return json({
@@ -201,7 +459,15 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
         lastDate: latestDate(dates),
         lastSync: store.updatedAt ?? null,
         totalWorkouts: workouts,
+        totalHeartEvents: heartEvents,
+        totalDrinks: Math.round(drinks * 100) / 100,
+        drinksWithoutAType,
         daysWithMetric: counts,
+        metricUnits: store.units ?? {},
+        // Only metrics where one device was deliberately chosen over another
+        // appear here. A metric HealthKit aggregated across every source is
+        // absent rather than credited to one of them.
+        metricSources: store.sources ?? {},
         note: ESTIMATE_NOTE,
       });
     }
@@ -240,6 +506,7 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const window = calendarWindow(last, span);
       const missingDates = missingIn(store, window);
       return json({
+        ...freshness(store),
         note: ESTIMATE_NOTE,
         requestedDays: span,
         window: { first: window[0], last: window[window.length - 1] },
@@ -269,10 +536,10 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       for (const date of dates) {
         if (start && date < start) continue;
         if (end && date > end) continue;
-        for (const w of store.days[date].workouts) all.push({ date, ...w });
+        for (const w of store.days[date].workouts) all.push({ date, ...withoutCurve(w) });
       }
       all.sort((a, b) => (a.start < b.start ? 1 : -1));
-      return json({ totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
+      return json({ ...freshness(store), totalMatching: all.length, workouts: all.slice(0, limit ?? 20) });
     }
   );
 
@@ -293,13 +560,14 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       const window = calendarWindow(latestDate(stored)!, span);
       const nights = window
         .filter((d) => store.days[d]?.sleep)
-        .map((d) => ({ date: d, ...store.days[d].sleep }));
+        .map((d) => ({ date: d, ...withoutCurve(store.days[d].sleep!) }));
       // Nights whose own numbers contradict each other are listed but kept out
       // of the average: an average over broken values is broken to two decimals.
       const sound = nights.filter((n) => !(n.suspect && n.suspect.length));
       const totals = sound.map((n) => n.totalSleepHours).filter((v): v is number => v !== undefined);
       const avg = totals.length ? Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 100) / 100 : null;
       return json({
+        ...freshness(store),
         requestedNights: span,
         window: { first: window[0], last: window[window.length - 1] },
         nightsFound: nights.length,
@@ -314,14 +582,154 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
 
   addTool(
     server,
+    "get_heart_rate_curve",
+    {
+      title: "Heart rate curve",
+      description:
+        "Heart rate through one day's workouts and night's sleep as a series of points — one per minute inside a " +
+        "workout, one per five minutes across a night. Use it for the shape rather than the totals: where the peaks " +
+        "were, how fast it came down afterwards, how deep the overnight dip went and when. Kept out of the other " +
+        "tools' answers because each curve is a few hundred numbers; they report heartRateCurvePoints where one " +
+        "exists. Only roughly the last two weeks carry curves.",
+      inputSchema: heartRateCurveInput,
+    },
+    async ({ date, which }: { date?: string; which?: "all" | "sleep" | "workouts" }) => {
+      const store = loadStore(slug);
+      const dates = sortedDates(store);
+      const day = date ?? latestDate(dates);
+      if (!day) return noData(slug);
+      const record = store.days[day];
+      if (!record) {
+        return json({
+          error: `No data stored for ${day}.`,
+          availableRange: { first: dates[0], last: latestDate(dates) },
+        });
+      }
+      const want = which ?? "all";
+      const sleepCurve = want === "workouts" ? undefined : record.sleep?.heartRateSeries;
+      const workouts =
+        want === "sleep"
+          ? []
+          : record.workouts
+              .filter((w) => w.heartRateSeries?.length)
+              .map((w) => ({
+                id: w.id ?? null,
+                name: w.name,
+                start: w.start,
+                bucketMinutes: 1,
+                points: w.heartRateSeries,
+              }));
+      const empty = !sleepCurve?.length && workouts.length === 0;
+      return json({
+        ...freshness(store),
+        date: day,
+        // Say why it is empty rather than returning a bare pair of nulls, which
+        // reads as "your heart stopped" instead of "nothing was recorded".
+        ...(empty
+          ? {
+              note:
+                "No heart-rate curve stored for this day. Curves are kept only for roughly the last two weeks, and " +
+                "only where a watch recorded heart rate during sleep or a workout.",
+            }
+          : {}),
+        sleep: sleepCurve?.length ? { bucketMinutes: 5, points: sleepCurve } : null,
+        workouts,
+      });
+    }
+  );
+
+  addTool(
+    server,
+    "get_drinks",
+    {
+      title: "Drinks",
+      description:
+        "Every drink logged on the phone over the last N days: when it was, and what it was if that has been " +
+        "said. The phone records only the tap — one tap, one drink, no type — so entries with kind: null are " +
+        "drinks nobody has described yet. Use set_drink_type to fill those in. A day with no entries means " +
+        "nothing was logged, which is not the same as nothing drunk: the button only records what someone " +
+        "pressed it for.",
+      inputSchema: drinksInput,
+    },
+    async ({ days }: { days?: number }) => {
+      const store = loadStore(slug);
+      const stored = sortedDates(store);
+      if (stored.length === 0) return noData(slug);
+      const window = calendarWindow(latestDate(stored)!, days ?? 30);
+      const first = window[0];
+      const last = window[window.length - 1];
+      const inWindow = collectDrinks(store).filter((e) => e.date >= first && e.date <= last);
+      const byDate: Record<string, number> = {};
+      for (const e of inWindow) byDate[e.date] = Math.round((byDate[e.date] ?? 0) * 100 + e.drink.count * 100) / 100;
+      const untyped = inWindow.filter((e) => !e.drink.kind);
+      return json({
+        ...freshness(store),
+        window: { first, last },
+        totalDrinks: Math.round(inWindow.reduce((sum, e) => sum + e.drink.count, 0) * 100) / 100,
+        daysWithADrink: Object.keys(byDate).length,
+        perDay: byDate,
+        withoutAType: untyped.length,
+        ...(untyped.length > 0
+          ? {
+              askNote:
+                `${untyped.length} of these were tapped but never described. If it matters to the answer, ask ` +
+                "what they were and record it with set_drink_type rather than guessing.",
+            }
+          : {}),
+        drinks: inWindow.map(briefDrink),
+      });
+    }
+  );
+
+  addTool(
+    server,
+    "set_drink_type",
+    {
+      title: "Set what a drink was",
+      description:
+        "Record what a logged drink actually was. The button on the phone deliberately asks nothing — one tap, " +
+        "one drink — so the type is added here afterwards: 'that was a beer', 'the last two were champagne'. " +
+        "With no id it describes the most recent drink(s) that have no type yet, so it can be called straight " +
+        "after someone says what they had.\n\n" +
+        "Record only what the person actually said. Do NOT fill in a typical volume, strength or calorie " +
+        "figure for a kind of drink — a made-up number for an 'average beer' is worse than no number, because " +
+        "it reads back later as though it were measured. Pass volumeMl and abvPct only when they were stated, " +
+        "and grams of alcohol are then computed from them. Each call states the whole thing: passing kind " +
+        "alone clears any volume or strength recorded for that drink before.\n\n" +
+        "This describes drinks; it does not add them. A drink that was never tapped on the phone is not here.",
+      inputSchema: setDrinkTypeInput,
+    },
+    async (args: DrinkLabel & { id?: string; howMany?: number }) => {
+      const store = loadStore(slug);
+      const result = applyDrinkLabel(
+        store,
+        { kind: args.kind, volumeMl: args.volumeMl, abvPct: args.abvPct, note: args.note },
+        { id: args.id, howMany: args.howMany },
+        new Date().toISOString()
+      );
+      if (!result.ok) return json(result);
+      // The only write this server makes. Load, change and save run with no
+      // await between them, so an ingest arriving from the phone cannot
+      // interleave and be lost — Node gives that for free here, and it would
+      // stop being true the moment an await appeared in the middle.
+      saveStore(store, slug);
+      return json(result);
+    }
+  );
+
+  addTool(
+    server,
     "get_raw_metric",
     {
       title: "Raw metric",
       description:
         "Daily values for one stored metric over the last N days. Valid names: hrvMs, restingHeartRate, heartRateAvg, " +
         "heartRateMax, respiratoryRate, bloodOxygenPct, vo2Max, wristTemperatureC, activeEnergyKcal, steps — " +
-        "plus anything listed under 'other:*' by get_data_status (e.g. mindful_minutes). Escape hatch when the " +
-        "summary tools don't cover a metric.",
+        "plus anything listed under 'other:*' by get_data_status (e.g. flights_climbed). Escape hatch when the " +
+        "summary tools don't cover a metric. For alcohol use get_drinks, which has one entry per drink rather " +
+        "than a daily total. " +
+        "Read daysWithoutValue before drawing a conclusion: a missing day means nothing was recorded, which is " +
+        "not the same as a zero — most of all for anything a person logs by hand.",
       inputSchema: rawMetricInput,
     },
     async ({ name, days }: { name: string; days?: number }) => {
@@ -339,7 +747,13 @@ export function buildHealthMcpServer(user?: HealthUser): McpServer {
       if (values.length === 0) {
         return json({ error: `No values stored for metric '${name}'.`, hint: "Call get_data_status to see available metrics." });
       }
-      return json({ metric: name, units: store.units?.[name], values });
+      return json({
+        ...freshness(store),
+        metric: name,
+        units: store.units?.[name],
+        ...coverage(name, dates, values),
+        values,
+      });
     }
   );
 

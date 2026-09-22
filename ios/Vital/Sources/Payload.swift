@@ -17,13 +17,30 @@ enum Payload {
     static func date(_ d: Date) -> String { dateFormatter.string(from: d) }
 
     /// One metric block: { name, units, data: [rows] }.
-    static func metric(name: String, units: String, rows: [[String: Any]]) -> [String: Any] {
-        ["name": name, "units": units, "data": rows]
+    ///
+    /// `source` is the bundle identifier of the device this metric was taken
+    /// from, and is set only where Vital deliberately chose one device over
+    /// another (sleep, HRV). A metric aggregated by HealthKit across every
+    /// source has no single answer and leaves it off rather than naming one
+    /// arbitrarily.
+    static func metric(name: String, units: String, rows: [[String: Any]],
+                       source: String? = nil) -> [String: Any] {
+        var block: [String: Any] = ["name": name, "units": units, "data": rows]
+        if let source { block["source"] = source }
+        return block
     }
 
     /// Wraps everything into the top-level body.
-    static func body(metrics: [[String: Any]], workouts: [[String: Any]]) -> [String: Any] {
-        ["data": ["metrics": metrics, "workouts": workouts]]
+    static func body(metrics: [[String: Any]], workouts: [[String: Any]],
+                     heartEvents: [[String: Any]] = [],
+                     drinks: [[String: Any]] = []) -> [String: Any] {
+        var data: [String: Any] = ["metrics": metrics, "workouts": workouts]
+        if !heartEvents.isEmpty { data["heartEvents"] = heartEvents }
+        // One entry per drink, not a daily total. The daily total goes up as a
+        // metric like everything else; these carry the timestamps, so what was
+        // drunk can be said afterwards against a particular glass.
+        if !drinks.isEmpty { data["drinks"] = drinks }
+        return ["data": data]
     }
 
     /// True when Health handed back nothing at all. That is exactly what a

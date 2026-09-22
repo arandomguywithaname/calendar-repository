@@ -24,12 +24,14 @@ targets:
           Vital reads the health data you approve (sleep, heart, activity,
           workouts) and sends it only to your family's own server.
         # Apple rejects any upload from an app carrying the HealthKit
-        # entitlement unless BOTH purpose strings exist (ITMS-90683), even
-        # when the app only reads. Vital passes toShare: [] and never asks
-        # for write access, so this string is never actually shown.
+        # entitlement unless BOTH purpose strings exist (ITMS-90683). This one
+        # used to be a formality that was never shown. It is shown now: the
+        # "Had a drink" button writes one alcohol sample, and that is the only
+        # thing Vital ever writes.
         NSHealthUpdateUsageDescription: >-
-          Vital never writes to Apple Health. It only reads the data you
-          approve, so it can be sent to your family's own server.
+          Vital adds one drink to Apple Health when you tap "Had a drink", so it
+          sits alongside your sleep and heart data. That is the only thing Vital
+          writes — everything else it only reads.
         # Optional zero-config for FAMILY builds: paste the connection link from
         # `npm run link` here before building, and installers never set anything up.
         VitalDefaultConnectionLink: ""
@@ -50,6 +52,13 @@ targets:
       path: Vital.entitlements
       properties:
         com.apple.developer.healthkit: true
+        # Required since iOS 15 for HKObserverQuery to fire while the app is in
+        # the background. Without it enableBackgroundDelivery reports success
+        # and then simply never delivers — nothing errors, the data just stays
+        # a day old. Adding an entitlement changes what the provisioning
+        # profile must carry, so the first build after this needs a reissued
+        # profile (Codemagic's fetch-signing-files --create handles that).
+        com.apple.developer.healthkit.background-delivery: true
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"

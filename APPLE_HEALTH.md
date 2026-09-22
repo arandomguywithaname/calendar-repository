@@ -193,15 +193,30 @@ needs zero changes for it. The contract your app implements:
           "data": [ { "date": "2026-08-30 07:01:00 +0200", "qty": 54.2 } ] },
         { "name": "step_count", "units": "steps",
           "data": [ { "date": "2026-08-30 22:00:00 +0200", "qty": 9182 } ] },
-        { "name": "sleep_analysis", "units": "hr",
+        { "name": "sleep_analysis", "units": "hr", "source": "com.apple.health.WATCH",
           "data": [ { "date": "2026-08-30 07:00:00 +0200",
-                      "totalSleep": 7.4, "deep": 1.2, "rem": 1.6, "core": 4.6 } ] }
+                      "totalSleep": 7.4, "deep": 1.2, "rem": 1.6, "core": 4.6,
+                      "source": "com.apple.health.WATCH",
+                      "sources": ["com.apple.health.WATCH", "com.apple.Health"] } ] }
       ],
       "workouts": [
         { "name": "Outdoor Run", "start": "2026-08-30 17:30:00 +0200",
           "end": "2026-08-30 18:10:00 +0200",
           "activeEnergyBurned": { "qty": 420, "units": "kcal" },
-          "heartRate": { "avg": 151, "max": 174 } }
+          "heartRate": { "avg": 151, "max": 174 },
+          "source": "com.apple.health.WATCH", "device": "Apple Watch (Watch7,1)",
+          "timeZone": "Europe/Riga",
+          "segments": [ { "type": "lap", "start": "2026-08-30 17:40:00 +0200",
+                          "end": "2026-08-30 17:45:00 +0200", "duration": 300 } ],
+          "heartRateSeries": [ { "t": "2026-08-30 17:31:00 +0200", "bpm": 138 }, … ] }
+      ],
+      "heartEvents": [
+        { "type": "high_heart_rate", "id": "…", "start": "2026-08-30 14:02:00 +0200",
+          "source": "com.apple.health.WATCH", "thresholdBpm": 120 }
+      ],
+      "drinks": [
+        { "id": "…", "at": "2026-08-30 21:10:00 +0200", "count": 1,
+          "source": "com.tim.vital", "timeZone": "Europe/Riga" }
       ]
   } }
   ```
@@ -209,12 +224,78 @@ needs zero changes for it. The contract your app implements:
   Dates are device-local `yyyy-MM-dd HH:mm:ss Z`; metric names are lowercase snake_case;
   re-sending a day simply overwrites it, so the app can always send "everything since a week
   ago" without creating duplicates. Metrics not listed anywhere in this guide are stored too,
-  with their units.
+  with their units, and `get_data_status` lists them.
+
+  Vital's **"Had a drink"** button is the one thing it writes. Each tap saves one standard
+  drink to Apple Health at that moment — three drinks is three taps — and the button shows
+  the day's running total read back from Health. Undo sits beside it and removes them one at
+  a time, because a tap writes to a permanent health record; the removable set is read back
+  out of Health on every appearance, so Undo is still there after the phone has been locked
+  and picked up again, and it covers exactly the samples HealthKit permits this app to
+  delete (its own). The send waits a few seconds after the last tap rather than firing on
+  each one. It goes into Apple Health rather than a private tally on purpose: the drink then
+  shows up in the Health app next to everything else, survives Vital being reinstalled, and
+  comes back through the reader that already exists — so it reaches the server by the same
+  path as a night's sleep.
+
+  **The button asks nothing else.** It is not a champagne button and not a beer button: one
+  tap is one drink, whatever it was. What it actually *was* is said afterwards, in Claude —
+  "that was a beer", "the last two were champagne" — and `set_drink_type` attaches it to that
+  particular drink. That split is the whole design: someone holding a glass will press one
+  button and no more, and a picker would simply go unused. Nothing is ever inferred from the
+  name. A "beer" carries no volume, no strength and no calorie figure unless the person gave
+  one, because a made-up number for an average beer reads back a week later as though it had
+  been measured.
+
+  `drinks` is optional and carries one entry per drink, alongside the daily
+  `number_of_alcoholic_beverages` total rather than instead of it — a total cannot be talked
+  about afterwards, and "the one at nine" needs something to attach to. Read from Apple
+  Health rather than from anything Vital keeps, so a drink logged in the Health app or
+  another tracker arrives the same way. This is the one block the server **merges** rather
+  than replaces: `kind`, `volumeMl`, `abvPct`, `alcoholGrams`, `note` and `labelledAt` are
+  never sent by the phone, so a re-sent day keeps them. Without that the phone would erase
+  the answer within minutes of it being given, on every sync.
+
+  `heartRateSeries` is optional, and may sit on a workout or on a sleep row. It is a curve:
+  one bucket **average** per minute inside a workout, one per five minutes across a night —
+  not raw samples. That is deliberate. A statistics query returns one number per bucket
+  however densely the watch sampled, so the cost is fixed by the length of the session and
+  cannot run away; and it de-duplicates, so a phone and a watch recording the same workout
+  cannot hand back two overlapping curves. Only roughly the last two weeks carry curves, and
+  each is capped — the daily figures reach back as far as HealthKit does, curves do not.
+  The server re-applies the cap on the way in, and keeps curves out of every tool answer
+  except `get_heart_rate_curve`; the others report `heartRateCurvePoints` so the curve is
+  still discoverable.
+
+  `heartEvents` is optional — the three things a watch raises on its own
+  (`high_heart_rate`, `low_heart_rate`, `irregular_heart_rhythm`). A payload without the key
+  is a phone with nothing to report or an older build, not a malformed one. Each event keeps
+  its own timestamp rather than being folded into a daily number, and re-sending a range
+  cannot duplicate one: they are replaced by `id`, or by type and timestamp when there is no
+  id. A workout likewise carries `source`, `device`, `timeZone` and its `segments` (laps,
+  pauses), because a workout is a single sample and really does belong to one device and one
+  place — unlike a daily total.
+
+  `source` is optional and means "this figure is one device's account, and here is which
+  device". Set it only where the sender genuinely chose between devices — a phone and a watch
+  both record the night, and the hours are taken from one of them, never added together.
+  Leave it off for a figure aggregated across every source, which is what HealthKit's
+  statistics queries return: naming one device there would be a guess. On a sleep row,
+  `source` is the device whose night was used and `sources` lists everything that recorded it,
+  so a night where one device was dropped is distinguishable from one with no rival.
 - The response (`{ "ok": true, "dataPoints": …, "daysTouched": …, "lastDate": … }`) is exactly
   what a "last sent / success / error" screen needs, and `GET /api/health/status` returns the
   same summary any time, without a token and without exposing any health values.
 
 ## 3. Seed history (do this once)
+
+> Vital does this by itself now. It remembers which metrics it has already sent a full
+> history for, so when an update teaches it to read something new it backfills just those,
+> once, a year at a time — without which the server would hold twelve years of steps beside
+> seven days of body mass and nothing would ever close the gap. It runs only in the
+> foreground, where there is time, and resumes where it left off if the app is backgrounded
+> partway. Pressing **All** by hand still works and does the same thing for everything.
+
 
 Recovery scores compare each day against your rolling 42-day personal baseline, so the connector gets
 good after it has some history (it needs ≥5 days to score at all). In Health Auto Export, do a one-time
@@ -301,7 +382,10 @@ Tools exposed by the connector:
 | `get_trends` | “How has my sleep/HRV/training load looked this month?” |
 | `get_workouts` | “What did my runs look like last week?” |
 | `get_sleep` | “Am I sleeping enough?” |
-| `get_raw_metric` | Any individual stored metric, day by day, with units |
+| `get_heart_rate_curve` | “Show me the shape: the peaks in that run, the dip overnight” (last ~2 weeks) |
+| `get_drinks` | “What has he been drinking this week?” — one entry per tap, with what each one was |
+| `set_drink_type` | Records what a logged drink was (“that was a beer”), against that particular drink |
+| `get_raw_metric` | Any individual stored metric, day by day, with units — and how many days of the window had no value at all |
 
 ### How the scores work (and their limits)
 

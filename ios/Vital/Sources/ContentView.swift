@@ -1,4 +1,5 @@
 import SwiftUI
+import HealthKit
 
 /// Vital's main screen — Tim's design: when data was last sent,
 /// whether it worked, and one big "Send now" button.
@@ -13,6 +14,17 @@ struct ContentView: View {
     @State private var days = 7
     @State private var showSettings = false
     @State private var showJoin = false
+    @State private var drinkMessage = ""
+    /// Today's total, read back from Apple Health.
+    @State private var drinksToday = 0
+    /// The drinks this app wrote today, oldest first, so they can be taken
+    /// back one at a time. HealthKit only lets an app delete its own samples,
+    /// so this is also exactly the set Undo is allowed to touch. Read back
+    /// from Health on every appearance, so Undo is still there after the phone
+    /// has been locked and picked up again.
+    @State private var myDrinks: [HKQuantitySample] = []
+    /// Sends after the tapping stops — see scheduleDrinkSync.
+    @State private var drinkSyncTask: Task<Void, Never>?
 
     /// "All" in days: HealthKit shipped with iOS 8 in September 2014, so nothing
     /// can exist before that and counting from there really is everything.
@@ -100,6 +112,43 @@ struct ContentView: View {
                 .disabled(sending)
                 .padding(.horizontal, 32)
 
+                // One tap, one drink, written to Apple Health there and then.
+                // It asks nothing else: what it was gets said afterwards in
+                // Claude, against that particular drink, because someone with
+                // a glass in their hand will press one button and no more.
+                // Deliberately quieter than Send now — it is used far more
+                // often but matters far less if it is missed.
+                VStack(spacing: 6) {
+                    // Never disabled. Three drinks is three taps, and a button
+                    // that locks itself while it talks to the server would
+                    // swallow the second and third — the write to Health is
+                    // instant, so there is nothing to wait for.
+                    Button(action: logDrink) {
+                        HStack {
+                            Image(systemName: "wineglass")
+                            Text("Had a drink")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.purple)
+                    .padding(.horizontal, 32)
+
+                    HStack(spacing: 14) {
+                        Text(drinkMessage.isEmpty ? drinkCountText : drinkMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if !myDrinks.isEmpty {
+                            Button("Undo", action: undoDrink)
+                                .font(.footnote.weight(.semibold))
+                        }
+                    }
+                    .padding(.horizontal, 32)
+                    .frame(minHeight: 18)
+                }
+
                 Spacer()
 
                 Text("Vital reads Apple Health on this phone and sends it only to our own server. It updates automatically when you open the app.")
@@ -124,6 +173,7 @@ struct ContentView: View {
                 JoinView(server: bakedServer)
             }
             .onAppear {
+                refreshDrinks()
                 applyBakedInLinkIfNeeded()
                 if !Uploader.isConfigured && !bakedServer.isEmpty {
                     showJoin = true // first run: sign up right in the app
@@ -132,7 +182,10 @@ struct ContentView: View {
                 }
             }
             .onChange(of: scenePhase) { phase in
-                if phase == .active { autoSyncIfDue() }
+                if phase == .active {
+                    refreshDrinks()
+                    autoSyncIfDue()
+                }
                 if phase == .background { VitalApp.scheduleRefresh() }
             }
         }
@@ -155,6 +208,14 @@ struct ContentView: View {
         lastSync = Uploader.lastSync
         lastMessage = Uploader.lastMessage
         lastOK = Uploader.lastOK
+        // Connecting is the moment the automatic side has to start, and both
+        // halves of it need arming here. The background refresh was previously
+        // only requested when the app was next backgrounded; and HealthKit
+        // background delivery asked for at launch was refused, because nobody
+        // had granted Health access yet — that happens during this first sync.
+        // Without these two lines, "connect once and forget" quietly wasn't.
+        VitalApp.scheduleRefresh()
+        HealthObserver.start()
         autoSyncIfDue()
     }
 
@@ -165,6 +226,89 @@ struct ContentView: View {
         // The very first send seeds history so Claude has a baseline to compare
         // against from day one; after that a week keeps everything current.
         startSync(days: Uploader.lastSync == nil ? 90 : 7, manual: false)
+    }
+
+    /// "2 drinks today". The larger of what Health reports and what this app
+    /// wrote, so the number still climbs with each tap if the *read*
+    /// permission was declined while the write was allowed — otherwise the
+    /// button would sit there reading "0 drinks today" and look broken.
+    private var drinkCountText: String {
+        let n = max(drinksToday, myDrinks.count)
+        if n == 0 { return "Tap after any drink — beer, wine, champagne. Say which one in Claude later." }
+        return n == 1 ? "1 drink today" : "\(n) drinks today"
+    }
+
+    /// Writes one drink to Apple Health. Tap it again for another.
+    private func logDrink() {
+        drinkMessage = ""
+        Task {
+            do {
+                let sample = try await DrinkLogger.log()
+                myDrinks.append(sample)
+                drinksToday = await DrinkLogger.countToday()
+                scheduleDrinkSync()
+            } catch {
+                drinkMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Removes the last drink this app wrote, and can be pressed as many times
+    /// as there are drinks to take back.
+    private func undoDrink() {
+        guard let sample = myDrinks.popLast() else { return }
+        drinkMessage = ""
+        Task {
+            do {
+                try await DrinkLogger.undo(sample)
+                drinksToday = await DrinkLogger.countToday()
+                scheduleDrinkSync()
+            } catch {
+                // Put it back: it is still in Health, so Undo should still
+                // offer to remove it.
+                myDrinks.append(sample)
+                drinkMessage = "Couldn't remove it: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Sends once the tapping stops.
+    ///
+    /// Someone having a few over an evening presses this several times in a
+    /// row, and a sync per tap would be several uploads of the same day for no
+    /// gain. The wait is short because the point of the button is that the
+    /// drink is written down — "it will turn up in a couple of hours" is not
+    /// what pressing a button feels like it promised. Each tap replaces the
+    /// pending send, so the timer starts again rather than stacking up.
+    private func scheduleDrinkSync() {
+        drinkSyncTask?.cancel()
+        guard Uploader.isConfigured else { return }
+        drinkSyncTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            let result = await SyncEngine.sync(days: 2)
+            lastOK = result.ok
+            lastMessage = result.message
+            lastSync = Uploader.lastSync
+        }
+    }
+
+    /// Today's total, and the set Undo can still take back.
+    private func refreshDrinks() {
+        Task {
+            drinksToday = await DrinkLogger.countToday()
+            let stored = await DrinkLogger.ownDrinksToday()
+            // Merge rather than replace. A tap made while this was in flight is
+            // already in myDrinks but may not be in what Health just handed
+            // back, and dropping it would take its Undo away again.
+            var known = Set(stored.map(\.uuid))
+            var merged = stored
+            for sample in myDrinks where !known.contains(sample.uuid) {
+                merged.append(sample)
+                known.insert(sample.uuid)
+            }
+            myDrinks = merged.sorted { $0.startDate < $1.startDate }
+        }
     }
 
     private func startSync(days: Int, manual: Bool) {
@@ -181,7 +325,9 @@ struct ContentView: View {
         guard !sending else { return }
         sending = true
         Task {
-            let result = await SyncEngine.sync(days: days)
+            // Foreground: a spinner is on screen and there is time, so this is
+            // where history for newly-read metrics is allowed to be filled in.
+            let result = await SyncEngine.sync(days: days, allowBackfill: true)
             lastOK = result.ok
             lastMessage = result.message
             lastSync = Uploader.lastSync

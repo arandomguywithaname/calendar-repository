@@ -7,6 +7,25 @@
  * Claude over MCP, including recovery/exertion estimates computed from it.
  */
 
+/**
+ * One point on a heart-rate curve: a bucket average, not a raw sample. One
+ * minute a bucket inside a workout, five across a night — enough to see where
+ * the peaks were and how fast it came down, without carrying beat-to-beat
+ * detail nothing downstream can use.
+ */
+export interface HeartRatePoint {
+  t: string; // device-local timestamp of the bucket's start
+  bpm: number;
+}
+
+/** A lap, pause or segment inside a workout — the shape of the session. */
+export interface WorkoutSegment {
+  type: string; // lap | pause | resume | segment | marker | motionPaused | …
+  start: string;
+  end?: string;
+  durationSec?: number;
+}
+
 /** A single workout session, normalized from Health Auto Export. */
 export interface WorkoutRecord {
   id?: string;
@@ -19,6 +38,34 @@ export interface WorkoutRecord {
   avgHeartRate?: number;
   maxHeartRate?: number;
   elevationUpM?: number;
+  /**
+   * A workout is one sample, so unlike a daily total it really does belong to
+   * one device and one place: who recorded it, on what, and the timezone it
+   * happened in.
+   */
+  source?: string;
+  device?: string;
+  timeZone?: string;
+  segments?: WorkoutSegment[];
+  /** Minute-by-minute heart rate through the session. Recent workouts only. */
+  heartRateSeries?: HeartRatePoint[];
+}
+
+/**
+ * Something the watch raised on its own — a high or low heart rate, or an
+ * irregular rhythm. Rare and individually meaningful, so each keeps its own
+ * timestamp instead of being folded into a daily number.
+ */
+export interface HeartEventRecord {
+  type: string; // high_heart_rate | low_heart_rate | irregular_heart_rhythm
+  id?: string;
+  start: string;
+  end?: string;
+  source?: string;
+  device?: string;
+  timeZone?: string;
+  /** The rate the watch was watching for; without it "high" is a word, not a number. */
+  thresholdBpm?: number;
 }
 
 /** One night of sleep, normalized. All durations are in hours. */
@@ -32,12 +79,56 @@ export interface SleepRecord {
   sleepStart?: string;
   sleepEnd?: string;
   /**
+   * Bundle identifier of the device whose account of this night was used
+   * (e.g. "com.apple.health.<uuid>" for the watch). Nights are never summed
+   * across devices — one is chosen — and this says which.
+   */
+  source?: string;
+  /** Every device that recorded this night, when more than one did. */
+  sources?: string[];
+  /** Heart rate across the night in five-minute buckets. Recent nights only. */
+  heartRateSeries?: HeartRatePoint[];
+  /**
    * Why this night's numbers don't add up, if they don't — e.g. stages summing
    * to more hours than lie between sleepStart and sleepEnd. A night with this
    * set is not trustworthy, and anything reading it should say so rather than
    * quietly averaging it in.
    */
   suspect?: string[];
+}
+
+/**
+ * One drink, as it was tapped.
+ *
+ * The phone sends the timestamp, the count and where it came from. What it
+ * actually *was* — beer, champagne, whisky — is not something Apple Health
+ * records and not something the button asks for: it is said afterwards, in
+ * conversation, and stored here against the same drink. Nothing is ever
+ * inferred from the name; a "beer" carries no volume or strength unless the
+ * person gave one.
+ */
+export interface DrinkRecord {
+  /** HealthKit sample uuid, which is also what lets the phone re-send a day
+   *  without the label being lost. */
+  id?: string;
+  at: string; // device-local timestamp of the drink
+  /** Standard drinks this sample recorded — one tap is 1. */
+  count: number;
+  source?: string;
+  device?: string;
+  timeZone?: string;
+
+  // Everything below is written in conversation, never by the phone.
+  /** What it was, in the person's own words: "beer", "champagne", "whisky". */
+  kind?: string;
+  volumeMl?: number;
+  abvPct?: number;
+  /** Grams of pure alcohol — computed only when both volume and strength were
+   *  given, so it is arithmetic rather than an average of anything. */
+  alcoholGrams?: number;
+  note?: string;
+  /** When the type was added, so a label can be told from a measurement. */
+  labelledAt?: string;
 }
 
 /** Everything known about one calendar day. */
@@ -56,6 +147,10 @@ export interface DayRecord {
   steps?: number;
   sleep?: SleepRecord;
   workouts: WorkoutRecord[];
+  /** Watch-raised heart events on this day, if any. */
+  heartEvents?: HeartEventRecord[];
+  /** Drinks logged on this day, one entry per tap. */
+  drinks?: DrinkRecord[];
   /** Any other daily-aggregated metrics we don't model explicitly, keyed by normalized name. */
   other: { [metric: string]: number };
 }
@@ -68,6 +163,13 @@ export interface HealthStore {
   days: { [date: string]: DayRecord };
   /** Units per metric as last reported by the phone (e.g. { flights_climbed: "count" }). */
   units?: { [metric: string]: string };
+  /**
+   * Device behind each metric, where there is one — the bundle identifier the
+   * phone reported alongside it. Only metrics for which Vital deliberately
+   * picked one device (sleep, HRV) carry this; a figure HealthKit aggregated
+   * across every source is absent here rather than attributed to a guess.
+   */
+  sources?: { [metric: string]: string };
 }
 
 /** Result summary returned to the ingest caller (shown in Health Auto Export). */
