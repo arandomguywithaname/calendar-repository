@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colibrix Family</title>
+<meta name="description" content="Colibrix — a family business.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%A6%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1b2a;
+    --bg2: #13263a;
+    --card: #1b3350;
+    --text: #f1f5f9;
+    --muted: #a8b8cc;
+    --accent: #2ee6a6;
+    --accent2: #29b6f6;
+    --pink: #ff5fa2;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Nunito", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- Header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(13, 27, 42, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .nav { display: flex; align-items: center; gap: 16px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 1.25rem; text-decoration: none; }
+  .brand img, .brand svg { width: 36px; height: 36px; }
+  .links { display: flex; gap: 6px; margin-left: auto; }
+  .links a {
+    text-decoration: none; padding: 8px 14px; border-radius: 999px;
+    color: var(--muted); font-weight: 700;
+  }
+  .links a:hover { background: var(--card); color: var(--text); }
+  select#lang {
+    background: var(--card); color: var(--text); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 999px; padding: 8px 12px; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  @media (max-width: 640px) {
+    .nav { flex-wrap: wrap; height: auto; padding: 10px 0; }
+    .links { order: 3; width: 100%; justify-content: space-between; margin: 0; }
+    select#lang { margin-left: auto; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    padding: 80px 0 70px;
+    background:
+      radial-gradient(circle at 80% 20%, rgba(46,230,166,0.25), transparent 45%),
+      radial-gradient(circle at 10% 90%, rgba(255,95,162,0.22), transparent 45%),
+      linear-gradient(160deg, var(--bg2), var(--bg));
+    overflow: hidden;
+  }
+  .hero-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 40px; align-items: center; }
+  .kicker {
+    display: inline-block; padding: 6px 14px; border-radius: 999px;
+    background: rgba(46,230,166,0.15); color: var(--accent); font-weight: 900; letter-spacing: .04em;
+  }
+  h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.1; margin: 18px 0; font-weight: 900; }
+  h1 .grad {
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--pink));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p { color: var(--muted); font-size: 1.15rem; max-width: 34em; }
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+  .btn {
+    display: inline-block; text-decoration: none; border: 0; cursor: pointer; font: inherit;
+    font-weight: 900; padding: 13px 24px; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06202b;
+    transition: transform .15s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn.ghost { background: transparent; color: var(--text); border: 2px solid rgba(255,255,255,0.25); }
+  .logo-big { display: flex; justify-content: center; }
+  .logo-big img, .logo-big svg { width: min(320px, 70vw); height: auto; animation: hover 3s ease-in-out infinite; filter: drop-shadow(0 20px 40px rgba(46,230,166,0.35)); }
+  @keyframes hover { 50% { transform: translateY(-14px) rotate(-3deg); } }
+  @media (max-width: 800px) { .hero-grid { grid-template-columns: 1fr; text-align: center; } .hero p { margin: 0 auto; } .btns { justify-content: center; } }
+
+  /* ---------- Sections ---------- */
+  section { padding: 70px 0; }
+  h2 { font-size: clamp(1.8rem, 4vw, 2.5rem); margin: 0 0 6px; font-weight: 900; }
+  .sub { color: var(--muted); margin: 0 0 32px; font-size: 1.1rem; }
+
+  .about {
+    display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center;
+    background: var(--card); border-radius: var(--radius); padding: 32px;
+  }
+  .about img, .about svg { width: 110px; height: 110px; }
+  @media (max-width: 640px) { .about { grid-template-columns: 1fr; text-align: center; } .about img, .about svg { margin: 0 auto; } }
+
+  /* ---------- Dashboard ---------- */
+  #family { background: var(--bg2); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 26px; }
+  .stat { background: var(--card); border-radius: var(--radius); padding: 18px; text-align: center; }
+  .stat b { display: block; font-size: 2.2rem; font-weight: 900; color: var(--accent); }
+  .stat span { color: var(--muted); font-weight: 700; }
+  .members { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
+  .member {
+    background: var(--card); border-radius: var(--radius); padding: 24px 18px; text-align: center;
+    border: 2px solid transparent; transition: transform .2s, border-color .2s;
+  }
+  .member:hover { transform: translateY(-6px); border-color: var(--accent); }
+  .avatar {
+    width: 110px; height: 110px; margin: 0 auto 14px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 3.4rem; overflow: hidden;
+    background: linear-gradient(135deg, var(--accent2), var(--pink));
+    border: 4px solid rgba(255,255,255,0.2);
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .member h3 { margin: 0; font-size: 1.3rem; }
+  .member p { margin: 6px 0 0; color: var(--muted); }
+
+  /* ---------- Fun ---------- */
+  .games { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+  .game {
+    background: var(--card); border-radius: var(--radius); overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .game .thumb { height: 140px; display: grid; place-items: center; font-size: 4rem; }
+  .game .body { padding: 18px; display: flex; flex-direction: column; flex: 1; }
+  .game h3 { margin: 0; font-size: 1.3rem; }
+  .game p { color: var(--muted); margin: 6px 0 16px; flex: 1; }
+
+  /* ---------- Game modal ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    background: rgba(5, 12, 20, 0.88); align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal.open { display: flex; }
+  .panel { background: var(--bg2); border-radius: var(--radius); padding: 16px; width: min(520px, 100%); }
+  .panel-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .panel-top h3 { margin: 0; flex: 1; }
+  .score { font-weight: 900; color: var(--accent); }
+  .close { background: var(--card); color: var(--text); border: 0; border-radius: 50%; width: 38px; height: 38px; font-size: 1.2rem; cursor: pointer; }
+  canvas { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: 12px; background: #081421; touch-action: none; }
+  .hint { color: var(--muted); text-align: center; margin: 10px 0 0; font-size: .95rem; }
+
+  footer { padding: 30px 0; text-align: center; color: var(--muted); border-top: 1px solid rgba(255,255,255,0.06); }
+</style>
+<script>
+/* ================= LOGO (used if logo.png is missing) ================= */
+function logoSvg() {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Colibrix">
+    <defs><linearGradient id="lg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#2ee6a6"/><stop offset=".55" stop-color="#29b6f6"/><stop offset="1" stop-color="#ff5fa2"/></linearGradient></defs>
+    <path d="M18 70 C30 40 58 34 78 44 L112 34 L84 54 C86 74 70 92 48 92 C36 92 26 86 18 70Z" fill="url(#lg)"/>
+    <path d="M52 50 C44 20 60 8 76 10 C70 24 66 38 62 50Z" fill="#2ee6a6" opacity=".85"/>
+    <path d="M46 56 C30 36 34 18 46 12 C50 28 54 42 56 54Z" fill="#29b6f6" opacity=".8"/>
+    <circle cx="74" cy="52" r="3.5" fill="#0d1b2a"/>
+    <path d="M40 90 L26 108 L48 94Z" fill="#ff5fa2"/></svg>`;
+  return wrap.firstElementChild;
+}
+</script>
+</head>
+<body>
+
+<!--
+  HOW TO USE YOUR OWN PICTURES
+  1. Put the Colibrix logo in this folder and name it:  logo.png
+  2. Put family photos in the "photos" folder named:  dad.jpg, mom.jpg, tim.jpg, vera.jpg, grisha.jpg
+  If a picture is missing, the site shows an emoji instead, so nothing breaks.
+-->
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#home">
+      <img src="logo.png" alt="Colibrix logo" onerror="this.replaceWith(logoSvg())">
+      Colibrix
+    </a>
+    <nav class="links">
+      <a href="#home" data-i18n="nav_home">Home</a>
+      <a href="#family" data-i18n="nav_family">Family</a>
+      <a href="#fun" data-i18n="nav_fun">Fun</a>
+    </nav>
+    <select id="lang" aria-label="Language">
+      <option value="en">🇬🇧 English</option>
+      <option value="es">🇪🇸 Español</option>
+      <option value="ru">🇷🇺 Русский</option>
+      <option value="lv">🇱🇻 Latviešu</option>
+      <option value="ca">🏳️ Català</option>
+      <option value="de">🇩🇪 Deutsch</option>
+      <option value="fr">🇫🇷 Français</option>
+      <option value="uk">🇺🇦 Українська</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <!-- HOME -->
+  <div class="hero" id="home">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="kicker" data-i18n="hero_kicker">A family business</span>
+        <h1><span data-i18n="hero_title">Hello from the </span><span class="grad">Colibrix</span><span data-i18n="hero_title2"> family!</span></h1>
+        <p data-i18n="hero_sub">Fast and bright like a hummingbird. Meet our family, learn about our business and play some games.</p>
+        <div class="btns">
+          <a class="btn" href="#family" data-i18n="btn_family">Meet the family</a>
+          <a class="btn ghost" href="#fun" data-i18n="btn_fun">Play games</a>
+        </div>
+      </div>
+      <div class="logo-big">
+        <img src="logo.png" alt="Colibrix logo" onerror="this.replaceWith(logoSvg())">
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="about">
+        <img src="logo.png" alt="" onerror="this.replaceWith(logoSvg())">
+        <div>
+          <h2 data-i18n="about_title">About Colibrix</h2>
+          <p class="sub" style="margin-bottom:18px" data-i18n="about_text">Colibrix is our family business, founded by Dad. Visit our main website to see everything we do.</p>
+          <a class="btn" href="https://colibrix.one" target="_blank" rel="noopener" data-i18n="btn_visit">Visit colibrix.one</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAMILY DASHBOARD -->
+  <section id="family">
+    <div class="wrap">
+      <h2 data-i18n="family_title">Family dashboard</h2>
+      <p class="sub" data-i18n="family_sub">The team behind Colibrix.</p>
+      <div class="stats">
+        <div class="stat"><b>5</b><span data-i18n="stat_members">family members</span></div>
+        <div class="stat"><b>8</b><span data-i18n="stat_langs">languages</span></div>
+        <div class="stat"><b>3</b><span data-i18n="stat_games">games</span></div>
+      </div>
+      <div class="members" id="members"></div>
+    </div>
+  </section>
+
+  <!-- FUN -->
+  <section id="fun">
+    <div class="wrap">
+      <h2 data-i18n="fun_title">Fun</h2>
+      <p class="sub" data-i18n="fun_sub">Pick a game and try to beat your high score!</p>
+      <div class="games">
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#ff5fa2,#ffb74d)">🧱</div>
+          <div class="body">
+            <h3 data-i18n="g_breakout">Blockout</h3>
+            <p data-i18n="g_breakout_d">Break all the bricks with the ball.</p>
+            <button class="btn" data-game="breakout" data-i18n="play">Play</button>
+          </div>
+        </div>
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#29b6f6,#2ee6a6)">🐦</div>
+          <div class="body">
+            <h3 data-i18n="g_flappy">Flappy Hummingbird</h3>
+            <p data-i18n="g_flappy_d">Tap to fly through the pipes.</p>
+            <button class="btn" data-game="flappy" data-i18n="play">Play</button>
+          </div>
+        </div>
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#7c4dff,#29b6f6)">🐍</div>
+          <div class="body">
+            <h3 data-i18n="g_snake">Snake</h3>
+            <p data-i18n="g_snake_d">Eat the fruit, but don't bite your tail!</p>
+            <button class="btn" data-game="snake" data-i18n="play">Play</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">© <span id="year"></span> Colibrix · <span data-i18n="footer">Made by Tim</span> 💚</div>
+</footer>
+
+<div class="modal" id="modal">
+  <div class="panel">
+    <div class="panel-top">
+      <h3 id="gameTitle">Game</h3>
+      <span class="score"><span data-i18n="score">Score</span>: <span id="score">0</span> · <span data-i18n="best">Best</span>: <span id="best">0</span></span>
+      <button class="close" id="closeGame" aria-label="Close">✕</button>
+    </div>
+    <canvas id="canvas" width="480" height="480"></canvas>
+    <p class="hint" id="hint"></p>
+  </div>
+</div>
+
+<script>
+/* ================= TRANSLATIONS ================= */
+const T = {
+  en: {
+    nav_home: "Home", nav_family: "Family", nav_fun: "Fun",
+    hero_kicker: "A family business", hero_title: "Hello from the ", hero_title2: " family!",
+    hero_sub: "Fast and bright like a hummingbird. Meet our family, learn about our business and play some games.",
+    btn_family: "Meet the family", btn_fun: "Play games",
+    about_title: "About Colibrix",
+    about_text: "Colibrix is our family business, founded by Dad. Visit our main website to see everything we do.",
+    btn_visit: "Visit colibrix.one",
+    family_title: "Family dashboard", family_sub: "The team behind Colibrix.",
+    stat_members: "family members", stat_langs: "languages", stat_games: "games",
+    name_dad: "Dad", name_mom: "Mom",
+    role_dad: "Founder of Colibrix", role_mom: "Heart of the family", role_tim: "Website builder & gamer",
+    role_vera: "Little artist", role_grisha: "Youngest of us all",
+    fun_title: "Fun", fun_sub: "Pick a game and try to beat your high score!",
+    g_breakout: "Blockout", g_breakout_d: "Break all the bricks with the ball.",
+    g_flappy: "Flappy Hummingbird", g_flappy_d: "Tap to fly through the pipes.",
+    g_snake: "Snake", g_snake_d: "Eat the fruit, but don't bite your tail!",
+    play: "Play", score: "Score", best: "Best",
+    start: "Tap or press Space to start", game_over: "Game over!", you_win: "You win!",
+    h_breakout: "Move: mouse, finger or ← →", h_flappy: "Fly: tap, click or Space", h_snake: "Move: arrow keys or swipe",
+    footer: "Made by Tim"
+  },
+  es: {
+    nav_home: "Inicio", nav_family: "Familia", nav_fun: "Diversión",
+    hero_kicker: "Un negocio familiar", hero_title: "¡Hola de parte de la familia ", hero_title2: "!",
+    hero_sub: "Rápidos y brillantes como un colibrí. Conoce a nuestra familia, descubre nuestro negocio y juega un rato.",
+    btn_family: "Conoce a la familia", btn_fun: "Jugar",
+    about_title: "Sobre Colibrix",
+    about_text: "Colibrix es nuestro negocio familiar, fundado por papá. Visita nuestra web principal para ver todo lo que hacemos.",
+    btn_visit: "Visitar colibrix.one",
+    family_title: "Panel familiar", family_sub: "El equipo detrás de Colibrix.",
+    stat_members: "miembros", stat_langs: "idiomas", stat_games: "juegos",
+    name_dad: "Papá", name_mom: "Mamá",
+    role_dad: "Fundador de Colibrix", role_mom: "El corazón de la familia", role_tim: "Creador de la web y jugador",
+    role_vera: "Pequeña artista", role_grisha: "El más pequeño",
+    fun_title: "Diversión", fun_sub: "¡Elige un juego e intenta superar tu récord!",
+    g_breakout: "Blockout", g_breakout_d: "Rompe todos los ladrillos con la pelota.",
+    g_flappy: "Colibrí volador", g_flappy_d: "Toca para volar entre las tuberías.",
+    g_snake: "Serpiente", g_snake_d: "¡Come la fruta, pero no te muerdas la cola!",
+    play: "Jugar", score: "Puntos", best: "Récord",
+    start: "Toca o pulsa Espacio para empezar", game_over: "¡Fin del juego!", you_win: "¡Has ganado!",
+    h_breakout: "Mover: ratón, dedo o ← →", h_flappy: "Volar: toca, clic o Espacio", h_snake: "Mover: flechas o deslizar",
+    footer: "Hecho por Tim"
+  },
+  ru: {
+    nav_home: "Главная", nav_family: "Семья", nav_fun: "Веселье",
+    hero_kicker: "Семейный бизнес", hero_title: "Привет от семьи ", hero_title2: "!",
+    hero_sub: "Быстрые и яркие, как колибри. Познакомься с нашей семьёй, узнай о нашем деле и поиграй в игры.",
+    btn_family: "Наша семья", btn_fun: "Играть",
+    about_title: "О Colibrix",
+    about_text: "Colibrix — наш семейный бизнес, который основал папа. Загляни на наш основной сайт, чтобы узнать больше.",
+    btn_visit: "Открыть colibrix.one",
+    family_title: "Семейная панель", family_sub: "Команда Colibrix.",
+    stat_members: "членов семьи", stat_langs: "языков", stat_games: "игры",
+    name_dad: "Папа", name_mom: "Мама",
+    role_dad: "Основатель Colibrix", role_mom: "Сердце семьи", role_tim: "Создатель сайта и геймер",
+    role_vera: "Маленькая художница", role_grisha: "Самый младший",
+    fun_title: "Веселье", fun_sub: "Выбери игру и побей свой рекорд!",
+    g_breakout: "Блокаут", g_breakout_d: "Разбей все кирпичики мячом.",
+    g_flappy: "Летучий колибри", g_flappy_d: "Нажимай, чтобы пролетать между трубами.",
+    g_snake: "Змейка", g_snake_d: "Ешь фрукты, но не кусай свой хвост!",
+    play: "Играть", score: "Очки", best: "Рекорд",
+    start: "Нажми или пробел, чтобы начать", game_over: "Игра окончена!", you_win: "Победа!",
+    h_breakout: "Двигай: мышь, палец или ← →", h_flappy: "Лети: нажатие, клик или пробел", h_snake: "Двигай: стрелки или свайп",
+    footer: "Сделал Тим"
+  },
+  lv: {
+    nav_home: "Sākums", nav_family: "Ģimene", nav_fun: "Izklaide",
+    hero_kicker: "Ģimenes uzņēmums", hero_title: "Sveiciens no ", hero_title2: " ģimenes!",
+    hero_sub: "Ātri un spilgti kā kolibri. Iepazīsti mūsu ģimeni, uzzini par mūsu uzņēmumu un uzspēlē spēles.",
+    btn_family: "Iepazīsti ģimeni", btn_fun: "Spēlēt",
+    about_title: "Par Colibrix",
+    about_text: "Colibrix ir mūsu ģimenes uzņēmums, ko dibināja tētis. Apmeklē mūsu galveno mājaslapu, lai redzētu visu, ko mēs darām.",
+    btn_visit: "Atvērt colibrix.one",
+    family_title: "Ģimenes panelis", family_sub: "Komanda aiz Colibrix.",
+    stat_members: "ģimenes locekļi", stat_langs: "valodas", stat_games: "spēles",
+    name_dad: "Tētis", name_mom: "Mamma",
+    role_dad: "Colibrix dibinātājs", role_mom: "Ģimenes sirds", role_tim: "Mājaslapas veidotājs un spēlētājs",
+    role_vera: "Mazā māksliniece", role_grisha: "Pats jaunākais",
+    fun_title: "Izklaide", fun_sub: "Izvēlies spēli un pārspēj savu rekordu!",
+    g_breakout: "Blockout", g_breakout_d: "Sadauzi visus ķieģeļus ar bumbu.",
+    g_flappy: "Lidojošais kolibri", g_flappy_d: "Pieskaries, lai lidotu starp caurulēm.",
+    g_snake: "Čūska", g_snake_d: "Ēd augļus, bet nekod sev astē!",
+    play: "Spēlēt", score: "Punkti", best: "Rekords",
+    start: "Pieskaries vai spied atstarpi, lai sāktu", game_over: "Spēle beigusies!", you_win: "Tu uzvarēji!",
+    h_breakout: "Kustini: pele, pirksts vai ← →", h_flappy: "Lido: pieskāriens, klikšķis vai atstarpe", h_snake: "Kustini: bultiņas vai pavelc",
+    footer: "Veidoja Tims"
+  },
+  ca: {
+    nav_home: "Inici", nav_family: "Família", nav_fun: "Diversió",
+    hero_kicker: "Un negoci familiar", hero_title: "Hola de part de la família ", hero_title2: "!",
+    hero_sub: "Ràpids i brillants com un colibrí. Coneix la nostra família, descobreix el nostre negoci i juga una estona.",
+    btn_family: "Coneix la família", btn_fun: "Jugar",
+    about_title: "Sobre Colibrix",
+    about_text: "Colibrix és el nostre negoci familiar, fundat pel pare. Visita el nostre web principal per veure tot el que fem.",
+    btn_visit: "Visita colibrix.one",
+    family_title: "Tauler familiar", family_sub: "L'equip darrere de Colibrix.",
+    stat_members: "membres", stat_langs: "idiomes", stat_games: "jocs",
+    name_dad: "Papa", name_mom: "Mama",
+    role_dad: "Fundador de Colibrix", role_mom: "El cor de la família", role_tim: "Creador del web i jugador",
+    role_vera: "Petita artista", role_grisha: "El més petit",
+    fun_title: "Diversió", fun_sub: "Tria un joc i intenta superar el teu rècord!",
+    g_breakout: "Blockout", g_breakout_d: "Trenca tots els maons amb la pilota.",
+    g_flappy: "Colibrí volador", g_flappy_d: "Toca per volar entre les canonades.",
+    g_snake: "Serp", g_snake_d: "Menja la fruita, però no et mosseguis la cua!",
+    play: "Jugar", score: "Punts", best: "Rècord",
+    start: "Toca o prem Espai per començar", game_over: "Fi del joc!", you_win: "Has guanyat!",
+    h_breakout: "Moure: ratolí, dit o ← →", h_flappy: "Volar: toca, clic o Espai", h_snake: "Moure: fletxes o lliscar",
+    footer: "Fet per en Tim"
+  },
+  de: {
+    nav_home: "Start", nav_family: "Familie", nav_fun: "Spaß",
+    hero_kicker: "Ein Familienunternehmen", hero_title: "Hallo von der ", hero_title2: " Familie!",
+    hero_sub: "Schnell und bunt wie ein Kolibri. Lerne unsere Familie kennen, erfahre mehr über unser Unternehmen und spiel ein paar Spiele.",
+    btn_family: "Die Familie", btn_fun: "Spielen",
+    about_title: "Über Colibrix",
+    about_text: "Colibrix ist unser Familienunternehmen, gegründet von Papa. Besuche unsere Hauptseite, um alles zu sehen, was wir machen.",
+    btn_visit: "colibrix.one besuchen",
+    family_title: "Familien-Dashboard", family_sub: "Das Team hinter Colibrix.",
+    stat_members: "Familienmitglieder", stat_langs: "Sprachen", stat_games: "Spiele",
+    name_dad: "Papa", name_mom: "Mama",
+    role_dad: "Gründer von Colibrix", role_mom: "Das Herz der Familie", role_tim: "Website-Bauer & Gamer",
+    role_vera: "Kleine Künstlerin", role_grisha: "Der Jüngste",
+    fun_title: "Spaß", fun_sub: "Wähle ein Spiel und knack deinen Rekord!",
+    g_breakout: "Blockout", g_breakout_d: "Zerschlage alle Steine mit dem Ball.",
+    g_flappy: "Flatter-Kolibri", g_flappy_d: "Tippe, um durch die Röhren zu fliegen.",
+    g_snake: "Schlange", g_snake_d: "Friss das Obst, aber beiß dir nicht in den Schwanz!",
+    play: "Spielen", score: "Punkte", best: "Rekord",
+    start: "Tippe oder drücke Leertaste zum Starten", game_over: "Spiel vorbei!", you_win: "Gewonnen!",
+    h_breakout: "Bewegen: Maus, Finger oder ← →", h_flappy: "Fliegen: Tippen, Klicken oder Leertaste", h_snake: "Bewegen: Pfeiltasten oder Wischen",
+    footer: "Gemacht von Tim"
+  },
+  fr: {
+    nav_home: "Accueil", nav_family: "Famille", nav_fun: "Jeux",
+    hero_kicker: "Une entreprise familiale", hero_title: "Bonjour de la famille ", hero_title2: "!",
+    hero_sub: "Rapides et brillants comme un colibri. Découvre notre famille, notre entreprise et amuse-toi avec nos jeux.",
+    btn_family: "Notre famille", btn_fun: "Jouer",
+    about_title: "À propos de Colibrix",
+    about_text: "Colibrix est notre entreprise familiale, fondée par papa. Visite notre site principal pour voir tout ce que nous faisons.",
+    btn_visit: "Visiter colibrix.one",
+    family_title: "Tableau de bord familial", family_sub: "L'équipe derrière Colibrix.",
+    stat_members: "membres", stat_langs: "langues", stat_games: "jeux",
+    name_dad: "Papa", name_mom: "Maman",
+    role_dad: "Fondateur de Colibrix", role_mom: "Le cœur de la famille", role_tim: "Créateur du site et joueur",
+    role_vera: "Petite artiste", role_grisha: "Le plus jeune",
+    fun_title: "Jeux", fun_sub: "Choisis un jeu et bats ton record !",
+    g_breakout: "Blockout", g_breakout_d: "Casse toutes les briques avec la balle.",
+    g_flappy: "Colibri volant", g_flappy_d: "Touche pour voler entre les tuyaux.",
+    g_snake: "Serpent", g_snake_d: "Mange les fruits, mais ne mords pas ta queue !",
+    play: "Jouer", score: "Score", best: "Record",
+    start: "Touche ou appuie sur Espace pour commencer", game_over: "Perdu !", you_win: "Gagné !",
+    h_breakout: "Bouger : souris, doigt ou ← →", h_flappy: "Voler : toucher, clic ou Espace", h_snake: "Bouger : flèches ou glisser",
+    footer: "Fait par Tim"
+  },
+  uk: {
+    nav_home: "Головна", nav_family: "Родина", nav_fun: "Розваги",
+    hero_kicker: "Сімейний бізнес", hero_title: "Привіт від родини ", hero_title2: "!",
+    hero_sub: "Швидкі та яскраві, як колібрі. Познайомся з нашою родиною, дізнайся про нашу справу та пограй в ігри.",
+    btn_family: "Наша родина", btn_fun: "Грати",
+    about_title: "Про Colibrix",
+    about_text: "Colibrix — наш сімейний бізнес, який заснував тато. Завітай на наш основний сайт, щоб дізнатися більше.",
+    btn_visit: "Відкрити colibrix.one",
+    family_title: "Сімейна панель", family_sub: "Команда Colibrix.",
+    stat_members: "членів родини", stat_langs: "мов", stat_games: "гри",
+    name_dad: "Тато", name_mom: "Мама",
+    role_dad: "Засновник Colibrix", role_mom: "Серце родини", role_tim: "Творець сайту і геймер",
+    role_vera: "Маленька художниця", role_grisha: "Наймолодший",
+    fun_title: "Розваги", fun_sub: "Обери гру та побий свій рекорд!",
+    g_breakout: "Блокаут", g_breakout_d: "Розбий усі цеглинки м'ячем.",
+    g_flappy: "Літаючий колібрі", g_flappy_d: "Натискай, щоб пролітати між трубами.",
+    g_snake: "Змійка", g_snake_d: "Їж фрукти, але не кусай свій хвіст!",
+    play: "Грати", score: "Очки", best: "Рекорд",
+    start: "Натисни або пробіл, щоб почати", game_over: "Гру закінчено!", you_win: "Перемога!",
+    h_breakout: "Рух: миша, палець або ← →", h_flappy: "Політ: дотик, клік або пробіл", h_snake: "Рух: стрілки або свайп",
+    footer: "Зробив Тім"
+  }
+};
+
+let lang = "en";
+function t(key) { return (T[lang] && T[lang][key]) || T.en[key] || key; }
+
+/** Swap every [data-i18n] element's text to the chosen language. */
+function applyLang(code) {
+  lang = T[code] ? code : "en";
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  renderMembers();
+  if (current) { gameTitle.textContent = t("g_" + current); hint.textContent = t("h_" + current); }
+  try { localStorage.setItem("lang", lang); } catch (e) {}
+}
+
+/* ================= FAMILY DASHBOARD ================= */
+const family = [
+  { id: "dad",    name: "name_dad", emoji: "👨‍💼", role: "role_dad" },
+  { id: "mom",    name: "Julija",   emoji: "👩",    role: "role_mom" },
+  { id: "tim",    name: "Tim",      emoji: "🧑‍💻", role: "role_tim" },
+  { id: "vera",   name: "Vera",     emoji: "👧",    role: "role_vera" },
+  { id: "grisha", name: "Grisha",   emoji: "🧒",    role: "role_grisha" }
+];
+
+/** Draw the member cards; photos/<id>.jpg is used when it exists, emoji otherwise. */
+function renderMembers() {
+  const box = document.getElementById("members");
+  box.innerHTML = "";
+  family.forEach(m => {
+    const card = document.createElement("div");
+    card.className = "member";
+    const av = document.createElement("div");
+    av.className = "avatar";
+    const img = document.createElement("img");
+    img.src = "photos/" + m.id + ".jpg";
+    img.alt = "";
+    img.onerror = () => { av.textContent = m.emoji; };
+    av.appendChild(img);
+    const h = document.createElement("h3");
+    h.textContent = T.en[m.name] ? t(m.name) : m.name;
+    const p = document.createElement("p");
+    p.textContent = t(m.role);
+    card.append(av, h, p);
+    box.appendChild(card);
+  });
+}
+
+/* ================= GAMES ================= */
+const modal = document.getElementById("modal");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+const scoreEl = document.getElementById("score");
+const bestEl = document.getElementById("best");
+const gameTitle = document.getElementById("gameTitle");
+const hint = document.getElementById("hint");
+let current = null, game = null, raf = 0, last = 0;
+const keys = {};
+
+function getBest(name) { try { return +localStorage.getItem("best_" + name) || 0; } catch (e) { return 0; } }
+function setScore(s) {
+  scoreEl.textContent = s;
+  if (s > getBest(current)) { try { localStorage.setItem("best_" + current, s); } catch (e) {} }
+  bestEl.textContent = Math.max(s, getBest(current));
+}
+function message(big, small) {
+  ctx.fillStyle = "rgba(8,20,33,0.7)"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+  ctx.font = "900 34px Nunito, sans-serif"; ctx.fillText(big, W / 2, H / 2 - 10);
+  ctx.font = "700 17px Nunito, sans-serif"; ctx.fillText(small, W / 2, H / 2 + 26);
+}
+/** Pointer x/y in canvas coordinates. */
+function pos(e) {
+  const r = canvas.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return { x: (p.clientX - r.left) * W / r.width, y: (p.clientY - r.top) * H / r.height };
+}
+
+/* ---- Blockout (Breakout) ---- */
+function Breakout() {
+  const cols = 8, rows = 5, bw = W / cols, bh = 22;
+  const colors = ["#ff5fa2", "#ffb74d", "#ffee58", "#2ee6a6", "#29b6f6"];
+  let paddle, ball, bricks, score, state, lives;
+  function reset() {
+    paddle = { x: W / 2 - 45, w: 90, h: 12 };
+    ball = { x: W / 2, y: H - 60, vx: 180, vy: -260, r: 7 };
+    bricks = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) bricks.push({ x: c * bw + 3, y: 50 + r * (bh + 6), c: colors[r], alive: true });
+    score = 0; lives = 3; state = "ready"; setScore(0);
+  }
+  reset();
+  return {
+    tap() { if (state !== "play") { if (state !== "ready") reset(); state = "play"; } },
+    move(x) { paddle.x = Math.max(0, Math.min(W - paddle.w, x - paddle.w / 2)); },
+    update(dt) {
+      if (keys.ArrowLeft) paddle.x = Math.max(0, paddle.x - 420 * dt);
+      if (keys.ArrowRight) paddle.x = Math.min(W - paddle.w, paddle.x + 420 * dt);
+      if (state !== "play") { ball.x = paddle.x + paddle.w / 2; return; }
+      ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+      if (ball.x < ball.r || ball.x > W - ball.r) { ball.vx *= -1; ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x)); }
+      if (ball.y < ball.r) { ball.vy = Math.abs(ball.vy); }
+      const py = H - 30;
+      if (ball.vy > 0 && ball.y + ball.r >= py && ball.y < py + paddle.h && ball.x > paddle.x && ball.x < paddle.x + paddle.w) {
+        const hit = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+        const speed = Math.min(560, Math.hypot(ball.vx, ball.vy) * 1.02);
+        ball.vx = speed * hit * 0.8; ball.vy = -Math.sqrt(speed * speed - ball.vx * ball.vx);
+      }
+      if (ball.y > H + 20) {
+        lives--;
+        if (lives <= 0) state = "over";
+        else { state = "ready"; ball.y = H - 60; ball.vx = 180; ball.vy = -260; }
+      }
+      for (const b of bricks) {
+        if (b.alive && ball.x > b.x && ball.x < b.x + bw - 6 && ball.y - ball.r < b.y + bh && ball.y + ball.r > b.y) {
+          b.alive = false; ball.vy *= -1; score += 10; setScore(score); break;
+        }
+      }
+      if (bricks.every(b => !b.alive)) state = "win";
+    },
+    draw() {
+      ctx.clearRect(0, 0, W, H);
+      for (const b of bricks) if (b.alive) { ctx.fillStyle = b.c; ctx.beginPath(); ctx.roundRect(b.x, b.y, bw - 6, bh, 6); ctx.fill(); }
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.roundRect(paddle.x, H - 30, paddle.w, paddle.h, 6); ctx.fill();
+      ctx.beginPath(); ctx.arc(ball.x, state === "play" ? ball.y : H - 30 - ball.r, ball.r, 0, 7); ctx.fill();
+      ctx.font = "16px sans-serif"; ctx.textAlign = "left"; ctx.fillText("❤️".repeat(lives), 10, 26);
+      if (state === "ready") message(t("g_breakout"), t("start"));
+      if (state === "over") message(t("game_over"), t("start"));
+      if (state === "win") message(t("you_win"), t("start"));
+    }
+  };
+}
+
+/* ---- Flappy Hummingbird ---- */
+function Flappy() {
+  let bird, pipes, score, state, timer;
+  const gap = 150, pw = 60;
+  function reset() { bird = { y: H / 2, v: 0 }; pipes = []; score = 0; timer = 0; state = "ready"; setScore(0); }
+  reset();
+  return {
+    tap() {
+      if (state === "over") { reset(); return; }
+      state = "play"; bird.v = -330;
+    },
+    update(dt) {
+      if (state !== "play") return;
+      bird.v += 900 * dt; bird.y += bird.v * dt;
+      timer -= dt;
+      if (timer <= 0) { timer = 1.5; pipes.push({ x: W, top: 60 + Math.random() * (H - gap - 120), passed: false }); }
+      for (const p of pipes) {
+        p.x -= 160 * dt;
+        if (!p.passed && p.x + pw < 100) { p.passed = true; score++; setScore(score); }
+        if (100 + 14 > p.x && 100 - 14 < p.x + pw && (bird.y - 12 < p.top || bird.y + 12 > p.top + gap)) state = "over";
+      }
+      pipes = pipes.filter(p => p.x > -pw);
+      if (bird.y > H - 12 || bird.y < 0) state = "over";
+    },
+    draw() {
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "#1e4d7a"); sky.addColorStop(1, "#0b2238");
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#2ee6a6";
+      for (const p of pipes) {
+        ctx.beginPath(); ctx.roundRect(p.x, -10, pw, p.top + 10, 8); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(p.x, p.top + gap, pw, H, 8); ctx.fill();
+      }
+      ctx.save(); ctx.translate(100, bird.y); ctx.rotate(Math.max(-0.5, Math.min(0.8, bird.v / 600)));
+      ctx.fillStyle = "#29b6f6"; ctx.beginPath(); ctx.ellipse(0, 0, 16, 11, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#ff5fa2"; ctx.beginPath(); ctx.ellipse(-4, -8, 10, 5, -0.6 + Math.sin(Date.now() / 40) * 0.6, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(14, -2); ctx.lineTo(30, -4); ctx.stroke();
+      ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(7, -3, 2.5, 0, 7); ctx.fill();
+      ctx.restore();
+      if (state === "ready") message(t("g_flappy"), t("start"));
+      if (state === "over") message(t("game_over"), t("start"));
+    }
+  };
+}
+
+/* ---- Snake ---- */
+function Snake() {
+  const n = 20, cell = W / n;
+  let snake, dir, next, food, score, state, acc;
+  function place() {
+    do { food = { x: Math.floor(Math.random() * n), y: Math.floor(Math.random() * n) }; }
+    while (snake.some(s => s.x === food.x && s.y === food.y));
+  }
+  function reset() { snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }]; dir = { x: 1, y: 0 }; next = dir; score = 0; acc = 0; state = "ready"; place(); setScore(0); }
+  reset();
+  function turn(x, y) { if (x !== -dir.x || y !== -dir.y) next = { x, y }; if (state === "ready") state = "play"; }
+  return {
+    tap() { if (state !== "play") { if (state === "over") reset(); state = "play"; } },
+    key(k) {
+      if (k === "ArrowUp") turn(0, -1); if (k === "ArrowDown") turn(0, 1);
+      if (k === "ArrowLeft") turn(-1, 0); if (k === "ArrowRight") turn(1, 0);
+    },
+    swipe(dx, dy) { Math.abs(dx) > Math.abs(dy) ? turn(Math.sign(dx), 0) : turn(0, Math.sign(dy)); },
+    update(dt) {
+      if (state !== "play") return;
+      acc += dt;
+      const step = Math.max(0.06, 0.13 - score * 0.002);
+      if (acc < step) return;
+      acc = 0; dir = next;
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      if (head.x < 0 || head.y < 0 || head.x >= n || head.y >= n || snake.some(s => s.x === head.x && s.y === head.y)) { state = "over"; return; }
+      snake.unshift(head);
+      if (head.x === food.x && head.y === food.y) { score++; setScore(score); place(); } else snake.pop();
+    },
+    draw() {
+      ctx.fillStyle = "#081421"; ctx.fillRect(0, 0, W, H);
+      ctx.font = cell + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🍎", food.x * cell + cell / 2, food.y * cell + cell / 2 + 2);
+      ctx.textBaseline = "alphabetic";
+      snake.forEach((s, i) => {
+        ctx.fillStyle = i === 0 ? "#2ee6a6" : "hsl(" + (160 + i * 4) + ",80%,55%)";
+        ctx.beginPath(); ctx.roundRect(s.x * cell + 1, s.y * cell + 1, cell - 2, cell - 2, 6); ctx.fill();
+      });
+      if (state === "ready") message(t("g_snake"), t("start"));
+      if (state === "over") message(t("game_over"), t("start"));
+    }
+  };
+}
+
+const GAMES = { breakout: Breakout, flappy: Flappy, snake: Snake };
+
+function openGame(name) {
+  current = name;
+  game = GAMES[name]();
+  gameTitle.textContent = t("g_" + name);
+  hint.textContent = t("h_" + name);
+  bestEl.textContent = getBest(name);
+  modal.classList.add("open");
+  last = performance.now();
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(loop);
+}
+function closeGame() { modal.classList.remove("open"); cancelAnimationFrame(raf); current = null; game = null; }
+function loop(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  game.update(dt); game.draw();
+  raf = requestAnimationFrame(loop);
+}
+
+document.querySelectorAll("[data-game]").forEach(b => b.addEventListener("click", () => openGame(b.dataset.game)));
+document.getElementById("closeGame").addEventListener("click", closeGame);
+modal.addEventListener("click", e => { if (e.target === modal) closeGame(); });
+
+let touchStart = null;
+canvas.addEventListener("mousedown", e => game && game.tap());
+canvas.addEventListener("mousemove", e => game && game.move && game.move(pos(e).x));
+canvas.addEventListener("touchstart", e => {
+  e.preventDefault(); if (!game) return;
+  touchStart = pos(e); game.tap(); if (game.move) game.move(touchStart.x);
+}, { passive: false });
+canvas.addEventListener("touchmove", e => {
+  e.preventDefault(); if (!game) return;
+  const p = pos(e);
+  if (game.move) game.move(p.x);
+  if (game.swipe && touchStart && Math.hypot(p.x - touchStart.x, p.y - touchStart.y) > 25) { game.swipe(p.x - touchStart.x, p.y - touchStart.y); touchStart = p; }
+}, { passive: false });
+
+window.addEventListener("keydown", e => {
+  if (!game) return;
+  if (e.key === "Escape") return closeGame();
+  if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault();
+  keys[e.key] = true;
+  if (e.key === " ") game.tap();
+  if (game.key) game.key(e.key);
+});
+window.addEventListener("keyup", e => { keys[e.key] = false; });
+
+/* ================= START ================= */
+document.getElementById("year").textContent = new Date().getFullYear();
+const langSelect = document.getElementById("lang");
+let saved = null;
+try { saved = localStorage.getItem("lang"); } catch (e) {}
+const browser = (navigator.language || "en").slice(0, 2);
+langSelect.value = T[saved] ? saved : (T[browser] ? browser : "en");
+langSelect.addEventListener("change", () => applyLang(langSelect.value));
+applyLang(langSelect.value);
+</script>
+</body>
+</html>
