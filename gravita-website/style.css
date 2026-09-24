@@ -25,7 +25,7 @@ body {
 a { color: var(--accent); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-.wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
 
 /* Header */
 header { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 10; }
@@ -71,3 +71,14 @@ dl.contact dd { margin: 0; overflow-wrap: anywhere; }
 /* Footer */
 footer { border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .9rem; }
 footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; }
+
+/* Large screens: a bit more room and slightly larger type */
+@media (min-width: 1280px) {
+  body { font-size: 18px; }
+  #home { padding: 140px 0 120px; }
+  h1 { font-size: 4.2rem; }
+  .items { gap: 24px; }
+  .items li { padding: 32px; }
+}
+/* Short screens (phone turned sideways): header scrolls away instead of taking space */
+@media (max-height: 500px) { header { position: static; } #home { padding: 56px 0; } }
