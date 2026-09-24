@@ -20,7 +20,33 @@
     --accent2: #29b6f6;
     --pink: #ff5fa2;
     --radius: 18px;
+    --header: rgba(13, 27, 42, 0.85);
+    --line: rgba(255,255,255,0.15);
+    --base: 16px;
   }
+  /* Kids version: bright, sunny, big and round */
+  body[data-mode="kids"] {
+    --bg: #fff6e0; --bg2: #ffe8bf; --card: #ffffff; --text: #3b2a14; --muted: #7a5f3c;
+    --accent: #ff8a00; --accent2: #ff4fa0; --pink: #7c4dff; --radius: 28px;
+    --header: rgba(255, 246, 224, 0.9); --line: rgba(59,42,20,0.2); --base: 18px;
+  }
+  /* Adults version: calm, light, quiet */
+  body[data-mode="adults"] {
+    --bg: #f6f4ef; --bg2: #ece8df; --card: #ffffff; --text: #1f2937; --muted: #5b6573;
+    --accent: #1f7a63; --accent2: #2c6f9b; --pink: #9b4d6b; --radius: 10px;
+    --header: rgba(246, 244, 239, 0.92); --line: rgba(31,41,55,0.18); --base: 16px;
+  }
+  body { font-size: var(--base); }
+  body[data-mode="kids"] h1, body[data-mode="kids"] h2 { letter-spacing: .01em; }
+  body[data-mode="kids"] .btn { font-size: 1.1rem; padding: 16px 30px; color: #fff; }
+  body[data-mode="kids"] .member, body[data-mode="kids"] .game, body[data-mode="kids"] .stat, body[data-mode="kids"] .about { box-shadow: 0 6px 0 rgba(59,42,20,0.12); }
+  body[data-mode="adults"] .btn { color: #fff; }
+  body[data-mode] .btn.ghost { color: var(--text); }
+  body[data-mode="adults"] h1, body[data-mode="adults"] h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
+  body[data-mode="adults"] .logo-big img, body[data-mode="adults"] .logo-big svg { animation: none; }
+  body[data-mode="adults"] .member, body[data-mode="adults"] .game, body[data-mode="adults"] .stat, body[data-mode="adults"] .about { border: 1px solid var(--line); }
+  .mode-hi { margin-top: 14px !important; font-size: 1rem !important; font-weight: 700; color: var(--accent) !important; }
+  .picker { display: flex; gap: 8px; }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
@@ -36,9 +62,9 @@
   /* ---------- Header ---------- */
   header {
     position: sticky; top: 0; z-index: 20;
-    background: rgba(13, 27, 42, 0.85);
+    background: var(--header);
     backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--line);
   }
   .nav { display: flex; align-items: center; gap: 16px; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 1.25rem; text-decoration: none; }
@@ -49,14 +75,14 @@
     color: var(--muted); font-weight: 700;
   }
   .links a:hover { background: var(--card); color: var(--text); }
-  select#lang {
-    background: var(--card); color: var(--text); border: 1px solid rgba(255,255,255,0.15);
+  select#lang, select#mode {
+    background: var(--card); color: var(--text); border: 1px solid var(--line);
     border-radius: 999px; padding: 8px 12px; font: inherit; font-weight: 700; cursor: pointer;
   }
   @media (max-width: 640px) {
-    .nav { flex-wrap: wrap; height: auto; padding: 10px 0; }
+    .nav { flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; }
     .links { order: 3; width: 100%; justify-content: space-between; margin: 0; }
-    select#lang { margin-left: auto; }
+    .picker { margin-left: auto; width: 100%; } .picker select { flex: 1; min-width: 0; }
   }
 
   /* ---------- Hero ---------- */
@@ -87,7 +113,7 @@
     transition: transform .15s;
   }
   .btn:hover { transform: translateY(-2px); }
-  .btn.ghost { background: transparent; color: var(--text); border: 2px solid rgba(255,255,255,0.25); }
+  .btn.ghost { background: transparent; color: var(--text); border: 2px solid var(--line); }
   .logo-big { display: flex; justify-content: center; }
   .logo-big img, .logo-big svg { width: min(320px, 70vw); height: auto; animation: hover 3s ease-in-out infinite; filter: drop-shadow(0 20px 40px rgba(46,230,166,0.35)); }
   @keyframes hover { 50% { transform: translateY(-14px) rotate(-3deg); } }
@@ -111,6 +137,8 @@
   .stat { background: var(--card); border-radius: var(--radius); padding: 18px; text-align: center; }
   .stat b { display: block; font-size: 2.2rem; font-weight: 900; color: var(--accent); }
   .stat span { color: var(--muted); font-weight: 700; }
+  .stat { min-width: 0; overflow-wrap: anywhere; }
+  @media (max-width: 480px) { .stats { gap: 8px; } .stat { padding: 12px 6px; } .stat b { font-size: 1.7rem; } .stat span { font-size: .8rem; } }
   .members { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
   .member {
     background: var(--card); border-radius: var(--radius); padding: 24px 18px; text-align: center;
@@ -190,6 +218,12 @@ function logoSvg() {
       <a href="#family" data-i18n="nav_family">Family</a>
       <a href="#fun" data-i18n="nav_fun">Fun</a>
     </nav>
+    <div class="picker">
+    <select id="mode" aria-label="Version">
+      <option value="kids" data-i18n="mode_kids">Kids</option>
+      <option value="teens" data-i18n="mode_teens">Teens</option>
+      <option value="adults" data-i18n="mode_adults">Adults</option>
+    </select>
     <select id="lang" aria-label="Language">
       <option value="en">🇬🇧 English</option>
       <option value="es">🇪🇸 Español</option>
@@ -200,6 +234,7 @@ function logoSvg() {
       <option value="fr">🇫🇷 Français</option>
       <option value="uk">🇺🇦 Українська</option>
     </select>
+    </div>
   </div>
 </header>
 
@@ -211,6 +246,7 @@ function logoSvg() {
         <span class="kicker" data-i18n="hero_kicker">A family business</span>
         <h1><span data-i18n="hero_title">Hello from the </span><span class="grad">Colibrix</span><span data-i18n="hero_title2"> family!</span></h1>
         <p data-i18n="hero_sub">Fast and bright like a hummingbird. Meet our family, learn about our business and play some games.</p>
+        <p class="mode-hi" id="modeHi"></p>
         <div class="btns">
           <a class="btn" href="#family" data-i18n="btn_family">Meet the family</a>
           <a class="btn ghost" href="#fun" data-i18n="btn_fun">Play games</a>
@@ -243,7 +279,7 @@ function logoSvg() {
       <div class="stats">
         <div class="stat"><b>5</b><span data-i18n="stat_members">family members</span></div>
         <div class="stat"><b>8</b><span data-i18n="stat_langs">languages</span></div>
-        <div class="stat"><b>3</b><span data-i18n="stat_games">games</span></div>
+        <div class="stat"><b id="gameCount">7</b><span data-i18n="stat_games">games</span></div>
       </div>
       <div class="members" id="members"></div>
     </div>
@@ -279,6 +315,38 @@ function logoSvg() {
             <button class="btn" data-game="snake" data-i18n="play">Play</button>
           </div>
         </div>
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#ffb74d,#ff5fa2)">🃏</div>
+          <div class="body">
+            <h3 data-i18n="g_memory">Memory</h3>
+            <p data-i18n="g_memory_d">Flip the cards and find all the pairs.</p>
+            <button class="btn" data-game="memory" data-i18n="play">Play</button>
+          </div>
+        </div>
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#ffee58,#ff8a00)">🔢</div>
+          <div class="body">
+            <h3 data-i18n="g_2048">2048</h3>
+            <p data-i18n="g_2048_d">Slide the tiles and join numbers to reach 2048.</p>
+            <button class="btn" data-game="2048" data-i18n="play">Play</button>
+          </div>
+        </div>
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#29b6f6,#7c4dff)">⭕</div>
+          <div class="body">
+            <h3 data-i18n="g_ttt">Tic-Tac-Toe</h3>
+            <p data-i18n="g_ttt_d">Get three in a row before the computer does.</p>
+            <button class="btn" data-game="ttt" data-i18n="play">Play</button>
+          </div>
+        </div>
+        <div class="game">
+          <div class="thumb" style="background:linear-gradient(135deg,#8d6e63,#2ee6a6)">🔨</div>
+          <div class="body">
+            <h3 data-i18n="g_mole">Whack-a-Mole</h3>
+            <p data-i18n="g_mole_d">Bop the moles before they hide!</p>
+            <button class="btn" data-game="mole" data-i18n="play">Play</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -304,6 +372,25 @@ function logoSvg() {
 /* ================= TRANSLATIONS ================= */
 const T = {
   en: {
+    mode_kids: "🧸 Kids",
+    mode_teens: "🎧 Teens",
+    mode_adults: "☕ Adults",
+    hi_kids: "Kids version: big buttons, bright colors and easier games!",
+    hi_teens: "Teen version: dark mode and normal-speed games.",
+    hi_adults: "Adult version: calm colors and harder games.",
+    g_memory: "Memory",
+    g_memory_d: "Flip the cards and find all the pairs.",
+    h_memory: "Click or tap two cards",
+    g_2048: "2048",
+    g_2048_d: "Slide the tiles and join numbers to reach 2048.",
+    h_2048: "Move: arrow keys or swipe",
+    g_ttt: "Tic-Tac-Toe",
+    g_ttt_d: "Get three in a row before the computer does.",
+    h_ttt: "You are ✕. Click or tap a square",
+    g_mole: "Whack-a-Mole",
+    g_mole_d: "Bop the moles before they hide!",
+    h_mole: "Click or tap the moles",
+    draw: "It's a draw!",
     nav_home: "Home", nav_family: "Family", nav_fun: "Fun",
     hero_kicker: "A family business", hero_title: "Hello from the ", hero_title2: " family!",
     hero_sub: "Fast and bright like a hummingbird. Meet our family, learn about our business and play some games.",
@@ -326,6 +413,25 @@ const T = {
     footer: "Made by Tim"
   },
   es: {
+    mode_kids: "🧸 Niños",
+    mode_teens: "🎧 Adolescentes",
+    mode_adults: "☕ Adultos",
+    hi_kids: "Versión para niños: botones grandes, colores alegres y juegos más fáciles.",
+    hi_teens: "Versión para adolescentes: modo oscuro y juegos a velocidad normal.",
+    hi_adults: "Versión para adultos: colores tranquilos y juegos más difíciles.",
+    g_memory: "Memoria",
+    g_memory_d: "Da la vuelta a las cartas y encuentra todas las parejas.",
+    h_memory: "Haz clic o toca dos cartas",
+    g_2048: "2048",
+    g_2048_d: "Desliza las fichas y junta números hasta llegar a 2048.",
+    h_2048: "Mover: flechas o deslizar",
+    g_ttt: "Tres en raya",
+    g_ttt_d: "Consigue tres en línea antes que el ordenador.",
+    h_ttt: "Eres ✕. Haz clic o toca una casilla",
+    g_mole: "Aplasta al topo",
+    g_mole_d: "¡Golpea a los topos antes de que se escondan!",
+    h_mole: "Haz clic o toca los topos",
+    draw: "¡Empate!",
     nav_home: "Inicio", nav_family: "Familia", nav_fun: "Diversión",
     hero_kicker: "Un negocio familiar", hero_title: "¡Hola de parte de la familia ", hero_title2: "!",
     hero_sub: "Rápidos y brillantes como un colibrí. Conoce a nuestra familia, descubre nuestro negocio y juega un rato.",
@@ -348,6 +454,25 @@ const T = {
     footer: "Hecho por Tim"
   },
   ru: {
+    mode_kids: "🧸 Детям",
+    mode_teens: "🎧 Подросткам",
+    mode_adults: "☕ Взрослым",
+    hi_kids: "Детская версия: большие кнопки, яркие цвета и игры попроще.",
+    hi_teens: "Версия для подростков: тёмная тема и игры на обычной скорости.",
+    hi_adults: "Версия для взрослых: спокойные цвета и игры посложнее.",
+    g_memory: "Мемори",
+    g_memory_d: "Переворачивай карточки и найди все пары.",
+    h_memory: "Нажми на две карточки",
+    g_2048: "2048",
+    g_2048_d: "Сдвигай плитки и соединяй числа, чтобы получить 2048.",
+    h_2048: "Двигай: стрелки или свайп",
+    g_ttt: "Крестики-нолики",
+    g_ttt_d: "Собери три в ряд раньше компьютера.",
+    h_ttt: "Ты играешь за ✕. Нажми на клетку",
+    g_mole: "Ударь крота",
+    g_mole_d: "Стукни кротов, пока они не спрятались!",
+    h_mole: "Нажимай на кротов",
+    draw: "Ничья!",
     nav_home: "Главная", nav_family: "Семья", nav_fun: "Веселье",
     hero_kicker: "Семейный бизнес", hero_title: "Привет от семьи ", hero_title2: "!",
     hero_sub: "Быстрые и яркие, как колибри. Познакомься с нашей семьёй, узнай о нашем деле и поиграй в игры.",
@@ -356,7 +481,7 @@ const T = {
     about_text: "Colibrix — наш семейный бизнес, который основал папа. Загляни на наш основной сайт, чтобы узнать больше.",
     btn_visit: "Открыть colibrix.one",
     family_title: "Семейная панель", family_sub: "Команда Colibrix.",
-    stat_members: "членов семьи", stat_langs: "языков", stat_games: "игры",
+    stat_members: "членов семьи", stat_langs: "языков", stat_games: "игр",
     name_dad: "Папа", name_mom: "Мама",
     role_dad: "Основатель Colibrix", role_mom: "Сердце семьи", role_tim: "Создатель сайта и геймер",
     role_vera: "Маленькая художница", role_grisha: "Самый младший",
@@ -370,6 +495,25 @@ const T = {
     footer: "Сделал Тим"
   },
   lv: {
+    mode_kids: "🧸 Bērniem",
+    mode_teens: "🎧 Pusaudžiem",
+    mode_adults: "☕ Pieaugušajiem",
+    hi_kids: "Bērnu versija: lielas pogas, spilgtas krāsas un vieglākas spēles.",
+    hi_teens: "Pusaudžu versija: tumšais režīms un spēles parastā ātrumā.",
+    hi_adults: "Pieaugušo versija: mierīgas krāsas un grūtākas spēles.",
+    g_memory: "Atmiņas spēle",
+    g_memory_d: "Apgriez kārtis un atrodi visus pārus.",
+    h_memory: "Noklikšķini vai pieskaries divām kārtīm",
+    g_2048: "2048",
+    g_2048_d: "Bīdi flīzes un apvieno skaitļus, lai sasniegtu 2048.",
+    h_2048: "Kustini: bultiņas vai pavelc",
+    g_ttt: "Krustiņi un nullītes",
+    g_ttt_d: "Saliec trīs rindā ātrāk par datoru.",
+    h_ttt: "Tu esi ✕. Noklikšķini vai pieskaries rūtiņai",
+    g_mole: "Kurmju medības",
+    g_mole_d: "Uzsit kurmjiem, pirms tie paslēpjas!",
+    h_mole: "Noklikšķini vai pieskaries kurmjiem",
+    draw: "Neizšķirts!",
     nav_home: "Sākums", nav_family: "Ģimene", nav_fun: "Izklaide",
     hero_kicker: "Ģimenes uzņēmums", hero_title: "Sveiciens no ", hero_title2: " ģimenes!",
     hero_sub: "Ātri un spilgti kā kolibri. Iepazīsti mūsu ģimeni, uzzini par mūsu uzņēmumu un uzspēlē spēles.",
@@ -392,6 +536,25 @@ const T = {
     footer: "Veidoja Tims"
   },
   ca: {
+    mode_kids: "🧸 Infants",
+    mode_teens: "🎧 Adolescents",
+    mode_adults: "☕ Adults",
+    hi_kids: "Versió infantil: botons grans, colors alegres i jocs més fàcils.",
+    hi_teens: "Versió per a adolescents: mode fosc i jocs a velocitat normal.",
+    hi_adults: "Versió per a adults: colors tranquils i jocs més difícils.",
+    g_memory: "Memòria",
+    g_memory_d: "Gira les cartes i troba totes les parelles.",
+    h_memory: "Fes clic o toca dues cartes",
+    g_2048: "2048",
+    g_2048_d: "Llisca les fitxes i ajunta números fins a arribar a 2048.",
+    h_2048: "Moure: fletxes o lliscar",
+    g_ttt: "Tres en ratlla",
+    g_ttt_d: "Fes tres en ratlla abans que l'ordinador.",
+    h_ttt: "Ets ✕. Fes clic o toca una casella",
+    g_mole: "Pica el talp",
+    g_mole_d: "Pica els talps abans que s'amaguin!",
+    h_mole: "Fes clic o toca els talps",
+    draw: "Empat!",
     nav_home: "Inici", nav_family: "Família", nav_fun: "Diversió",
     hero_kicker: "Un negoci familiar", hero_title: "Hola de part de la família ", hero_title2: "!",
     hero_sub: "Ràpids i brillants com un colibrí. Coneix la nostra família, descobreix el nostre negoci i juga una estona.",
@@ -414,6 +577,25 @@ const T = {
     footer: "Fet per en Tim"
   },
   de: {
+    mode_kids: "🧸 Kinder",
+    mode_teens: "🎧 Teens",
+    mode_adults: "☕ Erwachsene",
+    hi_kids: "Kinderversion: große Knöpfe, bunte Farben und leichtere Spiele.",
+    hi_teens: "Teen-Version: dunkles Design und Spiele in normalem Tempo.",
+    hi_adults: "Erwachsenenversion: ruhige Farben und schwierigere Spiele.",
+    g_memory: "Memory",
+    g_memory_d: "Dreh die Karten um und finde alle Paare.",
+    h_memory: "Klicke oder tippe auf zwei Karten",
+    g_2048: "2048",
+    g_2048_d: "Schiebe die Kacheln und verbinde Zahlen bis 2048.",
+    h_2048: "Bewegen: Pfeiltasten oder Wischen",
+    g_ttt: "Tic-Tac-Toe",
+    g_ttt_d: "Bilde vor dem Computer eine Dreierreihe.",
+    h_ttt: "Du bist ✕. Klicke oder tippe auf ein Feld",
+    g_mole: "Hau den Maulwurf",
+    g_mole_d: "Triff die Maulwürfe, bevor sie sich verstecken!",
+    h_mole: "Klicke oder tippe auf die Maulwürfe",
+    draw: "Unentschieden!",
     nav_home: "Start", nav_family: "Familie", nav_fun: "Spaß",
     hero_kicker: "Ein Familienunternehmen", hero_title: "Hallo von der ", hero_title2: " Familie!",
     hero_sub: "Schnell und bunt wie ein Kolibri. Lerne unsere Familie kennen, erfahre mehr über unser Unternehmen und spiel ein paar Spiele.",
@@ -436,6 +618,25 @@ const T = {
     footer: "Gemacht von Tim"
   },
   fr: {
+    mode_kids: "🧸 Enfants",
+    mode_teens: "🎧 Ados",
+    mode_adults: "☕ Adultes",
+    hi_kids: "Version enfants : gros boutons, couleurs vives et jeux plus faciles.",
+    hi_teens: "Version ados : mode sombre et jeux à vitesse normale.",
+    hi_adults: "Version adultes : couleurs calmes et jeux plus difficiles.",
+    g_memory: "Memory",
+    g_memory_d: "Retourne les cartes et trouve toutes les paires.",
+    h_memory: "Clique ou touche deux cartes",
+    g_2048: "2048",
+    g_2048_d: "Fais glisser les tuiles et assemble les nombres jusqu'à 2048.",
+    h_2048: "Bouger : flèches ou glisser",
+    g_ttt: "Morpion",
+    g_ttt_d: "Aligne trois symboles avant l'ordinateur.",
+    h_ttt: "Tu es ✕. Clique ou touche une case",
+    g_mole: "Tape-taupe",
+    g_mole_d: "Tape les taupes avant qu'elles se cachent !",
+    h_mole: "Clique ou touche les taupes",
+    draw: "Match nul !",
     nav_home: "Accueil", nav_family: "Famille", nav_fun: "Jeux",
     hero_kicker: "Une entreprise familiale", hero_title: "Bonjour de la famille ", hero_title2: "!",
     hero_sub: "Rapides et brillants comme un colibri. Découvre notre famille, notre entreprise et amuse-toi avec nos jeux.",
@@ -458,6 +659,25 @@ const T = {
     footer: "Fait par Tim"
   },
   uk: {
+    mode_kids: "🧸 Дітям",
+    mode_teens: "🎧 Підліткам",
+    mode_adults: "☕ Дорослим",
+    hi_kids: "Дитяча версія: великі кнопки, яскраві кольори та простіші ігри.",
+    hi_teens: "Версія для підлітків: темна тема та ігри на звичайній швидкості.",
+    hi_adults: "Версія для дорослих: спокійні кольори та складніші ігри.",
+    g_memory: "Мемо",
+    g_memory_d: "Перевертай картки та знайди всі пари.",
+    h_memory: "Натисни на дві картки",
+    g_2048: "2048",
+    g_2048_d: "Зсувай плитки та з'єднуй числа, щоб отримати 2048.",
+    h_2048: "Рух: стрілки або свайп",
+    g_ttt: "Хрестики-нулики",
+    g_ttt_d: "Збери три в ряд раніше за комп'ютер.",
+    h_ttt: "Ти граєш за ✕. Натисни на клітинку",
+    g_mole: "Влуч у крота",
+    g_mole_d: "Влуч у кротів, поки вони не сховалися!",
+    h_mole: "Натискай на кротів",
+    draw: "Нічия!",
     nav_home: "Головна", nav_family: "Родина", nav_fun: "Розваги",
     hero_kicker: "Сімейний бізнес", hero_title: "Привіт від родини ", hero_title2: "!",
     hero_sub: "Швидкі та яскраві, як колібрі. Познайомся з нашою родиною, дізнайся про нашу справу та пограй в ігри.",
@@ -466,7 +686,7 @@ const T = {
     about_text: "Colibrix — наш сімейний бізнес, який заснував тато. Завітай на наш основний сайт, щоб дізнатися більше.",
     btn_visit: "Відкрити colibrix.one",
     family_title: "Сімейна панель", family_sub: "Команда Colibrix.",
-    stat_members: "членів родини", stat_langs: "мов", stat_games: "гри",
+    stat_members: "членів родини", stat_langs: "мов", stat_games: "ігор",
     name_dad: "Тато", name_mom: "Мама",
     role_dad: "Засновник Colibrix", role_mom: "Серце родини", role_tim: "Творець сайту і геймер",
     role_vera: "Маленька художниця", role_grisha: "Наймолодший",
@@ -482,6 +702,9 @@ const T = {
 };
 
 let lang = "en";
+let mode = "teens";
+/** Pick a value by version: kids, teens, adults. */
+function pick(kids, teens, adults) { return mode === "kids" ? kids : mode === "adults" ? adults : teens; }
 function t(key) { return (T[lang] && T[lang][key]) || T.en[key] || key; }
 
 /** Swap every [data-i18n] element's text to the chosen language. */
@@ -489,6 +712,7 @@ function applyLang(code) {
   lang = T[code] ? code : "en";
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.getElementById("modeHi").textContent = t("hi_" + mode);
   renderMembers();
   if (current) { gameTitle.textContent = t("g_" + current); hint.textContent = t("h_" + current); }
   try { localStorage.setItem("lang", lang); } catch (e) {}
@@ -538,10 +762,10 @@ const hint = document.getElementById("hint");
 let current = null, game = null, raf = 0, last = 0;
 const keys = {};
 
-function getBest(name) { try { return +localStorage.getItem("best_" + name) || 0; } catch (e) { return 0; } }
+function getBest(name) { try { return +localStorage.getItem("best_" + name + "_" + mode) || 0; } catch (e) { return 0; } }
 function setScore(s) {
   scoreEl.textContent = s;
-  if (s > getBest(current)) { try { localStorage.setItem("best_" + current, s); } catch (e) {} }
+  if (s > getBest(current)) { try { localStorage.setItem("best_" + current + "_" + mode, s); } catch (e) {} }
   bestEl.textContent = Math.max(s, getBest(current));
 }
 function message(big, small) {
@@ -561,10 +785,12 @@ function pos(e) {
 function Breakout() {
   const cols = 8, rows = 5, bw = W / cols, bh = 22;
   const colors = ["#ff5fa2", "#ffb74d", "#ffee58", "#2ee6a6", "#29b6f6"];
+  const sp = pick(0.75, 1, 1.25);
   let paddle, ball, bricks, score, state, lives;
   function reset() {
-    paddle = { x: W / 2 - 45, w: 90, h: 12 };
-    ball = { x: W / 2, y: H - 60, vx: 180, vy: -260, r: 7 };
+    const pw = pick(130, 90, 70);
+    paddle = { x: W / 2 - pw / 2, w: pw, h: 12 };
+    ball = { x: W / 2, y: H - 60, vx: 180 * sp, vy: -260 * sp, r: 7 };
     bricks = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) bricks.push({ x: c * bw + 3, y: 50 + r * (bh + 6), c: colors[r], alive: true });
     score = 0; lives = 3; state = "ready"; setScore(0);
@@ -589,7 +815,7 @@ function Breakout() {
       if (ball.y > H + 20) {
         lives--;
         if (lives <= 0) state = "over";
-        else { state = "ready"; ball.y = H - 60; ball.vx = 180; ball.vy = -260; }
+        else { state = "ready"; ball.y = H - 60; ball.vx = 180 * sp; ball.vy = -260 * sp; }
       }
       for (const b of bricks) {
         if (b.alive && ball.x > b.x && ball.x < b.x + bw - 6 && ball.y - ball.r < b.y + bh && ball.y + ball.r > b.y) {
@@ -614,7 +840,7 @@ function Breakout() {
 /* ---- Flappy Hummingbird ---- */
 function Flappy() {
   let bird, pipes, score, state, timer;
-  const gap = 150, pw = 60;
+  const gap = pick(195, 150, 125), pw = 60, speed = pick(125, 160, 195);
   function reset() { bird = { y: H / 2, v: 0 }; pipes = []; score = 0; timer = 0; state = "ready"; setScore(0); }
   reset();
   return {
@@ -628,7 +854,7 @@ function Flappy() {
       timer -= dt;
       if (timer <= 0) { timer = 1.5; pipes.push({ x: W, top: 60 + Math.random() * (H - gap - 120), passed: false }); }
       for (const p of pipes) {
-        p.x -= 160 * dt;
+        p.x -= speed * dt;
         if (!p.passed && p.x + pw < 100) { p.passed = true; score++; setScore(score); }
         if (100 + 14 > p.x && 100 - 14 < p.x + pw && (bird.y - 12 < p.top || bird.y + 12 > p.top + gap)) state = "over";
       }
@@ -677,7 +903,7 @@ function Snake() {
     update(dt) {
       if (state !== "play") return;
       acc += dt;
-      const step = Math.max(0.06, 0.13 - score * 0.002);
+      const step = Math.max(pick(0.1, 0.06, 0.05), pick(0.18, 0.13, 0.1) - score * 0.002);
       if (acc < step) return;
       acc = 0; dir = next;
       const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
@@ -700,7 +926,249 @@ function Snake() {
   };
 }
 
-const GAMES = { breakout: Breakout, flappy: Flappy, snake: Snake };
+/* ---- Memory ---- */
+function Memory() {
+  const cols = 4, rows = pick(3, 4, 5);
+  const pool = ["🐦", "🍎", "⭐", "🚀", "🐱", "🌈", "🍕", "⚽", "🎸", "🐢"];
+  const cw = W / cols, ch = H / rows;
+  let cards, open, found, misses, score, wait, state;
+  function reset() {
+    const n = cols * rows / 2;
+    const deck = pool.slice(0, n).concat(pool.slice(0, n));
+    for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+    cards = deck.map(e => ({ e, up: false, done: false }));
+    open = []; found = 0; misses = 0; score = 0; wait = 0; state = "play"; setScore(0);
+  }
+  reset();
+  return {
+    tap(p) {
+      if (state === "win") { reset(); return; }
+      if (!p || wait > 0) return;
+      const i = Math.floor(p.y / ch) * cols + Math.floor(p.x / cw);
+      const c = cards[i];
+      if (!c || c.up || c.done) return;
+      c.up = true; open.push(c);
+      if (open.length === 2) {
+        if (open[0].e === open[1].e) {
+          open.forEach(o => o.done = true); open = []; found++;
+          score += 10; setScore(score);
+          if (found === cards.length / 2) state = "win";
+        } else { misses++; score = Math.max(0, score - pick(0, 1, 2)); setScore(score); wait = pick(1.1, 0.8, 0.6); }
+      }
+    },
+    update(dt) {
+      if (wait > 0) { wait -= dt; if (wait <= 0) { open.forEach(o => o.up = false); open = []; } }
+    },
+    draw() {
+      ctx.fillStyle = "#081421"; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      cards.forEach((c, i) => {
+        const x = (i % cols) * cw, y = Math.floor(i / cols) * ch;
+        ctx.fillStyle = c.done ? "#1b5e4a" : c.up ? "#f1f5f9" : "#29b6f6";
+        ctx.beginPath(); ctx.roundRect(x + 6, y + 6, cw - 12, ch - 12, 12); ctx.fill();
+        if (c.up || c.done) { ctx.font = Math.min(cw, ch) * 0.5 + "px serif"; ctx.fillText(c.e, x + cw / 2, y + ch / 2 + 3); }
+        else { ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "900 28px Nunito, sans-serif"; ctx.fillText("?", x + cw / 2, y + ch / 2); }
+      });
+      ctx.textBaseline = "alphabetic";
+      if (state === "win") message(t("you_win"), t("start"));
+    }
+  };
+}
+
+/* ---- 2048 ---- */
+function Game2048() {
+  const n = 4, cell = W / n, goal = pick(256, 2048, 2048);
+  const colors = { 2: "#eee4da", 4: "#ede0c8", 8: "#f2b179", 16: "#f59563", 32: "#f67c5f", 64: "#f65e3b", 128: "#edcf72", 256: "#edcc61", 512: "#edc850", 1024: "#edc53f", 2048: "#edc22e" };
+  let grid, score, state;
+  function add() {
+    const empty = [];
+    grid.forEach((v, i) => { if (!v) empty.push(i); });
+    if (empty.length) grid[empty[Math.floor(Math.random() * empty.length)]] = Math.random() < pick(0.05, 0.1, 0.2) ? 4 : 2;
+  }
+  function reset() { grid = Array(n * n).fill(0); score = 0; state = "play"; add(); add(); setScore(0); }
+  function canMove() {
+    for (let i = 0; i < n * n; i++) {
+      if (!grid[i]) return true;
+      if (i % n < n - 1 && grid[i] === grid[i + 1]) return true;
+      if (i < n * (n - 1) && grid[i] === grid[i + n]) return true;
+    }
+    return false;
+  }
+  /** Slide toward (dx, dy); returns true if anything moved. */
+  function slide(dx, dy) {
+    let moved = false;
+    for (let a = 0; a < n; a++) {
+      const idx = [];
+      for (let b = 0; b < n; b++) {
+        const k = (dx === 1 || dy === 1) ? n - 1 - b : b;
+        idx.push(dx ? a * n + k : k * n + a);
+      }
+      const vals = idx.map(i => grid[i]).filter(v => v);
+      const out = [];
+      for (let i = 0; i < vals.length; i++) {
+        if (vals[i] === vals[i + 1]) { out.push(vals[i] * 2); score += vals[i] * 2; if (vals[i] * 2 >= goal) state = "win"; i++; }
+        else out.push(vals[i]);
+      }
+      idx.forEach((gi, i) => { const v = out[i] || 0; if (grid[gi] !== v) moved = true; grid[gi] = v; });
+    }
+    return moved;
+  }
+  function go(dx, dy) {
+    if (state !== "play") return;
+    if (slide(dx, dy)) { add(); setScore(score); if (state === "play" && !canMove()) state = "over"; }
+  }
+  reset();
+  return {
+    tap() { if (state !== "play") reset(); },
+    key(k) {
+      if (k === "ArrowLeft") go(-1, 0); if (k === "ArrowRight") go(1, 0);
+      if (k === "ArrowUp") go(0, -1); if (k === "ArrowDown") go(0, 1);
+    },
+    swipeEnd(dx, dy) { if (Math.abs(dx) > Math.abs(dy)) go(Math.sign(dx), 0); else go(0, Math.sign(dy)); },
+    update() {},
+    draw() {
+      ctx.fillStyle = "#bbada0"; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      grid.forEach((v, i) => {
+        const x = (i % n) * cell, y = Math.floor(i / n) * cell;
+        ctx.fillStyle = v ? (colors[v] || "#3c3a32") : "#cdc1b4";
+        ctx.beginPath(); ctx.roundRect(x + 7, y + 7, cell - 14, cell - 14, 10); ctx.fill();
+        if (v) {
+          ctx.fillStyle = v <= 4 ? "#776e65" : "#fff";
+          ctx.font = "900 " + (v < 100 ? 48 : v < 1000 ? 40 : 32) + "px Nunito, sans-serif";
+          ctx.fillText(v, x + cell / 2, y + cell / 2 + 2);
+        }
+      });
+      ctx.textBaseline = "alphabetic";
+      if (state === "win") message(t("you_win"), t("start"));
+      if (state === "over") message(t("game_over"), t("start"));
+    }
+  };
+}
+
+/* ---- Tic-Tac-Toe ---- */
+function TicTacToe() {
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const c = W / 3;
+  let b, state, wins = 0, think = 0, result = "";
+  function winner(bd) {
+    for (const [x, y, z] of lines) if (bd[x] && bd[x] === bd[y] && bd[x] === bd[z]) return bd[x];
+    return bd.every(v => v) ? "draw" : null;
+  }
+  /** Score a board for O with minimax (+1 O wins, -1 X wins). */
+  function minimax(bd, turn) {
+    const w = winner(bd);
+    if (w === "O") return 1; if (w === "X") return -1; if (w === "draw") return 0;
+    let best = turn === "O" ? -2 : 2;
+    bd.forEach((v, i) => {
+      if (v) return;
+      bd[i] = turn; const sc = minimax(bd, turn === "O" ? "X" : "O"); bd[i] = "";
+      best = turn === "O" ? Math.max(best, sc) : Math.min(best, sc);
+    });
+    return best;
+  }
+  function aiMove() {
+    const free = b.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+    const tryWin = who => free.find(i => { b[i] = who; const w = winner(b) === who; b[i] = ""; return w; });
+    let m;
+    if (mode === "adults") {
+      let best = -2;
+      free.forEach(i => { b[i] = "O"; const sc = minimax(b, "X"); b[i] = ""; if (sc > best) { best = sc; m = i; } });
+    } else if (mode === "teens") {
+      m = tryWin("O"); if (m === undefined) m = tryWin("X");
+      if (m === undefined && !b[4]) m = 4;
+    }
+    if (m === undefined) m = free[Math.floor(Math.random() * free.length)];
+    b[m] = "O";
+  }
+  function check() {
+    const w = winner(b);
+    if (!w) return false;
+    state = "done";
+    if (w === "X") { wins++; setScore(wins); result = t("you_win"); }
+    else result = w === "draw" ? t("draw") : t("game_over");
+    return true;
+  }
+  function reset() { b = Array(9).fill(""); state = "play"; think = 0; }
+  reset(); setScore(0);
+  return {
+    tap(p) {
+      if (state === "done") { reset(); return; }
+      if (!p || state !== "play") return;
+      const i = Math.floor(p.y / c) * 3 + Math.floor(p.x / c);
+      if (b[i]) return;
+      b[i] = "X";
+      if (!check()) { state = "ai"; think = 0.35; }
+    },
+    update(dt) {
+      if (state === "ai" && (think -= dt) <= 0) { aiMove(); if (!check()) state = "play"; }
+    },
+    draw() {
+      ctx.fillStyle = "#081421"; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#29b6f6"; ctx.lineWidth = 6; ctx.lineCap = "round";
+      for (let k = 1; k < 3; k++) {
+        ctx.beginPath(); ctx.moveTo(k * c, 20); ctx.lineTo(k * c, H - 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(20, k * c); ctx.lineTo(W - 20, k * c); ctx.stroke();
+      }
+      ctx.lineWidth = 12;
+      b.forEach((v, i) => {
+        const x = (i % 3) * c + c / 2, y = Math.floor(i / 3) * c + c / 2, r = c * 0.28;
+        if (v === "X") {
+          ctx.strokeStyle = "#ff5fa2";
+          ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke();
+        } else if (v === "O") {
+          ctx.strokeStyle = "#2ee6a6"; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+        }
+      });
+      if (state === "done") message(result, t("start"));
+    }
+  };
+}
+
+/* ---- Whack-a-Mole ---- */
+function Mole() {
+  const c = W / 3, life = pick(1.4, 0.95, 0.65), length = 30;
+  let holes, score, state, timeLeft, spawn, bonk;
+  function reset() { holes = Array(9).fill(0); score = 0; state = "ready"; timeLeft = length; spawn = 0; bonk = null; setScore(0); }
+  reset();
+  return {
+    tap(p) {
+      if (state !== "play") { if (state === "over") reset(); state = "play"; return; }
+      if (!p) return;
+      const i = Math.floor(p.y / c) * 3 + Math.floor(p.x / c);
+      if (holes[i] > 0) { holes[i] = 0; score++; setScore(score); bonk = { i, t: 0.25 }; }
+    },
+    update(dt) {
+      if (state !== "play") return;
+      timeLeft -= dt;
+      if (timeLeft <= 0) { timeLeft = 0; state = "over"; return; }
+      holes = holes.map(h => Math.max(0, h - dt));
+      if (bonk && (bonk.t -= dt) <= 0) bonk = null;
+      if ((spawn -= dt) <= 0) {
+        spawn = life * pick(0.7, 0.55, 0.45);
+        const free = holes.map((h, i) => h ? -1 : i).filter(i => i >= 0);
+        if (free.length) holes[free[Math.floor(Math.random() * free.length)]] = life;
+      }
+    },
+    draw() {
+      ctx.fillStyle = "#3e7d3a"; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      holes.forEach((h, i) => {
+        const x = (i % 3) * c + c / 2, y = Math.floor(i / 3) * c + c / 2 + 10;
+        ctx.fillStyle = "#2b1d12"; ctx.beginPath(); ctx.ellipse(x, y + 28, c * 0.34, c * 0.13, 0, 0, 7); ctx.fill();
+        if (h > 0) { ctx.font = c * 0.45 + "px serif"; ctx.fillText("🐹", x, y); }
+        if (bonk && bonk.i === i) { ctx.font = c * 0.4 + "px serif"; ctx.fillText("💥", x, y); }
+      });
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = "#fff"; ctx.font = "900 20px Nunito, sans-serif"; ctx.textAlign = "left";
+      ctx.fillText("⏱ " + Math.ceil(timeLeft), 12, 28);
+      if (state === "ready") message(t("g_mole"), t("start"));
+      if (state === "over") message(t("game_over"), t("start"));
+    }
+  };
+}
+
+const GAMES = { breakout: Breakout, flappy: Flappy, snake: Snake, memory: Memory, "2048": Game2048, ttt: TicTacToe, mole: Mole };
 
 function openGame(name) {
   current = name;
@@ -725,11 +1193,12 @@ document.getElementById("closeGame").addEventListener("click", closeGame);
 modal.addEventListener("click", e => { if (e.target === modal) closeGame(); });
 
 let touchStart = null;
-canvas.addEventListener("mousedown", e => game && game.tap());
+let touchOrigin = null;
+canvas.addEventListener("mousedown", e => game && game.tap(pos(e)));
 canvas.addEventListener("mousemove", e => game && game.move && game.move(pos(e).x));
 canvas.addEventListener("touchstart", e => {
   e.preventDefault(); if (!game) return;
-  touchStart = pos(e); game.tap(); if (game.move) game.move(touchStart.x);
+  touchStart = touchOrigin = pos(e); game.tap(touchStart); if (game.move) game.move(touchStart.x);
 }, { passive: false });
 canvas.addEventListener("touchmove", e => {
   e.preventDefault(); if (!game) return;
@@ -737,13 +1206,20 @@ canvas.addEventListener("touchmove", e => {
   if (game.move) game.move(p.x);
   if (game.swipe && touchStart && Math.hypot(p.x - touchStart.x, p.y - touchStart.y) > 25) { game.swipe(p.x - touchStart.x, p.y - touchStart.y); touchStart = p; }
 }, { passive: false });
+canvas.addEventListener("touchend", e => {
+  if (!game || !game.swipeEnd || !touchOrigin || !e.changedTouches.length) return;
+  const r = canvas.getBoundingClientRect(), t0 = e.changedTouches[0];
+  const dx = (t0.clientX - r.left) * W / r.width - touchOrigin.x, dy = (t0.clientY - r.top) * H / r.height - touchOrigin.y;
+  if (Math.hypot(dx, dy) > 30) game.swipeEnd(dx, dy);
+  touchOrigin = null;
+});
 
 window.addEventListener("keydown", e => {
   if (!game) return;
   if (e.key === "Escape") return closeGame();
   if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault();
   keys[e.key] = true;
-  if (e.key === " ") game.tap();
+  if (e.key === " ") game.tap(null);
   if (game.key) game.key(e.key);
 });
 window.addEventListener("keyup", e => { keys[e.key] = false; });
@@ -756,7 +1232,23 @@ try { saved = localStorage.getItem("lang"); } catch (e) {}
 const browser = (navigator.language || "en").slice(0, 2);
 langSelect.value = T[saved] ? saved : (T[browser] ? browser : "en");
 langSelect.addEventListener("change", () => applyLang(langSelect.value));
+
+/** Switch between the kids, teens and adults versions. */
+function applyMode(m) {
+  mode = ["kids", "teens", "adults"].includes(m) ? m : "teens";
+  document.body.dataset.mode = mode;
+  document.getElementById("modeHi").textContent = t("hi_" + mode);
+  if (current) closeGame();
+  try { localStorage.setItem("mode", mode); } catch (e) {}
+}
+const modeSelect = document.getElementById("mode");
+let savedMode = null;
+try { savedMode = localStorage.getItem("mode"); } catch (e) {}
+modeSelect.value = savedMode || "teens";
+modeSelect.addEventListener("change", () => applyMode(modeSelect.value));
+applyMode(modeSelect.value);
 applyLang(langSelect.value);
+document.getElementById("gameCount").textContent = Object.keys(GAMES).length;
 </script>
 </body>
 </html>
