@@ -51,7 +51,7 @@ body {
   border: 1px solid var(--line); background: var(--card); color: var(--text);
   padding: 6px 12px; border-radius: 999px; font-size: 14px; cursor: pointer;
 }
-.chip[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 8px; font-size: 14px; }
 .toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -61,11 +61,15 @@ body {
 .store-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .avatar { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-weight: 800; flex: none; }
 .store-name { font-weight: 700; }
+/* Long names or codes wrap instead of pushing the page sideways. */
+.store-head > div:nth-child(2), .coupon-body, .code-btn { min-width: 0; }
+.store-name, .store-meta, .coupon-title, .coupon-details, .code-btn, .brand, .hero h1, .chip { overflow-wrap: anywhere; }
+.code-btn { max-width: 100%; }
 .store-meta { font-size: 13px; }
 .store-head .shop { margin-left: auto; font-size: 14px; color: var(--accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
 
 .coupon { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px dashed var(--line); }
-.coupon:first-of-type { border-top: 0; }
+.store-head + .coupon { border-top: 0; }
 .coupon-body { flex: 1; min-width: 0; }
 .coupon-title { font-weight: 600; }
 .coupon-details { font-size: 14px; }
@@ -83,6 +87,7 @@ body {
 }
 .code-btn.hidden-code { background: var(--accent); color: var(--accent-ink); font-family: inherit; letter-spacing: 0; border-style: solid; }
 
+.btn:disabled { opacity: .6; cursor: default; }
 .btn { background: var(--accent); color: var(--accent-ink); border: 0; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 15px; }
 
 .empty { text-align: center; padding: 40px 0; color: var(--muted); }
@@ -92,7 +97,7 @@ body {
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
 .grid .full { grid-column: 1 / -1; }
 .grid label { display: flex; flex-direction: column; font-size: 14px; gap: 4px; }
-.grid input { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; background: var(--bg); color: var(--text); }
+.grid input { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: var(--bg); color: var(--text); }
 
 .footer { font-size: 13px; padding-bottom: 32px; }
 

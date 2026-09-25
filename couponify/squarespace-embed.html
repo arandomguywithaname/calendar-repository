@@ -1,6 +1,6 @@
 <!--
   Paste this into a Squarespace "Code" block (Edit page → + → Code).
-  Replace YOUR-SITE.netlify.app with your Netlify address.
+  Replace YOUR-SITE.netlify.app with your Netlify address (or your custom domain).
   The iframe resizes itself to fit the coupon list.
 -->
 <iframe
@@ -8,12 +8,15 @@
   src="https://YOUR-SITE.netlify.app/"
   title="Coupons and promo codes"
   style="width:100%;height:1400px;border:0;display:block;"
-  allow="clipboard-write"
-  loading="lazy"></iframe>
+  allow="clipboard-write"></iframe>
 <script>
-  window.addEventListener("message", function (e) {
-    if (!e.data || e.data.type !== "couponify:height") return;
-    if (e.origin.indexOf(".netlify.app") === -1 && e.origin.indexOf("YOUR-CUSTOM-DOMAIN") === -1) return;
-    document.getElementById("couponify").style.height = e.data.height + "px";
-  });
+  (function () {
+    var frame = document.getElementById("couponify");
+    window.addEventListener("message", function (e) {
+      // Only listen to our own iframe.
+      if (e.source !== frame.contentWindow || !e.data || e.data.type !== "couponify:height") return;
+      var h = Number(e.data.height);
+      if (h > 0 && h < 100000) frame.style.height = h + "px";
+    });
+  })();
 </script>

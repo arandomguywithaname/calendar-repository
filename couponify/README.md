@@ -17,7 +17,7 @@ code worked, and let visitors submit new codes. No build step, no dependencies.
 | `styles.css` | Styling (auto light/dark mode) |
 | `app.js` | Search, filters, copy-to-clipboard, votes, submit form |
 | `coupons.js` | **Your stores and codes — edit this.** Ships with sample data only. |
-| `netlify.toml` | Netlify config (no build, allows iframe embedding) |
+| `_headers` | Netlify settings (allows embedding on Squarespace) |
 | `squarespace-embed.html` | Snippet to paste into a Squarespace Code block |
 
 ## 1. Add your coupons
