@@ -1,0 +1,17 @@
+# Static site — no build step. Netlify serves this folder as-is.
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Allow the site to be embedded in an iframe (e.g. a Squarespace Code Block).
+    Content-Security-Policy = "frame-ancestors *"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/coupons.js"
+  [headers.values]
+    # Make coupon edits show up quickly after a redeploy.
+    Cache-Control = "public, max-age=0, must-revalidate"
