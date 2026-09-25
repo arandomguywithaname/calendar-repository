@@ -1,4 +1,4 @@
-# CouponJar — a Honey-style coupon finder website
+# Couponing — a Honey-style coupon finder website
 
 A static coupon/promo-code site: search stores, filter by category, click
 **Show code** to reveal + copy a code (and open the store), vote on whether a
@@ -32,7 +32,7 @@ Preview locally by double-clicking `index.html`.
 ## 2. Publish to Netlify
 
 1. Go to <https://app.netlify.com/drop>.
-2. Unzip `coupon-app.zip`, then drag the resulting **folder** (the one containing `index.html`) onto the page.
+2. Unzip `couponing.zip`, then drag the resulting **folder** (the one containing `index.html`) onto the page.
 3. Netlify gives you a URL like `https://random-name-123.netlify.app`.
    Rename it under *Site configuration → Change site name*.
 

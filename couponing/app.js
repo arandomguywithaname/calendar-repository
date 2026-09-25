@@ -3,7 +3,7 @@
 
   var data = window.COUPON_DATA || { stores: [] };
   var state = { q: "", cat: "All", verifiedOnly: false };
-  var VOTES_KEY = "couponjar-votes";
+  var VOTES_KEY = "couponing-votes";
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -135,11 +135,16 @@
     notifyHeight();
   }
 
-  /** Tell a parent page (e.g. Squarespace embed) how tall we are so the iframe can fit. */
+  /**
+   * Tell a parent page (e.g. Squarespace embed) how tall we are so the iframe can fit.
+   * Measures <body> rather than scrollHeight, which never drops below the iframe's
+   * current height and so would stop the embed from shrinking.
+   */
   function notifyHeight() {
     if (window.parent === window) return;
     requestAnimationFrame(function () {
-      window.parent.postMessage({ type: "couponjar:height", height: document.documentElement.scrollHeight }, "*");
+      var height = Math.ceil(document.body.getBoundingClientRect().height);
+      window.parent.postMessage({ type: "couponing:height", height: height }, "*");
     });
   }
 
@@ -198,6 +203,8 @@
   });
 
   window.addEventListener("resize", notifyHeight);
+  // Also catch size changes that aren't re-renders (font loading, form messages).
+  if (window.ResizeObserver) new ResizeObserver(notifyHeight).observe(document.body);
 
   // --- Init -----------------------------------------------------------------
 
