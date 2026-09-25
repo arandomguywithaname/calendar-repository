@@ -12,9 +12,9 @@
   <header class="hero">
     <div class="wrap">
       <div class="brand"><span class="logo">🏷️</span> <span id="site-name">Couponify</span></div>
-      <h1 id="tagline">Find a working promo code before you check out.</h1>
+      <h1 id="tagline">Official deals and promo codes from the stores you already shop.</h1>
       <div class="search">
-        <input id="q" type="search" placeholder="Search a store or code… e.g. shoes, 20%" autocomplete="off" aria-label="Search stores and coupons">
+        <input id="q" type="search" placeholder="Search a store or deal… e.g. Nike, laptop, beauty" autocomplete="off" aria-label="Search stores and coupons">
       </div>
       <div id="cats" class="cats" role="tablist" aria-label="Categories"></div>
     </div>
@@ -23,10 +23,10 @@
   <main class="wrap">
     <div class="toolbar">
       <span id="count" class="muted"></span>
-      <label class="toggle"><input type="checkbox" id="verified-only"> Verified only</label>
+      <label class="toggle"><input type="checkbox" id="codes-only"> Promo codes only</label>
     </div>
     <div id="stores" class="stores"></div>
-    <p id="empty" class="empty" hidden>No coupons match that search. Try another store, or submit one below.</p>
+    <p id="empty" class="empty" hidden>Nothing matches that search. Try another store, or tell us about a code below.</p>
 
     <section class="submit" id="submit">
       <h2>Know a code we don't?</h2>
@@ -47,7 +47,7 @@
   </main>
 
   <footer class="wrap footer muted">
-    Codes are shared by the community and may expire or have exclusions. Always check the final price at checkout.
+    Deals link to each store's own website. Offers change often and may have exclusions — always check the final price at checkout. Store names belong to their owners; this site isn't affiliated with them.
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

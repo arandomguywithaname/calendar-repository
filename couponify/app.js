@@ -2,7 +2,7 @@
   "use strict";
 
   var raw = window.COUPON_DATA || {};
-  var state = { q: "", cat: "All", verifiedOnly: false };
+  var state = { q: "", cat: "All", codesOnly: false };
   var revealed = {}; // coupon keys the visitor has already revealed
 
   /** Only allow real web links for "Shop now" (blocks javascript: and typos). */
@@ -31,11 +31,14 @@
         url: safeUrl(text(s.url)),
         color: /^#[0-9a-f]{3,8}$|^[a-z]+$/i.test(text(s.color)) ? text(s.color) : "#888",
         coupons: (Array.isArray(s.coupons) ? s.coupons : []).filter(function (c) {
-          return c && typeof c === "object" && text(c.code);
+          // An offer is either a promo code or a link to a deal page.
+          return c && typeof c === "object" && (text(c.code) || safeUrl(text(c.url)));
         }).map(function (c) {
+          var code = text(c.code);
           return {
-            code: text(c.code),
-            title: text(c.title) || "Promo code",
+            code: code,
+            url: code ? "" : safeUrl(text(c.url)),
+            title: text(c.title) || (code ? "Promo code" : "Deal"),
             details: text(c.details),
             expires: text(c.expires),
             verified: c.verified === true
@@ -133,7 +136,7 @@
       var storeHit = !q || has(s.name) || has(s.category);
       var coupons = s.coupons.filter(function (c) {
         if (isExpired(c)) return false;
-        if (state.verifiedOnly && !c.verified) return false;
+        if (state.codesOnly && !c.code) return false;
         if (storeHit) return true;
         return has(c.code) || has(c.title) || has(c.details);
       });
@@ -142,12 +145,13 @@
   }
 
   function couponHtml(s, c) {
-    var key = s.id + ":" + c.code;
+    var key = s.id + ":" + (c.code || "deal:" + c.title);
     var v = votes[key];
     var shown = revealed[key];
     var badges = [];
     if (c.verified) badges.push('<span class="badge good">✓ Verified</span>');
-    badges.push('<span class="badge">' + (c.expires ? "Expires " + esc(fmtDate(c.expires)) : "No expiry listed") + "</span>");
+    if (!c.code) badges.push('<span class="badge">Official deals page</span>');
+    badges.push('<span class="badge">' + (c.expires ? "Ends " + esc(fmtDate(c.expires)) : c.code ? "No end date listed" : "Updated by the store") + "</span>");
     return (
       '<div class="coupon">' +
         '<div class="coupon-body">' +
@@ -159,7 +163,9 @@
             '<button type="button" data-vote="down" data-key="' + esc(key) + '" aria-pressed="' + (v === "down") + '">👎 No</button>' +
           "</div>" +
         "</div>" +
-        '<button type="button" class="code-btn' + (shown ? "" : " hidden-code") + '" data-key="' + esc(key) + '" data-code="' + esc(c.code) + '" data-url="' + esc(s.url) + '">' + (shown ? esc(c.code) : "Show code") + "</button>" +
+        (c.code
+          ? '<button type="button" class="code-btn' + (shown ? "" : " hidden-code") + '" data-key="' + esc(key) + '" data-code="' + esc(c.code) + '" data-url="' + esc(s.url) + '">' + (shown ? esc(c.code) : "Show code") + "</button>"
+          : '<a class="code-btn hidden-code deal-btn" href="' + esc(c.url) + '" target="_blank" rel="noopener nofollow">Get deal ↗</a>') +
       "</div>"
     );
   }
@@ -167,7 +173,7 @@
   function render() {
     var list = filtered();
     var total = list.reduce(function (n, r) { return n + r.coupons.length; }, 0);
-    $("count").textContent = total + " code" + (total === 1 ? "" : "s") + " at " + list.length + " store" + (list.length === 1 ? "" : "s");
+    $("count").textContent = total + " offer" + (total === 1 ? "" : "s") + " at " + list.length + " store" + (list.length === 1 ? "" : "s");
     $("empty").hidden = list.length > 0;
     $("stores").innerHTML = list.map(function (r) {
       var s = r.store;
@@ -199,7 +205,7 @@
   // --- Events ---------------------------------------------------------------
 
   $("q").addEventListener("input", function (e) { state.q = e.target.value; render(); });
-  $("verified-only").addEventListener("change", function (e) { state.verifiedOnly = e.target.checked; render(); });
+  $("codes-only").addEventListener("change", function (e) { state.codesOnly = e.target.checked; render(); });
 
   $("cats").addEventListener("click", function (e) {
     var b = e.target.closest("[data-cat]");
@@ -210,7 +216,7 @@
   });
 
   $("stores").addEventListener("click", function (e) {
-    var codeBtn = e.target.closest(".code-btn");
+    var codeBtn = e.target.closest("button.code-btn");
     if (codeBtn) {
       var code = codeBtn.getAttribute("data-code");
       var key = codeBtn.getAttribute("data-key");

@@ -1,8 +1,10 @@
 # Couponify — a Honey-style coupon finder website
 
-A static coupon/promo-code site: search stores, filter by category, click
-**Show code** to reveal + copy a code (and open the store), vote on whether a
-code worked, and let visitors submit new codes. No build step, no dependencies.
+A coupon and deals site for 24 real US stores (Amazon, Target, Walmart, Best
+Buy, Nike, Sephora, Home Depot, Expedia and more). Visitors search or filter,
+click **Get deal** to open the store's own official deals page, or **Show code**
+to reveal and copy a promo code. They can vote on whether an offer worked and
+submit new codes. No build step, no dependencies.
 
 > Honey itself is a browser *extension* that auto-applies codes on other
 > stores' checkout pages. A website (Netlify / Squarespace) can't do that, so
@@ -16,18 +18,40 @@ code worked, and let visitors submit new codes. No build step, no dependencies.
 | `index.html` | The page |
 | `styles.css` | Styling (auto light/dark mode) |
 | `app.js` | Search, filters, copy-to-clipboard, votes, submit form |
-| `coupons.js` | **Your stores and codes — edit this.** Ships with sample data only. |
+| `coupons.js` | **Your stores, deals and codes. Edit this file.** |
 | `_headers` | Netlify settings (allows embedding on Squarespace) |
 | `squarespace-embed.html` | Snippet to paste into a Squarespace Code block |
 
-## 1. Add your coupons
+## 1. Keep the offers current
 
-Open `coupons.js` in any text editor. Replace the sample stores (they all
-point at `example.com`) with real stores and codes you've checked. Change
-`siteName` and `tagline` at the top to rebrand. Expired codes (past
-`expires`) are hidden automatically.
+`coupons.js` ships with **real stores**. Every link goes to that store's
+own official deals or coupons page (checked September 2026). Those pages
+show whatever the store is running today, so they stay useful.
 
-Preview locally by double-clicking `index.html`.
+It also has one promo code the store published itself: Ulta's `FRAG15`
+(15% off fragrance), which ends **Sept 28, 2026** and then hides itself.
+Any offer with an `expires` date disappears automatically once that date passes.
+
+To add a code, open `coupons.js` in any text editor and add a line under the store:
+
+```js
+{ code: "SAVE20", title: "20% off sitewide", details: "Ends Sunday.", expires: "2026-10-05" },
+```
+
+To add a deal link (no code), use `url` instead of `code`:
+
+```js
+{ title: "Weekend sale", details: "Up to 40% off.", url: "https://www.example-store.com/sale" },
+```
+
+Only add `verified: true` to a code you've actually used at checkout. Good
+places to find real codes are the stores' own coupons pages (linked in
+the app), their email and text sign-ups, and affiliate networks such as
+Impact, CJ, Rakuten or Awin. Once you're approved as a publisher, those
+networks give you official code feeds and pay you commission.
+
+Change `siteName` and `tagline` at the top to rebrand. Preview locally by
+double-clicking `index.html`.
 
 ## 2. Publish to Netlify
 
@@ -61,5 +85,9 @@ appear in the Netlify dashboard (and can be emailed to you under
 ## Notes
 
 - "Did it work?" votes are saved only in each visitor's own browser.
-- If you use affiliate links in `url`, disclose that on your site as required
-  by the FTC and the affiliate program.
+- If you swap in affiliate links, disclose that on your site as required by
+  the FTC and the affiliate program.
+- The site uses store names only, with no logos, and says it isn't affiliated
+  with the stores. Keep it that way unless you have permission.
+- Links point at US store sites. For another country, change the URLs in
+  `coupons.js` to that country's store sites.
