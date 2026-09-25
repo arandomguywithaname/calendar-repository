@@ -7,7 +7,7 @@
  * Coupon fields: code, title, details, expires ("YYYY-MM-DD" or ""), verified (true/false)
  */
 window.COUPON_DATA = {
-  siteName: "Couponing",
+  siteName: "Couponify",
   tagline: "Find a working promo code before you check out.",
   stores: [
     {

@@ -3,7 +3,7 @@
 
   var data = window.COUPON_DATA || { stores: [] };
   var state = { q: "", cat: "All", verifiedOnly: false };
-  var VOTES_KEY = "couponing-votes";
+  var VOTES_KEY = "couponify-votes";
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -144,7 +144,7 @@
     if (window.parent === window) return;
     requestAnimationFrame(function () {
       var height = Math.ceil(document.body.getBoundingClientRect().height);
-      window.parent.postMessage({ type: "couponing:height", height: height }, "*");
+      window.parent.postMessage({ type: "couponify:height", height: height }, "*");
     });
   }
 
