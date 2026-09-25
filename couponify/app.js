@@ -37,11 +37,13 @@
           var code = text(c.code);
           return {
             code: code,
-            url: code ? "" : safeUrl(text(c.url)),
+            url: safeUrl(text(c.url)),
             title: text(c.title) || (code ? "Promo code" : "Deal"),
             details: text(c.details),
             expires: text(c.expires),
-            verified: c.verified === true
+            verified: c.verified === true,
+            live: c.live === true,
+            network: text(c.network)
           };
         })
       };
@@ -149,6 +151,7 @@
     var v = votes[key];
     var shown = revealed[key];
     var badges = [];
+    if (c.live) badges.push('<span class="badge live">● Live' + (c.network ? " · " + esc(c.network) : "") + "</span>");
     if (c.verified) badges.push('<span class="badge good">✓ Verified</span>');
     if (!c.code) badges.push('<span class="badge">Official deals page</span>');
     badges.push('<span class="badge">' + (c.expires ? "Ends " + esc(fmtDate(c.expires)) : c.code ? "No end date listed" : "Updated by the store") + "</span>");
@@ -164,7 +167,7 @@
           "</div>" +
         "</div>" +
         (c.code
-          ? '<button type="button" class="code-btn' + (shown ? "" : " hidden-code") + '" data-key="' + esc(key) + '" data-code="' + esc(c.code) + '" data-url="' + esc(s.url) + '">' + (shown ? esc(c.code) : "Show code") + "</button>"
+          ? '<button type="button" class="code-btn' + (shown ? "" : " hidden-code") + '" data-key="' + esc(key) + '" data-code="' + esc(c.code) + '" data-url="' + esc(c.url || s.url) + '">' + (shown ? esc(c.code) : "Show code") + "</button>"
           : '<a class="code-btn hidden-code deal-btn" href="' + esc(c.url) + '" target="_blank" rel="noopener nofollow">Get deal ↗</a>') +
       "</div>"
     );
@@ -265,6 +268,55 @@
       .then(function () { btn.disabled = false; });
   });
 
+  // --- Live affiliate offers ----------------------------------------------------
+
+  /** Loose store-name key so "Macy's", "Macys" and "Macy's US" all match. */
+  function storeKey(name) {
+    return text(name).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "").replace(/(usa|us|com|inc|llc)$/, "");
+  }
+
+  /** Put live offers from /api/offers on top of the stores in coupons.js. */
+  function mergeLive(feed) {
+    var offers = feed && Array.isArray(feed.offers) ? feed.offers : [];
+    var stores = (Array.isArray(raw.stores) ? raw.stores : []).map(function (s) {
+      return s && typeof s === "object" ? Object.assign({}, s, { coupons: Array.isArray(s.coupons) ? s.coupons.slice() : [] }) : s;
+    });
+    var byKey = {};
+    stores.forEach(function (s) { if (s && typeof s === "object" && storeKey(s.name)) byKey[storeKey(s.name)] = s; });
+    var live = {};
+    offers.forEach(function (o) {
+      if (!o || typeof o !== "object" || !safeUrl(text(o.url))) return;
+      var k = storeKey(o.store);
+      if (!k) return;
+      if (!byKey[k]) {
+        byKey[k] = { id: "live-" + k, name: text(o.store), category: text(o.category) || "Other", coupons: [] };
+        stores.push(byKey[k]);
+      }
+      (live[k] = live[k] || []).push({ code: o.code, title: o.title, details: o.details, url: o.url, expires: o.expires, live: true, network: o.network });
+    });
+    var count = 0;
+    Object.keys(live).forEach(function (k) {
+      var s = byKey[k];
+      s.coupons = live[k].concat(s.coupons);
+      s.url = live[k][0].url; // "Shop now" goes through the affiliate link too
+      count += live[k].length;
+    });
+    if (!count) return;
+    data.stores = normalize(stores);
+    if (data.stores.every(function (st) { return st.category !== state.cat; })) state.cat = "All";
+    renderCats();
+    render();
+    $("disclosure").hidden = false;
+  }
+
+  function loadLive() {
+    if (!/^https?:$/.test(location.protocol) || !window.fetch) return;
+    fetch("api/offers", { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(mergeLive)
+      .catch(function () { /* no live feed (e.g. drag-and-drop deploy): coupons.js alone is fine */ });
+  }
+
   window.addEventListener("resize", notifyHeight);
   // Also catch size changes that aren't re-renders (font loading, form messages).
   if (window.ResizeObserver) new ResizeObserver(notifyHeight).observe(document.body);
@@ -275,4 +327,5 @@
   if (data.tagline) $("tagline").textContent = data.tagline;
   renderCats();
   render();
+  loadLive();
 })();

@@ -75,6 +75,8 @@ body {
 .coupon-details { font-size: 14px; }
 .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; }
 .badge { padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); }
+.badge.live { background: var(--good-soft); color: var(--good); font-weight: 600; }
+.disclosure { font-size: 13px; margin: 0 0 12px; }
 .badge.good { background: var(--good-soft); color: var(--good); }
 .votes { font-size: 12px; margin-top: 6px; display: flex; gap: 8px; align-items: center; }
 .votes button { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 8px; padding: 2px 8px; cursor: pointer; font-size: 12px; }

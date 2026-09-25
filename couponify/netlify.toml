@@ -1,0 +1,7 @@
+# Used when the site is deployed from GitHub (needed for live affiliate offers).
+# In Netlify set "Base directory" to: couponify
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
