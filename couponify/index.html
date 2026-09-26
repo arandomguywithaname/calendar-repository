@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Couponify — Promo Codes</title>
+  <meta name="description" content="Find working promo codes and coupons before you check out.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="brand"><span class="logo">🏷️</span> <span id="site-name">Couponify</span></div>
+      <h1 id="tagline">Official deals and promo codes from the stores you already shop.</h1>
+      <div class="search">
+        <input id="q" type="search" placeholder="Search a store or deal… e.g. Nike, laptop, beauty" autocomplete="off" aria-label="Search stores and coupons">
+      </div>
+      <div id="cats" class="cats" role="tablist" aria-label="Categories"></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <span id="count" class="muted"></span>
+      <label class="toggle"><input type="checkbox" id="codes-only"> Promo codes only</label>
+    </div>
+    <p id="disclosure" class="disclosure muted" hidden>Offers marked <strong>Live</strong> come from affiliate networks. If you buy through those links we may earn a commission, at no extra cost to you.</p>
+    <div id="stores" class="stores"></div>
+    <p id="empty" class="empty" hidden>Nothing matches that search. Try another store, or tell us about a code below.</p>
+
+    <section class="submit" id="submit">
+      <h2>Know a code we don't?</h2>
+      <p class="muted">Share it and we'll add it after checking it works.</p>
+      <!-- Netlify Forms picks this up automatically at deploy time. -->
+      <form name="submit-coupon" method="POST" data-netlify="true" netlify-honeypot="bot-field" id="submit-form">
+        <input type="hidden" name="form-name" value="submit-coupon">
+        <p hidden><label>Don't fill this out: <input name="bot-field"></label></p>
+        <div class="grid">
+          <label>Store<input name="store" required maxlength="80"></label>
+          <label>Code<input name="code" required maxlength="40"></label>
+          <label class="full">What does it give?<input name="details" maxlength="200" placeholder="e.g. 20% off orders over $50"></label>
+        </div>
+        <button type="submit" class="btn">Submit code</button>
+        <span id="submit-msg" class="muted" role="status"></span>
+      </form>
+    </section>
+  </main>
+
+  <footer class="wrap footer muted">
+    Deals link to each store's own website. Offers change often and may have exclusions — always check the final price at checkout. Store names belong to their owners; this site isn't affiliated with them.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="coupons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

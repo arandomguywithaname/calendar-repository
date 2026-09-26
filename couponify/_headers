@@ -1,0 +1,6 @@
+# Netlify response headers (works with drag-and-drop deploys).
+/*
+  # Allow the site to be embedded in an iframe (e.g. a Squarespace Code Block).
+  Content-Security-Policy: frame-ancestors *
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
