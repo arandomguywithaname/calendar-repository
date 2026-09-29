@@ -89,7 +89,7 @@ class Game {
 
     document.getElementById('loadText').textContent = 'Building the map…';
     await frame();
-    this.map = new GameMap();
+    this.map = new GameMap(resolveMapId('dune'));
 
     document.getElementById('loadText').textContent = 'Preparing models…';
     await frame();
@@ -118,6 +118,23 @@ class Game {
     this.loop = this.loop.bind(this);
     this.lastFrame = performance.now();
     requestAnimationFrame(this.loop);
+  }
+
+  /** Swap to another map: rebuild geometry, meshes, radar and lighting. */
+  loadMap(id) {
+    if (this.map && this.map.id === id) return;
+    this.map = new GameMap(id);
+    this.buildGraphics();
+    this.hud.buildRadarMap(this.map);
+    this.applyMapLook();
+  }
+
+  /** Each map carries its own sky and fog so they do not all feel alike. */
+  applyMapLook() {
+    const r = this.renderer, m = this.map;
+    r.skyTopColor = m.skyTop;
+    r.skyHorizonColor = m.skyHorizon;
+    r.fogColor = m.fogColor;
   }
 
   /** (Re)build every GPU mesh. Safe to call again after a context restore. */
@@ -211,6 +228,11 @@ class Game {
 
   startMatch(opts) {
     const s = this.hud.settings;
+    // Everyone in a PvP match must land on the same map, so the host's
+    // choice travels with the start message.
+    this.loadMap(resolveMapId(opts.map || (s.mapChoice || 'random')));
+    const mn = document.querySelector('.mm-map-name');
+    if (mn) mn.textContent = this.map.title;
     this.mode = opts.mode || 'offline';
     this.difficulty = opts.difficulty || 'normal';
     this.teamSize = opts.teamSize || 5;
@@ -824,9 +846,11 @@ class Game {
     ent.reloadTotal = w.reloadTime;
     ent.zoomLevel = 0;
     ent.sprayIndex = 0;
-    this.sound.play('reload_out', ent === this.localPlayer ? null : ent.pos);
+    const cls = reloadClassOf(w);
+    const at = ent === this.localPlayer ? null : ent.pos;
+    this.sound.play('reload', at, { cls, phase: 'out' });
     setTimeout(() => {
-      if (ent.reloading > 0) this.sound.play('reload_in', ent === this.localPlayer ? null : ent.pos);
+      if (ent.reloading > 0) this.sound.play('reload', at, { cls, phase: 'in' });
     }, w.reloadTime * 500);
   }
 
@@ -838,7 +862,8 @@ class Game {
     const take = Math.min(need, ammo.reserve);
     ammo.mag += take;
     ammo.reserve -= take;
-    this.sound.play('reload_done', ent === this.localPlayer ? null : ent.pos);
+    this.sound.play('reload', ent === this.localPlayer ? null : ent.pos,
+      { cls: reloadClassOf(w), phase: 'done' });
   }
 
   toggleZoom(ent) {
@@ -2124,9 +2149,10 @@ class Game {
       this.sound.init();
       document.getElementById('pvpName').value = this.hud.settings.name || 'player';
       document.getElementById('pvpServer').value = this.hud.settings.server || NetClient.defaultUrl();
-      document.getElementById('pvpRoom').value = 'PARTY';
+      const codeEl = document.getElementById('pvpRoom');
+      if (!codeEl.value) codeEl.value = this.hud.settings.room || makeRoomCode();
       show('pvpLobby');
-      this.pvpAutoConnect();   // one click — no addresses, no codes
+      this.pvpAutoConnect(undefined, codeEl.value);
     });
 
     document.getElementById('mmCancel').addEventListener('click', () => {
@@ -2147,6 +2173,12 @@ class Game {
     });
     document.getElementById('optControls').addEventListener('change', (e) => {
       this.setControlMode(e.target.value);
+    });
+    const mapSel = document.getElementById('optMap');
+    mapSel.value = this.hud.settings.mapChoice || 'random';
+    mapSel.addEventListener('change', (e) => {
+      this.hud.settings.mapChoice = e.target.value;
+      saveSettings(this.hud.settings);
     });
     document.getElementById('pauseQuit').addEventListener('click', () => {
       this.running = false;
@@ -2171,14 +2203,82 @@ class Game {
     this.bindPvpLobby();
   }
 
-  /** Fake matchmaking: fills the lobby with the bots you are about to play. */
-  startMatchmaking() {
-    this.showScreen('matchmaking');
+  /**
+   * Quick match. Tries the relay for real opponents first and only falls
+   * back to a bot lobby if there is no server to reach.
+   */
+  async startMatchmaking() {
     const teamSize = parseInt(document.getElementById('optTeamSize').value, 10);
     const side = document.getElementById('optSide').value;
     const difficulty = document.getElementById('optDifficulty').value;
     const myTeam = side === 'random' ? (Math.random() < 0.5 ? 'T' : 'CT') : side;
 
+    this.showScreen('matchmaking');
+    document.getElementById('mmStatus').textContent = 'LOOKING FOR PLAYERS';
+    document.getElementById('mmAccept').classList.add('hidden');
+
+    let online = false;
+    try {
+      await this.net.connect(NetClient.defaultUrl(),
+        (this.hud.settings.name || 'player').slice(0, 14), null, side, true, true);
+      online = true;
+    } catch (e) {
+      online = false;
+    }
+
+    if (!online) {
+      // No relay reachable: run the offline lobby against bots.
+      this.startBotMatchmaking(teamSize, myTeam, difficulty, 'No server reachable — playing bots');
+      return;
+    }
+
+    // Online queue: the server starts us when the lobby fills, or after its
+    // countdown with bots taking the empty slots.
+    let left = 30;
+    const slotsEl = document.getElementById('mmSlots');
+    const render = () => {
+      const list = [...this.net.players.values()];
+      const total = Math.max(teamSize * 2, list.length);
+      let html = '';
+      for (let i = 0; i < total; i++) {
+        const p = list[i];
+        html += `<div class="mm-slot ${p ? p.team.toLowerCase() + ' filled' : ''}">
+          ${p ? escapeHtml(p.name) : 'waiting…'}
+          <span class="rank">${p ? (p.id === this.net.id ? 'you' : 'player') : ''}</span></div>`;
+      }
+      slotsEl.innerHTML = html;
+      document.getElementById('mmEta').textContent = `0:${String(Math.max(0, left)).padStart(2, '0')}`;
+      document.getElementById('mmStatus').textContent =
+        list.length > 1 ? `${list.length} PLAYERS IN LOBBY` : 'LOOKING FOR PLAYERS';
+    };
+    this._pvpRender = render;
+    render();
+
+    clearInterval(this.mmTimer);
+    const started = performance.now();
+    this.mmTimer = setInterval(() => {
+      const el = Math.floor((performance.now() - started) / 1000);
+      document.getElementById('mmElapsed').textContent =
+        `0:${String(el).padStart(2, '0')}`;
+      left = Math.max(0, 30 - el);
+      render();
+      if (left === 0) {
+        document.getElementById('mmStatus').textContent = 'STARTING — FILLING WITH BOTS';
+      }
+    }, 500);
+
+    this._queueContext = { teamSize, difficulty };
+  }
+
+  /** Offline lobby: fills the slots with the bots you are about to play. */
+  startBotMatchmaking(teamSize, myTeam, difficulty, note) {
+    this.showScreen('matchmaking');
+    if (note) document.getElementById('mmStatus').textContent = note;
+    this._startBotLobby(teamSize, myTeam, difficulty);
+  }
+
+  /** Bot lobby animation for when no relay is reachable. */
+  _startBotLobby(teamSize, myTeam, difficulty) {
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
     const slots = [];
     for (let i = 0; i < teamSize * 2; i++) {
@@ -2276,6 +2376,28 @@ class Game {
       this.pvpAutoConnect(url, room, team, document.getElementById('pvpFillBots').checked);
     });
 
+    // Join / new-code buttons beside the big code field.
+    const codeEl = document.getElementById('pvpRoom');
+    const joinCode = () => {
+      const code = (codeEl.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      if (code.length < 3) {
+        statusEl.textContent = 'Enter at least 3 characters.';
+        statusEl.className = 'pvp-status err';
+        return;
+      }
+      codeEl.value = code;
+      this.hud.settings.room = code;
+      saveSettings(this.hud.settings);
+      this.net.disconnect();
+      this.pvpAutoConnect(undefined, code);
+    };
+    document.getElementById('pvpJoin').addEventListener('click', joinCode);
+    codeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinCode(); });
+    document.getElementById('pvpNewCode').addEventListener('click', () => {
+      codeEl.value = makeRoomCode();
+      joinCode();
+    });
+
     this.net.on('roster', (msg) => {
       renderRoster();
       // Friends joining a running match need entities created on the fly.
@@ -2303,17 +2425,25 @@ class Game {
     });
 
     startBtn.addEventListener('click', () => {
-      this.net.send({ t: 'start', teamSize: Math.max(2, Math.ceil(this.net.players.size / 2)) });
+      this.net.send({
+        t: 'start',
+        teamSize: Math.max(2, Math.ceil(this.net.players.size / 2)),
+        map: resolveMapId(this.hud.settings.mapChoice || 'random'),
+      });
     });
+
+    // The quick-match queue ticking over on the server.
+    this.net.on('queue', () => { if (this._pvpRender) this._pvpRender(); });
 
     this.net.on('start', (msg) => {
       if (this.running && this.mode === 'pvp') return;   // already in the match
+      clearInterval(this.mmTimer);
       this.showScreen(null);
       const me = this.net.players.get(this.net.id);
       this.startMatch({
         mode: 'pvp', difficulty: document.getElementById('optDifficulty').value,
         teamSize: msg.teamSize || 5, team: me ? me.team : 'T',
-        fillBots: msg.fillBots,
+        fillBots: msg.fillBots, map: msg.map,
       });
     });
 
@@ -2567,6 +2697,14 @@ class Game {
 
 function frame() {
   return new Promise(r => requestAnimationFrame(() => r()));
+}
+
+/** Short, unambiguous room code — no 0/O or 1/I to mis-hear over voice. */
+function makeRoomCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 5; i++) s += alphabet[(Math.random() * alphabet.length) | 0];
+  return s;
 }
 
 /**

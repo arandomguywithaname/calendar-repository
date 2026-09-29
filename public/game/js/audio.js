@@ -226,21 +226,98 @@ class SoundSystem {
     const d = this._chain(sp, 0.5);
     this._noise(d, 0.04, { type: 'highpass', freq: 3000, gain: 0.3 });
   }
-  snd_reload_out(sp) {
-    const d = this._chain(sp, 0.5);
-    this._noise(d, 0.07, { type: 'bandpass', freq: 1200, q: 1.4, gain: 0.35 });
-    this._tone(d, 320, 0.05, { type: 'square', gain: 0.1 });
+  /*
+     Reloads are synthesised per weapon class, so a Deagle mag drop does not
+     sound like a shotgun shell or an AWP bolt. `cls` comes from the weapon's
+     model, `phase` is out / in / done.
+  */
+  snd_reload(sp, o = {}) {
+    const cls = o.cls || 'rifle';
+    const phase = o.phase || 'out';
+    const fn = this['_rl_' + cls] || this._rl_rifle;
+    fn.call(this, this._chain(sp, o.volume || 0.6), phase);
   }
-  snd_reload_in(sp) {
-    const d = this._chain(sp, 0.55);
-    this._noise(d, 0.06, { type: 'bandpass', freq: 900, q: 1.2, gain: 0.4 });
-    this._tone(d, 210, 0.06, { type: 'square', gain: 0.14 });
+  // heavy metal magazine: deep clack out, solid seat in, charging handle
+  _rl_rifle(d, phase) {
+    if (phase === 'out') {
+      this._noise(d, 0.09, { type: 'bandpass', freq: 900, q: 1.1, gain: 0.5 });
+      this._tone(d, 260, 0.07, { type: 'square', gain: 0.16, sweepTo: 140 });
+    } else if (phase === 'in') {
+      this._noise(d, 0.10, { type: 'bandpass', freq: 620, q: 1.0, gain: 0.6 });
+      this._tone(d, 170, 0.10, { type: 'square', gain: 0.22, sweepTo: 90 });
+    } else {
+      this._noise(d, 0.07, { type: 'highpass', freq: 2600, gain: 0.4 });
+      this._tone(d, 540, 0.05, { type: 'square', gain: 0.16 });
+      this._noise(d, 0.05, { type: 'bandpass', freq: 1500, q: 2, gain: 0.3, attack: 0.03 });
+    }
   }
-  snd_reload_done(sp) {
-    const d = this._chain(sp, 0.5);
-    this._noise(d, 0.05, { type: 'highpass', freq: 2200, gain: 0.35 });
-    this._tone(d, 480, 0.04, { type: 'square', gain: 0.12 });
+  // lighter, quicker, higher pitched
+  _rl_pistol(d, phase) {
+    if (phase === 'out') {
+      this._noise(d, 0.05, { type: 'bandpass', freq: 1700, q: 1.6, gain: 0.32 });
+      this._tone(d, 420, 0.04, { type: 'square', gain: 0.10 });
+    } else if (phase === 'in') {
+      this._noise(d, 0.06, { type: 'bandpass', freq: 1150, q: 1.3, gain: 0.42 });
+      this._tone(d, 300, 0.05, { type: 'square', gain: 0.15 });
+    } else {
+      this._tone(d, 780, 0.04, { type: 'square', gain: 0.13 });   // slide release
+      this._noise(d, 0.04, { type: 'highpass', freq: 3200, gain: 0.3 });
+    }
   }
+  // stamped-metal SMG: rattly and fast
+  _rl_smg(d, phase) {
+    if (phase === 'out') {
+      this._noise(d, 0.06, { type: 'bandpass', freq: 1400, q: 1.2, gain: 0.4 });
+      this._tone(d, 330, 0.05, { type: 'square', gain: 0.12, sweepTo: 200 });
+    } else if (phase === 'in') {
+      this._noise(d, 0.08, { type: 'bandpass', freq: 780, q: 1.0, gain: 0.5 });
+      this._tone(d, 210, 0.07, { type: 'square', gain: 0.18, sweepTo: 120 });
+    } else {
+      this._noise(d, 0.05, { type: 'bandpass', freq: 2100, q: 1.8, gain: 0.35 });
+      this._tone(d, 620, 0.04, { type: 'square', gain: 0.12 });
+    }
+  }
+  // one shell at a time, then a pump
+  _rl_shotgun(d, phase) {
+    if (phase === 'done') {
+      this._noise(d, 0.09, { type: 'bandpass', freq: 700, q: 0.9, gain: 0.5 });
+      this._tone(d, 190, 0.09, { type: 'square', gain: 0.2, sweepTo: 95 });
+    } else {
+      this._noise(d, 0.06, { type: 'bandpass', freq: 1050, q: 1.5, gain: 0.4 });
+      this._tone(d, 250, 0.05, { type: 'triangle', gain: 0.14 });
+    }
+  }
+  // long bolt throw with a heavy lock-up
+  _rl_sniper(d, phase) {
+    if (phase === 'out') {
+      this._noise(d, 0.12, { type: 'bandpass', freq: 760, q: 0.9, gain: 0.45, attack: 0.02 });
+      this._tone(d, 200, 0.10, { type: 'square', gain: 0.15, sweepTo: 110 });
+    } else if (phase === 'in') {
+      this._noise(d, 0.14, { type: 'bandpass', freq: 520, q: 0.8, gain: 0.6 });
+      this._tone(d, 140, 0.13, { type: 'square', gain: 0.24, sweepTo: 70 });
+    } else {
+      this._tone(d, 320, 0.09, { type: 'square', gain: 0.2, sweepTo: 150 });
+      this._noise(d, 0.08, { type: 'bandpass', freq: 1250, q: 2.2, gain: 0.4 });
+    }
+  }
+  // belt-fed: box latch, rattling links, heavy cover slam
+  _rl_lmg(d, phase) {
+    if (phase === 'out') {
+      this._noise(d, 0.16, { type: 'bandpass', freq: 560, q: 0.8, gain: 0.55 });
+      this._tone(d, 150, 0.14, { type: 'square', gain: 0.2, sweepTo: 70 });
+    } else if (phase === 'in') {
+      for (let i = 0; i < 5; i++) {
+        this._noise(d, 0.05, {
+          type: 'bandpass', freq: 1300 + Math.random() * 900, q: 2.2,
+          gain: 0.25, attack: 0.002 + i * 0.03,
+        });
+      }
+    } else {
+      this._noise(d, 0.13, { type: 'lowpass', freq: 700, gain: 0.65 });
+      this._tone(d, 120, 0.12, { type: 'square', gain: 0.26, sweepTo: 60 });
+    }
+  }
+  _rl_knife(d, phase) { this._rl_pistol(d, phase); }
   snd_switch(sp) {
     const d = this._chain(sp, 0.4);
     this._noise(d, 0.05, { type: 'bandpass', freq: 2600, q: 1.6, gain: 0.28 });

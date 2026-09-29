@@ -168,6 +168,14 @@
           <option value="random">Random</option>
         </select>
       </label>
+      <label>Map
+        <select id="optMap">
+          <option value="random" selected>Random</option>
+          <option value="dune">Operation: Dune</option>
+          <option value="foundry">The Foundry</option>
+          <option value="villa">Villa</option>
+        </select>
+      </label>
       <label>Controls
         <select id="optControls">
           <option value="auto" selected>Auto-detect</option>
@@ -203,10 +211,20 @@
   <div class="mm-panel wide">
     <div class="mm-status">PLAY WITH FRIENDS</div>
     <p class="pvp-help">
-      Friends who open this game from the <b>same address</b> and press
-      <b>Play with Friends</b> land in this party automatically — even if the
-      match has already started. Empty slots are filled with bots.
+      Share the code. Anyone who types it joins your game — even after the
+      match has started. Empty slots fill with bots.
     </p>
+
+    <div class="code-box">
+      <label class="code-label">ROOM CODE</label>
+      <input id="pvpRoom" class="code-input" maxlength="6" autocomplete="off"
+             autocapitalize="characters" spellcheck="false" placeholder="ABC123" />
+      <div class="code-actions">
+        <button class="btn small" id="pvpNewCode">NEW CODE</button>
+        <button class="btn primary small" id="pvpJoin">JOIN</button>
+      </div>
+    </div>
+
     <div class="pvp-form-mini">
       <label>Your name <input id="pvpName" maxlength="14" placeholder="player" /></label>
     </div>
@@ -220,7 +238,6 @@
       <summary>Advanced — different server or a private room</summary>
       <div class="pvp-form">
         <label>Server<input id="pvpServer" placeholder="wss://your-relay.example" /></label>
-        <label>Room code<input id="pvpRoom" maxlength="8" placeholder="PARTY" /></label>
         <label>Team
           <select id="pvpTeam"><option value="auto" selected>Auto-balance</option><option value="T">Terrorists</option><option value="CT">Counter-Terrorists</option></select>
         </label>

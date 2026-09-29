@@ -37,12 +37,21 @@ anywhere to aim, a fire button with zoom/jump/crouch/reload/swap/grenade
 around it, a contextual PLANT / DEFUSE / PICK UP button, and BUY / SCORES /
 pause along the top. The match goes fullscreen in landscape.
 
+### Maps
+
+Three maps, picked from the menu or left on random rotation. Each has its
+own sky, fog and materials:
+
+- **Operation: Dune** — sun-bleached desert town, long mid and A-long angles.
+- **The Foundry** — overcast industrial yard: containers, gantries, tight bays.
+- **Villa** — close-quarters Mediterranean village, short angles, fast rounds.
+
 ### Modes
 
-- **Find Match** — matchmaking that fills a 5v5 lobby, then drops you into a
-  competitive match: MR12, first to 13, sides swap at the half.
-- **Play with Friends** — real PvP. Everyone points at the same server and
-  enters the same room code; see below.
+- **Find Match** — real matchmaking. You join a live queue; if the lobby has
+  not filled after 30 seconds the match starts anyway with bots taking the
+  empty slots. With no server reachable it falls back to a bot lobby.
+- **Play with Friends** — type a room code, that is all. See below.
 - **Practice** — free roam, unlimited money, instant respawns.
 
 ## Player versus player
@@ -51,17 +60,29 @@ pause along the top. The match goes fullscreen in landscape.
 no dependencies — the WebSocket handshake and framing are implemented directly
 on node's `http`/`net`.
 
-1. One person runs `npm run game`. It prints a LAN address.
-2. Everyone opens `http://<that address>:8080/game/` and presses
-   **PLAY WITH FRIENDS** — that's it. The lobby connects to the server the
-   page came from and drops everyone into the same party automatically.
-3. The first player in is the host and presses **START MATCH**. Empty
-   slots fill with bots, and friends who arrive late are pulled straight
-   into the running match.
+Players only ever type a **room code**. Press **PLAY WITH FRIENDS**, share
+the five-character code, and anyone who types it joins — including after
+the match has started. Empty slots fill with bots.
 
-The **Advanced** panel (different server address, private room codes,
-forced teams) is only needed for copies on static hosts like itch.io,
-where the relay lives at another address.
+For that to work from anywhere, the game needs a relay it can always
+reach. Two ways:
+
+- **Same network** — one person runs `npm run game` and everyone opens the
+  LAN address it prints. Nothing to configure.
+- **Anywhere** — deploy the bundled `server.js` once to any host that runs
+  Node (Render, Railway, Fly.io and Glitch all have free tiers), then set
+  its address at the top of `js/net.js`:
+
+  ```js
+  const RELAY_URL = 'wss://my-dune-relay.onrender.com';
+  ```
+
+  Every copy of the build then reaches the same relay, so a static host
+  like itch.io works too and players still only type a code. An HTTPS page
+  needs a `wss://` relay.
+
+The **Advanced** panel (a different server, forced teams) is only there for
+one-off cases; normal play never needs it.
 
 The room host's browser simulates the authoritative match — health, kills,
 rounds, economy, the bomb and every bot — and broadcasts events for all of

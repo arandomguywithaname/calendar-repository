@@ -520,6 +520,23 @@ select, input[type="text"], input:not([type]) {
 .mm-map-mode { font-size: 11px; color: var(--dim); letter-spacing: 2px; margin-top: 4px; }
 .mm-actions { display: flex; gap: 10px; justify-content: center; }
 
+/* --- room code entry: the only thing a player should have to type --- */
+.code-box {
+  border: 1px solid var(--line-strong); border-radius: 8px;
+  background: rgba(255,255,255,0.04); padding: 16px 18px 14px; margin: 4px 0 16px;
+}
+.code-label { display: block; font-size: 10px; letter-spacing: 3px; color: var(--dim); }
+.code-input {
+  display: block; width: 100%; margin: 8px 0 12px; padding: 12px 10px;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--line-strong); border-radius: 6px;
+  color: var(--text); font-family: var(--mono); font-size: 34px; font-weight: 700;
+  letter-spacing: 10px; text-align: center; text-transform: uppercase;
+}
+.code-input:focus { outline: none; border-color: var(--accent); }
+.code-input::placeholder { color: rgba(255,255,255,0.18); letter-spacing: 10px; }
+.code-actions { display: flex; gap: 10px; justify-content: center; }
+.code-actions .btn { flex: 1; max-width: 190px; }
+
 .pvp-help { font-size: 13px; color: var(--dim); line-height: 1.6; margin: 16px 0; }
 .pvp-help b { color: var(--text); }
 .pvp-form-mini { display: flex; justify-content: center; margin-bottom: 14px; }

@@ -9,6 +9,19 @@
    the past so they move smoothly.
    ------------------------------------------------------------------ */
 
+/* ==========================================================================
+   SET THIS ONCE to play with friends anywhere, using only a room code.
+
+   Deploy the bundled server.js to any host that runs Node (Render, Railway,
+   Fly.io, Glitch — all have free tiers), then put its address here:
+
+       const RELAY_URL = 'wss://my-dune-relay.onrender.com';
+
+   Leave it empty and the game uses whichever server served the page, which
+   is what you get from `npm run game` on your own network.
+   ========================================================================== */
+const RELAY_URL = '';
+
 const NET_TICK = 1 / 20;
 const INTERP_DELAY = 0.1;
 
@@ -32,14 +45,23 @@ class NetClient {
 
   get active() { return this.connected && !!this.room; }
 
-  /** Default to the page's own host so "just open the link" works. */
+  /**
+   * Where the relay lives. Players never type this — they only type a room
+   * code. Set RELAY_URL below (or window.DUNE_RELAY before the scripts load)
+   * to a server you host, and every copy of the build — including one on a
+   * static host like itch.io — reaches the same place from anywhere.
+   * Left empty, the game talks to whatever server served the page, which is
+   * what `npm run game` gives you on a local network.
+   */
   static defaultUrl() {
+    const configured = (typeof window !== 'undefined' && window.DUNE_RELAY) || RELAY_URL;
+    if (configured) return configured;
     if (location.protocol === 'file:') return 'ws://localhost:8080';
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${location.host}`;
   }
 
-  connect(url, name, room, team, fillBots) {
+  connect(url, name, room, team, fillBots, quick) {
     return new Promise((resolve, reject) => {
       let ws;
       try {
@@ -58,7 +80,7 @@ class NetClient {
         clearTimeout(timeout);
         this.connected = true;
         this.status = 'connected';
-        this.send({ t: 'join', room, name, team, fillBots });
+        this.send({ t: 'join', room, name, team, fillBots, quick: !!quick });
       };
       ws.onerror = () => {
         clearTimeout(timeout);

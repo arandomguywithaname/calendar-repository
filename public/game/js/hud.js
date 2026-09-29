@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   name: 'player', server: '', room: 'DUNE1',
   skins: {},                       // weapon key -> skin key
   controlMode: 'auto',             // 'auto' | 'desktop' | 'mobile'
+  mapChoice: 'random',             // map id, or random rotation
 };
 
 function loadSettings() {

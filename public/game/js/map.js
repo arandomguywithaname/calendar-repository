@@ -26,12 +26,23 @@ class Solid {
 }
 
 class GameMap {
-  constructor() {
-    this.name = 'de_dune';
+  /**
+   * @param {string} id key into MAPS; defaults to the first one.
+   * Collision, ray casting and the nav grid are shared by every map — a
+   * definition only supplies geometry and the tactical positions.
+   */
+  constructor(id) {
+    const def = MAPS[id] || MAPS[MAP_IDS[0]];
+    this.id = def.id;
+    this.name = def.name;
+    this.title = def.title;
     this.solids = [];
     this.props = [];
-    this.bounds = { x0: -42, z0: -42, x1: 42, z1: 42 };
-    this._build();
+    this.bounds = def.bounds || { x0: -42, z0: -42, x1: 42, z1: 42 };
+    this.skyTop = def.skyTop || [0.17, 0.36, 0.70];
+    this.skyHorizon = def.skyHorizon || [0.80, 0.83, 0.80];
+    this.fogColor = def.fogColor || [0.60, 0.63, 0.68];
+    def.build(this);
     this._buildNav();
   }
 
@@ -61,7 +72,8 @@ class GameMap {
     }
   }
 
-  _build() {
+  /** de_dune's geometry, kept as a method so `this.add` reads naturally. */
+  buildDune() {
     const W = MAT;
     const SAND = { uvScale: 0.35 };
     const B = this.bounds;
@@ -164,8 +176,9 @@ class GameMap {
 
     /* ---- T spawn dressing ---- */
     this.add(-20, 34, 20, 34.8, 0, 1.1, W.SANDSTONE, { uvScale: 0.4 });
-    this.container(-8, 30, 5.6, 2.4, 2.5, 0);
-    this.container(8, 30, 5.6, 2.4, 2.5, 0);
+    // Pushed wide of the spawn fan — these used to sit on spawn points.
+    this.container(-15, 31, 5.6, 2.4, 2.5, 0);
+    this.container(15, 31, 5.6, 2.4, 2.5, 0);
 
     /* ---- decorative rooftops / awnings ---- */
     this.add(13, 12, 22, 13.4, 4.4, 4.8, W.WOOD, { uvScale: 0.5, noClip: true });
@@ -216,6 +229,199 @@ class GameMap {
     this.rotations = {
       A: [[10.5, 0, -14], [10.5, 0, -26], [14, 0, -31]],
       B: [[-10.5, 0, -14], [-10.5, 0, -26], [-14, 0, -31]],
+    };
+  }
+
+  /* ============================= de_foundry =============================
+     A tight industrial yard: two warehouse halls flanking a covered rail
+     corridor, cargo containers for cover, sites in the loading bays.     */
+  buildFoundry() {
+    const W = MAT;
+    const CON = { uvScale: 0.32 };
+    const B = this.bounds;
+
+    this.add(B.x0, B.z0, B.x1, B.z1, -1.0, 0, W.ASPHALT, { uvScale: 0.26 });
+
+    // perimeter
+    const PH = 12;
+    this.add(B.x0 - 2, B.z0 - 2, B.x0, B.z1 + 2, 0, PH, W.CONCRETE, CON);
+    this.add(B.x1, B.z0 - 2, B.x1 + 2, B.z1 + 2, 0, PH, W.CONCRETE, CON);
+    this.add(B.x0 - 2, B.z0 - 2, B.x1 + 2, B.z0, 0, PH, W.CONCRETE, CON);
+    this.add(B.x0 - 2, B.z1, B.x1 + 2, B.z1 + 2, 0, PH, W.CONCRETE, CON);
+
+    // Two warehouse halls define the lanes.
+    this.add(-36, -4, -16, 26, 0, 8.5, W.METAL, { uvScale: 0.22, tint: [0.62, 0.66, 0.68] });
+    this.add(16, -4, 36, 26, 0, 8.5, W.METAL, { uvScale: 0.22, tint: [0.62, 0.66, 0.68] });
+    // saw-tooth roofs
+    this.add(-36.5, -4.5, -15.5, 26.5, 8.5, 9.2, W.CONCRETE, { uvScale: 0.4 });
+    this.add(15.5, -4.5, 36.5, 26.5, 8.5, 9.2, W.CONCRETE, { uvScale: 0.4 });
+
+    // Central rail corridor with a covered section.
+    this.add(-6, 8, 6, 8.8, 0, 3.6, W.METAL, { uvScale: 0.5, tint: [0.5, 0.52, 0.55] });
+    this.addWallWithGap('z', 8.4, -6, 6, 0, 4.2, 0, 6.5, W.CONCRETE,
+      { thickness: 0.7, lintel: 3.2, uvScale: 0.35 });
+    this.add(-9, -6, 9, 4, 5.2, 6.0, W.METAL, { uvScale: 0.3, tint: [0.45, 0.48, 0.5] });
+
+    // Gantry pillars down mid.
+    for (const z of [-2, 2, 6]) {
+      this.add(-9.4, z - 0.4, -8.6, z + 0.4, 0, 5.2, W.METAL, { uvScale: 1.2, tint: [0.5, 0.52, 0.54] });
+      this.add(8.6, z - 0.4, 9.4, z + 0.4, 0, 5.2, W.METAL, { uvScale: 1.2, tint: [0.5, 0.52, 0.54] });
+    }
+
+    // North block splits the two bays.
+    this.add(-7, -30, -2, -12, 0, 7.5, W.BRICK, { uvScale: 0.3 });
+    this.add(2, -30, 7, -12, 0, 7.5, W.BRICK, { uvScale: 0.3 });
+
+    /* ---- bombsite A: east loading bay ---- */
+    this.add(16, -26, 28, -14, -0.02, 0.03, W.SITE_A, { uvScale: 1 / 12, noClip: true });
+    this.container(20, -10, 6.2, 2.5, 2.6, 0);
+    this.container(27, -12, 6.2, 2.5, 2.6, 1);
+    this.crate(18.5, -20, 1.2, W.CRATE);
+    this.crate(21, -21.5, 1.2, W.CRATE);
+    this.crate(21, -21.5, 1.2, W.CRATE, 1.2);
+    this.crate(26, -24, 1.2, W.CRATE);
+    this.barrel(16.8, -16);
+    this.barrel(17.6, -17.2);
+    this.add(30, -28, 34, -13, 0, 1.3, W.CONCRETE, { uvScale: 0.35 });   // dock ledge
+
+    /* ---- bombsite B: west loading bay ---- */
+    this.add(-28, -26, -16, -14, -0.02, 0.03, W.SITE_B, { uvScale: 1 / 12, noClip: true });
+    this.container(-20, -10, 6.2, 2.5, 2.6, 0);
+    this.container(-27, -12, 6.2, 2.5, 2.6, 1);
+    this.crate(-18.5, -20, 1.2, W.CRATE);
+    this.crate(-21, -21.5, 1.2, W.CRATE);
+    this.crate(-26, -24, 1.2, W.CRATE);
+    this.crate(-26, -24, 1.2, W.CRATE, 1.2);
+    this.barrel(-16.8, -16);
+    this.add(-34, -28, -30, -13, 0, 1.3, W.CONCRETE, { uvScale: 0.35 });
+
+    // Approach cover in the lanes and spawns.
+    this.crate(-12, 14, 1.2, W.CRATE);
+    this.crate(12, 14, 1.2, W.CRATE);
+    this.container(0, 22, 5.6, 2.4, 2.5, 0);
+    this.container(-15, 30, 5.6, 2.4, 2.5, 1);
+    this.container(15, 30, 5.6, 2.4, 2.5, 1);
+    this.crate(-4, -8, 1.2, W.CRATE);
+    this.crate(4, -8, 1.2, W.CRATE);
+    this.add(-14, -30.5, 14, -29.7, 0, 1.1, W.CONCRETE, { uvScale: 0.4 });
+
+    this.sites = {
+      A: { center: [22, 0, -20], radius: 9, min: [16, -26], max: [30, -13] },
+      B: { center: [-22, 0, -20], radius: 9, min: [-30, -26], max: [-16, -13] },
+    };
+    this.spawns = {
+      T: [[-8, 32], [-4, 33], [0, 32.5], [4, 33], [8, 32],
+          [-10, 29], [-3, 29.5], [3, 29.5], [10, 29], [0, 27]].map(([x, z]) => [x, 0, z]),
+      CT: [[-8, -35], [-4, -36], [0, -35.5], [4, -36], [8, -35],
+           [-11, -33], [-3, -33.5], [3, -33.5], [11, -33], [0, -37]].map(([x, z]) => [x, 0, z]),
+    };
+    this.spawnYaw = { T: Math.PI, CT: 0 };
+    this.holdSpots = {
+      A: [{ pos: [26, 0, -24], yaw: 2.4 }, { pos: [18, 0, -15], yaw: 1.3 },
+          { pos: [22, 0, -25], yaw: 2.0 }, { pos: [9, 0, -20], yaw: 1.57 }],
+      B: [{ pos: [-26, 0, -24], yaw: -2.4 }, { pos: [-18, 0, -15], yaw: -1.3 },
+          { pos: [-22, 0, -25], yaw: -2.0 }, { pos: [-9, 0, -20], yaw: -1.57 }],
+      MID: [{ pos: [0, 0, -8], yaw: 0 }, { pos: [0, 0, 2], yaw: 0 }],
+    };
+    this.pushSpots = {
+      A: [[13, 0, 20], [14, 0, 8], [15, 0, -2], [18, 0, -10], [22, 0, -16], [24, 0, -21]],
+      B: [[-13, 0, 20], [-14, 0, 8], [-15, 0, -2], [-18, 0, -10], [-22, 0, -16], [-24, 0, -21]],
+      MID: [[0, 0, 18], [0, 0, 10], [0, 0, 2], [0, 0, -8], [0, 0, -18], [0, 0, -26]],
+    };
+    this.rotations = {
+      A: [[9, 0, -14], [9, 0, -26], [13, 0, -31]],
+      B: [[-9, 0, -14], [-9, 0, -26], [-13, 0, -31]],
+    };
+  }
+
+  /* ============================== de_villa ==============================
+     A compact Mediterranean village: short sightlines, a plaza at mid and
+     two courtyard sites. Rounds here are fast and close-quarters.        */
+  buildVilla() {
+    const W = MAT;
+    const STUC = { uvScale: 0.34 };
+    const B = this.bounds;
+
+    this.add(B.x0, B.z0, B.x1, B.z1, -1.0, 0, W.TILE, { uvScale: 0.22 });
+
+    const PH = 10;
+    this.add(B.x0 - 2, B.z0 - 2, B.x0, B.z1 + 2, 0, PH, W.PLASTER, STUC);
+    this.add(B.x1, B.z0 - 2, B.x1 + 2, B.z1 + 2, 0, PH, W.PLASTER, STUC);
+    this.add(B.x0 - 2, B.z0 - 2, B.x1 + 2, B.z0, 0, PH, W.PLASTER, STUC);
+    this.add(B.x0 - 2, B.z1, B.x1 + 2, B.z1 + 2, 0, PH, W.PLASTER, STUC);
+
+    // Village houses. Short blocks make a dense, twisty layout.
+    const house = (x0, z0, x1, z1, h) => {
+      this.add(x0, z0, x1, z1, 0, h, W.PLASTER, STUC);
+      this.add(x0 - 0.4, z0 - 0.4, x1 + 0.4, z1 + 0.4, h, h + 0.5, W.BRICK,
+        { uvScale: 0.5, tint: [0.9, 0.62, 0.5] });   // terracotta eaves
+    };
+    house(-30, 4, -18, 20, 6.5);
+    house(18, 4, 30, 20, 6.5);
+    house(-12, 10, -3, 22, 5.5);
+    house(3, 10, 12, 22, 5.5);
+    house(-30, -20, -20, -6, 7.0);
+    house(20, -20, 30, -6, 7.0);
+    house(-8, -28, -2, -12, 6.0);
+    house(2, -28, 8, -12, 6.0);
+
+    // Plaza well and market stalls at mid.
+    this.add(-1.4, -2.4, 1.4, 0.4, 0, 1.0, W.SANDSTONE, { uvScale: 0.9 });
+    this.add(-5.5, 4, -3.5, 6, 0, 2.4, W.WOOD, { uvScale: 0.7 });
+    this.add(3.5, 4, 5.5, 6, 0, 2.4, W.WOOD, { uvScale: 0.7 });
+    this.add(-6, 3.4, -3, 3.9, 2.4, 2.7, W.CARPET, { uvScale: 0.6, noClip: true });
+    this.add(3, 3.4, 6, 3.9, 2.4, 2.7, W.CARPET, { uvScale: 0.6, noClip: true });
+
+    // Low garden walls for cover in the open.
+    this.add(-17, -2, -8, -1.2, 0, 1.15, W.SANDSTONE, { uvScale: 0.5 });
+    this.add(8, -2, 17, -1.2, 0, 1.15, W.SANDSTONE, { uvScale: 0.5 });
+    this.add(-16, 24, -6, 24.8, 0, 1.15, W.SANDSTONE, { uvScale: 0.5 });
+    this.add(6, 24, 16, 24.8, 0, 1.15, W.SANDSTONE, { uvScale: 0.5 });
+
+    /* ---- bombsite A: east courtyard ---- */
+    this.add(14, -30, 26, -20, -0.02, 0.03, W.SITE_A, { uvScale: 1 / 12, noClip: true });
+    this.crate(16, -23, 1.15, W.CRATE);
+    this.crate(18.4, -23, 1.15, W.CRATE);
+    this.crate(23, -27, 1.15, W.CRATE);
+    this.crate(23, -27, 1.15, W.CRATE, 1.15);
+    this.barrel(14.6, -28.5);
+    this.barrel(15.6, -29.6);
+    this.add(12.5, -31, 13.4, -20, 0, 1.6, W.SANDSTONE, { uvScale: 0.5 });
+
+    /* ---- bombsite B: west courtyard ---- */
+    this.add(-26, -30, -14, -20, -0.02, 0.03, W.SITE_B, { uvScale: 1 / 12, noClip: true });
+    this.crate(-16, -23, 1.15, W.CRATE);
+    this.crate(-18.4, -23, 1.15, W.CRATE);
+    this.crate(-23, -27, 1.15, W.CRATE);
+    this.barrel(-14.6, -28.5);
+    this.add(-13.4, -31, -12.5, -20, 0, 1.6, W.SANDSTONE, { uvScale: 0.5 });
+
+    this.sites = {
+      A: { center: [20, 0, -25], radius: 8, min: [13, -31], max: [27, -19] },
+      B: { center: [-20, 0, -25], radius: 8, min: [-27, -31], max: [-13, -19] },
+    };
+    this.spawns = {
+      T: [[-6, 31], [-2, 32], [2, 31.5], [6, 32], [10, 31],
+          [-9, 28], [-2, 28.5], [4, 28.5], [9, 28], [0, 26]].map(([x, z]) => [x, 0, z]),
+      CT: [[-6, -34], [-2, -35], [2, -34.5], [6, -35], [10, -34],
+           [-9, -32], [-2, -32.5], [4, -32.5], [9, -32], [0, -36]].map(([x, z]) => [x, 0, z]),
+    };
+    this.spawnYaw = { T: Math.PI, CT: 0 };
+    this.holdSpots = {
+      A: [{ pos: [24, 0, -28], yaw: 2.5 }, { pos: [16, 0, -21], yaw: 1.4 },
+          { pos: [20, 0, -22], yaw: 1.9 }, { pos: [10, 0, -24], yaw: 1.57 }],
+      B: [{ pos: [-24, 0, -28], yaw: -2.5 }, { pos: [-16, 0, -21], yaw: -1.4 },
+          { pos: [-20, 0, -22], yaw: -1.9 }, { pos: [-10, 0, -24], yaw: -1.57 }],
+      MID: [{ pos: [0, 0, -6], yaw: 0 }, { pos: [0, 0, 2], yaw: 0 }],
+    };
+    this.pushSpots = {
+      A: [[15, 0, 27], [16, 0, 12], [16, 0, 2], [17, 0, -8], [18, 0, -16], [20, 0, -24]],
+      B: [[-15, 0, 27], [-16, 0, 12], [-16, 0, 2], [-17, 0, -8], [-18, 0, -16], [-20, 0, -24]],
+      MID: [[0, 0, 22], [0, 0, 12], [0, 0, 2], [0, 0, -6], [0, 0, -16], [0, 0, -24]],
+    };
+    this.rotations = {
+      A: [[10, 0, -14], [10, 0, -24], [12, 0, -31]],
+      B: [[-10, 0, -14], [-10, 0, -24], [-12, 0, -31]],
     };
   }
 
@@ -509,4 +715,40 @@ class GameMap {
     if (this.inSite(pos, 'B')) return 'B';
     return null;
   }
+}
+
+/* ------------------------------ map registry ------------------------------ */
+
+const MAPS = {
+  dune: {
+    id: 'dune', name: 'de_dune', title: 'OPERATION: DUNE',
+    bounds: { x0: -42, z0: -42, x1: 42, z1: 42 },
+    skyTop: [0.17, 0.36, 0.70], skyHorizon: [0.80, 0.83, 0.80],
+    fogColor: [0.60, 0.63, 0.68],
+    blurb: 'Sun-bleached desert town. Long sightlines down mid and A long.',
+    build: (m) => m.buildDune(),
+  },
+  foundry: {
+    id: 'foundry', name: 'de_foundry', title: 'THE FOUNDRY',
+    bounds: { x0: -40, z0: -40, x1: 40, z1: 40 },
+    skyTop: [0.22, 0.26, 0.34], skyHorizon: [0.62, 0.63, 0.66],
+    fogColor: [0.55, 0.57, 0.60],
+    blurb: 'Overcast industrial yard. Containers, gantries and tight bays.',
+    build: (m) => m.buildFoundry(),
+  },
+  villa: {
+    id: 'villa', name: 'de_villa', title: 'VILLA',
+    bounds: { x0: -36, z0: -38, x1: 36, z1: 38 },
+    skyTop: [0.15, 0.40, 0.74], skyHorizon: [0.88, 0.84, 0.72],
+    fogColor: [0.68, 0.66, 0.60],
+    blurb: 'Close-quarters village. Short angles, fast rounds.',
+    build: (m) => m.buildVilla(),
+  },
+};
+const MAP_IDS = Object.keys(MAPS);
+
+/** The map a fresh match should use: explicit pick, or random rotation. */
+function resolveMapId(choice) {
+  if (choice && choice !== 'random' && MAPS[choice]) return choice;
+  return MAP_IDS[(Math.random() * MAP_IDS.length) | 0];
 }

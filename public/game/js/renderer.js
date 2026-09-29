@@ -644,8 +644,8 @@ class Renderer {
     gl.useProgram(this.sky.p);
     gl.uniformMatrix4fv(this.sky.u.uInvViewProj, false, invVP);
     gl.uniform3fv(this.sky.u.uSunDir, this.sunDir);
-    gl.uniform3fv(this.sky.u.uSkyTop, [0.17, 0.36, 0.70]);
-    gl.uniform3fv(this.sky.u.uSkyHorizon, [0.80, 0.83, 0.80]);
+    gl.uniform3fv(this.sky.u.uSkyTop, this.skyTopColor || [0.17, 0.36, 0.70]);
+    gl.uniform3fv(this.sky.u.uSkyHorizon, this.skyHorizonColor || [0.80, 0.83, 0.80]);
     gl.uniform3fv(this.sky.u.uSunColor, this.sunColor);
     gl.uniform1f(this.sky.u.uTime, this.time || 0);
     gl.bindVertexArray(this.fsVao);

@@ -122,12 +122,19 @@ function handleClient(socket) {
 function onMessage(client, msg) {
   switch (msg.t) {
     case 'join': {
-      const code = String(msg.room || 'DUNE1').toUpperCase().slice(0, 8);
-      let room = rooms.get(code);
-      if (!room) {
-        room = { code, hostId: client.id, clients: new Map(), fillBots: msg.fillBots !== false };
-        rooms.set(code, room);
+      let room;
+      if (msg.quick) {
+        room = findQuickRoom();                 // matchmaking: server picks
+      } else {
+        const code = String(msg.room || 'DUNE1').toUpperCase().slice(0, 8);
+        room = rooms.get(code);
+        if (!room) {
+          room = { code, hostId: client.id, clients: new Map(), fillBots: msg.fillBots !== false };
+          rooms.set(code, room);
+        }
       }
+      if (room.hostId === null) room.hostId = client.id;
+      const code = room.code;
       if (room.clients.size >= 10) {
         send(client, { t: 'error', message: 'That room is full.' });
         return;
@@ -145,6 +152,13 @@ function onMessage(client, msg) {
       if (room.started) {
         send(client, Object.assign({ t: 'start', players: roster(room) }, room.started));
         log(`${client.name} late-joined the running match in ${code}`);
+      } else if (room.quick) {
+        armQuickTimer(room);
+        send(client, {
+          t: 'queue', players: roster(room),
+          wait: Math.max(0, QUICK_WAIT - Math.floor((Date.now() - room.quickStartedAt) / 1000)),
+        });
+        if (room.clients.size >= QUICK_SIZE) startRoom(room, { teamSize: 5 });
       }
       log(`${client.name} joined ${code} (${room.clients.size}/10)`);
       break;
@@ -152,11 +166,7 @@ function onMessage(client, msg) {
     case 'start': {
       const room = client.room;
       if (!room || room.hostId !== client.id) return;
-      room.started = { teamSize: msg.teamSize || 5, fillBots: room.fillBots };
-      broadcast(room, Object.assign({
-        t: 'start', players: roster(room),
-      }, room.started), null);
-      log(`room ${room.code}: match started`);
+      startRoom(room, { teamSize: msg.teamSize || 5, map: msg.map });
       break;
     }
     case 'ping':
@@ -172,6 +182,52 @@ function onMessage(client, msg) {
       break;
     }
   }
+}
+
+/** Broadcast the start of a match and remember it for late joiners. */
+function startRoom(room, opts) {
+  if (room.started) return;
+  clearTimeout(room.quickTimer);
+  room.quickTimer = null;
+  room.started = {
+    teamSize: opts.teamSize || 5,
+    fillBots: room.fillBots !== false,
+    map: opts.map || null,
+  };
+  broadcast(room, Object.assign({ t: 'start', players: roster(room) }, room.started), null);
+  log(`room ${room.code}: match started (${room.clients.size} human, map ${room.started.map || 'random'})`);
+}
+
+/**
+ * Quick match: everyone lands in the same open room. It starts as soon as
+ * it is full, or after QUICK_WAIT seconds with bots filling the gaps.
+ */
+const QUICK_WAIT = 30;
+const QUICK_SIZE = 10;
+
+function findQuickRoom() {
+  for (const room of rooms.values()) {
+    if (room.quick && !room.started && room.clients.size < QUICK_SIZE) return room;
+  }
+  let n = 1;
+  while (rooms.has('QUICK' + n)) n++;
+  const room = {
+    code: 'QUICK' + n, hostId: null, clients: new Map(),
+    fillBots: true, quick: true,
+  };
+  rooms.set(room.code, room);
+  return room;
+}
+
+function armQuickTimer(room) {
+  if (room.quickTimer || room.started) return;
+  room.quickStartedAt = Date.now();
+  room.quickTimer = setTimeout(() => {
+    if (room.started || room.clients.size === 0) return;
+    startRoom(room, { teamSize: 5, map: room.map });
+  }, QUICK_WAIT * 1000);
+  // Tell everyone when the match will kick off regardless of player count.
+  broadcast(room, { t: 'queue', wait: QUICK_WAIT, players: roster(room) }, null);
 }
 
 function pickTeam(room, requested) {
@@ -193,6 +249,7 @@ function closeClient(client) {
   if (!room) return;
   room.clients.delete(client.id);
   if (room.clients.size === 0) {
+    clearTimeout(room.quickTimer);
     rooms.delete(room.code);
     log(`room ${room.code} closed`);
     return;

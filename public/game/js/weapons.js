@@ -831,6 +831,22 @@ function viewmodelPose(kind) {
   return VIEWMODEL_POSE[kind] || VIEWMODEL_POSE.DEFAULT;
 }
 
+/** Which reload sound family a weapon's model belongs to. */
+const RELOAD_CLASS = {
+  pistol: 'pistol', pistol_s: 'pistol', tec9: 'pistol', dual: 'pistol',
+  deagle: 'pistol', revolver: 'sniper', zeus: 'pistol',
+  smg: 'smg', mp5: 'smg', mac10: 'smg', ump: 'smg', p90: 'smg', bizon: 'smg',
+  rifle: 'rifle', m4a1s: 'rifle', famas: 'rifle', galil: 'rifle', ak: 'rifle',
+  scopedrifle: 'rifle',
+  sniper: 'sniper', awp: 'sniper', autosniper: 'sniper',
+  shotgun: 'shotgun', autoshotgun: 'shotgun', sawedoff: 'shotgun', mag7: 'shotgun',
+  lmg: 'lmg', knife: 'pistol',
+};
+
+function reloadClassOf(weapon) {
+  return (weapon && RELOAD_CLASS[weapon.model]) || 'rifle';
+}
+
 /* ------------------------- viewmodel hands ------------------------- */
 
 /** Where the gloves grip each model, in gun space. */

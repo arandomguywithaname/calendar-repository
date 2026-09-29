@@ -466,10 +466,7 @@ class Bot extends Character {
       const faceYaw = Math.atan2(-(lookTarget[0] - this.pos[0]), -(lookTarget[2] - this.pos[2]));
       this.yaw += angleDiff(this.yaw, faceYaw) * Math.min(1, dt * 4);
     } else if (this.holdSpot && this.holdSpot.yaw !== undefined) {
-      // idle scanning
-      const scan = this.holdSpot.yaw + Math.sin(time * 0.5 + this.id) * 0.35;
-      this.yaw += angleDiff(this.yaw, scan) * Math.min(1, dt * 2);
-      this.pitch += (0 - this.pitch) * Math.min(1, dt * 2);
+      this._holdAngle(dt, time);
     }
 
     // Reload during downtime.
@@ -479,6 +476,38 @@ class Bot extends Character {
       if (ammo.mag < w.mag * 0.45 && ammo.reserve > 0 && !this.target) game.startReload(this);
     }
     if (this.zoomLevel > 0 && !this.target) game.toggleZoom(this);
+  }
+
+  /**
+   * Holding an angle. A continuous sine sweep is the classic "bot swivel",
+   * so instead they mostly sit still on the danger angle and occasionally
+   * flick to check a second angle before settling back.
+   */
+  _holdAngle(dt, time) {
+    const base = this.holdSpot.yaw;
+    this.glanceTimer = (this.glanceTimer || 0) - dt;
+    if (this.glanceTimer <= 0) {
+      if (this.glancing) {
+        // Return to the main angle and stay there for a while.
+        this.glancing = false;
+        this.lookOffset = 0;
+        this.glanceTimer = rand(2.5, 6.0) * this.patience;
+      } else {
+        // Check off-angle, or just re-settle with a small adjustment.
+        this.glancing = Math.random() < 0.55;
+        this.lookOffset = this.glancing
+          ? rand(0.5, 1.25) * (Math.random() < 0.5 ? -1 : 1)
+          : rand(-0.12, 0.12);
+        this.glanceTimer = this.glancing ? rand(0.7, 1.6) : rand(1.5, 3.5);
+      }
+    }
+    const want = base + (this.lookOffset || 0);
+    // Snappy when flicking to a new angle, near-still once settled.
+    const speed = Math.abs(angleDiff(this.yaw, want)) > 0.25 ? 6.5 : 1.2;
+    this.yaw += angleDiff(this.yaw, want) * Math.min(1, dt * speed);
+    // A touch of breathing so they are not statues either.
+    const breathe = Math.sin(time * 0.7 + this.id * 1.7) * 0.012;
+    this.pitch += (breathe - this.pitch) * Math.min(1, dt * 1.5);
   }
 
   _unstick(dt) {
