@@ -102,7 +102,7 @@ class Renderer {
     this.groundColor = [0.30, 0.25, 0.18];
     this.fogColor = [0.60, 0.63, 0.68];
     this.fogDensity = 0.0055;
-    this.exposure = 1.05;
+    this.exposure = 0.98;
     this.ambient = 0.34;
     this.muzzleLight = 0;
 
@@ -250,15 +250,20 @@ class Renderer {
         vec3 pc = vLightPos.xyz / vLightPos.w * 0.5 + 0.5;
         if (pc.z > 1.0 || pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0) return 1.0;
         float ndl = max(dot(n, -uSunDir), 0.0);
-        float bias = mix(0.0016, 0.0004, ndl);
+        float bias = mix(0.0016, 0.00035, ndl);
+        // 5x5 PCF with a rotated offset: soft edges instead of stair-steps.
         float sum = 0.0;
-        for (int y = -1; y <= 1; y++){
-          for (int x = -1; x <= 1; x++){
-            vec2 off = vec2(float(x), float(y)) * uShadowTexel;
+        for (int y = -2; y <= 2; y++){
+          for (int x = -2; x <= 2; x++){
+            vec2 off = vec2(float(x), float(y)) * uShadowTexel * 0.85;
             sum += texture(uShadow, vec3(pc.xy + off, pc.z - bias));
           }
         }
-        return sum / 9.0;
+        sum /= 25.0;
+        // Fade the shadow out at the edge of the map so it never pops.
+        vec2 e = abs(pc.xy - 0.5) * 2.0;
+        float edge = 1.0 - smoothstep(0.82, 1.0, max(e.x, e.y));
+        return mix(1.0, sum, edge);
       }
 
       void main(){
@@ -269,17 +274,32 @@ class Renderer {
         float sh = shadowFactor(n);
         vec3 sun = uSunColor * ndl * sh;
         vec3 amb = mix(uGroundColor, uSkyColor, n.y * 0.5 + 0.5) * uAmbient;
-        vec3 color = albedo * (sun + amb) + albedo * uEmissive;
+
+        // Grime gradient: surfaces get dirtier toward the floor. Cheap stand-in
+        // for ambient occlusion that stops walls meeting the ground in a
+        // perfectly flat seam.
+        float grime = mix(0.62, 1.0, smoothstep(0.0, 1.6, vWorld.y));
+        if (n.y > 0.7) grime = mix(grime, 1.0, 0.75);  // tops stay mostly clean
+        vec3 color = albedo * grime * (sun + amb) + albedo * uEmissive;
+
         // cheap sun sheen so metal and polished floors catch a highlight
         vec3 viewDir = normalize(uCamPos - vWorld);
         vec3 h = normalize(viewDir - uSunDir);
-        float spec = pow(max(dot(n, h), 0.0), 24.0) * 0.12 * sh;
+        float spec = pow(max(dot(n, h), 0.0), 28.0) * 0.16 * sh;
         color += uSunColor * spec;
+        // Fresnel rim keeps silhouettes from going flat against the sky.
+        float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 4.0);
+        color += uSkyColor * rim * 0.10;
         float d = length(uCamPos - vWorld);
         float fog = 1.0 - exp(-pow(d * uFogDensity, 2.0));
         color = mix(color, uFogColor, clamp(fog, 0.0, 1.0));
         color = tonemap(color * uExposure);
-        fragColor = vec4(pow(color, vec3(1.0/2.2)), texel.a * uAlpha);
+        color = pow(color, vec3(1.0/2.2));
+        // A little saturation and contrast so the palette is not so chalky.
+        float lum = dot(color, vec3(0.299, 0.587, 0.114));
+        color = clamp(mix(vec3(lum), color, 1.18), 0.0, 1.0);
+        color = clamp((color - 0.5) * 1.06 + 0.5, 0.0, 1.0);
+        fragColor = vec4(color, texel.a * uAlpha);
       }`);
 
     this.depth = this._program(`#version 300 es
@@ -334,17 +354,44 @@ class Renderer {
       precision highp float;
       in vec3 vDir;
       uniform vec3 uSunDir, uSkyTop, uSkyHorizon, uSunColor;
+      uniform float uTime;
       out vec4 fragColor;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
+                   mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
+      }
+      float fbm(vec2 p){
+        float v = 0.0, a = 0.5;
+        for (int i = 0; i < 5; i++){ v += a * noise(p); p *= 2.02; a *= 0.5; }
+        return v;
+      }
+
       void main(){
         vec3 d = normalize(vDir);
         float h = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);
         vec3 col = mix(uSkyHorizon, uSkyTop, pow(h, 0.85));
+
+        // High cirrus, projected onto the dome and thinned near the horizon.
+        if (d.y > 0.015) {
+          vec2 uv = d.xz / d.y * 0.55 + vec2(uTime * 0.004, uTime * 0.002);
+          float c = fbm(uv * 1.6);
+          c = smoothstep(0.48, 0.92, c) * smoothstep(0.015, 0.35, d.y);
+          vec3 cloud = mix(vec3(0.95, 0.95, 0.97), vec3(1.05, 1.0, 0.94), c);
+          col = mix(col, cloud, c * 0.72);
+        }
+
         float sun = max(dot(d, -uSunDir), 0.0);
-        col += uSunColor * pow(sun, 220.0) * 3.0;          // disc
-        col += uSunColor * pow(sun, 8.0) * 0.22;           // bloom
-        col += vec3(0.9, 0.85, 0.75) * pow(1.0 - abs(d.y), 8.0) * 0.15; // haze band
+        col += uSunColor * pow(sun, 420.0) * 4.0;          // disc
+        col += uSunColor * pow(sun, 8.0) * 0.26;           // bloom
+        col += vec3(0.9, 0.85, 0.75) * pow(1.0 - abs(d.y), 8.0) * 0.18; // haze band
         col = clamp((col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14), 0.0, 1.0);
-        fragColor = vec4(pow(col, vec3(1.0/2.2)), 1.0);
+        col = pow(col, vec3(1.0/2.2));
+        float lum = dot(col, vec3(0.299, 0.587, 0.114));
+        col = clamp(mix(vec3(lum), col, 1.12), 0.0, 1.0);
+        fragColor = vec4(col, 1.0);
       }`);
   }
 
@@ -535,6 +582,7 @@ class Renderer {
     }
     this.camRight = right;
     this.camUp = up;
+    this.currentFov = fovDeg || 90;
     M4.perspective((fovDeg || 90) * DEG, this.aspect, 0.03, 320, this.proj);
     M4.lookAt(pos, V.add(pos, fwd), up, this.view);
     M4.mul(this.proj, this.view, this.viewProj);
@@ -596,9 +644,10 @@ class Renderer {
     gl.useProgram(this.sky.p);
     gl.uniformMatrix4fv(this.sky.u.uInvViewProj, false, invVP);
     gl.uniform3fv(this.sky.u.uSunDir, this.sunDir);
-    gl.uniform3fv(this.sky.u.uSkyTop, [0.20, 0.38, 0.68]);
-    gl.uniform3fv(this.sky.u.uSkyHorizon, [0.78, 0.80, 0.78]);
+    gl.uniform3fv(this.sky.u.uSkyTop, [0.17, 0.36, 0.70]);
+    gl.uniform3fv(this.sky.u.uSkyHorizon, [0.80, 0.83, 0.80]);
     gl.uniform3fv(this.sky.u.uSunColor, this.sunColor);
+    gl.uniform1f(this.sky.u.uTime, this.time || 0);
     gl.bindVertexArray(this.fsVao);
     gl.depthMask(false);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -754,7 +803,11 @@ class Renderer {
   beginViewmodelPass() {
     const gl = this.gl;
     gl.clear(gl.DEPTH_BUFFER_BIT);
-    const proj = M4.perspective(this.viewmodelFov, this.aspect, 0.005, 12);
+    // The viewmodel FOV has to track the world FOV, otherwise a wide setting
+    // zooms the world out while the gun stays put and looms into frame.
+    const worldFov = this.currentFov || 90;
+    const vmFov = clamp(54 + (worldFov - 90) * 0.85, 40, 100) * DEG;
+    const proj = M4.perspective(vmFov, this.aspect, 0.005, 12);
     const u = this.world.u;
     gl.useProgram(this.world.p);
     gl.uniformMatrix4fv(u.uProj, false, proj);

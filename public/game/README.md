@@ -98,6 +98,12 @@ menu with the ◀ ▶ arrows under the preview. One colour table drives the
 viewmodel and the rotating shop preview, and your choices persist between
 sessions. Cosmetic only.
 
+**Difficulty** — Easy is the default and is genuinely forgiving. Measured
+against a stationary player facing three rifle bots at 15 m: Easy deals
+~2 damage/second, Normal ~13, Hard ~14, Expert ~50. Bots carry a
+permanent aim wander, extra error at range, and throw a share of bursts
+deliberately wide, so they cannot hold a perfect bead on you.
+
 **Bots** — perception with a real FOV cone, line-of-sight and smoke occlusion;
 a reaction delay before they react to a new target; aim error that converges
 while they track you; recoil compensation and burst discipline scaled by

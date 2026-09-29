@@ -5,22 +5,33 @@
    following on the nav grid and bomb-scenario decision making.
    ------------------------------------------------------------------ */
 
+/*
+   reaction  seconds before they react to a new target
+   aimError  degrees of aim offset, which decays as they track
+   wander    degrees of never-settling sway, so they cannot hold a perfect bead
+   missBias  fraction of shots deliberately thrown wide
+   settle    seconds for aim error to converge
+*/
 const DIFFICULTY = {
   easy: {
-    label: 'Easy', reaction: [0.42, 0.72], aimSpeed: 5.0, aimError: 5.5, settle: 1.6,
-    fov: 105, spray: 0.25, hearing: 16, burstSkill: 0.35, moveSkill: 0.4, accuracyBoost: 0.75,
+    label: 'Easy', reaction: [0.75, 1.25], aimSpeed: 2.6, aimError: 9.0, wander: 2.6,
+    missBias: 0.55, settle: 2.6, fov: 90, spray: 0.05, hearing: 11,
+    burstSkill: 0.15, moveSkill: 0.25, accuracyBoost: 0.5,
   },
   normal: {
-    label: 'Normal', reaction: [0.26, 0.46], aimSpeed: 8.5, aimError: 3.2, settle: 1.0,
-    fov: 120, spray: 0.5, hearing: 24, burstSkill: 0.6, moveSkill: 0.65, accuracyBoost: 0.9,
+    label: 'Normal', reaction: [0.50, 0.85], aimSpeed: 4.6, aimError: 5.5, wander: 1.6,
+    missBias: 0.32, settle: 1.8, fov: 105, spray: 0.2, hearing: 17,
+    burstSkill: 0.35, moveSkill: 0.45, accuracyBoost: 0.7,
   },
   hard: {
-    label: 'Hard', reaction: [0.17, 0.30], aimSpeed: 13.0, aimError: 1.9, settle: 0.62,
-    fov: 135, spray: 0.72, hearing: 32, burstSkill: 0.8, moveSkill: 0.85, accuracyBoost: 1.0,
+    label: 'Hard', reaction: [0.32, 0.55], aimSpeed: 7.5, aimError: 3.2, wander: 0.9,
+    missBias: 0.16, settle: 1.1, fov: 120, spray: 0.45, hearing: 24,
+    burstSkill: 0.6, moveSkill: 0.7, accuracyBoost: 0.88,
   },
   expert: {
-    label: 'Expert', reaction: [0.10, 0.19], aimSpeed: 19.0, aimError: 1.05, settle: 0.38,
-    fov: 150, spray: 0.9, hearing: 40, burstSkill: 0.95, moveSkill: 1.0, accuracyBoost: 1.05,
+    label: 'Expert', reaction: [0.20, 0.34], aimSpeed: 11.0, aimError: 1.9, wander: 0.5,
+    missBias: 0.06, settle: 0.7, fov: 135, spray: 0.7, hearing: 32,
+    burstSkill: 0.8, moveSkill: 0.9, accuracyBoost: 1.0,
   },
 };
 
@@ -199,7 +210,8 @@ class Bot extends Character {
     const wantYaw = Math.atan2(-d[0], -d[2]);
     const wantPitch = Math.atan2(d[1], Math.hypot(d[0], d[2]));
 
-    // Error shrinks while the bot keeps tracking the same target.
+    // Error shrinks while the bot keeps tracking the same target, but never
+    // to zero: the wander term keeps the barrel drifting like a real hand.
     const decay = Math.exp(-dt / (this.diff.settle * 0.6));
     this.aimError[0] *= decay;
     this.aimError[1] *= decay;
@@ -208,14 +220,24 @@ class Bot extends Character {
       this.aimError[0] += rand(-e, e);
       this.aimError[1] += rand(-e, e) * 0.6;
     }
+    this.wanderPhase = (this.wanderPhase || rand(0, TAU)) + dt * rand(1.6, 2.6);
+    const wander = this.diff.wander * DEG;
+    const sway = [
+      Math.sin(this.wanderPhase) * wander,
+      Math.cos(this.wanderPhase * 0.73) * wander * 0.55,
+    ];
+    // Distance makes everyone worse, which keeps long-range duels winnable.
+    const rangeSlop = clamp(dist / 34, 0, 1) * this.diff.aimError * 0.5 * DEG;
 
     // Counteract the accumulated spray, as well as the bot's skill allows.
     const comp = this.diff.spray * clamp(this.skill, 0.6, 1.2);
     const recoilYaw = -this.recoil[0] * DEG * comp;
     const recoilPitch = -this.recoil[1] * DEG * comp;
 
-    const targetYaw = wantYaw + this.aimError[0] + recoilYaw;
-    const targetPitch = clamp(wantPitch + this.aimError[1] + recoilPitch, -1.4, 1.4);
+    const targetYaw = wantYaw + this.aimError[0] + recoilYaw + sway[0] +
+      (this.shotBias ? this.shotBias[0] : 0) + rand(-rangeSlop, rangeSlop);
+    const targetPitch = clamp(wantPitch + this.aimError[1] + recoilPitch + sway[1] +
+      (this.shotBias ? this.shotBias[1] : 0), -1.4, 1.4);
 
     const speed = this.diff.aimSpeed * this.skill;
     const k = 1 - Math.exp(-speed * dt);
@@ -283,7 +305,18 @@ class Bot extends Character {
     if (this.burstTimer > 0) { this.burstTimer -= dt; return; }
     if (this.sprayIndex >= skillCap && weapon.auto) {
       this.burstTimer = rand(0.16, 0.34) * (2 - this.diff.burstSkill);
+      this.shotBias = null;
       return;
+    }
+    // Throw a share of bursts deliberately wide, re-rolled per burst rather
+    // than per bullet so it reads as a bot missing, not as random spraying.
+    if (this.shotBias === undefined || this.sprayIndex === 0) {
+      if (Math.random() < this.diff.missBias) {
+        const m = rand(2.2, 5.5) * DEG * (0.6 + clamp(dist / 30, 0, 1));
+        this.shotBias = [rand(-m, m), rand(-m, m) * 0.7];
+      } else {
+        this.shotBias = [0, 0];
+      }
     }
     game.tryFire(this, false);
   }

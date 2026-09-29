@@ -1818,6 +1818,7 @@ class Game {
     // camera shake decay
     this.shakeAmount = Math.max(0, (this.shakeAmount || 0) - dt * 2.4);
     this.renderer.muzzleLight = Math.max(0, this.renderer.muzzleLight - dt * 9);
+    this.renderer.time = this.time;   // drives the drifting cloud layer
     this.vmKick = Math.max(0, (this.vmKick || 0) - dt * 7);
 
     // dropped weapons decay
@@ -2049,7 +2050,8 @@ class Game {
 
     const model = M4.compose([px, py, pz], rotY, rotX, rotZ, pose.scale || 0.46);
     r.beginViewmodelPass();
-    if (this.zoomLerp < 0.85) {
+    // A scoped weapon shows the optic instead of the gun, immediately.
+    if (p.zoomLevel === 0 && this.zoomLerp < 0.85) {
       // Weapon tint and skin are baked into the mesh; hands stay untinted.
       r.drawMesh(mesh, model, [1, 1, 1]);
     }
@@ -2115,8 +2117,9 @@ class Game {
       show('settings');
     };
     document.getElementById('btnSettings').addEventListener('click', showSettings);
-    document.getElementById('setClose').addEventListener('click', () =>
-      show(this.running ? 'pause' : 'mainMenu'));
+    const leaveSettings = () => show(this.running ? 'pause' : 'mainMenu');
+    document.getElementById('setClose').addEventListener('click', leaveSettings);
+    document.getElementById('setBack').addEventListener('click', leaveSettings);
     document.getElementById('btnHostPvp').addEventListener('click', () => {
       this.sound.init();
       document.getElementById('pvpName').value = this.hud.settings.name || 'player';

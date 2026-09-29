@@ -5,8 +5,8 @@
    TEXTURE_2D_ARRAY, sprites into another.
    ------------------------------------------------------------------ */
 
-const TEX_SIZE = 128;
-const SPRITE_SIZE = 64;
+const TEX_SIZE = 256;     // doubled: the old 128 was the main source of mush
+const SPRITE_SIZE = 128;
 
 /** Material layer indices used by the map and models. */
 const MAT = {
@@ -125,20 +125,31 @@ function bricks(ctx, size, rows, cols, base, variants, mortar, gap) {
 
 const MATERIAL_PAINTERS = {
   [MAT.GROUND](ctx, s) {
-    fillRect(ctx, '#b5a077', 0, 0, s, s);
-    blotches(ctx, s, 40, ['rgb(198,180,138)', 'rgb(160,140,100)', 'rgb(180,163,120)'], 6, 30, 0.5);
-    grain(ctx, s, 26);
+    fillRect(ctx, '#a28d63', 0, 0, s, s);
+    // Broad mottling first, then finer patches: stops the ground reading as
+    // one flat sheet of cream across the whole map.
+    blotches(ctx, s, 14, ['rgb(150,130,92)', 'rgb(186,168,126)'], s * 0.18, s * 0.42, 0.55);
+    blotches(ctx, s, 46, ['rgb(178,160,118)', 'rgb(140,122,86)', 'rgb(163,146,106)'],
+      s * 0.04, s * 0.18, 0.45);
+    // Dry cracks
+    scratches(ctx, s, 16, '#7d6c4c', 0.22, s / 14);
+    grain(ctx, s, 30);
     // scattered pebbles
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 400; i++) {
       ctx.fillStyle = `rgba(${randi(90, 150)},${randi(80, 130)},${randi(60, 100)},0.5)`;
       ctx.fillRect(Math.random() * s, Math.random() * s, rand(1, 2.4), rand(1, 2.4));
     }
   },
   [MAT.SANDSTONE](ctx, s) {
-    bricks(ctx, s, 4, 2, '#c9b285', ['#c9b285', '#c2a97c', '#d2bd92', '#bda775'], '#8d7a55', 2);
-    blotches(ctx, s, 18, ['rgb(150,133,99)', 'rgb(214,199,163)'], 8, 26, 0.35);
-    scratches(ctx, s, 14, '#8a7952', 0.35, 7);
-    grain(ctx, s, 16);
+    bricks(ctx, s, 4, 2, '#c9b285', ['#c9b285', '#c2a97c', '#d2bd92', '#bda775'], '#8d7a55', s / 64);
+    blotches(ctx, s, 26, ['rgb(150,133,99)', 'rgb(214,199,163)'], s * 0.06, s * 0.2, 0.32);
+    scratches(ctx, s, 22, '#8a7952', 0.30, s / 18);
+    // Pitting gives the stone some tooth at close range.
+    for (let i = 0; i < 700; i++) {
+      ctx.fillStyle = `rgba(${randi(120, 165)},${randi(105, 148)},${randi(80, 115)},0.35)`;
+      ctx.fillRect(Math.random() * s, Math.random() * s, rand(1, 2.5), rand(1, 2.5));
+    }
+    grain(ctx, s, 18);
   },
   [MAT.CONCRETE](ctx, s) {
     fillRect(ctx, '#9c9a93', 0, 0, s, s);
@@ -152,6 +163,7 @@ const MATERIAL_PAINTERS = {
     grain(ctx, s, 20);
   },
   [MAT.CRATE](ctx, s) {
+    const k = s / 128;                       // authored at 128, scales up
     fillRect(ctx, '#9a6f3c', 0, 0, s, s);
     // planks
     for (let i = 0; i < 4; i++) {
@@ -171,28 +183,30 @@ const MATERIAL_PAINTERS = {
       }
     }
     // corner banding + bolts
-    fillRect(ctx, '#5d5b56', 0, 0, s, 6);
-    fillRect(ctx, '#5d5b56', 0, s - 6, s, 6);
-    fillRect(ctx, '#5d5b56', 0, 0, 6, s);
-    fillRect(ctx, '#5d5b56', s - 6, 0, 6, s);
+    const band = 6 * k;
+    fillRect(ctx, '#5d5b56', 0, 0, s, band);
+    fillRect(ctx, '#5d5b56', 0, s - band, s, band);
+    fillRect(ctx, '#5d5b56', 0, 0, band, s);
+    fillRect(ctx, '#5d5b56', s - band, 0, band, s);
     ctx.fillStyle = '#3f3e3a';
     for (let i = 0; i < 4; i++) {
-      const p = 3 + i * (s - 6) / 3;
-      ctx.beginPath(); ctx.arc(p, 3, 1.6, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.arc(p, s - 3, 1.6, 0, TAU); ctx.fill();
+      const p = band / 2 + i * (s - band) / 3;
+      ctx.beginPath(); ctx.arc(p, band / 2, 1.6 * k, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(p, s - band / 2, 1.6 * k, 0, TAU); ctx.fill();
     }
     grain(ctx, s, 14);
   },
   [MAT.METAL](ctx, s) {
     fillRect(ctx, '#7f858c', 0, 0, s, s);
     // corrugation
-    for (let x = 0; x < s; x += 8) {
-      const g = ctx.createLinearGradient(x, 0, x + 8, 0);
+    const pitch = s / 16;
+    for (let x = 0; x < s; x += pitch) {
+      const g = ctx.createLinearGradient(x, 0, x + pitch, 0);
       g.addColorStop(0, 'rgba(0,0,0,0.22)');
       g.addColorStop(0.5, 'rgba(255,255,255,0.16)');
       g.addColorStop(1, 'rgba(0,0,0,0.22)');
       ctx.fillStyle = g;
-      ctx.fillRect(x, 0, 8, s);
+      ctx.fillRect(x, 0, pitch, s);
     }
     blotches(ctx, s, 12, ['rgb(120,80,50)', 'rgb(90,70,60)'], 4, 16, 0.35); // rust
     scratches(ctx, s, 18, '#4b4f54', 0.3, 8);
@@ -212,12 +226,27 @@ const MATERIAL_PAINTERS = {
     fillRect(ctx, '#d8cdb4', 0, 0, s, s);
     blotches(ctx, s, 30, ['rgb(196,184,158)', 'rgb(226,217,196)'], 8, 34, 0.4);
     scratches(ctx, s, 8, '#a89a7c', 0.3, 10);
-    // chipped patch showing brick underneath
-    ctx.fillStyle = 'rgba(140,88,70,0.55)';
-    ctx.beginPath();
-    ctx.ellipse(rand(20, 108), rand(20, 108), rand(6, 14), rand(5, 11), rand(0, TAU), 0, TAU);
-    ctx.fill();
-    grain(ctx, s, 14);
+    // A few small chips showing the render coat underneath. Kept desaturated
+    // and tiny — a big pink ellipse read as a stain, especially when scoped.
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = `rgba(168,142,120,${rand(0.18, 0.30).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.ellipse(rand(0, s), rand(0, s), rand(0.02, 0.05) * s, rand(0.015, 0.04) * s,
+        rand(0, TAU), 0, TAU);
+      ctx.fill();
+    }
+    // Fine vertical weathering streaks.
+    ctx.strokeStyle = 'rgba(150,138,118,0.16)';
+    for (let i = 0; i < 26; i++) {
+      const x = Math.random() * s;
+      ctx.lineWidth = rand(0.004, 0.012) * s;
+      ctx.beginPath();
+      ctx.moveTo(x, rand(0, s * 0.4));
+      ctx.lineTo(x + rand(-2, 2), rand(s * 0.5, s));
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    grain(ctx, s, 16);
   },
   [MAT.WOOD](ctx, s) {
     fillRect(ctx, '#6b4a2c', 0, 0, s, s);
@@ -240,7 +269,7 @@ const MATERIAL_PAINTERS = {
   [MAT.ASPHALT](ctx, s) {
     fillRect(ctx, '#4c4c4e', 0, 0, s, s);
     blotches(ctx, s, 30, ['rgb(64,64,66)', 'rgb(40,40,42)'], 6, 24, 0.5);
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 1600; i++) {
       ctx.fillStyle = `rgba(${randi(70, 120)},${randi(70, 120)},${randi(70, 120)},0.35)`;
       ctx.fillRect(Math.random() * s, Math.random() * s, 1.2, 1.2);
     }
@@ -317,7 +346,7 @@ const MATERIAL_PAINTERS = {
   },
   [MAT.CARPET](ctx, s) {
     fillRect(ctx, '#5c4a3f', 0, 0, s, s);
-    for (let i = 0; i < 2500; i++) {
+    for (let i = 0; i < 9000; i++) {
       ctx.fillStyle = `rgba(${randi(70, 110)},${randi(55, 85)},${randi(45, 70)},0.6)`;
       ctx.fillRect(Math.random() * s, Math.random() * s, 1.5, 1.5);
     }
@@ -331,10 +360,10 @@ function paintSite(ctx, s, letter, color) {
   ctx.save();
   ctx.globalAlpha = 0.75;
   ctx.strokeStyle = color;
-  ctx.lineWidth = 5;
-  ctx.strokeRect(9, 9, s - 18, s - 18);
+  ctx.lineWidth = s * 0.04;
+  ctx.strokeRect(s * 0.07, s * 0.07, s * 0.86, s * 0.86);
   ctx.fillStyle = color;
-  ctx.font = 'bold 74px Impact, sans-serif';
+  ctx.font = `bold ${Math.round(s * 0.58)}px Impact, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(letter, s / 2, s / 2 + 4);

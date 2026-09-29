@@ -572,7 +572,28 @@ class HUD {
       spread = clamp(inacc / DEG * 5.2, 0, 60);
     }
     this.drawCrosshair(spread, me.zoomLevel > 0 || game.shopOpen || !local.alive);
-    this.el.scope.classList.toggle('on', me.zoomLevel > 0 && !!w && !w.scopedAccuracy);
+    // Any scoped weapon gets the optic; rifle scopes (AUG/SG) show it too,
+    // which is what "the scope doesn't work when you zoom in" was about.
+    const scoped = me.zoomLevel > 0 && !!w && !!w.zoom;
+    if (scoped !== this._scopedWas) {
+      this._scopedWas = scoped;
+      this.el.scope.classList.toggle('on', scoped);
+      if (scoped) this._buildScopeTicks();
+    }
+  }
+
+  /** Mil-dot stadia marks, sized to the current lens. */
+  _buildScopeTicks() {
+    const el = document.getElementById('scopeTicks');
+    if (!el || el.childElementCount) return;
+    let html = '';
+    for (let i = 1; i <= 4; i++) {
+      const off = i * 7;                       // percent from centre
+      const w = i % 2 === 0 ? 14 : 8;          // longer mark every second tick
+      html += `<i style="top:${50 + off}%;width:${w}px"></i>`;
+      html += `<i style="top:${50 - off}%;width:${w}px"></i>`;
+    }
+    el.innerHTML = html;
   }
 
   _updateInventory(me) {

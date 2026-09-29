@@ -12,7 +12,16 @@
 <div id="vignette"></div>
 <div id="flash"></div>
 <div id="damageFlash"></div>
-<div id="scopeOverlay"><div class="scope-circle"></div><div class="scope-v"></div><div class="scope-h"></div></div>
+<div id="scopeOverlay">
+  <div class="scope-shade"></div>
+  <div class="scope-lens">
+    <div class="scope-ring"></div>
+    <div class="scope-v"></div>
+    <div class="scope-h"></div>
+    <div class="scope-dot"></div>
+    <div class="scope-ticks" id="scopeTicks"></div>
+  </div>
+</div>
 
 <!-- ============================ HUD ============================ -->
 <div id="hud" class="hidden">
@@ -139,8 +148,8 @@
     <div class="menu-opts">
       <label>Bot difficulty
         <select id="optDifficulty">
-          <option value="easy">Easy</option>
-          <option value="normal" selected>Normal</option>
+          <option value="easy" selected>Easy</option>
+          <option value="normal">Normal</option>
           <option value="hard">Hard</option>
           <option value="expert">Expert</option>
         </select>
@@ -225,7 +234,10 @@
 <!-- ========================== SETTINGS ========================== -->
 <div id="settings" class="overlay hidden">
   <div class="set-panel">
-    <h2>SETTINGS</h2>
+    <div class="set-head">
+      <button class="set-back" id="setBack" title="Back">&#8592;</button>
+      <h2>SETTINGS</h2>
+    </div>
     <div class="set-grid">
       <label>Controls
         <select id="setControls">
