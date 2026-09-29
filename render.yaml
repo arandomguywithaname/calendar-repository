@@ -1,0 +1,19 @@
+# Render blueprint for the Operation: Dune game server.
+#
+# It serves the game over HTTP and runs the PvP relay on the same port,
+# so one service covers both. No dependencies, so no build step.
+#
+# Deploy: push this repo to GitHub, then on Render choose
+# New > Blueprint, pick the repo, and Apply.
+services:
+  - type: web
+    name: dune-relay
+    runtime: node
+    plan: free
+    buildCommand: ''          # zero dependencies — nothing to install
+    startCommand: node scripts/serve-game.js
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '22'

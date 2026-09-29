@@ -760,6 +760,7 @@ class Game {
 
     if (victim === this.localPlayer) {
       this.spectateIndex = 0;
+      this.freeCamPlaced = false;             // re-seat the camera on the body
       this.deathCamUntil = this.time + 2.2;   // linger on the death cam first
       this.hud.centerMessage('YOU WERE ELIMINATED',
         attacker ? `${attacker.name} · ${weapon ? weapon.name : 'explosion'}` : '');
@@ -1525,8 +1526,18 @@ class Game {
 
     document.addEventListener('mousemove', (e) => {
       if (!this.locked || !this.running || this.paused) return;
+      const s0 = this.hud.settings;
+      // Dead players still need to aim the spectator camera.
+      if (!this.localPlayer.alive) {
+        const cam = this.isFreeCam() ? this.ensureFreeCam() : null;
+        if (cam) {
+          const sens = s0.sens * 0.00022;
+          cam.yaw -= e.movementX * sens;
+          cam.pitch = clamp(cam.pitch - e.movementY * sens * (s0.invertY ? -1 : 1), -1.5, 1.5);
+        }
+        return;
+      }
       const p = this.localPlayer;
-      if (!p.alive) return;
       const s = this.hud.settings;
       const zf = zoomFovOf(p);
       const zoomScale = zf ? zf / s.fov : 1;
@@ -1827,6 +1838,8 @@ class Game {
       }
     }
 
+    if (!p.alive && this.mode !== 'practice' && this.isFreeCam()) this.updateFreeCam(dt);
+
     this.updateGrenades(dt);
     this.updateParticles(dt);
     this.updateBomb(dt);
@@ -1932,19 +1945,103 @@ class Game {
 
   /* ============================ view + render ============================ */
 
-  /** Whose eyes we are looking through (self, or a teammate when dead). */
+  /**
+   * Whose eyes we are looking through. While dead this is the death cam,
+   * then a free-flying camera, then each living teammate in turn.
+   */
   viewTarget() {
     const p = this.localPlayer;
     if (p.alive || this.mode === 'practice') return p;
     if (this.time < (this.deathCamUntil || 0)) return p;   // death cam first
-    const mates = this.entities.filter(e => e.alive && e.team === p.team);
-    if (!mates.length) return p;
-    return mates[this.spectateIndex % mates.length];
+    const mates = this.spectatableMates();
+    // index 0 is the free camera; 1..n follow a teammate
+    const i = this.spectateIndex % (mates.length + 1);
+    if (i === 0 || !mates.length) return this.ensureFreeCam();
+    return mates[i - 1];
+  }
+
+  spectatableMates() {
+    const p = this.localPlayer;
+    return this.entities.filter(e => e.alive && e.team === p.team && e !== p);
+  }
+
+  isFreeCam() {
+    const p = this.localPlayer;
+    if (p.alive || this.mode === 'practice') return false;
+    if (this.time < (this.deathCamUntil || 0)) return false;
+    const mates = this.spectatableMates();
+    return (this.spectateIndex % (mates.length + 1)) === 0 || !mates.length;
+  }
+
+  /** Lazily built camera rig; it is never added to the entity list. */
+  ensureFreeCam() {
+    if (!this.freeCam) {
+      this.freeCam = new Character(this.localPlayer.team, 'camera', false);
+      this.freeCam.alive = false;         // keeps it undrawn and untargetable
+      this.freeCam.isCamera = true;
+    }
+    if (!this.freeCamPlaced) {
+      this.freeCamPlaced = true;
+      const p = this.localPlayer;
+      this.freeCam.pos = [p.pos[0], p.pos[1] + 2.4, p.pos[2]];
+      this.freeCam.yaw = p.yaw;
+      this.freeCam.pitch = -0.25;
+      this.freeCam.vel = [0, 0, 0];
+    }
+    return this.freeCam;
+  }
+
+  /** Constant-speed noclip flight — deliberately faster than anyone alive. */
+  updateFreeCam(dt) {
+    const cam = this.ensureFreeCam();
+    cam.vel = [0, 0, 0];                  // no inertia: movement is constant
+    if (this.paused || this.shopOpen) return;
+
+    let f = 0, s = 0, up = 0;
+    if (this.keys.has('KeyW')) f += 1;
+    if (this.keys.has('KeyS')) f -= 1;
+    if (this.keys.has('KeyD')) s += 1;
+    if (this.keys.has('KeyA')) s -= 1;
+    if (this.keys.has('Space')) up += 1;
+    if (this.keys.has('ControlLeft') || this.keys.has('KeyC')) up -= 1;
+    if (this.mobile && this.touch) {
+      f += -this.touch.moveVec.y;
+      s += this.touch.moveVec.x;
+    }
+
+    const SPEED = 11.5;                   // player run is 4.85 m/s
+    const boost = this.keys.has('ShiftLeft') ? 2.0 : 1;
+    const fwd = angleVector(cam.yaw, cam.pitch);
+    const right = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+    let dx = fwd[0] * f + right[0] * s;
+    let dy = fwd[1] * f + up;
+    let dz = fwd[2] * f + right[2] * s;
+    const len = Math.hypot(dx, dy, dz);
+    if (len > 0.001) {
+      const k = (SPEED * boost * dt) / len;
+      cam.pos[0] += dx * k;
+      cam.pos[1] += dy * k;
+      cam.pos[2] += dz * k;
+    }
+
+    // Stay inside the level rather than drifting into the void.
+    const b = this.map.bounds;
+    cam.pos[0] = clamp(cam.pos[0], b.x0 + 1, b.x1 - 1);
+    cam.pos[2] = clamp(cam.pos[2], b.z0 + 1, b.z1 - 1);
+    cam.pos[1] = clamp(cam.pos[1], 0.4, 40);
   }
 
   cycleSpectate() {
     this.deathCamUntil = 0;   // clicking skips the death cam
     this.spectateIndex++;
+    // Re-entering free flight starts from wherever we were watching.
+    if (this.isFreeCam()) {
+      const prev = this.entities.find(e => e.alive && e.team === this.localPlayer.team);
+      if (prev && this.freeCam) {
+        this.freeCam.pos = [prev.pos[0], prev.pos[1] + 1.8, prev.pos[2]];
+        this.freeCam.yaw = prev.yaw;
+      }
+    }
     this.sound.play('switch');
   }
 
@@ -2367,11 +2464,16 @@ class Game {
     });
 
     document.getElementById('pvpConnect').addEventListener('click', () => {
-      const url = document.getElementById('pvpServer').value || NetClient.defaultUrl();
+      const raw = document.getElementById('pvpServer').value.trim();
+      // Paste the Render address as-is; https:// is converted to wss://.
+      const url = raw ? NetClient.normalizeUrl(raw) : NetClient.defaultUrl();
       const room = (document.getElementById('pvpRoom').value || 'PARTY').toUpperCase();
       const team = document.getElementById('pvpTeam').value;
       this.hud.settings.server = url;
       saveSettings(this.hud.settings);
+      // Remember it for this device so the code field alone works next time.
+      try { if (raw) localStorage.setItem('dune.relay', url); } catch (e) { /* ignore */ }
+      document.getElementById('pvpServer').value = url;
       this.net.disconnect();
       this.pvpAutoConnect(url, room, team, document.getElementById('pvpFillBots').checked);
     });

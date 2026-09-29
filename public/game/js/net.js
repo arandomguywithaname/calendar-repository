@@ -54,11 +54,34 @@ class NetClient {
    * what `npm run game` gives you on a local network.
    */
   static defaultUrl() {
-    const configured = (typeof window !== 'undefined' && window.DUNE_RELAY) || RELAY_URL;
-    if (configured) return configured;
+    // ?relay=wss://… wins and is remembered, so a relay can be tried without
+    // editing or re-uploading the build.
+    let override = null;
+    try {
+      const q = new URLSearchParams(location.search).get('relay');
+      if (q) {
+        localStorage.setItem('dune.relay', q);
+        override = q;
+      } else {
+        override = localStorage.getItem('dune.relay');
+      }
+    } catch (e) { /* storage blocked; fall through to the baked-in value */ }
+
+    const configured = override ||
+      (typeof window !== 'undefined' && window.DUNE_RELAY) || RELAY_URL;
+    if (configured) return NetClient.normalizeUrl(configured);
     if (location.protocol === 'file:') return 'ws://localhost:8080';
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${location.host}`;
+  }
+
+  /** Accept a pasted https:// Render address and turn it into a socket URL. */
+  static normalizeUrl(raw) {
+    let u = String(raw).trim().replace(/\/+$/, '');
+    if (u.startsWith('https://')) u = 'wss://' + u.slice(8);
+    else if (u.startsWith('http://')) u = 'ws://' + u.slice(7);
+    else if (!/^wss?:\/\//.test(u)) u = (location.protocol === 'https:' ? 'wss://' : 'ws://') + u;
+    return u;
   }
 
   connect(url, name, room, team, fillBots, quick) {

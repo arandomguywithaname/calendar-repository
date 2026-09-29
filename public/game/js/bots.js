@@ -14,24 +14,24 @@
 */
 const DIFFICULTY = {
   easy: {
-    label: 'Easy', reaction: [0.75, 1.25], aimSpeed: 2.6, aimError: 9.0, wander: 2.6,
-    missBias: 0.55, settle: 2.6, fov: 90, spray: 0.05, hearing: 11,
-    burstSkill: 0.15, moveSkill: 0.25, accuracyBoost: 0.5,
+    label: 'Easy', reaction: [0.55, 0.95], aimSpeed: 3.6, aimError: 6.5, wander: 1.9,
+    missBias: 0.40, settle: 2.1, fov: 95, spray: 0.12, hearing: 14,
+    burstSkill: 0.25, moveSkill: 0.35, accuracyBoost: 0.6,
   },
   normal: {
-    label: 'Normal', reaction: [0.50, 0.85], aimSpeed: 4.6, aimError: 5.5, wander: 1.6,
-    missBias: 0.32, settle: 1.8, fov: 105, spray: 0.2, hearing: 17,
-    burstSkill: 0.35, moveSkill: 0.45, accuracyBoost: 0.7,
+    label: 'Normal', reaction: [0.36, 0.62], aimSpeed: 6.0, aimError: 4.2, wander: 1.2,
+    missBias: 0.24, settle: 1.4, fov: 110, spray: 0.32, hearing: 20,
+    burstSkill: 0.45, moveSkill: 0.55, accuracyBoost: 0.8,
   },
   hard: {
-    label: 'Hard', reaction: [0.32, 0.55], aimSpeed: 7.5, aimError: 3.2, wander: 0.9,
-    missBias: 0.16, settle: 1.1, fov: 120, spray: 0.45, hearing: 24,
-    burstSkill: 0.6, moveSkill: 0.7, accuracyBoost: 0.88,
+    label: 'Hard', reaction: [0.24, 0.42], aimSpeed: 9.5, aimError: 2.5, wander: 0.7,
+    missBias: 0.11, settle: 0.9, fov: 125, spray: 0.58, hearing: 27,
+    burstSkill: 0.7, moveSkill: 0.8, accuracyBoost: 0.95,
   },
   expert: {
-    label: 'Expert', reaction: [0.20, 0.34], aimSpeed: 11.0, aimError: 1.9, wander: 0.5,
-    missBias: 0.06, settle: 0.7, fov: 135, spray: 0.7, hearing: 32,
-    burstSkill: 0.8, moveSkill: 0.9, accuracyBoost: 1.0,
+    label: 'Expert', reaction: [0.15, 0.27], aimSpeed: 13.5, aimError: 1.5, wander: 0.4,
+    missBias: 0.04, settle: 0.55, fov: 140, spray: 0.8, hearing: 34,
+    burstSkill: 0.88, moveSkill: 0.95, accuracyBoost: 1.0,
   },
 };
 

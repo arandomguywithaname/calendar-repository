@@ -130,8 +130,26 @@ zip.add(PREFIX + 'package.json', Buffer.from(JSON.stringify({
   version: '1.0.0',
   description: 'A tactical 5v5 bomb-defusal shooter for the browser — no dependencies.',
   scripts: { start: 'node server.js' },
+  engines: { node: '>=18' },
   license: 'MIT',
 }, null, 2) + '\n'));
+
+// Render blueprint, pointing at the flattened server in this bundle.
+zip.add(PREFIX + 'render.yaml', Buffer.from(`# One-click deploy: Render > New + > Blueprint > pick this repo > Apply.
+# Serves the game and the multiplayer relay on the same address.
+services:
+  - type: web
+    name: dune-relay
+    runtime: node
+    plan: free
+    buildCommand: ''
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+`));
 
 zip.add(PREFIX + 'README.md', Buffer.from(`# OPERATION: DUNE
 

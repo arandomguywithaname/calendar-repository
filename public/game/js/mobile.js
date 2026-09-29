@@ -90,10 +90,8 @@ class TouchControls {
       e.preventDefault();
       const g = this.game;
       if (!g.running) return;
-      if (!g.localPlayer.alive && g.phase !== PHASE.MATCHEND && g.mode !== 'practice') {
-        g.cycleSpectate();               // dead: tap flips to the next teammate
-        return;
-      }
+      // While dead, dragging still aims the spectator camera — the NEXT
+      // button switches view instead of a tap, so flying stays usable.
       if (this.lookTouch !== null) return;
       const t = e.changedTouches[0];
       this.lookTouch = t.identifier;
@@ -109,7 +107,16 @@ class TouchControls {
         const dx = t.clientX - this.lookLast[0];
         const dy = t.clientY - this.lookLast[1];
         this.lookLast = [t.clientX, t.clientY];
-        if (!p.alive || g.paused || g.shopOpen) continue;
+        if (g.paused || g.shopOpen) continue;
+        if (!p.alive) {
+          const cam = g.isFreeCam && g.isFreeCam() ? g.ensureFreeCam() : null;
+          if (cam) {
+            const sn = g.hud.settings.sens * 0.0028;
+            cam.yaw -= dx * sn;
+            cam.pitch = clamp(cam.pitch - dy * sn * (g.hud.settings.invertY ? -1 : 1), -1.5, 1.5);
+          }
+          continue;
+        }
         const s = g.hud.settings;
         const zf = zoomFovOf(p);
         const sens = s.sens * 0.0028 * (zf ? zf / s.fov : 1);
@@ -159,6 +166,7 @@ class TouchControls {
     });
     bind('btnScoresT', () => g.hud.showScoreboard(true), () => g.hud.showScoreboard(false));
     bind('btnPauseT', () => g.setPaused(true));
+    bind('btnSpecT', () => g.cycleSpectate());
     bind('btnUseT', () => {
       g.keys.add('KeyE');
       g.useAction();                      // one-shot pickups fire immediately
@@ -199,5 +207,9 @@ class TouchControls {
     }
     this.useBtn.classList.toggle('hidden', !label);
     if (label && this.useBtn.textContent !== label) this.useBtn.textContent = label;
+
+    const spectating = !p.alive && g.mode !== 'practice' && g.phase !== PHASE.MATCHEND;
+    const specBtn = document.getElementById('btnSpecT');
+    if (specBtn) specBtn.classList.toggle('hidden', !spectating);
   }
 }

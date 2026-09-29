@@ -684,6 +684,11 @@ body.mobile .overlay { touch-action: pan-y; }
   font-size: 15px; letter-spacing: 2px; color: var(--accent);
   border-color: var(--accent) !important; padding: 0 22px;
 }
+#btnSpecT {
+  left: 50%; bottom: 210px; transform: translateX(-50%);
+  min-width: 108px; height: 46px; border-radius: 23px !important;
+  font-size: 13px; letter-spacing: 2px; padding: 0 20px;
+}
 #touchTop {
   position: absolute; top: max(8px, env(safe-area-inset-top)); right: 12px;
   display: flex; gap: 8px;

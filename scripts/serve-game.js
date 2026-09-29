@@ -44,6 +44,14 @@ const server = http.createServer((req, res) => {
     res.writeHead(400).end('Bad request');
     return;
   }
+  // Health probe for hosts like Render, and a quick way to confirm a relay
+  // is awake from a browser.
+  if (urlPath === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size, uptime: Math.round(process.uptime()) }));
+    return;
+  }
+
   if (urlPath === '/') urlPath = '/game/index.html';
   if (urlPath.endsWith('/')) urlPath += 'index.html';
 

@@ -503,9 +503,11 @@ class HUD {
       });
     }
 
-    this.el.healthVal.textContent = Math.max(0, Math.ceil(me.health));
-    this.el.armorVal.textContent = Math.max(0, Math.ceil(me.armor));
-    this.el.healthRow.classList.toggle('low', me.health <= 35);
+    // The free camera has no loadout of its own; show the player's last state.
+    const stat = game.isFreeCam() ? local : me;
+    this.el.healthVal.textContent = Math.max(0, Math.ceil(stat.health));
+    this.el.armorVal.textContent = Math.max(0, Math.ceil(stat.armor));
+    this.el.healthRow.classList.toggle('low', stat.health <= 35);
 
     if (local.money !== this.lastMoney) {
       const delta = local.money - this.lastMoney;
@@ -519,19 +521,19 @@ class HUD {
     }
     this.el.moneyVal.textContent = '$' + local.money;
 
-    const w = me.weapon;
-    const key = me.weaponKey;
-    if (me.slot === 'grenade') {
-      const g = GRENADES[me.grenades[me.grenadeIndex || 0]];
-      this.el.ammoMag.textContent = String(me.grenades.filter(x => x === (g && g.key)).length);
+    const w = stat.weapon;
+    const key = stat.weaponKey;
+    if (stat.slot === 'grenade') {
+      const g = GRENADES[stat.grenades[stat.grenadeIndex || 0]];
+      this.el.ammoMag.textContent = String(stat.grenades.filter(x => x === (g && g.key)).length);
       this.el.ammoReserve.textContent = '';
       this.el.weaponName.textContent = g ? g.name.toUpperCase() : '';
-    } else if (me.slot === 'bomb') {
+    } else if (stat.slot === 'bomb') {
       this.el.ammoMag.textContent = '';
       this.el.ammoReserve.textContent = '';
       this.el.weaponName.textContent = 'C4 EXPLOSIVE';
     } else if (w && !w.melee) {
-      const ammo = me.ammoFor(key);
+      const ammo = stat.ammoFor(key);
       this.el.ammoMag.textContent = ammo.mag;
       this.el.ammoReserve.textContent = '/ ' + ammo.reserve;
       this.el.weaponName.textContent = w.name.toUpperCase();
@@ -542,7 +544,7 @@ class HUD {
       this.el.weaponName.textContent = w ? w.name.toUpperCase() : '';
     }
 
-    this._updateInventory(me);
+    this._updateInventory(stat);
 
     // bomb timer
     const bomb = game.bomb;
@@ -553,9 +555,16 @@ class HUD {
     const spectating = !local.alive && game.phase !== 'warmup' && game.mode !== 'practice';
     this.el.spectatorBar.classList.toggle('hidden', !spectating);
     if (spectating) {
-      this.el.specName.textContent = me === local
-        ? (game.time < (game.deathCamUntil || 0) ? 'death cam' : 'no teammates left')
-        : me.name;
+      this.el.specName.textContent =
+        game.time < (game.deathCamUntil || 0) ? 'death cam'
+          : (game.isFreeCam() ? 'free camera' : me.name);
+      const hint = this.el.spectatorBar.querySelector('.dim');
+      if (hint) {
+        hint.textContent = game.isFreeCam()
+          ? (game.mobile ? 'Stick to fly · tap NEXT for a player'
+            : 'WASD / Space / Ctrl to fly · click for a player')
+          : 'Click / Space — next view';
+      }
     }
 
     this.el.buyHint.classList.toggle('hidden', !(game.canBuy(local) && !game.shopOpen));
