@@ -23,13 +23,16 @@ const RULES = {
   defuseTime: 10,
   defuseTimeKit: 5,
   startMoney: 800,
-  maxMoney: 16000,
-  winReward: 3250,
-  defuseReward: 3500,
-  detonateReward: 3500,
-  plantBonus: 300,
-  lossBonus: [1400, 1750, 2100, 2450, 2900],
-  bombPlantTeamBonus: 800,
+  maxMoney: 11000,
+  // Tightened economy: rounds pay less, so a rifle is a real decision
+  // rather than something you re-buy every round out of pocket change.
+  winReward: 2300,
+  defuseReward: 2600,
+  detonateReward: 2600,
+  plantBonus: 250,
+  lossBonus: [900, 1200, 1500, 1800, 2100],
+  bombPlantTeamBonus: 500,
+  killRewardScale: 0.6,
 };
 
 class Game {
@@ -733,7 +736,8 @@ class Game {
 
     if (attacker && attacker !== victim) {
       attacker.kills++;
-      const reward = weapon && weapon.killReward !== undefined ? weapon.killReward : 300;
+      const base = weapon && weapon.killReward !== undefined ? weapon.killReward : 300;
+      const reward = Math.round(base * RULES.killRewardScale);
       if (this.mode !== 'practice') this.awardMoney(attacker, reward);
       // assists
       for (const [id, dmg] of victim.recentDamagers) {
@@ -2227,6 +2231,36 @@ class Game {
     }
     if (this.hud) this.hud.tickPreview(dt);
     if (this.touch) this.touch.tick();
+
+    // Once a second, ask the driver whether it is still happy. Without this a
+    // GPU that starts rejecting draws just shows a frozen or black screen and
+    // the player has nothing to tell us.
+    this._gfxPoll = (this._gfxPoll || 0) + dt;
+    if (this._gfxPoll > 1) {
+      this._gfxPoll = 0;
+      const trouble = this.renderer.checkForTrouble();
+      if (trouble) this.showGraphicsTrouble(trouble);
+    }
+  }
+
+  /** Surface a renderer fault in a dismissable banner the player can copy. */
+  showGraphicsTrouble(text) {
+    this.graphicsTrouble = text;
+    const bar = document.getElementById('gfxWarn');
+    const msg = document.getElementById('gfxWarnMsg');
+    if (!bar || !msg) return;
+    msg.textContent = text;
+    bar.classList.remove('hidden');
+    if (this._gfxWarnBound) return;
+    this._gfxWarnBound = true;
+    document.getElementById('gfxWarnHide').addEventListener('click', () => {
+      bar.classList.add('hidden');
+    });
+    document.getElementById('gfxWarnCopy').addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      const done = () => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(this.graphicsTrouble).then(done, () => {});
+    });
   }
 
   /* ============================== menus ============================== */
@@ -2260,17 +2294,28 @@ class Game {
     });
     const showSettings = () => {
       const el = document.getElementById('setDiag');
-      if (el) el.textContent = this.renderer.report();
+      if (el) el.textContent = this.graphicsTrouble || this.renderer.report();
       show('settings');
     };
     document.getElementById('btnSettings').addEventListener('click', showSettings);
+    // So a player who hits a graphics fault can hand over the exact text
+    // instead of describing it.
+    const diagCopy = document.getElementById('setDiagCopy');
+    if (diagCopy) diagCopy.addEventListener('click', () => {
+      const text = (this.graphicsTrouble || this.renderer.report()) + '\n' +
+        Renderer.diagnostics(document.createElement('canvas'));
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(text).then(() => {
+        diagCopy.textContent = 'COPIED';
+        setTimeout(() => { diagCopy.textContent = 'COPY'; }, 1500);
+      }, () => {});
+    });
     const leaveSettings = () => show(this.running ? 'pause' : 'mainMenu');
     document.getElementById('setClose').addEventListener('click', leaveSettings);
     document.getElementById('setBack').addEventListener('click', leaveSettings);
     document.getElementById('btnHostPvp').addEventListener('click', () => {
       this.sound.init();
       document.getElementById('pvpName').value = this.hud.settings.name || 'player';
-      document.getElementById('pvpServer').value = this.hud.settings.server || NetClient.defaultUrl();
       const codeEl = document.getElementById('pvpRoom');
       if (!codeEl.value) codeEl.value = this.hud.settings.room || makeRoomCode();
       show('pvpLobby');
@@ -2490,20 +2535,6 @@ class Game {
       }
     });
 
-    document.getElementById('pvpConnect').addEventListener('click', () => {
-      const raw = document.getElementById('pvpServer').value.trim();
-      // Paste the Render address as-is; https:// is converted to wss://.
-      const url = raw ? NetClient.normalizeUrl(raw) : NetClient.defaultUrl();
-      const room = (document.getElementById('pvpRoom').value || 'PARTY').toUpperCase();
-      const team = document.getElementById('pvpTeam').value;
-      this.hud.settings.server = url;
-      saveSettings(this.hud.settings);
-      // Remember it for this device so the code field alone works next time.
-      try { if (raw) localStorage.setItem('dune.relay', url); } catch (e) { /* ignore */ }
-      document.getElementById('pvpServer').value = url;
-      this.net.disconnect();
-      this.pvpAutoConnect(url, room, team, document.getElementById('pvpFillBots').checked);
-    });
 
     // Join / new-code buttons beside the big code field.
     const codeEl = document.getElementById('pvpRoom');
@@ -2673,8 +2704,8 @@ class Game {
 
   /**
    * One-click party join: connect to the server this page came from and
-   * drop into the shared PARTY room. The Advanced panel is only for
-   * static-hosted copies pointing at a relay elsewhere.
+   * drop into the shared PARTY room. A static-hosted copy reaches a relay
+   * elsewhere through the one address in config.js; nobody types a URL.
    */
   async pvpAutoConnect(url, room, team, fillBots) {
     const statusEl = document.getElementById('pvpStatus');
@@ -2693,8 +2724,7 @@ class Game {
         fillBots === undefined ? true : fillBots);
       if (this._pvpRender) this._pvpRender();
     } catch (err) {
-      // Plain language, and no jargon shoved in the player's face: the
-      // server address lives in Advanced only for whoever set the game up.
+      // Plain language, and no jargon shoved in the player's face.
       this._offlineLobby();
     }
   }
@@ -2751,7 +2781,8 @@ class Game {
     if (attacker === this.localPlayer && attacker !== victim) {
       attacker.kills++;
       const w = WEAPONS[msg.w];
-      this.awardMoney(attacker, w && w.killReward !== undefined ? w.killReward : 300);
+      const base = w && w.killReward !== undefined ? w.killReward : 300;
+      this.awardMoney(attacker, Math.round(base * RULES.killRewardScale));
       this.hud.hitmarker(true);
     } else if (attacker && attacker !== victim) {
       attacker.kills++;

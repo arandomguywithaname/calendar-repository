@@ -35,11 +35,14 @@ Prefer doing it by hand? **New +** → **Web Service**, pick the repo, then:
 ## 3. Point the game at it
 
 Render gives you an address like `https://dune-relay.onrender.com`.
-Open `config.js` and paste it in, changing `https` to `wss`:
+Open `config.js` and paste it in exactly as Render shows it:
 
 ```js
-window.DUNE_RELAY = 'wss://dune-relay.onrender.com';
+window.DUNE_RELAY = 'https://dune-relay.onrender.com';
 ```
+
+That is the whole setup — the game turns the address into a socket URL
+itself, so you never type one.
 
 Commit that change. Anyone opening your Render address — or your
 itch.io upload of the same files — now reaches the same relay, and
@@ -59,8 +62,5 @@ To try a relay on one device only, open the game with the address in the
 URL — it is remembered on that device:
 
 ```
-https://your-itch-page/?relay=wss://dune-relay.onrender.com
+https://your-itch-page/?relay=https://dune-relay.onrender.com
 ```
-
-The PvP lobby's **Advanced** panel accepts the same address, and you can
-paste the `https://` form — it is converted for you.

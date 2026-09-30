@@ -236,15 +236,13 @@
       <button class="btn primary small" id="pvpStart" disabled>START MATCH</button>
     </div>
     <details class="pvp-adv" id="pvpAdv">
-      <summary>Advanced (for whoever set this game up)</summary>
+      <summary>Match options</summary>
       <div class="pvp-form">
-        <label>Server address<input id="pvpServer" placeholder="paste your server address" /></label>
         <label>Team
           <select id="pvpTeam"><option value="auto" selected>Auto-balance</option><option value="T">Terrorists</option><option value="CT">Counter-Terrorists</option></select>
         </label>
         <label class="check"><input type="checkbox" id="pvpFillBots" checked /> Fill empty slots with bots</label>
       </div>
-      <div class="mm-actions"><button class="btn small" id="pvpConnect">CONNECT</button></div>
     </details>
   </div>
 </div>
@@ -279,7 +277,8 @@
       <label class="check"><input type="checkbox" id="setViewmodel" checked /> Show viewmodel</label>
       <label class="check"><input type="checkbox" id="setInvertY" /> Invert mouse Y</label>
     </div>
-    <div class="set-diag">Graphics: <span id="setDiag">—</span></div>
+    <div class="set-diag">Graphics: <span id="setDiag">—</span>
+      <button class="btn tiny" id="setDiagCopy">COPY</button></div>
     <div class="set-actions"><button class="btn small" id="setClose">CLOSE</button></div>
   </div>
 </div>
@@ -333,6 +332,7 @@
 
 <div id="loading" class="overlay hidden"><div class="load-inner"><div class="load-bar"><i></i></div><div id="loadText">Building the map…</div></div></div>
 <div id="fatal" class="overlay hidden"><div class="fatal-inner"><h2>Cannot start</h2><p id="fatalMsg"></p></div></div>
+<div id="gfxWarn" class="hidden"><b>Graphics problem</b><span id="gfxWarnMsg"></span><button id="gfxWarnCopy">Copy</button><button id="gfxWarnHide">&times;</button></div>
 
 <script src="config.js"></script>
 <script src="js/math.js"></script>

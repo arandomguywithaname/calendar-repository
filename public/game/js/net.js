@@ -13,9 +13,10 @@
    SET THIS ONCE to play with friends anywhere, using only a room code.
 
    Deploy the bundled server.js to any host that runs Node (Render, Railway,
-   Fly.io, Glitch — all have free tiers), then put its address here:
+   Fly.io, Glitch — all have free tiers), then paste the address it gives you
+   into config.js, or here:
 
-       const RELAY_URL = 'wss://my-dune-relay.onrender.com';
+       const RELAY_URL = 'https://my-dune-relay.onrender.com';
 
    Leave it empty and the game uses whichever server served the page, which
    is what you get from `npm run game` on your own network.
@@ -54,7 +55,7 @@ class NetClient {
    * what `npm run game` gives you on a local network.
    */
   static defaultUrl() {
-    // ?relay=wss://… wins and is remembered, so a relay can be tried without
+    // ?relay=https://… wins and is remembered, so a relay can be tried without
     // editing or re-uploading the build.
     let override = null;
     try {

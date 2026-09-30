@@ -233,18 +233,20 @@ const WEAPONS = {
   negev: {
     name: 'Negev', slot: SLOT.PRIMARY, cat: 'heavy', team: 'both', price: 1700, killReward: 300,
     damage: 35, armorPen: 0.75, fireRate: 800 / 60, mag: 150, reserve: 150, reloadTime: 5.7,
-    speed: 0.86, rangeMod: 0.81, penetration: 2, inaccuracy: [4.5, 12.0, 30.0, 4.0],
-    recoil: 2.6, model: 'lmg', pattern: makePattern(34, 150, 11.0, 5.0, 1.4), auto: true,
+    speed: 0.86, rangeMod: 0.81, penetration: 2, inaccuracy: [7.5, 18.0, 38.0, 6.5],
+    // Belt-fed: the muzzle climbs hard and wanders wide. Holding it on a
+    // target past short range should be a genuine fight.
+    recoil: 6.2, model: 'lmg', pattern: makePattern(34, 150, 26.0, 11.0, 3.0), auto: true,
     sound: 'rifle_heavy', tint: [0.3, 0.32, 0.28], spinUp: 0.9,
-    desc: 'Wildly inaccurate until it settles, then it does not stop.',
+    desc: 'Enormous magazine, enormous climb. Brace it or spray the floor.',
   },
   m249: {
     name: 'M249', slot: SLOT.PRIMARY, cat: 'heavy', team: 'both', price: 5200, killReward: 300,
     damage: 32, armorPen: 0.80, fireRate: 750 / 60, mag: 100, reserve: 200, reloadTime: 5.7,
-    speed: 0.84, rangeMod: 0.97, penetration: 3, inaccuracy: [1.2, 10.0, 28.0, 0.9],
-    recoil: 2.4, model: 'lmg', pattern: makePattern(35, 100, 10.0, 4.4, 1.1), auto: true,
+    speed: 0.84, rangeMod: 0.97, penetration: 3, inaccuracy: [2.2, 15.0, 34.0, 1.8],
+    recoil: 5.4, model: 'lmg', pattern: makePattern(35, 100, 22.0, 9.5, 2.4), auto: true,
     sound: 'rifle_heavy', tint: [0.28, 0.3, 0.28],
-    desc: 'A hundred rounds of belt-fed suppression. Heavy and slow.',
+    desc: 'A hundred rounds of belt-fed suppression. Kicks like one.',
   },
 
   /* ----------------------------- rifles ------------------------------ */

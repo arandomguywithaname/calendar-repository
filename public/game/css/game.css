@@ -604,6 +604,10 @@ input[type="color"] { width: 52px; height: 26px; background: none; border: 1px s
   font-family: var(--mono); font-size: 10px; color: var(--dim);
   line-height: 1.6; word-break: break-word;
 }
+.btn.tiny {
+  padding: 2px 8px; font-size: 9px; letter-spacing: 1px;
+  margin-left: 8px; vertical-align: middle; min-width: 0;
+}
 .set-actions { margin-top: 22px; text-align: center; }
 
 .pause-panel {
@@ -633,6 +637,25 @@ input[type="color"] { width: 52px; height: 26px; background: none; border: 1px s
 .fatal-inner { text-align: center; max-width: 520px; padding: 20px; }
 .fatal-inner h2 { color: var(--bad); letter-spacing: 3px; margin-bottom: 12px; }
 .fatal-inner p { color: var(--dim); line-height: 1.6; font-size: 14px; }
+
+/* A driver that starts rejecting draws mid-match otherwise just freezes or
+   goes black with nothing for the player to report. */
+#gfxWarn {
+  position: fixed; left: 50%; top: 10px; transform: translateX(-50%);
+  z-index: 60; max-width: min(92vw, 720px);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border: 1px solid var(--bad); border-radius: 4px;
+  background: rgba(20, 6, 6, 0.94); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  font-size: 12px; line-height: 1.45; color: #ffd9d9;
+}
+#gfxWarn.hidden { display: none; }
+#gfxWarn b { color: var(--bad); letter-spacing: 2px; white-space: nowrap; }
+#gfxWarnMsg { flex: 1 1 260px; min-width: 0; word-break: break-word; color: var(--dim); }
+#gfxWarn button {
+  background: transparent; border: 1px solid var(--line); color: var(--dim);
+  border-radius: 3px; padding: 3px 8px; font: inherit; cursor: pointer;
+}
+#gfxWarn button:hover { color: #fff; border-color: var(--accent); }
 
 /* ========================== touch controls ========================== */
 

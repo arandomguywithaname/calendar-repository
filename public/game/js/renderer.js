@@ -161,6 +161,32 @@ class Renderer {
     return lines.join('\n');
   }
 
+  /**
+   * Poll for GL errors occasionally. A driver that starts rejecting draws
+   * otherwise just shows a black or frozen screen with nothing to report.
+   * Returns a human-readable problem string once, or null.
+   */
+  checkForTrouble() {
+    const gl = this.gl;
+    const code = gl.getError();
+    if (code === gl.NO_ERROR) {
+      this._glErrorStreak = 0;
+      return null;
+    }
+    this._glErrorStreak = (this._glErrorStreak || 0) + 1;
+    if (this._glErrorStreak < 3 || this._reportedTrouble) return null;
+    this._reportedTrouble = true;
+    const names = {
+      [gl.INVALID_ENUM]: 'INVALID_ENUM',
+      [gl.INVALID_VALUE]: 'INVALID_VALUE',
+      [gl.INVALID_OPERATION]: 'INVALID_OPERATION',
+      [gl.OUT_OF_MEMORY]: 'OUT_OF_MEMORY',
+      [gl.INVALID_FRAMEBUFFER_OPERATION]: 'INVALID_FRAMEBUFFER_OPERATION',
+      [gl.CONTEXT_LOST_WEBGL]: 'CONTEXT_LOST',
+    };
+    return (names[code] || ('0x' + code.toString(16))) + ' — ' + this.report();
+  }
+
   /** One-line summary of what the renderer actually ended up using. */
   report() {
     const gl = this.gl;

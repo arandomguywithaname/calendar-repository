@@ -70,19 +70,16 @@ reach. Two ways:
 - **Same network** — one person runs `npm run game` and everyone opens the
   LAN address it prints. Nothing to configure.
 - **Anywhere** — deploy the bundled `server.js` once to any host that runs
-  Node (Render, Railway, Fly.io and Glitch all have free tiers), then set
-  its address at the top of `js/net.js`:
+  Node (Render, Railway, Fly.io and Glitch all have free tiers), then paste
+  the address it gives you into `config.js`:
 
   ```js
-  const RELAY_URL = 'wss://my-dune-relay.onrender.com';
+  window.DUNE_RELAY = 'https://my-dune-relay.onrender.com';
   ```
 
   Every copy of the build then reaches the same relay, so a static host
-  like itch.io works too and players still only type a code. An HTTPS page
-  needs a `wss://` relay.
-
-The **Advanced** panel (a different server, forced teams) is only there for
-one-off cases; normal play never needs it.
+  like itch.io works too and players still only type a code. Nobody has to
+  type a server address in the game itself — see `DEPLOY.md`.
 
 The room host's browser simulates the authoritative match — health, kills,
 rounds, economy, the bomb and every bot — and broadcasts events for all of
