@@ -5,6 +5,9 @@
    runs this same logic and broadcasts the authoritative events.
    ------------------------------------------------------------------ */
 
+/** Seconds the quick-match queue waits for real players before adding bots. */
+const QUICK_WAIT_SECS = 15;
+
 const PHASE = { WARMUP: 'warmup', FREEZE: 'freeze', LIVE: 'live', END: 'end', MATCHEND: 'matchend' };
 
 const RULES = {
@@ -2331,7 +2334,7 @@ class Game {
 
     // Online queue: the server starts us when the lobby fills, or after its
     // countdown with bots taking the empty slots.
-    let left = 30;
+    let left = QUICK_WAIT_SECS;
     const slotsEl = document.getElementById('mmSlots');
     const render = () => {
       const list = [...this.net.players.values()];
@@ -2357,7 +2360,7 @@ class Game {
       const el = Math.floor((performance.now() - started) / 1000);
       document.getElementById('mmElapsed').textContent =
         `0:${String(el).padStart(2, '0')}`;
-      left = Math.max(0, 30 - el);
+      left = Math.max(0, QUICK_WAIT_SECS - el);
       render();
       if (left === 0) {
         document.getElementById('mmStatus').textContent = 'STARTING — FILLING WITH BOTS';
@@ -2625,11 +2628,12 @@ class Game {
         fillBots === undefined ? true : fillBots);
       if (this._pvpRender) this._pvpRender();
     } catch (err) {
-      statusEl.textContent = `No game server at ${url}. ` +
-        'If this copy is on a static host, open Advanced and enter your relay address — ' +
-        'or run "npm run game" and share that URL instead.';
+      // Plain language, and no jargon shoved in the player's face: the
+      // server address lives in Advanced only for whoever set the game up.
+      statusEl.textContent =
+        'Can\u2019t reach the game server, so online play is unavailable right now. ' +
+        'You can still play Find Match and Practice against bots.';
       statusEl.className = 'pvp-status err';
-      document.getElementById('pvpAdv').open = true;
     }
   }
 

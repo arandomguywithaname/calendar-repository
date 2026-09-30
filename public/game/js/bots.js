@@ -156,6 +156,7 @@ class Bot extends Character {
     this.reactTimer = Math.max(0, this.reactTimer - dt);
 
     const cmd = { forward: 0, side: 0, jump: false, duck: false, walk: false };
+    this.wantedMove = false;         // set by _navigate when it steers
     this._objective(game, time);
     if (this.target && this.reactTimer <= 0) this._fight(game, cmd, dt, time);
     else this._navigate(game, cmd, dt, time);
@@ -176,6 +177,12 @@ class Bot extends Character {
       }
     }
 
+    if (this.sidestepTimer > 0) {
+      this.sidestepTimer -= dt;
+      cmd.side += this.sidestep * 0.9;
+      cmd.forward += 0.25;
+      this.wantedMove = true;
+    }
     cmd.forward = clamp(cmd.forward, -1, 1);
     cmd.side = clamp(cmd.side, -1, 1);
     if (this.crouchTimer > 0) cmd.duck = true;
@@ -335,7 +342,7 @@ class Bot extends Character {
         this.state = 'defend';
         if (!this.holdSpot || this.holdSpot.site !== bomb.site) {
           const spots = map.holdSpots[bomb.site];
-          this.holdSpot = { site: bomb.site, ...pick(spots) };
+          this.holdSpot = { site: bomb.site, ...this._claimSpot(game, spots) };
         }
         this._setGoal(this.holdSpot.pos);
         return;
@@ -378,9 +385,29 @@ class Bot extends Character {
     this.state = this.state === 'rotate' ? 'rotate' : 'hold';
     if (!this.holdSpot || this.holdSpot.site !== this.goalSite) {
       const spots = map.holdSpots[this.goalSite] || map.holdSpots.A;
-      this.holdSpot = { site: this.goalSite, ...pick(spots) };
+      this.holdSpot = { site: this.goalSite, ...this._claimSpot(game, spots) };
     }
     this._setGoal(this.holdSpot.pos);
+  }
+
+  /**
+   * Take a hold position none of my teammates already has, preferring the
+   * nearest. Two bots stacked on one spot is what makes holding look random.
+   */
+  _claimSpot(game, spots) {
+    const taken = new Set();
+    for (const e of game.entities) {
+      if (e === this || !e.isBot || !e.alive || e.team !== this.team) continue;
+      if (e.holdSpot) taken.add(e.holdSpot.pos.join(','));
+    }
+    const free = spots.filter(s => !taken.has(s.pos.join(',')));
+    const pool = free.length ? free : spots;
+    let best = pool[0], bestD = Infinity;
+    for (const s of pool) {
+      const d = V.distXZ(this.pos, s.pos) + rand(0, 6);   // a little variety
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best;
   }
 
   /** Walk the T-side approach points in order, so pushes look deliberate. */
@@ -440,7 +467,14 @@ class Bot extends Character {
     }
 
     if (moveDir) {
-      const desiredYaw = Math.atan2(-moveDir[0], -moveDir[2]);
+      this.wantedMove = true;
+      // Low-pass the heading: raw waypoint directions flip back and forth.
+      if (!this.smoothDir) this.smoothDir = moveDir.slice();
+      const k = Math.min(1, dt * 5);
+      this.smoothDir[0] += (moveDir[0] - this.smoothDir[0]) * k;
+      this.smoothDir[2] += (moveDir[2] - this.smoothDir[2]) * k;
+      const sl = Math.hypot(this.smoothDir[0], this.smoothDir[2]) || 1;
+      const desiredYaw = Math.atan2(-this.smoothDir[0] / sl, -this.smoothDir[2] / sl);
       const faceYaw = lookTarget
         ? Math.atan2(-(lookTarget[0] - this.pos[0]), -(lookTarget[2] - this.pos[2]))
         : desiredYaw;
@@ -510,19 +544,40 @@ class Bot extends Character {
     this.pitch += (breathe - this.pitch) * Math.min(1, dt * 1.5);
   }
 
+  /**
+   * Only a bot that is *trying* to walk can be stuck. Standing on a hold
+   * angle is the job, not a fault — treating it as stuck used to spin the
+   * bot by up to a radian every 0.8s, which is the classic idle swivel.
+   */
   _unstick(dt) {
     const moved = V.distXZ(this.pos, this.lastPos);
     this.lastPos = [this.pos[0], this.pos[1], this.pos[2]];
-    if (moved < 0.02 * 60 * dt && !this.target) {
+    if (!this.wantedMove || this.target) {
+      this.stuckTimer = 0;
+      return;
+    }
+    if (moved < 0.02 * 60 * dt) {
       this.stuckTimer += dt;
       if (this.stuckTimer > 0.8) {
         this.stuckTimer = 0;
+        this.stuckCount = (this.stuckCount || 0) + 1;
         this.path = null;
         this.repathTimer = 0;
-        this.yaw += rand(-1.2, 1.2);
+        // Sidestep past the obstruction. Spinning the view instead is what
+        // read as a bot swivelling in place.
+        this.sidestep = Math.random() < 0.5 ? -1 : 1;
+        this.sidestepTimer = rand(0.35, 0.7);
+        // Still stuck after several tries? The destination is the problem.
+        if (this.stuckCount >= 3) {
+          this.stuckCount = 0;
+          this.holdSpot = null;
+          this.pathGoal = null;
+          this.decisionTimer = 0;
+        }
       }
     } else {
       this.stuckTimer = Math.max(0, this.stuckTimer - dt);
+      this.stuckCount = Math.max(0, (this.stuckCount || 0) - dt * 0.5);
     }
   }
 

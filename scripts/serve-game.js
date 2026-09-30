@@ -207,10 +207,11 @@ function startRoom(room, opts) {
 }
 
 /**
- * Quick match: everyone lands in the same open room. It starts as soon as
- * it is full, or after QUICK_WAIT seconds with bots filling the gaps.
+ * Quick match: everyone lands in the same open room. Real players get
+ * first refusal — it starts the moment the room fills, and only after
+ * QUICK_WAIT seconds of waiting do bots fill whatever is left.
  */
-const QUICK_WAIT = 30;
+const QUICK_WAIT = 15;
 const QUICK_SIZE = 10;
 
 function findQuickRoom() {
