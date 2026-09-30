@@ -2439,12 +2439,13 @@ class Game {
     const startBtn = document.getElementById('pvpStart');
 
     const renderRoster = () => {
-      if (!this.net.active) return;
+      if (!this.net.active) { this._offlineLobby(); return; }
       const list = [...this.net.players.values()];
       rosterEl.innerHTML = list.map(p =>
         `<span class="p ${p.team.toLowerCase()}">${escapeHtml(p.name)}${p.id === this.net.id ? ' (you)' : ''}</span>`
       ).join('');
       startBtn.disabled = !this.net.host;
+      startBtn.textContent = 'START MATCH';
       const friends = list.length - 1;
       statusEl.textContent = this.net.host
         ? (friends > 0
@@ -2524,16 +2525,28 @@ class Game {
       void msg;
     });
     this.net.on('close', () => {
-      statusEl.textContent = 'Disconnected from the server.';
-      statusEl.className = 'pvp-status err';
-      startBtn.disabled = true;
+      // Never a dead end: fall back to a startable offline lobby.
+      this._offlineLobby(this.running ? 'Lost connection to the server.' : null);
     });
 
     startBtn.addEventListener('click', () => {
-      this.net.send({
-        t: 'start',
-        teamSize: Math.max(2, Math.ceil(this.net.players.size / 2)),
-        map: resolveMapId(this.hud.settings.mapChoice || 'random'),
+      const map = resolveMapId(this.hud.settings.mapChoice || 'random');
+      if (this.net.active && this.net.host) {
+        this.net.send({
+          t: 'start',
+          teamSize: Math.max(2, Math.ceil(this.net.players.size / 2)),
+          map,
+        });
+        return;
+      }
+      // No server: start the same match locally against bots.
+      this.showScreen(null);
+      this.startMatch({
+        mode: 'offline',
+        difficulty: document.getElementById('optDifficulty').value,
+        teamSize: parseInt(document.getElementById('optTeamSize').value, 10),
+        team: document.getElementById('optSide').value,
+        map,
       });
     });
 
@@ -2607,6 +2620,24 @@ class Game {
   }
 
   /**
+   * Present the lobby in its offline shape: explain that online play is
+   * unavailable, but keep a working START so the screen is never a dead end.
+   */
+  _offlineLobby(reason) {
+    const statusEl = document.getElementById('pvpStatus');
+    const startBtn = document.getElementById('pvpStart');
+    const roster = document.getElementById('pvpRoster');
+    if (!statusEl || !startBtn) return;
+    statusEl.textContent = (reason ? reason + ' ' : '') +
+      'No game server available, so friends cannot join right now — ' +
+      'you can still start this match against bots.';
+    statusEl.className = 'pvp-status err';
+    startBtn.disabled = false;
+    startBtn.textContent = 'START WITH BOTS';
+    if (roster) roster.innerHTML = '';
+  }
+
+  /**
    * One-click party join: connect to the server this page came from and
    * drop into the shared PARTY room. The Advanced panel is only for
    * static-hosted copies pointing at a relay elsewhere.
@@ -2630,10 +2661,7 @@ class Game {
     } catch (err) {
       // Plain language, and no jargon shoved in the player's face: the
       // server address lives in Advanced only for whoever set the game up.
-      statusEl.textContent =
-        'Can\u2019t reach the game server, so online play is unavailable right now. ' +
-        'You can still play Find Match and Practice against bots.';
-      statusEl.className = 'pvp-status err';
+      this._offlineLobby();
     }
   }
 
