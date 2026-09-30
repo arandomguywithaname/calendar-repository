@@ -164,7 +164,7 @@ class HUD {
       progressBar: $('progressBar').firstElementChild,
       bombHud: $('bombHud'), bombTimer: $('bombTimer'),
       spectatorBar: $('spectatorBar'), specName: $('specName'),
-      damageDirs: $('damageDirs'), buyHint: $('buyHint'),
+      damageDirs: $('damageDirs'), buyHint: $('buyHint'), usePrompt: $('usePrompt'),
       flash: $('flash'), damageFlash: $('damageFlash'), scope: $('scopeOverlay'),
       shop: $('shop'), shopGrid: $('shopGrid'), shopCats: $('shopCats'),
       shopMoney: $('shopMoney'), shopTimer: $('shopTimer'), shopTeamLabel: $('shopTeamLabel'),
@@ -455,6 +455,14 @@ class HUD {
   }
 
   setFlash(v) { this.el.flash.style.opacity = String(clamp(v, 0, 1)); }
+
+  /** Contextual "hold E to …" line, or null to clear it. */
+  setPrompt(text) {
+    if (this._promptText === text) return;
+    this._promptText = text;
+    this.el.usePrompt.classList.toggle('hidden', !text);
+    if (text) this.el.usePrompt.textContent = text;
+  }
 
   centerMessage(text, sub) {
     this.el.centerMsg.textContent = text || '';

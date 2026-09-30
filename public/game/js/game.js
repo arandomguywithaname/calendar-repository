@@ -11,6 +11,9 @@ const QUICK_WAIT_SECS = 15;
 const PHASE = { WARMUP: 'warmup', FREEZE: 'freeze', LIVE: 'live', END: 'end', MATCHEND: 'matchend' };
 
 const RULES = {
+  // Reaching the bomb was fiddly at 2 m; this is the radius everywhere.
+  bombReach: 2.8,
+  bombMoveTolerance: 1.3,
   freezeTime: 12,
   buyTime: 20,
   roundTime: 115,
@@ -1049,7 +1052,7 @@ class Game {
 
   startDefuse(ent) {
     if (!this.bomb.planted || ent.team !== 'CT') return;
-    if (V.distXZ(ent.pos, this.bomb.pos) > 2.0) return;
+    if (V.distXZ(ent.pos, this.bomb.pos) > RULES.bombReach) return;
     ent.defusing = true;
   }
 
@@ -1073,7 +1076,8 @@ class Game {
       }
 
       if (e.defusing && this.bomb.planted) {
-        const stillValid = V.distXZ(e.pos, this.bomb.pos) < 2.0 && Math.hypot(e.vel[0], e.vel[2]) < 0.6;
+        const stillValid = V.distXZ(e.pos, this.bomb.pos) < RULES.bombReach &&
+          Math.hypot(e.vel[0], e.vel[2]) < RULES.bombMoveTolerance;
         if (!stillValid) { e.defusing = false; e.defuseProgress = 0; continue; }
         e.defuseProgress += dt;
         if (Math.floor(e.defuseProgress * 4) !== Math.floor((e.defuseProgress - dt) * 4)) {
@@ -1127,7 +1131,8 @@ class Game {
       p.plantProgress = Math.max(0, p.plantProgress - dt * 2);
     }
     if (p.alive && p.defusing && this.bomb.planted &&
-        V.distXZ(p.pos, this.bomb.pos) < 2.0 && Math.hypot(p.vel[0], p.vel[2]) < 0.6) {
+        V.distXZ(p.pos, this.bomb.pos) < RULES.bombReach &&
+        Math.hypot(p.vel[0], p.vel[2]) < RULES.bombMoveTolerance) {
       const need = (p.defuser ? RULES.defuseTimeKit : RULES.defuseTime) - 0.05;
       p.defuseProgress = Math.min(p.defuseProgress + dt, need);
       if (Math.floor(p.defuseProgress * 4) !== Math.floor((p.defuseProgress - dt) * 4)) {
@@ -1702,7 +1707,7 @@ class Game {
       p.selectSlot('bomb');
       return;
     }
-    if (p.team === 'CT' && this.bomb.planted && V.distXZ(p.pos, this.bomb.pos) < 2.0) {
+    if (p.team === 'CT' && this.bomb.planted && V.distXZ(p.pos, this.bomb.pos) < RULES.bombReach) {
       p.defusing = true;
     }
   }
@@ -1797,7 +1802,8 @@ class Game {
       }
       if (this.keys.has('KeyE')) {
         if (p.team === 'T' && p.hasBomb && this.map.whichSite(p.pos) && !this.bomb.planted) p.planting = true;
-        if (p.team === 'CT' && this.bomb.planted && V.distXZ(p.pos, this.bomb.pos) < 2.0) p.defusing = true;
+        if (p.team === 'CT' && this.bomb.planted &&
+            V.distXZ(p.pos, this.bomb.pos) < RULES.bombReach) p.defusing = true;
       } else {
         p.planting = false;
         p.defusing = false;
@@ -1879,6 +1885,22 @@ class Game {
     } else {
       this.hud.progress(null, null);
     }
+
+    // Tell the player they can interact. Without this there was no sign the
+    // bomb was in reach, or that the key has to be held.
+    let prompt = null;
+    if (p.alive && !this.mobile) {
+      if (p.team === 'CT' && this.bomb.planted && !p.defusing &&
+          V.distXZ(p.pos, this.bomb.pos) < RULES.bombReach) {
+        prompt = p.defuser ? 'Hold E to defuse (with kit)' : 'Hold E to defuse';
+      } else if (p.team === 'T' && p.hasBomb && !this.bomb.planted && !p.planting &&
+          this.map.whichSite(p.pos)) {
+        prompt = 'Hold E to plant the bomb';
+      } else if (this.droppedWeapons.some(d => V.distXZ(d.pos, p.pos) < 1.4)) {
+        prompt = 'Press E to pick up';
+      }
+    }
+    this.hud.setPrompt(prompt);
 
     if (this.shopOpen && !this.canBuy(p)) this.openShop(false);
   }
@@ -2446,6 +2468,7 @@ class Game {
       ).join('');
       startBtn.disabled = !this.net.host;
       startBtn.textContent = 'START MATCH';
+      this._setCodeBoxEnabled(true);
       const friends = list.length - 1;
       statusEl.textContent = this.net.host
         ? (friends > 0
@@ -2629,12 +2652,23 @@ class Game {
     const roster = document.getElementById('pvpRoster');
     if (!statusEl || !startBtn) return;
     statusEl.textContent = (reason ? reason + ' ' : '') +
-      'No game server available, so friends cannot join right now — ' +
-      'you can still start this match against bots.';
+      'No game server yet, so room codes cannot connect anyone. ' +
+      'Set one up with DEPLOY.md — until then you can play against bots.';
     statusEl.className = 'pvp-status err';
     startBtn.disabled = false;
     startBtn.textContent = 'START WITH BOTS';
     if (roster) roster.innerHTML = '';
+    // Grey out the code controls rather than letting them look functional.
+    this._setCodeBoxEnabled(false);
+  }
+
+  _setCodeBoxEnabled(on) {
+    const box = document.querySelector('.code-box');
+    if (box) box.classList.toggle('disabled', !on);
+    for (const id of ['pvpRoom', 'pvpJoin', 'pvpNewCode']) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !on;
+    }
   }
 
   /**

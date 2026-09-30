@@ -309,6 +309,13 @@ canvas#view {
 }
 #buyHint b { color: var(--accent); }
 
+#usePrompt {
+  position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%);
+  background: rgba(10,12,16,0.82); border: 1px solid var(--accent);
+  color: var(--text); font-size: 15px; letter-spacing: 1px;
+  padding: 8px 18px; border-radius: 4px; white-space: nowrap;
+}
+
 /* ============================ overlays ============================ */
 
 .overlay {
@@ -535,6 +542,8 @@ select, input[type="text"], input:not([type]) {
 .code-input:focus { outline: none; border-color: var(--accent); }
 .code-input::placeholder { color: rgba(255,255,255,0.18); letter-spacing: 10px; }
 .code-actions { display: flex; gap: 10px; justify-content: center; }
+.code-box.disabled { opacity: 0.4; }
+.code-box.disabled .code-input { cursor: not-allowed; }
 .code-actions .btn { flex: 1; max-width: 190px; }
 
 .pvp-help { font-size: 13px; color: var(--dim); line-height: 1.6; margin: 16px 0; }

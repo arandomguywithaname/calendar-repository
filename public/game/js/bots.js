@@ -522,22 +522,23 @@ class Bot extends Character {
     this.glanceTimer = (this.glanceTimer || 0) - dt;
     if (this.glanceTimer <= 0) {
       if (this.glancing) {
-        // Return to the main angle and stay there for a while.
+        // Back to the main angle, and stay put for a good while.
         this.glancing = false;
         this.lookOffset = 0;
-        this.glanceTimer = rand(2.5, 6.0) * this.patience;
+        this.glanceTimer = rand(6.0, 12.0) * this.patience;
       } else {
-        // Check off-angle, or just re-settle with a small adjustment.
-        this.glancing = Math.random() < 0.55;
+        // Mostly just micro-adjust. A real check off-angle is rare and
+        // small — big frequent sweeps are what read as a bot swivelling.
+        this.glancing = Math.random() < 0.18;
         this.lookOffset = this.glancing
-          ? rand(0.5, 1.25) * (Math.random() < 0.5 ? -1 : 1)
-          : rand(-0.12, 0.12);
-        this.glanceTimer = this.glancing ? rand(0.7, 1.6) : rand(1.5, 3.5);
+          ? rand(0.22, 0.5) * (Math.random() < 0.5 ? -1 : 1)
+          : rand(-0.05, 0.05);
+        this.glanceTimer = this.glancing ? rand(0.8, 1.5) : rand(3.0, 7.0);
       }
     }
     const want = base + (this.lookOffset || 0);
     // Snappy when flicking to a new angle, near-still once settled.
-    const speed = Math.abs(angleDiff(this.yaw, want)) > 0.25 ? 6.5 : 1.2;
+    const speed = Math.abs(angleDiff(this.yaw, want)) > 0.25 ? 2.8 : 0.9;
     this.yaw += angleDiff(this.yaw, want) * Math.min(1, dt * speed);
     // A touch of breathing so they are not statues either.
     const breathe = Math.sin(time * 0.7 + this.id * 1.7) * 0.012;
