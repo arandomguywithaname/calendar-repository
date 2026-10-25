@@ -11,9 +11,13 @@ loadout, and fight bots or a friend.
   fades in, then the odds, and it fades out by itself after 6 seconds. Cosmic Veil
   (1 in 2,000,000) and Fury of Darkness have their own sequences. Preview any of them
   from the Index tab.
-- **Turn-based battles** with 12 abilities (Strike, Heavy Blow, Guard, Mend,
-  Precision, Drain, Focus, Venom, Weaken, Shock, Mirror, Supernova). Pick 4 for your
-  loadout in the Abilities tab; unlock more with coins. Bots each have their own kit.
+- **Turn-based battles with signature abilities.** Every aura has its own kit of 6
+  abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova
+  Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Choose 4 per
+  aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
+  precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
+  execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
+  their own named kits.
 - **PvP with 4-digit room codes**: one player creates a room and shares the code,
   the other joins. Peer-to-peer over WebRTC via the bundled PeerJS library (uses the
   free public PeerJS signalling server). The host runs the battle; both players
@@ -37,5 +41,6 @@ connect the repo and set the publish directory to `rng-game`.
 - `index.html` – markup
 - `style.css` – styling and CSS animations
 - `auras.js` – deterministic generator for the 784 auras
+- `abilities.js` – ability mechanics and the per-aura signature kit generator
 - `game.js` – game logic, battle engine, PvP, accounts, cutscene engine
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections

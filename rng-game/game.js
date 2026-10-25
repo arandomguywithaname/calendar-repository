@@ -3,6 +3,7 @@
   "use strict";
 
   var A = window.AURAS;
+  var K = window.KITS;
   var $ = function (s) { return document.querySelector(s); };
   var SAVE_BASE = "aura-realms-save-v2";
   var ACCOUNTS_KEY = "aura-realms-accounts";
@@ -28,35 +29,19 @@
   };
   var POTION_ORDER = ["lucky", "fortune", "heavenly", "godly", "zenith", "gold", "haste", "heal", "strength"];
 
-  /* Abilities. mult = damage as a fraction of power. cd = turns the ability is unavailable after use. */
-  var ABILITIES = {
-    strike:    { name: "Strike",     icon: "⚔️", mult: 1.0,  cd: 0, cost: 0,    desc: "A reliable hit for 100% power. No cooldown." },
-    heavy:     { name: "Heavy Blow", icon: "🔨", mult: 1.7,  cd: 2, cost: 0,    desc: "A crushing hit for 170% power." },
-    guard:     { name: "Guard",      icon: "🛡️", mult: 0,    cd: 1, cost: 0,    desc: "Block 60% of the next hit you take.", effect: "guard" },
-    heal:      { name: "Mend",       icon: "💚", mult: 0,    cd: 3, cost: 0,    desc: "Restore 30% of your max HP.", effect: "heal", pct: 0.3 },
-    precision: { name: "Precision",  icon: "🎯", mult: 0.9,  cd: 1, cost: 400,  desc: "90% power and always a critical hit (x2).", alwaysCrit: true },
-    drain:     { name: "Drain",      icon: "🩸", mult: 0.75, cd: 2, cost: 600,  desc: "75% power and heal half of the damage dealt.", lifesteal: 0.5 },
-    focus:     { name: "Focus",      icon: "🔮", mult: 0,    cd: 2, cost: 500,  desc: "Your next attack deals +80% damage.", effect: "focus" },
-    poison:    { name: "Venom",      icon: "☠️", mult: 0.5,  cd: 3, cost: 900,  desc: "50% power, then poison for 30% power a turn for 3 turns.", poison: { turns: 3, mult: 0.3 } },
-    weaken:    { name: "Weaken",     icon: "🌀", mult: 0.6,  cd: 3, cost: 900,  desc: "60% power and the enemy deals 30% less for 2 turns.", weaken: 2 },
-    stun:      { name: "Shock",      icon: "⚡", mult: 0.7,  cd: 3, cost: 1500, desc: "70% power with a 40% chance to stun (they skip a turn).", stunChance: 0.4 },
-    reflect:   { name: "Mirror",     icon: "🪞", mult: 0,    cd: 4, cost: 1500, desc: "Reflect 60% of the next hit back at the attacker.", effect: "reflect" },
-    burst:     { name: "Supernova",  icon: "💥", mult: 2.6,  cd: 4, cost: 3000, desc: "Devastating 260% power blast." }
-  };
-  var ABILITY_ORDER = ["strike", "heavy", "guard", "heal", "precision", "drain", "focus", "poison", "weaken", "stun", "reflect", "burst"];
-  var STARTER_ABILITIES = ["strike", "heavy", "guard", "heal"];
   var LOADOUT_SIZE = 4;
+  var DEFAULT_LOADOUT = [0, 1, 2, 3];
 
   var BOTS = [
-    { id: "dummy",     name: "Training Dummy", icon: "🪵", power: 15,   reward: 25,    abilities: ["strike"] },
-    { id: "rookie",    name: "Rookie Bot",     icon: "🤖", power: 45,   reward: 60,    abilities: ["strike", "guard"] },
-    { id: "guard",     name: "Guard Bot",      icon: "🛡️", power: 120,  reward: 150,   abilities: ["strike", "guard", "heal"] },
-    { id: "knight",    name: "Knight Bot",     icon: "⚔️", power: 300,  reward: 400,   abilities: ["strike", "heavy", "guard", "heal"] },
-    { id: "warlord",   name: "Warlord Bot",    icon: "👹", power: 600,  reward: 900,   abilities: ["strike", "heavy", "focus", "drain"] },
-    { id: "titan",     name: "Titan Bot",      icon: "🗿", power: 1000, reward: 1800,  abilities: ["heavy", "guard", "heal", "burst"] },
-    { id: "celestial", name: "Celestial Bot",  icon: "👼", power: 1500, reward: 3500,  abilities: ["precision", "heal", "reflect", "focus"] },
-    { id: "void",      name: "Void Bot",       icon: "🕳️", power: 2200, reward: 7000,  abilities: ["poison", "weaken", "drain", "stun"] },
-    { id: "omega",     name: "Omega Bot",      icon: "💀", power: 3000, reward: 15000, abilities: ["burst", "stun", "heal", "reflect"], boss: true }
+    { id: "dummy",     name: "Training Dummy", icon: "🪵", power: 15,   reward: 25 },
+    { id: "rookie",    name: "Rookie Bot",     icon: "🤖", power: 45,   reward: 60 },
+    { id: "guard",     name: "Guard Bot",      icon: "🛡️", power: 120,  reward: 150 },
+    { id: "knight",    name: "Knight Bot",     icon: "⚔️", power: 300,  reward: 400 },
+    { id: "warlord",   name: "Warlord Bot",    icon: "👹", power: 600,  reward: 900 },
+    { id: "titan",     name: "Titan Bot",      icon: "🗿", power: 1000, reward: 1800 },
+    { id: "celestial", name: "Celestial Bot",  icon: "👼", power: 1500, reward: 3500 },
+    { id: "void",      name: "Void Bot",       icon: "🕳️", power: 2200, reward: 7000 },
+    { id: "omega",     name: "Omega Bot",      icon: "💀", power: 3000, reward: 15000, boss: true }
   ];
 
   var AUTO_UNLOCK_COST = 1000;
@@ -80,8 +65,7 @@
       strengthReady: false,
       training: 0,
       autoUnlocked: false,
-      ownedAbilities: STARTER_ABILITIES.slice(),
-      loadout: STARTER_ABILITIES.slice(),
+      loadouts: {},
       playerName: "",
       botWins: {},
       history: [],
@@ -111,9 +95,7 @@
       var merged = Object.assign(base, saved);
       merged.stats = Object.assign(defaultState().stats, saved.stats || {});
       merged.settings = Object.assign(defaultState().settings, saved.settings || {});
-      if (!Array.isArray(merged.ownedAbilities) || !merged.ownedAbilities.length) merged.ownedAbilities = STARTER_ABILITIES.slice();
-      if (!Array.isArray(merged.loadout) || !merged.loadout.length) merged.loadout = STARTER_ABILITIES.slice();
-      merged.loadout = merged.loadout.filter(function (id) { return ABILITIES[id] && merged.ownedAbilities.indexOf(id) >= 0; }).slice(0, LOADOUT_SIZE);
+      if (!merged.loadouts || typeof merged.loadouts !== "object") merged.loadouts = {};
       return merged;
     } catch (e) {
       return base;
@@ -151,6 +133,18 @@
   function playerPower() {
     var aura = equippedAura();
     return (aura ? aura.power : 0) + S.training * 10;
+  }
+
+  /* Slot indices (0-5) of the chosen abilities for an aura. */
+  function loadoutFor(aura) {
+    var raw = S.loadouts[aura.id];
+    var clean = Array.isArray(raw) ? raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < K.KIT_SIZE && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE) : [];
+    return clean.length ? clean : DEFAULT_LOADOUT.slice();
+  }
+
+  function kitAbility(fighter, id) {
+    for (var i = 0; i < fighter.kit.length; i++) if (fighter.kit[i].id === id) return fighter.kit[i];
+    return null;
   }
 
   function addCoins(n) {
@@ -641,75 +635,96 @@
   function equip(id) {
     if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
     S.equipped = id;
+    abilitiesViewAura = id;
     toast("Equipped " + A.byId(id).name);
     save();
     renderAll();
   }
 
-  /* ---------- Abilities tab ---------- */
+  /* ---------- Abilities tab: each aura has its own kit of 6, pick 4 ---------- */
+
+  var abilitiesViewAura = null;
 
   function renderAbilities() {
     var grid = $("#ability-grid");
+    var sel = $("#ability-aura");
     grid.innerHTML = "";
-    $("#loadout-count").textContent = S.loadout.length + " / " + LOADOUT_SIZE + " equipped";
-    ABILITY_ORDER.forEach(function (id) {
-      var ab = ABILITIES[id];
-      var owned = S.ownedAbilities.indexOf(id) >= 0;
-      var slot = S.loadout.indexOf(id);
+    var ids = Object.keys(S.inventory).map(Number).filter(function (id) { return S.inventory[id] > 0; });
+    ids.sort(function (a, b) { return A.byId(b).rarity - A.byId(a).rarity; });
+    var eq = equippedAura();
+    if (abilitiesViewAura === null || !S.inventory[abilitiesViewAura]) abilitiesViewAura = eq ? eq.id : (ids.length ? ids[0] : null);
+    sel.innerHTML = "";
+    ids.forEach(function (id) {
+      var a = A.byId(id);
+      var o = document.createElement("option");
+      o.value = id;
+      o.textContent = a.name + " · " + tierName(a) + (eq && eq.id === id ? " (equipped)" : "");
+      sel.appendChild(o);
+    });
+    if (abilitiesViewAura === null) {
+      $("#loadout-count").textContent = "";
+      grid.innerHTML = "<div class=\"empty-note\">Roll an aura first. Every aura comes with its own signature abilities.</div>";
+      return;
+    }
+    sel.value = String(abilitiesViewAura);
+    var aura = A.byId(abilitiesViewAura);
+    var kit = K.kitFor(aura);
+    var loadout = loadoutFor(aura);
+    $("#loadout-count").textContent = loadout.length + " / " + LOADOUT_SIZE + " chosen";
+    var head = $("#ability-aura-head");
+    head.innerHTML = "";
+    head.appendChild(makeOrb(aura, "small"));
+    var ht = document.createElement("div");
+    var hn = document.createElement("div"); hn.className = "card-title"; hn.textContent = aura.name + "'s kit";
+    var hs = document.createElement("div"); hs.className = "card-sub"; hs.textContent = tierName(aura) + " · " + fmt(aura.power) + " power" + (eq && eq.id === aura.id ? " · equipped" : " · not equipped");
+    ht.appendChild(hn); ht.appendChild(hs);
+    head.appendChild(ht);
+    kit.forEach(function (ab, idx) {
+      var slot = loadout.indexOf(idx);
       var card = document.createElement("div");
-      card.className = "card" + (slot >= 0 ? " selected" : "") + (owned ? "" : " locked");
+      card.className = "card" + (slot >= 0 ? " selected" : "");
       if (slot >= 0) {
         var sl = document.createElement("div");
         sl.className = "slot";
         sl.textContent = "SLOT " + (slot + 1);
         card.appendChild(sl);
       }
-      var stat = ab.mult > 0 ? fmt(Math.round(ab.mult * 100)) + "% power" : "support";
-      card.innerHTML +=
-        "<div class=\"row\"><div class=\"big-icon\">" + ab.icon + "</div><div><div class=\"card-title\">" + ab.name + "</div><div class=\"card-sub\">" + stat + " · " + (ab.cd ? ab.cd + " turn cooldown" : "no cooldown") + "</div></div></div>" +
-        "<div class=\"card-sub\">" + ab.desc + "</div>";
+      var stat = ab.mult > 0 ? fmt(Math.round(ab.mult * 100)) + "% power" + (ab.hits ? " x" + ab.hits : "") : "support";
+      var row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = "<div class=\"big-icon\">" + ab.icon + "</div>";
+      var info = document.createElement("div");
+      var t = document.createElement("div"); t.className = "card-title"; t.textContent = ab.name;
+      var sub = document.createElement("div"); sub.className = "card-sub"; sub.textContent = stat + " · " + (ab.cd ? ab.cd + " turn cooldown" : "no cooldown");
+      info.appendChild(t); info.appendChild(sub);
+      row.appendChild(info);
+      card.appendChild(row);
+      var d = document.createElement("div"); d.className = "card-sub"; d.textContent = ab.desc;
+      card.appendChild(d);
       var actions = document.createElement("div");
       actions.className = "actions";
-      if (!owned) {
-        var price = document.createElement("span");
-        price.className = "price";
-        price.textContent = fmt(ab.cost) + " coins";
-        var buy = document.createElement("button");
-        buy.className = "btn small primary";
-        buy.textContent = "Unlock";
-        buy.disabled = S.coins < ab.cost;
-        buy.addEventListener("click", function () {
-          if (S.coins < ab.cost) return;
-          S.coins -= ab.cost;
-          S.ownedAbilities.push(id);
-          Sound.buy();
-          toast("Unlocked " + ab.name);
-          save();
-          renderAll();
-        });
-        actions.appendChild(price);
-        actions.appendChild(buy);
-      } else {
-        var btn = document.createElement("button");
-        btn.className = "btn small" + (slot >= 0 ? " danger" : " primary");
-        btn.textContent = slot >= 0 ? "Remove" : "Equip";
-        btn.addEventListener("click", function () { toggleLoadout(id); });
-        actions.appendChild(btn);
-      }
+      var btn = document.createElement("button");
+      btn.className = "btn small" + (slot >= 0 ? " danger" : " primary");
+      btn.textContent = slot >= 0 ? "Remove" : "Choose";
+      btn.addEventListener("click", function () { toggleLoadout(aura, idx); });
+      actions.appendChild(btn);
       card.appendChild(actions);
       grid.appendChild(card);
     });
   }
 
-  function toggleLoadout(id) {
+  function toggleLoadout(aura, idx) {
     if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
-    var i = S.loadout.indexOf(id);
+    var loadout = loadoutFor(aura);
+    var i = loadout.indexOf(idx);
     if (i >= 0) {
-      S.loadout.splice(i, 1);
+      if (loadout.length === 1) { toast("Keep at least one ability", "bad"); return; }
+      loadout.splice(i, 1);
     } else {
-      if (S.loadout.length >= LOADOUT_SIZE) { toast("Loadout is full. Remove an ability first.", "bad"); return; }
-      S.loadout.push(id);
+      if (loadout.length >= LOADOUT_SIZE) { toast("Loadout is full. Remove an ability first.", "bad"); return; }
+      loadout.push(idx);
     }
+    S.loadouts[aura.id] = loadout;
     save();
     renderAbilities();
   }
@@ -720,8 +735,8 @@
     makeFighter: function (o) {
       return {
         name: o.name, power: o.power, maxHp: o.power * 12, hp: o.power * 12,
-        abilities: o.abilities.slice(), cooldowns: {},
-        guard: false, focus: false, reflect: false, stunned: false, skip: false,
+        kit: o.kit, abilities: o.abilities.slice(), cooldowns: {},
+        guard: false, focus: false, reflect: false, stunned: false, skip: false, shield: 0,
         poison: null, weaken: 0, dmgMult: o.dmgMult || 1,
         auraId: o.auraId === undefined ? null : o.auraId, icon: o.icon || null, isBot: !!o.isBot
       };
@@ -732,7 +747,7 @@
     other: function (w) { return w === "a" ? "b" : "a"; },
     canUse: function (b, who, id) {
       var f = b[who];
-      return !b.over && b.turn === who && !!ABILITIES[id] && f.abilities.indexOf(id) >= 0 && !(f.cooldowns[id] > 0);
+      return !b.over && b.turn === who && !!kitAbility(f, id) && f.abilities.indexOf(id) >= 0 && !(f.cooldowns[id] > 0);
     },
     snapshot: function (b) {
       return {
@@ -772,40 +787,50 @@
       rng = rng || Math.random;
       var ev = [];
       if (!Engine.canUse(b, who, id)) return ev;
-      var ab = ABILITIES[id];
+      var ab = kitAbility(b[who], id);
       var me = b[who], them = b[Engine.other(who)], other = Engine.other(who);
       me.cooldowns[id] = ab.cd + 1;
-      ev.push({ type: "use", who: who, ability: id });
+      ev.push({ type: "use", who: who, ability: id, name: ab.name, icon: ab.icon });
 
       if (ab.effect === "heal") {
         var amt = Math.round(me.maxHp * ab.pct);
         me.hp = Math.min(me.maxHp, me.hp + amt);
         ev.push({ type: "heal", who: who, amount: amt, hpA: b.a.hp, hpB: b.b.hp });
+      } else if (ab.effect === "shield") {
+        me.shield = Math.round(me.maxHp * ab.shieldPct);
+        ev.push({ type: "buff", who: who, effect: "shield", amount: me.shield });
       } else if (ab.effect === "guard" || ab.effect === "focus" || ab.effect === "reflect") {
         me[ab.effect] = true;
         ev.push({ type: "buff", who: who, effect: ab.effect });
       }
 
       if (ab.mult > 0) {
-        var crit = ab.alwaysCrit || rng() < 0.1;
-        var dmg = me.power * ab.mult * me.dmgMult * (0.85 + rng() * 0.3) * (crit ? 2 : 1);
-        if (me.focus) { dmg *= 1.8; me.focus = false; ev.push({ type: "consume", who: who, effect: "focus" }); }
-        if (me.weaken > 0) dmg *= 0.7;
-        var blocked = false;
-        if (them.guard) { dmg *= 0.4; them.guard = false; blocked = true; }
-        dmg = Math.max(1, Math.round(dmg));
-        them.hp -= dmg;
-        ev.push({ type: "damage", who: who, target: other, amount: dmg, crit: crit, blocked: blocked, hpA: b.a.hp, hpB: b.b.hp });
-        if (ab.lifesteal) {
-          var heal = Math.round(dmg * ab.lifesteal);
-          me.hp = Math.min(me.maxHp, me.hp + heal);
-          ev.push({ type: "heal", who: who, amount: heal, hpA: b.a.hp, hpB: b.b.hp });
-        }
-        if (them.reflect) {
-          var back = Math.max(1, Math.round(dmg * 0.6));
-          them.reflect = false;
-          me.hp -= back;
-          ev.push({ type: "reflect", who: other, target: who, amount: back, hpA: b.a.hp, hpB: b.b.hp });
+        var hits = ab.hits || 1;
+        for (var h = 0; h < hits && them.hp > 0 && me.hp > 0; h++) {
+          var crit = ab.alwaysCrit || rng() < 0.1;
+          var dmg = me.power * ab.mult * me.dmgMult * (0.85 + rng() * 0.3) * (crit ? 2 : 1);
+          if (me.focus) { dmg *= 1.8; me.focus = false; ev.push({ type: "consume", who: who, effect: "focus" }); }
+          if (me.weaken > 0) dmg *= 0.7;
+          var executed = false;
+          if (ab.executeBelow && them.hp / them.maxHp < ab.executeBelow) { dmg *= 2; executed = true; }
+          var blocked = false;
+          if (them.guard) { dmg *= 0.4; them.guard = false; blocked = true; }
+          dmg = Math.max(1, Math.round(dmg));
+          var absorbed = 0;
+          if (them.shield > 0) { absorbed = Math.min(them.shield, dmg); them.shield -= absorbed; dmg -= absorbed; }
+          them.hp -= dmg;
+          ev.push({ type: "damage", who: who, target: other, amount: dmg, absorbed: absorbed, crit: crit, blocked: blocked, executed: executed, hpA: b.a.hp, hpB: b.b.hp });
+          if (ab.lifesteal && dmg > 0) {
+            var heal = Math.round(dmg * ab.lifesteal);
+            me.hp = Math.min(me.maxHp, me.hp + heal);
+            ev.push({ type: "heal", who: who, amount: heal, hpA: b.a.hp, hpB: b.b.hp });
+          }
+          if (them.reflect) {
+            var back = Math.max(1, Math.round((dmg + absorbed) * 0.6));
+            them.reflect = false;
+            me.hp -= back;
+            ev.push({ type: "reflect", who: other, target: who, amount: back, hpA: b.a.hp, hpB: b.b.hp });
+          }
         }
         if (them.hp > 0) {
           if (ab.poison) { them.poison = { turns: ab.poison.turns, dmg: Math.max(1, Math.round(me.power * ab.poison.mult)) }; ev.push({ type: "debuff", who: other, effect: "poison" }); }
@@ -828,16 +853,19 @@
       var avail = f.abilities.filter(function (id) { return Engine.canUse(b, who, id); });
       if (!avail.length) return null;
       var hpPct = f.hp / f.maxHp;
-      if (hpPct < 0.35 && avail.indexOf("heal") >= 0 && rng() < 0.8) return "heal";
-      if (!f.focus && avail.indexOf("focus") >= 0 && rng() < 0.4) return "focus";
-      if (!f.reflect && avail.indexOf("reflect") >= 0 && rng() < 0.35) return "reflect";
-      if (!f.guard && avail.indexOf("guard") >= 0 && hpPct < 0.6 && rng() < 0.35) return "guard";
-      var attacks = avail.filter(function (id) { return ABILITIES[id].mult > 0; });
+      var byArch = function (arch) { return avail.filter(function (id) { return kitAbility(f, id).arch === arch; })[0]; };
+      if (hpPct < 0.35 && byArch("heal") && rng() < 0.8) return byArch("heal");
+      if (!f.focus && byArch("focus") && rng() < 0.4) return byArch("focus");
+      if (!f.reflect && byArch("reflect") && rng() < 0.35) return byArch("reflect");
+      if (!f.shield && byArch("shield") && hpPct < 0.7 && rng() < 0.4) return byArch("shield");
+      if (!f.guard && byArch("guard") && hpPct < 0.6 && rng() < 0.35) return byArch("guard");
+      var weight = function (id) { var ab = kitAbility(f, id); return ab.mult * (ab.hits || 1) * (ab.executeBelow && b[Engine.other(who)].hp / b[Engine.other(who)].maxHp < ab.executeBelow ? 2 : 1); };
+      var attacks = avail.filter(function (id) { return kitAbility(f, id).mult > 0; });
       if (!attacks.length) return avail[Math.floor(rng() * avail.length)];
       var total = 0;
-      attacks.forEach(function (id) { total += ABILITIES[id].mult; });
+      attacks.forEach(function (id) { total += weight(id); });
       var r = rng() * total;
-      for (var i = 0; i < attacks.length; i++) { r -= ABILITIES[attacks[i]].mult; if (r <= 0) return attacks[i]; }
+      for (var i = 0; i < attacks.length; i++) { r -= weight(attacks[i]); if (r <= 0) return attacks[i]; }
       return attacks[attacks.length - 1];
     }
   };
@@ -859,7 +887,7 @@
       var ratio = pp / bot.power;
       var verdict = ratio >= 1.3 ? "Easy" : ratio >= 1 ? "Fair" : ratio >= 0.75 ? "Hard" : "Deadly";
       var vcls = ratio >= 1 ? "t-uncommon" : ratio >= 0.75 ? "t-legendary" : "t-forbidden";
-      var abil = bot.abilities.map(function (id) { return ABILITIES[id].icon; }).join(" ");
+      var abil = K.botKit(bot.id).map(function (ab) { return ab.icon + " " + ab.name; }).join(" · ");
       card.innerHTML =
         "<div class=\"row\"><div class=\"big-icon\">" + bot.icon + "</div><div><div class=\"card-title\">" + bot.name + "</div><div class=\"card-sub\">Power " + fmt(bot.power) + " · <span class=\"" + vcls + "\">" + verdict + "</span></div><div class=\"card-sub\">Abilities: " + abil + "</div></div></div>" +
         "<div class=\"row\"><span class=\"price\">+" + fmt(bot.reward) + " coins</span><span class=\"card-sub\">wins: " + wins + "</span></div>";
@@ -878,10 +906,17 @@
 
   function myFighterSpec() {
     var aura = equippedAura();
-    return {
-      name: (S.playerName || "You"), power: playerPower(), abilities: S.loadout.slice(),
-      auraId: aura ? aura.id : null, auraName: aura ? aura.name : "", isBot: false
-    };
+    return { name: (S.playerName || "You"), power: playerPower(), auraId: aura ? aura.id : null, loadout: aura ? loadoutFor(aura) : DEFAULT_LOADOUT.slice(), isBot: false };
+  }
+
+  /* Build a fighter from a spec: its kit comes from the aura, its abilities from the loadout slots. */
+  function fighterFromSpec(spec) {
+    var aura = spec.auraId !== null && spec.auraId !== undefined ? A.byId(spec.auraId) : null;
+    var kit = aura ? K.kitFor(aura) : K.botKit("dummy");
+    var slots = Array.isArray(spec.loadout) && spec.loadout.length ? spec.loadout : DEFAULT_LOADOUT;
+    var abilities = slots.filter(function (i) { return kit[i]; }).map(function (i) { return kit[i].id; });
+    if (!abilities.length) abilities = [kit[0].id];
+    return Engine.makeFighter({ name: spec.name, power: spec.power, kit: kit, abilities: abilities, auraId: aura ? aura.id : null, dmgMult: spec.dmgMult || 1, isBot: false });
   }
 
   function startBotFight(bot) {
@@ -889,11 +924,11 @@
     if (PvP.status === "connected") { toast("Leave the PvP room to fight bots", "bad"); return; }
     var aura = equippedAura();
     if (!aura) { toast("Equip an aura first", "bad"); return; }
-    if (S.loadout.length < 1) { toast("Equip at least one ability", "bad"); return; }
     var spec = myFighterSpec();
     spec.dmgMult = S.strengthReady ? POTIONS.strength.mult : 1;
-    var me = Engine.makeFighter(spec);
-    var them = Engine.makeFighter({ name: bot.name, power: bot.power, abilities: bot.abilities, icon: bot.icon, isBot: true });
+    var me = fighterFromSpec(spec);
+    var bkit = K.botKit(bot.id);
+    var them = Engine.makeFighter({ name: bot.name, power: bot.power, kit: bkit, abilities: bkit.map(function (ab) { return ab.id; }), icon: bot.icon, isBot: true });
     battle = Engine.create(me, them, "a");
     view = { me: "a", pvp: false, animating: false, bot: bot };
     openArena();
@@ -931,6 +966,7 @@
     if (f.guard) chips.push(["🛡️ Guard", "good"]);
     if (f.focus) chips.push(["🔮 Focus", "good"]);
     if (f.reflect) chips.push(["🪞 Mirror", "good"]);
+    if (f.shield > 0) chips.push(["🔰 Shield " + fmt(f.shield), "good"]);
     if (f.poison) chips.push(["☠️ Poison " + f.poison.turns, "bad"]);
     if (f.weaken > 0) chips.push(["🌀 Weak " + f.weaken, "bad"]);
     if (f.stunned) chips.push(["⚡ Stunned", "bad"]);
@@ -969,13 +1005,14 @@
     bar.innerHTML = "";
     var me = battle[view.me];
     me.abilities.forEach(function (id) {
-      var ab = ABILITIES[id];
+      var ab = kitAbility(me, id);
+      if (!ab) return;
       var btn = document.createElement("button");
       btn.className = "ability-btn";
       var cdLeft = me.cooldowns[id] || 0;
       btn.disabled = !myTurn || cdLeft > 0;
       btn.title = ab.desc;
-      var sub = ab.mult > 0 ? "~" + fmt(Math.round(me.power * ab.mult * me.dmgMult)) + " dmg" : "support";
+      var sub = ab.mult > 0 ? "~" + fmt(Math.round(me.power * ab.mult * me.dmgMult)) + " dmg" + (ab.hits ? " x" + ab.hits : "") : "support";
       btn.innerHTML = "<span class=\"ab-icon\">" + ab.icon + "</span><span class=\"ab-name\">" + ab.name + "</span><span class=\"ab-sub\">" + sub + "</span>" + (cdLeft > 0 ? "<span class=\"cd\">" + cdLeft + "</span>" : "");
       btn.addEventListener("click", function () { chooseAbility(id); });
       bar.appendChild(btn);
@@ -1034,14 +1071,14 @@
       var delay = 420;
       switch (e.type) {
         case "use":
-          logLine((isMe(e.who) ? "You use " : sideName(e.who) + " uses ") + ABILITIES[e.ability].icon + " " + ABILITIES[e.ability].name, isMe(e.who) ? "you" : "them");
+          logLine((isMe(e.who) ? "You use " : sideName(e.who) + " uses ") + e.icon + " " + e.name, isMe(e.who) ? "you" : "them");
           delay = 250;
           break;
         case "damage":
           flash(e.target, "hit");
           floatText(e.target, "-" + fmt(e.amount) + (e.crit ? "!" : ""), e.crit ? "t-divine" : "t-forbidden");
           Sound.hit(e.crit);
-          logLine((e.crit ? "💥 CRIT! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.blocked ? " (blocked 60%)" : ""), e.crit ? "crit" : (isMe(e.who) ? "you" : "them"));
+          logLine((e.crit ? "💥 CRIT! " : "") + (e.executed ? "EXECUTE! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.absorbed ? " (" + fmt(e.absorbed) + " absorbed)" : "") + (e.blocked ? " (blocked 60%)" : ""), e.crit || e.executed ? "crit" : (isMe(e.who) ? "you" : "them"));
           setHP(e);
           break;
         case "heal":
@@ -1064,7 +1101,7 @@
           setHP(e);
           break;
         case "buff":
-          logLine((isMe(e.who) ? "You gain " : sideName(e.who) + " gains ") + e.effect, isMe(e.who) ? "you" : "them");
+          logLine((isMe(e.who) ? "You gain " : sideName(e.who) + " gains ") + (e.effect === "shield" ? "a shield of " + fmt(e.amount) : e.effect), isMe(e.who) ? "you" : "them");
           delay = 250;
           break;
         case "debuff":
@@ -1378,16 +1415,17 @@
     if (!spec || typeof spec !== "object") return null;
     var name = String(spec.name || "Opponent").slice(0, 16).replace(/[<>]/g, "") || "Opponent";
     var power = Math.max(1, Math.min(1e7, Math.floor(Number(spec.power) || 1)));
-    var abilities = Array.isArray(spec.abilities) ? spec.abilities.filter(function (id) { return !!ABILITIES[id]; }).slice(0, LOADOUT_SIZE) : [];
-    if (!abilities.length) abilities = ["strike"];
     var auraId = Number.isInteger(spec.auraId) && A.byId(spec.auraId) ? spec.auraId : null;
-    return { name: name, power: power, abilities: abilities, auraId: auraId, isBot: false };
+    var raw = Array.isArray(spec.loadout) ? spec.loadout : [];
+    var loadout = raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < K.KIT_SIZE && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE);
+    if (!loadout.length) loadout = DEFAULT_LOADOUT.slice();
+    return { name: name, power: power, auraId: auraId, loadout: loadout, isBot: false };
   }
 
   function pvpStartBattle() {
     /* Host builds the battle: host is "a", guest is "b". */
-    var me = Engine.makeFighter(PvP.hello);
-    var them = Engine.makeFighter(PvP.opp);
+    var me = fighterFromSpec(PvP.hello);
+    var them = fighterFromSpec(PvP.opp);
     var first = Math.random() < 0.5 ? "a" : "b";
     battle = Engine.create(me, them, first);
     view = { me: "a", pvp: true, animating: false, bot: null };
@@ -1564,7 +1602,7 @@
       ["Win streak", fmt(S.stats.streak) + " (best " + fmt(S.stats.bestStreak) + ")"],
       ["Cutscenes triggered", fmt(S.stats.cutscenes)],
       ["Training level", fmt(S.training)],
-      ["Abilities unlocked", S.ownedAbilities.length + " / " + ABILITY_ORDER.length]
+      ["Equipped kit", equippedAura() ? loadoutFor(equippedAura()).map(function (i) { return K.kitFor(equippedAura())[i].name; }).join(", ") : "—"]
     ];
     grid.innerHTML = "";
     items.forEach(function (it) {
@@ -1607,7 +1645,6 @@
     "give <aura name|id>       add an aura to your inventory",
     "roll <aura name|id>       force your next roll to be that aura (plays its reveal)",
     "potion <key> [count]      add potions: " + POTION_ORDER.join(", "),
-    "ability <id|all>          unlock abilities: " + ABILITY_ORDER.join(", "),
     "training <level>          set training level",
     "unlockauto                unlock Auto Roll",
     "clearluck                 remove all luck boosts",
@@ -1663,14 +1700,6 @@
         if (!POTIONS[key] || !(cnt > 0)) { adminPrint("Usage: potion <" + POTION_ORDER.join("|") + "> [count]"); break; }
         S.potions[key] = (S.potions[key] || 0) + cnt;
         adminPrint("Added " + cnt + " x " + POTIONS[key].name + ".");
-        break;
-      }
-      case "ability": {
-        var ab = (parts[0] || "").toLowerCase();
-        if (ab === "all") { S.ownedAbilities = ABILITY_ORDER.slice(); adminPrint("All abilities unlocked."); break; }
-        if (!ABILITIES[ab]) { adminPrint("Usage: ability <" + ABILITY_ORDER.join("|") + "|all>"); break; }
-        if (S.ownedAbilities.indexOf(ab) < 0) S.ownedAbilities.push(ab);
-        adminPrint("Unlocked " + ABILITIES[ab].name + ".");
         break;
       }
       case "training": {
@@ -2287,6 +2316,7 @@
     resetSave();
     toast("Progress reset");
   });
+  $("#ability-aura").addEventListener("change", function (e) { abilitiesViewAura = Number(e.target.value); renderAbilities(); });
   $("#btn-save").addEventListener("click", manualSave);
   $("#btn-login").addEventListener("click", openLogin);
   $("#login-close").addEventListener("click", closeLogin);
@@ -2332,7 +2362,7 @@
     preview: function (name) { var a = findAura(name); if (a) playCutscene(a, true); },
     admin: runAdmin,
     engine: Engine,
-    abilities: ABILITIES,
+    kits: K,
     pvp: function () { return { status: PvP.status, role: PvP.role, code: PvP.code }; },
     battle: function () { return battle; }
   };

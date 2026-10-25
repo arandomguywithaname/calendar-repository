@@ -77,8 +77,13 @@
     <section id="tab-abilities" class="panel">
       <div class="panel-head">
         <h2>Abilities <span id="loadout-count" class="pill"></span></h2>
-        <p class="muted">Pick exactly 4 abilities for battle. Unlock more with coins. Damage scales with your equipped aura's power.</p>
+        <p class="muted">Every aura has its own kit of 6 signature abilities. Choose up to 4 to bring into battle. Damage scales with the aura's power.</p>
       </div>
+      <div class="index-controls">
+        <label class="pvp-label">Aura</label>
+        <select id="ability-aura"></select>
+      </div>
+      <div id="ability-aura-head" class="kit-head"></div>
       <div id="ability-grid" class="card-grid"></div>
     </section>
 
@@ -238,6 +243,7 @@
 
   <script src="peerjs.min.js"></script>
   <script src="auras.js"></script>
+  <script src="abilities.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

@@ -282,6 +282,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .card.selected { border-color: var(--gold); box-shadow: 0 0 20px rgba(251,191,36,.25); }
 .card .slot { position: absolute; top: 10px; right: 12px; font-size: .75rem; font-weight: 700; color: var(--gold); letter-spacing: .1em; }
 
+.kit-head { display: flex; align-items: center; gap: 16px; margin: 6px 0 16px; padding: 12px 16px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); }
+.index-controls .pvp-label { align-self: center; }
+
 /* PvP */
 .pvp-box { display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); margin-bottom: 10px; }
 .pvp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
