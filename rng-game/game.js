@@ -239,6 +239,8 @@
       o.stop(t0 + dur + 0.05);
     },
     roll: function () { this.tone(520, 0, 0.07, "square", 0.025); },
+    tick: function (freq) { this.tone(freq, 0, 0.05, "square", 0.02); },
+    boom: function (level) { this.tone(60, 0, 0.6, "sawtooth", 0.06 + level * 0.02); this.tone(90, 0.02, 0.4, "square", 0.04); },
     rare: function (level) {
       var self = this;
       [523, 659, 784, 1047, 1319, 1568].slice(0, 2 + level).forEach(function (f, i) { self.tone(f, i * 0.09, 0.6, "triangle", 0.07); });
@@ -385,25 +387,244 @@
     $("#btn-equip-last").disabled = false;
   }
 
-  function startSpin() {
-    var orb = $("#orb");
+  /* ---------- Roll stage effects (particles, beams, flashes) ---------- */
+
+  var FX = (function () {
+    var canvas = $("#stage-fx");
+    var ctx = canvas.getContext("2d");
+    var stage = $("#roll-stage");
+    var parts = [], orbit = [], beams = { on: false, colors: [], level: 0 }, raf = 0, running = false, last = 0;
+
+    var cachedCenter = null, lastLayout = 0;
+    function resize() {
+      var r = stage.getBoundingClientRect();
+      if (r.width && (canvas.width !== Math.round(r.width) || canvas.height !== Math.round(r.height))) {
+        canvas.width = Math.round(r.width);
+        canvas.height = Math.round(r.height);
+      }
+      cachedCenter = null;
+    }
+    /* Layout reads are throttled: the orb only moves on resize or tab switches. */
+    function center() {
+      var now = performance.now();
+      if (!cachedCenter || now - lastLayout > 400) {
+        var o = $("#orb").getBoundingClientRect(), r = stage.getBoundingClientRect();
+        cachedCenter = { x: o.left - r.left + o.width / 2, y: o.top - r.top + o.height / 2, r: o.width / 2 };
+        lastLayout = now;
+      }
+      return cachedCenter;
+    }
+    function start() { if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(frame); } }
+    function burst(colors, n, power) {
+      resize();
+      var c = center();
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, sp = (120 + Math.random() * 380) * power;
+        parts.push({ x: c.x + Math.cos(a) * c.r * 0.6, y: c.y + Math.sin(a) * c.r * 0.6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60 * power,
+          life: 1, decay: 0.45 + Math.random() * 0.7, size: 1.5 + Math.random() * 3 * power, color: colors[Math.floor(Math.random() * colors.length)], spark: Math.random() < 0.3 });
+      }
+      start();
+    }
+    function ring(color, power) {
+      resize();
+      var c = center();
+      parts.push({ ring: true, x: c.x, y: c.y, rad: c.r, vr: 500 * power, life: 1, decay: 1.1, color: color, width: 6 * power });
+      start();
+    }
+    function ambient(aura, tierIdx) {
+      resize();
+      orbit = [];
+      beams.on = tierIdx >= 4;
+      beams.colors = aura.colors;
+      beams.level = tierIdx;
+      if (tierIdx >= 3) {
+        var n = tierIdx >= 7 ? 70 : tierIdx >= 4 ? 44 : 18;
+        for (var i = 0; i < n; i++) {
+          orbit.push({ a: Math.random() * Math.PI * 2, dist: 1.2 + Math.random() * 0.7, tilt: 0.35 + Math.random() * 0.5, speed: (0.25 + Math.random() * 0.5) * (Math.random() < 0.5 ? 1 : -1),
+            size: 1 + Math.random() * 2, color: aura.colors[Math.floor(Math.random() * aura.colors.length)], phase: Math.random() * 6 });
+        }
+      }
+      if (orbit.length || beams.on) start();
+    }
+    function clear() {
+      parts = []; orbit = []; beams.on = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    function frame(now) {
+      var dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (now - lastLayout > 400) resize();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var c = center();
+      if (beams.on) {
+        var n = beams.level >= 7 ? 18 : 12;
+        var len = Math.max(canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        ctx.globalCompositeOperation = "lighter";
+        for (var k = 0; k < n; k++) {
+          var ang = now / (beams.level >= 7 ? 2500 : 4500) * Math.PI * 2 * (k % 2 ? 1 : -1) + k * Math.PI * 2 / n;
+          var col = beams.colors[k % beams.colors.length];
+          var g = ctx.createLinearGradient(0, 0, Math.cos(ang) * len, Math.sin(ang) * len);
+          g.addColorStop(0, col);
+          g.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = 0.16 + 0.08 * Math.sin(now / 300 + k);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(ang - 0.05) * len, Math.sin(ang - 0.05) * len);
+          ctx.lineTo(Math.cos(ang + 0.05) * len, Math.sin(ang + 0.05) * len);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+      ctx.globalCompositeOperation = "lighter";
+      orbit.forEach(function (o) {
+        o.a += o.speed * dt;
+        var x = c.x + Math.cos(o.a) * o.dist * c.r, y = c.y + Math.sin(o.a) * o.dist * c.r * o.tilt;
+        var tw = 0.45 + 0.55 * Math.sin(now / 180 + o.phase);
+        ctx.fillStyle = o.color;
+        ctx.globalAlpha = tw * 0.25;
+        ctx.beginPath();
+        ctx.arc(x, y, o.size * 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = tw;
+        ctx.beginPath();
+        ctx.arc(x, y, o.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      parts = parts.filter(function (p) { return p.life > 0; });
+      parts.forEach(function (p) {
+        p.life -= p.decay * dt;
+        if (p.ring) {
+          p.rad += p.vr * dt;
+          ctx.globalAlpha = Math.max(0, p.life) * 0.8;
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = p.width * p.life;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2);
+          ctx.stroke();
+          return;
+        }
+        p.vy += 160 * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.985;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.spark ? "#fff" : p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (0.4 + p.life * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+      if (parts.length || orbit.length || beams.on) raf = requestAnimationFrame(frame);
+      else { running = false; ctx.clearRect(0, 0, canvas.width, canvas.height); }
+    }
+    window.addEventListener("resize", resize);
+    return { burst: burst, ring: ring, ambient: ambient, clear: clear, resize: resize };
+  })();
+
+  function tierIndex(aura) { return A.TIERS.indexOf(A.tierOf(aura)); }
+
+  function screenFlash(aura, power) {
+    var el = $("#stage-flash");
+    el.style.background = "radial-gradient(circle at 50% 40%, rgba(255,255,255," + (0.9 * power) + ") 0%, " + aura.c1 + " 25%, " + aura.c2 + " 55%, rgba(0,0,0,0) 80%)";
+    el.classList.remove("go");
+    void el.offsetWidth;
+    el.classList.add("go");
+  }
+
+  function shake(level) {
+    if (!level) return;
+    document.body.classList.remove("shake-1", "shake-2", "shake-3");
+    void document.body.offsetWidth;
+    document.body.classList.add("shake-" + level);
+    setTimeout(function () { document.body.classList.remove("shake-" + level); }, 1000);
+  }
+
+  function showBanner(aura, ti) {
+    var b = $("#roll-banner");
+    b.className = "roll-banner";
+    if (ti < 2) { b.textContent = ""; return; }
+    b.textContent = "✦ " + tierName(aura) + " ✦";
+    b.classList.add("t-" + aura.tier);
+    void b.offsetWidth;
+    b.classList.add(ti >= 4 ? "big" : "go");
+  }
+
+  function setGlow(aura, ti) {
+    var g = $("#stage-glow");
+    g.classList.remove("pulse");
+    if (!aura || ti < 3) { g.style.setProperty("--glow", "0"); return; }
+    g.style.background = "radial-gradient(ellipse at 50% 32%, " + aura.c1 + " 0%, " + aura.c2 + " 28%, rgba(0,0,0,0) 62%)";
+    g.style.setProperty("--glow", ti >= 7 ? "0.6" : ti >= 4 ? "0.5" : "0.32");
+    if (ti >= 4) g.classList.add("pulse");
+  }
+
+  /* Persistent look of the stage for the aura currently shown (used after a reveal and on load). */
+  function stageAmbient(aura) {
+    var ti = tierIndex(aura);
+    setGlow(aura, ti);
+    FX.ambient(aura, ti);
+    var b = $("#roll-banner");
+    b.className = "roll-banner";
+    if (ti >= 2) { b.textContent = "✦ " + tierName(aura) + " ✦"; b.classList.add("t-" + aura.tier, ti >= 4 ? "big" : "go"); }
+    else b.textContent = "";
+  }
+
+  var tierPools = {};
+  function spinPool(ti) {
+    if (!tierPools[ti]) {
+      var keys = [A.TIERS[ti].key, A.TIERS[Math.max(0, ti - 1)].key];
+      tierPools[ti] = A.list.filter(function (a) { return keys.indexOf(a.tier) >= 0; });
+    }
+    return tierPools[ti];
+  }
+
+  /* Cycle random aura names on the orb. Rare and above slow down like a slot machine and
+     drift toward the rolled tier near the end, so the player can feel it coming. */
+  function runSpin(aura, ti, duration, done) {
+    var orb = $("#orb"), nameEl = $("#roll-name"), paint = orb.querySelector(".orb-paint");
+    var slow = ti >= 2;
     orb.classList.add("spinning");
-    var nameEl = $("#roll-name");
-    var fill = orb.querySelector(".orb-paint");
-    spinTimer = setInterval(function () {
-      var a = A.list[Math.floor(Math.random() * A.list.length)];
+    var start = performance.now();
+    function tick() {
+      var p = Math.min(1, (performance.now() - start) / duration);
+      if (p >= 1) { stopSpin(); done(); return; }
+      var a = (slow && p > 0.6) ? spinPool(ti)[Math.floor(Math.random() * spinPool(ti).length)] : A.list[Math.floor(Math.random() * A.list.length)];
       nameEl.textContent = a.name;
       nameEl.className = "roll-name t-" + a.tier;
       nameEl.style.backgroundImage = "";
       orb.style.setProperty("--c1", a.c1);
-      fill.style.background = fillStyle(a);
-    }, 55);
+      paint.style.background = fillStyle(a);
+      if (slow) Sound.tick(220 + p * p * 700);
+      spinTimer = setTimeout(tick, slow ? 45 + Math.pow(p, 2.2) * 330 : 55);
+    }
+    tick();
   }
 
   function stopSpin() {
-    clearInterval(spinTimer);
+    clearTimeout(spinTimer);
     spinTimer = null;
     $("#orb").classList.remove("spinning");
+  }
+
+  function revealEffects(aura, ti) {
+    if (ti < 2) return;
+    var power = ti === 2 ? 0.5 : ti === 3 ? 0.8 : ti >= 7 ? 1.4 : 1.1;
+    screenFlash(aura, power);
+    FX.burst(aura.colors, ti === 2 ? 50 : ti === 3 ? 130 : ti >= 7 ? 420 : 260, power);
+    FX.ring(aura.c1, power);
+    if (ti >= 4) { FX.ring(aura.colors[2] || aura.c2, power * 0.7); setTimeout(function () { FX.ring("#ffffff", power * 0.5); }, 180); }
+    showBanner(aura, ti);
+    setGlow(aura, ti);
+    FX.ambient(aura, ti);
+    shake(ti === 3 ? 1 : ti >= 7 ? 3 : ti >= 4 ? 2 : 0);
+    if (ti >= 4) Sound.boom(ti - 4);
+    else Sound.rare(ti - 2);
   }
 
   function doRoll(forced) {
@@ -413,6 +634,7 @@
     Sound.roll();
 
     var aura = forced || pickAura(currentLuck());
+    var ti = tierIndex(aura);
 
     S.rolls++;
     if (!forced) {
@@ -432,13 +654,16 @@
     if (aura.cutscene > 0) S.stats.cutscenes++;
     save();
 
-    var spinMs = aura.cutscene > 0 ? 900 : (hasteActive() ? 250 : 450);
-    startSpin();
-    setTimeout(function () {
-      stopSpin();
-      var after = function () {
+    FX.clear();
+    setGlow(null, 0);
+    $("#roll-banner").className = "roll-banner";
+    var spinMs = ti <= 1 ? (hasteActive() ? 250 : 450) : ti === 2 ? 1100 : ti === 3 ? 1600 : 2200;
+    var stage = $("#roll-stage");
+    runSpin(aura, ti, spinMs, function () {
+      var finish = function () {
+        stage.classList.remove("suspense");
         showAura(aura);
-        if (aura.cutscene === 0 && aura.rarity >= 1000) Sound.rare(0);
+        revealEffects(aura, ti);
         toast("+" + fmt(coins) + " coins", "gold");
         renderAll();
         busy = false;
@@ -446,11 +671,15 @@
         setTimeout(function () { $("#btn-roll").disabled = false; }, Math.max(0, cooldownUntil - Date.now()));
       };
       if (aura.cutscene > 0 && !S.settings.skipCutscenes) {
-        playCutscene(aura).then(after);
+        /* A beat of suspense: the orb trembles and dims before the screen is taken over. */
+        stage.classList.add("suspense");
+        $("#roll-name").textContent = "…";
+        $("#roll-name").className = "roll-name";
+        setTimeout(function () { playCutscene(aura).then(finish); }, 650);
       } else {
-        after();
+        finish();
       }
-    }, spinMs);
+    });
   }
 
   setInterval(function () {
@@ -1814,9 +2043,15 @@
       CS.el.classList.remove("hidden");
       CS.start = performance.now();
       function frame(now) {
-        var t = (now - CS.start) / 1000;
+        var t = Math.max(0, (now - CS.start) / 1000);
         CS.t = t;
-        CS.draw(ctx, t, CS.canvas.width, CS.canvas.height);
+        try {
+          CS.draw(ctx, t, CS.canvas.width, CS.canvas.height);
+        } catch (e) {
+          /* A drawing error must never lock the game behind the overlay. */
+          endCutscene();
+          return;
+        }
         if (t >= CS.endAt) { endCutscene(); return; }
         CS.raf = requestAnimationFrame(frame);
       }
@@ -1838,31 +2073,92 @@
     if (r) r();
   }
 
-  CS.el.addEventListener("click", function () { if (CS.running && CS.t > 1) endCutscene(); });
+  CS.el.addEventListener("click", function () { if (CS.running && performance.now() - CS.start > 1000) endCutscene(); });
 
+  /* Generic reveal. level 1 = Legendary (rings + sparks), 2 = Cosmic (+ star warp),
+     3 = Divine (+ god rays), 4 = Transcendent (+ lightning and colour cycling). */
   function drawGeneric(aura, level) {
     var colors = aura.colors;
     var c1 = aura.c1, c2 = aura.c2;
-    var parts = null;
+    var parts = null, stars = null, bolts = [], lastBolt = 0;
+    function makeBolt(w, h) {
+      var edge = Math.floor(Math.random() * 4);
+      var x = edge === 0 ? Math.random() * w : edge === 1 ? w : edge === 2 ? Math.random() * w : 0;
+      var y = edge === 0 ? 0 : edge === 1 ? Math.random() * h : edge === 2 ? h : Math.random() * h;
+      var pts = [[x, y]];
+      var cx = w / 2 + (Math.random() - 0.5) * w * 0.25, cy = h / 2 + (Math.random() - 0.5) * h * 0.25;
+      var n = 9;
+      for (var i = 1; i <= n; i++) {
+        var f = i / n;
+        pts.push([x + (cx - x) * f + (Math.random() - 0.5) * 60 * (1 - f), y + (cy - y) * f + (Math.random() - 0.5) * 60 * (1 - f)]);
+      }
+      return { pts: pts, born: performance.now() };
+    }
     return function (ctx, t, w, h) {
       var cx = w / 2, cy = h / 2, m = Math.max(w, h);
+      var cyc = level >= 4 ? Math.floor(t * 3) : 0;
+      var col = function (i) { return colors[(i + cyc) % colors.length]; };
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
-      var shake = t < 1.5 ? (1.5 - t) * 5 * level : 0;
+      var shake = t < 1.5 ? (1.5 - t) * 5 * level : (level >= 3 ? 1.5 : 0);
       ctx.save();
       ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
       var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, m * 0.6);
-      g.addColorStop(0, c1); g.addColorStop(0.35, c2); g.addColorStop(1, "rgba(0,0,0,1)");
+      g.addColorStop(0, col(0)); g.addColorStop(0.35, col(1)); g.addColorStop(1, "rgba(0,0,0,1)");
       ctx.globalAlpha = Math.min(1, t * 1.5) * (0.55 + 0.15 * Math.sin(t * 4));
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
       ctx.globalAlpha = 1;
+
+      if (level >= 2) {
+        if (!stars) { stars = []; for (var si = 0; si < 320; si++) stars.push({ x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2, z: Math.random() }); }
+        var speed = 0.004 + Math.min(1, t / 2) * 0.03;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.lineCap = "round";
+        stars.forEach(function (st) {
+          var pz = st.z;
+          st.z -= speed;
+          if (st.z <= 0.03) { st.z = 1; st.x = (Math.random() - 0.5) * 2; st.y = (Math.random() - 0.5) * 2; return; }
+          ctx.strokeStyle = Math.random() < 0.5 ? "#fff" : c1;
+          ctx.globalAlpha = Math.min(1, (1 - st.z) * 1.3) * Math.min(1, t);
+          ctx.lineWidth = (1 - st.z) * 2.2 + 0.4;
+          ctx.beginPath();
+          ctx.moveTo(cx + st.x / pz * cx, cy + st.y / pz * cy);
+          ctx.lineTo(cx + st.x / st.z * cx, cy + st.y / st.z * cy);
+          ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      if (level >= 3) {
+        var rays = level >= 4 ? 20 : 14;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.globalCompositeOperation = "lighter";
+        for (var r = 0; r < rays; r++) {
+          var ang = t * 0.35 * (r % 2 ? 1 : -0.7) + r * Math.PI * 2 / rays;
+          var rg = ctx.createLinearGradient(0, 0, Math.cos(ang) * m, Math.sin(ang) * m);
+          rg.addColorStop(0, col(r)); rg.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = (0.12 + 0.08 * Math.sin(t * 3 + r)) * Math.min(1, t / 1.2);
+          ctx.fillStyle = rg;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(ang - 0.06) * m, Math.sin(ang - 0.06) * m);
+          ctx.lineTo(Math.cos(ang + 0.06) * m, Math.sin(ang + 0.06) * m);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+
       var rings = 4 + level;
       for (var i = 0; i < rings; i++) {
         var rt = (t * 0.6 + i / rings) % 1;
         ctx.beginPath();
         ctx.arc(cx, cy, rt * m * 0.7, 0, Math.PI * 2);
-        ctx.strokeStyle = colors[i % colors.length];
+        ctx.strokeStyle = col(i);
         ctx.lineWidth = 2 + (1 - rt) * 6;
         ctx.globalAlpha = (1 - rt) * 0.6;
         ctx.stroke();
@@ -1870,7 +2166,7 @@
       ctx.globalAlpha = 1;
       if (!parts) {
         parts = [];
-        for (var k = 0; k < 120 + level * 60; k++) {
+        for (var k = 0; k < 120 + level * 70; k++) {
           parts.push({ a: Math.random() * Math.PI * 2, s: 60 + Math.random() * 260, r: Math.random() * 2 + 1, o: Math.random(), col: colors[Math.floor(Math.random() * colors.length)] });
         }
       }
@@ -1886,6 +2182,25 @@
       });
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
+
+      if (level >= 4) {
+        var now = performance.now();
+        if (now - lastBolt > 180 + Math.random() * 500 && t > 0.4) { bolts.push(makeBolt(w, h)); lastBolt = now; }
+        bolts = bolts.filter(function (b) { return now - b.born < 260; });
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        bolts.forEach(function (b) {
+          var age = (now - b.born) / 260;
+          ctx.beginPath();
+          ctx.moveTo(b.pts[0][0], b.pts[0][1]);
+          for (var q = 1; q < b.pts.length; q++) ctx.lineTo(b.pts[q][0], b.pts[q][1]);
+          ctx.shadowColor = c1; ctx.shadowBlur = 25;
+          ctx.strokeStyle = c1; ctx.lineWidth = 5 * (1 - age); ctx.globalAlpha = 1 - age; ctx.stroke();
+          ctx.shadowBlur = 0; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+          if (age < 0.15) { ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.25 * (1 - age / 0.15); ctx.fillRect(-20, -20, w + 40, h + 40); }
+          ctx.globalAlpha = 1;
+        });
+      }
+
       if (t < 0.5) {
         ctx.fillStyle = "#fff";
         ctx.globalAlpha = (0.5 - t) * 2;
@@ -2232,7 +2547,11 @@
   }
 
   function resetRollDisplay() {
-    if (S.lastRoll !== null && S.inventory[S.lastRoll]) { showAura(A.byId(S.lastRoll)); return; }
+    FX.clear();
+    if (S.lastRoll !== null && S.inventory[S.lastRoll]) { showAura(A.byId(S.lastRoll)); stageAmbient(A.byId(S.lastRoll)); return; }
+    setGlow(null, 0);
+    $("#roll-banner").className = "roll-banner";
+    $("#roll-banner").textContent = "";
     $("#roll-name").textContent = "Ready to roll";
     $("#roll-name").className = "roll-name";
     $("#roll-name").style.backgroundImage = "";
@@ -2293,6 +2612,7 @@
   function switchTab(name) {
     document.querySelectorAll(".tab").forEach(function (b) { b.classList.toggle("active", b.dataset.tab === name); });
     document.querySelectorAll(".panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
+    if (name === "roll") FX.resize();
   }
 
   $("#tabs").addEventListener("click", function (e) {

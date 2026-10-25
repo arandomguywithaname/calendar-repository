@@ -75,6 +75,7 @@ h3 { font-size: 1.05rem; letter-spacing: .04em; }
 
 main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .panel { display: none; animation: fadein .25s ease; }
+#tab-roll { overflow: hidden; }
 .panel.active { display: block; }
 @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .panel-head { margin-bottom: 18px; }
@@ -99,7 +100,29 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .btn.on { border-color: var(--ok); color: var(--ok); }
 
 /* Roll stage */
-.roll-stage { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.roll-stage { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.roll-stage > * { position: relative; z-index: 1; }
+.stage-fx { position: absolute !important; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0 !important; }
+.stage-glow { --glow: 0; position: absolute !important; inset: -60px 0 0; pointer-events: none; z-index: 0 !important; opacity: var(--glow); transition: opacity .8s; will-change: transform, opacity; }
+.stage-glow.pulse { animation: glowpulse 2.4s ease-in-out infinite; }
+@keyframes glowpulse { 0%, 100% { transform: scale(1); opacity: var(--glow); } 50% { transform: scale(1.1); opacity: calc(var(--glow) * 1.35); } }
+.stage-flash { position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: 0; }
+.stage-flash.go { animation: stageflash .9s ease-out forwards; }
+@keyframes stageflash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.roll-banner { font-family: var(--font-head); font-weight: 900; letter-spacing: .45em; padding-left: .45em; text-transform: uppercase; font-size: 1.05rem; min-height: 1.5em; margin-top: 18px; opacity: 0; }
+.roll-banner.go { animation: bannerin .7s cubic-bezier(.2,1.4,.4,1) forwards; }
+.roll-banner.big { font-size: 1.7rem; animation: bannerin .7s cubic-bezier(.2,1.4,.4,1) forwards, bannerglow 1.6s ease-in-out .7s infinite; }
+@keyframes bannerin { 0% { opacity: 0; transform: scale(3); filter: blur(12px); } 60% { opacity: 1; transform: scale(.95); filter: blur(0); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes bannerglow { 50% { text-shadow: 0 0 30px currentColor, 0 0 70px currentColor; } }
+.roll-stage.suspense .orb { animation: suspense .12s ease-in-out infinite; filter: brightness(.6) saturate(.6); }
+.roll-stage.suspense .roll-name { opacity: .5; }
+@keyframes suspense { 0%,100% { transform: translate(-2px, 1px) scale(.97); } 50% { transform: translate(2px, -1px) scale(.97); } }
+body.shake-1 { animation: shake1 .4s; }
+body.shake-2 { animation: shake2 .65s; }
+body.shake-3 { animation: shake3 .9s; }
+@keyframes shake1 { 0%,100% { transform: none; } 25% { transform: translate(3px,-2px); } 50% { transform: translate(-3px,2px); } 75% { transform: translate(2px,2px); } }
+@keyframes shake2 { 0%,100% { transform: none; } 15% { transform: translate(8px,-5px) rotate(.3deg); } 30% { transform: translate(-7px,5px); } 45% { transform: translate(6px,3px) rotate(-.3deg); } 60% { transform: translate(-5px,-4px); } 75% { transform: translate(3px,2px); } 90% { transform: translate(-2px,1px); } }
+@keyframes shake3 { 0%,100% { transform: none; } 10% { transform: translate(14px,-9px) rotate(.6deg); } 20% { transform: translate(-13px,8px) rotate(-.5deg); } 30% { transform: translate(11px,6px); } 40% { transform: translate(-10px,-7px) rotate(.4deg); } 50% { transform: translate(8px,4px); } 60% { transform: translate(-6px,-4px); } 70% { transform: translate(5px,3px); } 80% { transform: translate(-3px,-2px); } 90% { transform: translate(2px,1px); } }
 .orb-wrap { padding: 50px 0 30px; }
 .orb {
   --c1: #c7c7c7; --c2: #5f5f5f;
@@ -185,7 +208,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 @keyframes shake-pulse { 0%,100% { transform: translate(0,0); box-shadow: 0 0 60px 8px rgba(255,30,30,.6); } 25% { transform: translate(2px,-1px); } 50% { transform: translate(-2px,1px); box-shadow: 0 0 110px 24px rgba(255,0,0,.8); } 75% { transform: translate(1px,2px); } }
 
 .roll-name { font-family: var(--font-head); font-size: 2rem; font-weight: 800; letter-spacing: .04em; min-height: 2.4rem; text-shadow: 0 0 20px rgba(255,255,255,.2); transition: color .2s; }
-.roll-name.shine { background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; animation: shimmer 3s linear infinite; filter: drop-shadow(0 0 12px rgba(255,255,255,.35)); }
+.roll-name.shine { background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; animation: shimmer 3s linear infinite; filter: drop-shadow(0 2px 2px rgba(0,0,0,.95)) drop-shadow(0 0 10px rgba(0,0,0,.7)) drop-shadow(0 0 18px rgba(255,255,255,.25)); }
 .roll-tier { font-weight: 600; letter-spacing: .25em; text-transform: uppercase; font-size: .85rem; color: var(--muted); }
 .roll-odds { font-size: 1.1rem; font-variant-numeric: tabular-nums; color: var(--muted); min-height: 1.5rem; }
 .roll-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }

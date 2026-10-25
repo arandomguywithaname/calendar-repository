@@ -40,7 +40,10 @@
   <main>
     <!-- ROLL -->
     <section id="tab-roll" class="panel active">
-      <div class="roll-stage">
+      <div class="roll-stage" id="roll-stage">
+        <canvas id="stage-fx" class="stage-fx"></canvas>
+        <div id="stage-glow" class="stage-glow"></div>
+        <div id="roll-banner" class="roll-banner"></div>
         <div class="orb-wrap">
           <div id="orb" class="orb tier-common"><div class="orb-fill"><div class="orb-paint"></div></div><div class="orb-core"></div><div class="orb-gloss"></div></div>
         </div>
@@ -239,6 +242,7 @@
     </div>
   </div>
 
+  <div id="stage-flash" class="stage-flash"></div>
   <div id="toasts" class="toasts"></div>
 
   <script src="peerjs.min.js"></script>

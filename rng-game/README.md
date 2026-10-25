@@ -7,10 +7,14 @@ loadout, and fight bots or a friend.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, and a red
   storm for Fury of Darkness.
-- **Reveal animations** for Legendary and above: the screen is covered, the name
-  fades in, then the odds, and it fades out by itself after 6 seconds. Cosmic Veil
-  (1 in 2,000,000) and Fury of Darkness have their own sequences. Preview any of them
-  from the Index tab.
+- **Reveals that scale with rarity.** Common and Uncommon rolls are quick and plain.
+  Rare rolls slow down like a slot machine and land with a flash and a spark burst.
+  Epic adds screen shake, a tier banner and a glowing stage. Legendary and above get
+  a suspense build-up, a full-screen cutscene (name fades in, then the odds, gone by
+  itself after 6 seconds), then light beams, orbiting sparkles and shockwaves on the
+  roll screen. Cutscenes escalate too: star warp for Cosmic, god rays for Divine,
+  lightning and colour cycling for Transcendent, and unique sequences for Cosmic
+  Veil and Fury of Darkness. Preview any of them from the Index tab.
 - **Turn-based battles with signature abilities.** Every aura has its own kit of 6
   abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova
   Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Choose 4 per
