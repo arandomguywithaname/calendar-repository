@@ -1,11 +1,16 @@
-/* game.js — Aura Realms RNG: rolling, coins, potions, battles, index, cutscenes. */
+/* game.js — Aura Realms RNG: rolling, coins, potions, abilities, turn-based battles, PvP, cutscenes. */
 (function () {
   "use strict";
 
   var A = window.AURAS;
   var $ = function (s) { return document.querySelector(s); };
-  var SAVE_KEY = "aura-realms-save-v1";
+  var SAVE_BASE = "aura-realms-save-v2";
+  var ACCOUNTS_KEY = "aura-realms-accounts";
+  var SESSION_KEY = "aura-realms-session";
+  var currentUser = null;
+  function saveKey() { return currentUser ? SAVE_BASE + ":" + currentUser : SAVE_BASE; }
   var ROLL_COOLDOWN = 1000;
+  var PEER_PREFIX = "aura-realms-v1-";
   var fmt = function (n) { return Math.floor(n).toLocaleString("en-US"); };
 
   /* ---------- Data ---------- */
@@ -18,24 +23,45 @@
     zenith:   { name: "Zenith Potion",   icon: "🌌", cost: 100000, kind: "luck", mult: 1000, rolls: 3,  desc: "x1000 luck for 3 rolls" },
     gold:     { name: "Gold Potion",     icon: "💰", cost: 250,    kind: "gold", rolls: 30,  desc: "x2 coins from rolls for 30 rolls" },
     haste:    { name: "Haste Potion",    icon: "⚡", cost: 200,    kind: "haste", seconds: 60, desc: "Roll cooldown halved for 60 seconds" },
-    heal:     { name: "Healing Potion",  icon: "❤️", cost: 100,    kind: "heal", pct: 0.4,   desc: "Restore 40% HP during a fight" },
-    strength: { name: "Strength Potion", icon: "💪", cost: 150,    kind: "strength", mult: 1.5, desc: "+50% damage in your next fight" }
+    heal:     { name: "Healing Potion",  icon: "❤️", cost: 100,    kind: "heal", pct: 0.4,   desc: "Restore 40% HP during a bot fight" },
+    strength: { name: "Strength Potion", icon: "💪", cost: 150,    kind: "strength", mult: 1.5, desc: "+50% damage in your next bot fight" }
   };
   var POTION_ORDER = ["lucky", "fortune", "heavenly", "godly", "zenith", "gold", "haste", "heal", "strength"];
 
+  /* Abilities. mult = damage as a fraction of power. cd = turns the ability is unavailable after use. */
+  var ABILITIES = {
+    strike:    { name: "Strike",     icon: "⚔️", mult: 1.0,  cd: 0, cost: 0,    desc: "A reliable hit for 100% power. No cooldown." },
+    heavy:     { name: "Heavy Blow", icon: "🔨", mult: 1.7,  cd: 2, cost: 0,    desc: "A crushing hit for 170% power." },
+    guard:     { name: "Guard",      icon: "🛡️", mult: 0,    cd: 1, cost: 0,    desc: "Block 60% of the next hit you take.", effect: "guard" },
+    heal:      { name: "Mend",       icon: "💚", mult: 0,    cd: 3, cost: 0,    desc: "Restore 30% of your max HP.", effect: "heal", pct: 0.3 },
+    precision: { name: "Precision",  icon: "🎯", mult: 0.9,  cd: 1, cost: 400,  desc: "90% power and always a critical hit (x2).", alwaysCrit: true },
+    drain:     { name: "Drain",      icon: "🩸", mult: 0.75, cd: 2, cost: 600,  desc: "75% power and heal half of the damage dealt.", lifesteal: 0.5 },
+    focus:     { name: "Focus",      icon: "🔮", mult: 0,    cd: 2, cost: 500,  desc: "Your next attack deals +80% damage.", effect: "focus" },
+    poison:    { name: "Venom",      icon: "☠️", mult: 0.5,  cd: 3, cost: 900,  desc: "50% power, then poison for 30% power a turn for 3 turns.", poison: { turns: 3, mult: 0.3 } },
+    weaken:    { name: "Weaken",     icon: "🌀", mult: 0.6,  cd: 3, cost: 900,  desc: "60% power and the enemy deals 30% less for 2 turns.", weaken: 2 },
+    stun:      { name: "Shock",      icon: "⚡", mult: 0.7,  cd: 3, cost: 1500, desc: "70% power with a 40% chance to stun (they skip a turn).", stunChance: 0.4 },
+    reflect:   { name: "Mirror",     icon: "🪞", mult: 0,    cd: 4, cost: 1500, desc: "Reflect 60% of the next hit back at the attacker.", effect: "reflect" },
+    burst:     { name: "Supernova",  icon: "💥", mult: 2.6,  cd: 4, cost: 3000, desc: "Devastating 260% power blast." }
+  };
+  var ABILITY_ORDER = ["strike", "heavy", "guard", "heal", "precision", "drain", "focus", "poison", "weaken", "stun", "reflect", "burst"];
+  var STARTER_ABILITIES = ["strike", "heavy", "guard", "heal"];
+  var LOADOUT_SIZE = 4;
+
   var BOTS = [
-    { id: "dummy",     name: "Training Dummy", icon: "🪵", power: 15,   reward: 25 },
-    { id: "rookie",    name: "Rookie Bot",     icon: "🤖", power: 45,   reward: 60 },
-    { id: "guard",     name: "Guard Bot",      icon: "🛡️", power: 120,  reward: 150 },
-    { id: "knight",    name: "Knight Bot",     icon: "⚔️", power: 300,  reward: 400 },
-    { id: "warlord",   name: "Warlord Bot",    icon: "👹", power: 600,  reward: 900 },
-    { id: "titan",     name: "Titan Bot",      icon: "🗿", power: 1000, reward: 1800 },
-    { id: "celestial", name: "Celestial Bot",  icon: "👼", power: 1500, reward: 3500 },
-    { id: "void",      name: "Void Bot",       icon: "🕳️", power: 2200, reward: 7000 },
-    { id: "omega",     name: "Omega Bot",      icon: "💀", power: 3000, reward: 15000, boss: true }
+    { id: "dummy",     name: "Training Dummy", icon: "🪵", power: 15,   reward: 25,    abilities: ["strike"] },
+    { id: "rookie",    name: "Rookie Bot",     icon: "🤖", power: 45,   reward: 60,    abilities: ["strike", "guard"] },
+    { id: "guard",     name: "Guard Bot",      icon: "🛡️", power: 120,  reward: 150,   abilities: ["strike", "guard", "heal"] },
+    { id: "knight",    name: "Knight Bot",     icon: "⚔️", power: 300,  reward: 400,   abilities: ["strike", "heavy", "guard", "heal"] },
+    { id: "warlord",   name: "Warlord Bot",    icon: "👹", power: 600,  reward: 900,   abilities: ["strike", "heavy", "focus", "drain"] },
+    { id: "titan",     name: "Titan Bot",      icon: "🗿", power: 1000, reward: 1800,  abilities: ["heavy", "guard", "heal", "burst"] },
+    { id: "celestial", name: "Celestial Bot",  icon: "👼", power: 1500, reward: 3500,  abilities: ["precision", "heal", "reflect", "focus"] },
+    { id: "void",      name: "Void Bot",       icon: "🕳️", power: 2200, reward: 7000,  abilities: ["poison", "weaken", "drain", "stun"] },
+    { id: "omega",     name: "Omega Bot",      icon: "💀", power: 3000, reward: 15000, abilities: ["burst", "stun", "heal", "reflect"], boss: true }
   ];
 
   var AUTO_UNLOCK_COST = 1000;
+  var PVP_WIN_REWARD = 500;
+  var PVP_LOSS_REWARD = 100;
   function trainingCost(level) { return Math.floor(50 * Math.pow(1.35, level)); }
 
   /* ---------- State ---------- */
@@ -54,24 +80,40 @@
       strengthReady: false,
       training: 0,
       autoUnlocked: false,
+      ownedAbilities: STARTER_ABILITIES.slice(),
+      loadout: STARTER_ABILITIES.slice(),
+      playerName: "",
       botWins: {},
       history: [],
-      stats: { best: null, won: 0, lost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0 },
+      stats: { best: null, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0 },
       settings: { sound: true, skipCutscenes: false }
     };
   }
 
+  try { currentUser = localStorage.getItem(SESSION_KEY) || null; } catch (e) { currentUser = null; }
   var S = load();
 
   function load() {
     var base = defaultState();
     try {
-      var raw = localStorage.getItem(SAVE_KEY);
+      var raw = localStorage.getItem(saveKey()) || (!currentUser ? localStorage.getItem("aura-realms-save-v1") : null);
       if (!raw) return base;
-      var saved = JSON.parse(raw);
+      return hydrate(JSON.parse(raw));
+    } catch (e) {
+      return base;
+    }
+  }
+
+  function hydrate(saved) {
+    var base = defaultState();
+    try {
+      if (!saved || typeof saved !== "object") return base;
       var merged = Object.assign(base, saved);
       merged.stats = Object.assign(defaultState().stats, saved.stats || {});
       merged.settings = Object.assign(defaultState().settings, saved.settings || {});
+      if (!Array.isArray(merged.ownedAbilities) || !merged.ownedAbilities.length) merged.ownedAbilities = STARTER_ABILITIES.slice();
+      if (!Array.isArray(merged.loadout) || !merged.loadout.length) merged.loadout = STARTER_ABILITIES.slice();
+      merged.loadout = merged.loadout.filter(function (id) { return ABILITIES[id] && merged.ownedAbilities.indexOf(id) >= 0; }).slice(0, LOADOUT_SIZE);
       return merged;
     } catch (e) {
       return base;
@@ -79,7 +121,7 @@
   }
 
   function save() {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ }
+    try { localStorage.setItem(saveKey(), JSON.stringify(S)); } catch (e) { /* storage unavailable */ }
   }
 
   /* ---------- Helpers ---------- */
@@ -116,21 +158,63 @@
     S.stats.earned += n;
   }
 
+  function tierName(aura) { return A.tierOf(aura).name; }
+
+  function shineLevel(aura) {
+    var t = A.TIERS.indexOf(A.tierOf(aura));
+    if (t >= 8) return 3;
+    if (t >= 4) return 2;
+    if (t >= 2) return 1;
+    return 0;
+  }
+
+  function conicOf(colors) {
+    return "conic-gradient(from 0deg, " + colors.concat([colors[0]]).join(", ") + ")";
+  }
+
+  function fillStyle(aura) {
+    var c = aura.colors;
+    var layers = [];
+    if (c.length > 2) layers.push("radial-gradient(circle at 70% 72%, " + c[2] + " 0%, transparent 45%)");
+    if (c.length > 3) layers.push("radial-gradient(circle at 28% 68%, " + c[3] + " 0%, transparent 40%)");
+    if (c.length > 4) layers.push("radial-gradient(circle at 62% 28%, " + c[4] + " 0%, transparent 35%)");
+    layers.push(conicOf(c));
+    return layers.join(", ");
+  }
+
   function setOrb(el, aura) {
     el.style.setProperty("--c1", aura.c1);
     el.style.setProperty("--c2", aura.c2);
-    el.className = el.className.replace(/\btier-\S+/g, "").trim() + " tier-" + aura.tier;
+    var paint = el.querySelector(".orb-paint");
+    if (paint) paint.style.background = fillStyle(aura);
+    el.className = el.className.replace(/\b(tier|shine)-\S+/g, "").replace(/\s+/g, " ").trim() + " tier-" + aura.tier + " shine-" + shineLevel(aura);
   }
 
   function makeOrb(aura, cls) {
     var el = document.createElement("div");
     el.className = "orb " + (cls || "");
-    el.innerHTML = "<div class=\"orb-core\"></div>";
+    el.innerHTML = "<div class=\"orb-fill\"><div class=\"orb-paint\"></div></div><div class=\"orb-core\"></div><div class=\"orb-gloss\"></div>";
     setOrb(el, aura);
     return el;
   }
 
-  function tierName(aura) { return A.tierOf(aura).name; }
+  function makeSwatch(aura) {
+    var sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.setProperty("--c1", aura.c1);
+    sw.style.setProperty("--c2", aura.c2);
+    sw.style.background = conicOf(aura.colors);
+    return sw;
+  }
+
+  function setNameStyle(el, aura) {
+    el.className = "roll-name t-" + aura.tier;
+    el.style.backgroundImage = "";
+    if (shineLevel(aura) >= 2) {
+      el.classList.add("shine");
+      el.style.backgroundImage = "linear-gradient(90deg, " + aura.colors.concat([aura.colors[0]]).join(", ") + ")";
+    }
+  }
 
   /* ---------- Sound ---------- */
 
@@ -167,22 +251,23 @@
     },
     cosmic: function () {
       var self = this;
-      [196, 247, 294, 392, 494, 587].forEach(function (f, i) { self.tone(f, 0.6 + i * 0.3, 5.5, "sine", 0.045); });
-      [1047, 1319, 1568, 2093, 2637].forEach(function (f, i) { self.tone(f, 4.6 + i * 0.1, 1.8, "triangle", 0.06); });
+      [196, 247, 294, 392, 494, 587].forEach(function (f, i) { self.tone(f, 0.3 + i * 0.2, 4.5, "sine", 0.045); });
+      [1047, 1319, 1568, 2093, 2637].forEach(function (f, i) { self.tone(f, 3.2 + i * 0.1, 1.8, "triangle", 0.06); });
     },
     fury: function () {
       var self = this;
-      this.tone(55, 0, 7.5, "sawtooth", 0.07);
-      this.tone(58, 0, 7.5, "sawtooth", 0.04);
-      [110, 82, 65, 55].forEach(function (f, i) { self.tone(f, 4.1 + i * 0.18, 1.6, "square", 0.08); });
+      this.tone(55, 0, 6, "sawtooth", 0.07);
+      this.tone(58, 0, 6, "sawtooth", 0.04);
+      [110, 82, 65, 55].forEach(function (f, i) { self.tone(f, 2.9 + i * 0.18, 1.6, "square", 0.08); });
     },
     win: function () { var s = this; [523, 659, 784, 1047].forEach(function (f, i) { s.tone(f, i * 0.09, 0.35, "triangle", 0.07); }); },
     lose: function () { var s = this; [300, 250, 200].forEach(function (f, i) { s.tone(f, i * 0.15, 0.4, "sawtooth", 0.05); }); },
     hit: function (crit) { this.tone(crit ? 220 : 150, 0, 0.1, "square", 0.04); },
+    heal: function () { this.tone(660, 0, 0.2, "sine", 0.05); this.tone(990, 0.12, 0.25, "sine", 0.05); },
     buy: function () { this.tone(880, 0, 0.1, "triangle", 0.06); this.tone(1320, 0.08, 0.15, "triangle", 0.06); }
   };
 
-  /* ---------- HUD ---------- */
+  /* ---------- HUD and shared renders ---------- */
 
   function renderHUD() {
     $("#hud-coins").textContent = fmt(S.coins);
@@ -245,10 +330,6 @@
     S.history.forEach(function (id) {
       var a = A.byId(id);
       var li = document.createElement("li");
-      var sw = document.createElement("span");
-      sw.className = "swatch";
-      sw.style.setProperty("--c1", a.c1);
-      sw.style.setProperty("--c2", a.c2);
       var name = document.createElement("span");
       name.textContent = a.name;
       var tier = document.createElement("span");
@@ -257,7 +338,7 @@
       var odds = document.createElement("span");
       odds.className = "odds";
       odds.textContent = A.formatOdds(a.rarity);
-      li.appendChild(sw); li.appendChild(name); li.appendChild(tier); li.appendChild(odds);
+      li.appendChild(makeSwatch(a)); li.appendChild(name); li.appendChild(tier); li.appendChild(odds);
       ul.appendChild(li);
     });
   }
@@ -268,8 +349,10 @@
     renderQuickbar();
     renderHistory();
     renderInventory();
+    renderAbilities();
     renderShop();
     renderBots();
+    renderPvpPanel();
     updateIndex();
     renderStats();
     $("#btn-auto").textContent = "Auto Roll: " + (autoOn ? "On" : "Off");
@@ -292,7 +375,7 @@
     return A.list[0];
   }
 
-  function canRoll() { return !busy && Date.now() >= cooldownUntil && !battle; }
+  function canRoll() { return !busy && Date.now() >= cooldownUntil && !battle && !CS.running; }
 
   function showAura(aura) {
     var orb = $("#orb");
@@ -302,7 +385,7 @@
     orb.classList.add("pop");
     var nameEl = $("#roll-name");
     nameEl.textContent = aura.name;
-    nameEl.className = "roll-name t-" + aura.tier;
+    setNameStyle(nameEl, aura);
     $("#roll-tier").textContent = tierName(aura) + " · " + fmt(aura.power) + " power";
     $("#roll-odds").textContent = A.formatOdds(aura.rarity);
     $("#btn-equip-last").disabled = false;
@@ -312,12 +395,14 @@
     var orb = $("#orb");
     orb.classList.add("spinning");
     var nameEl = $("#roll-name");
+    var fill = orb.querySelector(".orb-paint");
     spinTimer = setInterval(function () {
       var a = A.list[Math.floor(Math.random() * A.list.length)];
       nameEl.textContent = a.name;
       nameEl.className = "roll-name t-" + a.tier;
+      nameEl.style.backgroundImage = "";
       orb.style.setProperty("--c1", a.c1);
-      orb.style.setProperty("--c2", a.c2);
+      fill.style.background = fillStyle(a);
     }, 55);
   }
 
@@ -327,18 +412,19 @@
     $("#orb").classList.remove("spinning");
   }
 
-  function doRoll() {
+  function doRoll(forced) {
     if (!canRoll()) return;
     busy = true;
     $("#btn-roll").disabled = true;
     Sound.roll();
 
-    var luck = currentLuck();
-    var aura = pickAura(luck);
+    var aura = forced || pickAura(currentLuck());
 
     S.rolls++;
-    S.luckEffects.forEach(function (e) { e.rolls--; });
-    S.luckEffects = S.luckEffects.filter(function (e) { return e.rolls > 0; });
+    if (!forced) {
+      S.luckEffects.forEach(function (e) { e.rolls--; });
+      S.luckEffects = S.luckEffects.filter(function (e) { return e.rolls > 0; });
+    }
     var mult = S.goldRolls > 0 ? 2 : 1;
     if (S.goldRolls > 0) S.goldRolls--;
     var coins = aura.coins * mult;
@@ -396,7 +482,7 @@
       if (S.strengthReady) { toast("Strength is already active", "bad"); return; }
       S.strengthReady = true;
     } else if (p.kind === "heal") {
-      if (!battle || battle.over) { toast("Healing potions are used during a fight", "bad"); return; }
+      if (!battle || battle.over || view.pvp) { toast("Healing potions are used during a bot fight", "bad"); return; }
       healInBattle();
       return;
     }
@@ -516,8 +602,9 @@
     var eq = equippedAura();
     ids.forEach(function (id) {
       var a = A.byId(id);
+      var isEq = !!(eq && eq.id === id);
       var card = document.createElement("div");
-      card.className = "card" + (eq && eq.id === id ? " equipped" : "");
+      card.className = "card" + (isEq ? " equipped" : "");
       var badge = document.createElement("div");
       badge.className = "count-badge";
       badge.textContent = "x" + S.inventory[id];
@@ -541,9 +628,9 @@
       var actions = document.createElement("div");
       actions.className = "actions";
       var btn = document.createElement("button");
-      btn.className = "btn small" + (eq && eq.id === id ? "" : " primary");
-      btn.textContent = eq && eq.id === id ? "Equipped" : "Equip";
-      btn.disabled = !!(eq && eq.id === id);
+      btn.className = "btn small" + (isEq ? "" : " primary");
+      btn.textContent = isEq ? "Equipped" : "Equip";
+      btn.disabled = isEq;
       btn.addEventListener("click", function () { equip(id); });
       actions.appendChild(btn);
       card.appendChild(actions);
@@ -559,9 +646,207 @@
     renderAll();
   }
 
-  /* ---------- Battle ---------- */
+  /* ---------- Abilities tab ---------- */
+
+  function renderAbilities() {
+    var grid = $("#ability-grid");
+    grid.innerHTML = "";
+    $("#loadout-count").textContent = S.loadout.length + " / " + LOADOUT_SIZE + " equipped";
+    ABILITY_ORDER.forEach(function (id) {
+      var ab = ABILITIES[id];
+      var owned = S.ownedAbilities.indexOf(id) >= 0;
+      var slot = S.loadout.indexOf(id);
+      var card = document.createElement("div");
+      card.className = "card" + (slot >= 0 ? " selected" : "") + (owned ? "" : " locked");
+      if (slot >= 0) {
+        var sl = document.createElement("div");
+        sl.className = "slot";
+        sl.textContent = "SLOT " + (slot + 1);
+        card.appendChild(sl);
+      }
+      var stat = ab.mult > 0 ? fmt(Math.round(ab.mult * 100)) + "% power" : "support";
+      card.innerHTML +=
+        "<div class=\"row\"><div class=\"big-icon\">" + ab.icon + "</div><div><div class=\"card-title\">" + ab.name + "</div><div class=\"card-sub\">" + stat + " · " + (ab.cd ? ab.cd + " turn cooldown" : "no cooldown") + "</div></div></div>" +
+        "<div class=\"card-sub\">" + ab.desc + "</div>";
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      if (!owned) {
+        var price = document.createElement("span");
+        price.className = "price";
+        price.textContent = fmt(ab.cost) + " coins";
+        var buy = document.createElement("button");
+        buy.className = "btn small primary";
+        buy.textContent = "Unlock";
+        buy.disabled = S.coins < ab.cost;
+        buy.addEventListener("click", function () {
+          if (S.coins < ab.cost) return;
+          S.coins -= ab.cost;
+          S.ownedAbilities.push(id);
+          Sound.buy();
+          toast("Unlocked " + ab.name);
+          save();
+          renderAll();
+        });
+        actions.appendChild(price);
+        actions.appendChild(buy);
+      } else {
+        var btn = document.createElement("button");
+        btn.className = "btn small" + (slot >= 0 ? " danger" : " primary");
+        btn.textContent = slot >= 0 ? "Remove" : "Equip";
+        btn.addEventListener("click", function () { toggleLoadout(id); });
+        actions.appendChild(btn);
+      }
+      card.appendChild(actions);
+      grid.appendChild(card);
+    });
+  }
+
+  function toggleLoadout(id) {
+    if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
+    var i = S.loadout.indexOf(id);
+    if (i >= 0) {
+      S.loadout.splice(i, 1);
+    } else {
+      if (S.loadout.length >= LOADOUT_SIZE) { toast("Loadout is full. Remove an ability first.", "bad"); return; }
+      S.loadout.push(id);
+    }
+    save();
+    renderAbilities();
+  }
+
+  /* ---------- Battle engine (pure, used for bots and PvP) ---------- */
+
+  var Engine = {
+    makeFighter: function (o) {
+      return {
+        name: o.name, power: o.power, maxHp: o.power * 12, hp: o.power * 12,
+        abilities: o.abilities.slice(), cooldowns: {},
+        guard: false, focus: false, reflect: false, stunned: false, skip: false,
+        poison: null, weaken: 0, dmgMult: o.dmgMult || 1,
+        auraId: o.auraId === undefined ? null : o.auraId, icon: o.icon || null, isBot: !!o.isBot
+      };
+    },
+    create: function (a, b, first) {
+      return { a: a, b: b, turn: first, round: 1, over: false, winner: null };
+    },
+    other: function (w) { return w === "a" ? "b" : "a"; },
+    canUse: function (b, who, id) {
+      var f = b[who];
+      return !b.over && b.turn === who && !!ABILITIES[id] && f.abilities.indexOf(id) >= 0 && !(f.cooldowns[id] > 0);
+    },
+    snapshot: function (b) {
+      return {
+        a: b.a, b: b.b, turn: b.turn, round: b.round, over: b.over, winner: b.winner
+      };
+    },
+    /* Start-of-turn upkeep for the fighter whose turn it is. */
+    beginTurn: function (b, who, ev) {
+      var f = b[who];
+      Object.keys(f.cooldowns).forEach(function (k) { if (f.cooldowns[k] > 0) f.cooldowns[k]--; });
+      if (f.poison) {
+        f.hp -= f.poison.dmg;
+        f.poison.turns--;
+        ev.push({ type: "poison", who: who, amount: f.poison.dmg, hpA: b.a.hp, hpB: b.b.hp });
+        if (f.poison.turns <= 0) f.poison = null;
+        if (f.hp <= 0) { b.over = true; b.winner = Engine.other(who); ev.push({ type: "end", winner: b.winner }); return; }
+      }
+      if (f.stunned) {
+        f.stunned = false;
+        f.skip = true;
+        ev.push({ type: "stunned", who: who });
+      }
+    },
+    /* Advance to the next fighter, skipping stunned turns. */
+    advance: function (b, ev) {
+      for (var guard = 0; guard < 4; guard++) {
+        b.turn = Engine.other(b.turn);
+        if (b.turn === "a") b.round++;
+        Engine.beginTurn(b, b.turn, ev);
+        if (b.over) return;
+        if (b[b.turn].skip) { b[b.turn].skip = false; continue; }
+        return;
+      }
+    },
+    /* Resolve one ability use. Returns a list of events for animation. */
+    act: function (b, who, id, rng) {
+      rng = rng || Math.random;
+      var ev = [];
+      if (!Engine.canUse(b, who, id)) return ev;
+      var ab = ABILITIES[id];
+      var me = b[who], them = b[Engine.other(who)], other = Engine.other(who);
+      me.cooldowns[id] = ab.cd + 1;
+      ev.push({ type: "use", who: who, ability: id });
+
+      if (ab.effect === "heal") {
+        var amt = Math.round(me.maxHp * ab.pct);
+        me.hp = Math.min(me.maxHp, me.hp + amt);
+        ev.push({ type: "heal", who: who, amount: amt, hpA: b.a.hp, hpB: b.b.hp });
+      } else if (ab.effect === "guard" || ab.effect === "focus" || ab.effect === "reflect") {
+        me[ab.effect] = true;
+        ev.push({ type: "buff", who: who, effect: ab.effect });
+      }
+
+      if (ab.mult > 0) {
+        var crit = ab.alwaysCrit || rng() < 0.1;
+        var dmg = me.power * ab.mult * me.dmgMult * (0.85 + rng() * 0.3) * (crit ? 2 : 1);
+        if (me.focus) { dmg *= 1.8; me.focus = false; ev.push({ type: "consume", who: who, effect: "focus" }); }
+        if (me.weaken > 0) dmg *= 0.7;
+        var blocked = false;
+        if (them.guard) { dmg *= 0.4; them.guard = false; blocked = true; }
+        dmg = Math.max(1, Math.round(dmg));
+        them.hp -= dmg;
+        ev.push({ type: "damage", who: who, target: other, amount: dmg, crit: crit, blocked: blocked, hpA: b.a.hp, hpB: b.b.hp });
+        if (ab.lifesteal) {
+          var heal = Math.round(dmg * ab.lifesteal);
+          me.hp = Math.min(me.maxHp, me.hp + heal);
+          ev.push({ type: "heal", who: who, amount: heal, hpA: b.a.hp, hpB: b.b.hp });
+        }
+        if (them.reflect) {
+          var back = Math.max(1, Math.round(dmg * 0.6));
+          them.reflect = false;
+          me.hp -= back;
+          ev.push({ type: "reflect", who: other, target: who, amount: back, hpA: b.a.hp, hpB: b.b.hp });
+        }
+        if (them.hp > 0) {
+          if (ab.poison) { them.poison = { turns: ab.poison.turns, dmg: Math.max(1, Math.round(me.power * ab.poison.mult)) }; ev.push({ type: "debuff", who: other, effect: "poison" }); }
+          if (ab.weaken) { them.weaken = ab.weaken; ev.push({ type: "debuff", who: other, effect: "weaken" }); }
+          if (ab.stunChance && rng() < ab.stunChance) { them.stunned = true; ev.push({ type: "debuff", who: other, effect: "stunned" }); }
+        }
+      }
+
+      if (them.hp <= 0) { b.over = true; b.winner = who; ev.push({ type: "end", winner: who }); return ev; }
+      if (me.hp <= 0) { b.over = true; b.winner = other; ev.push({ type: "end", winner: other }); return ev; }
+
+      if (me.weaken > 0) me.weaken--;
+      Engine.advance(b, ev);
+      return ev;
+    },
+    /* Simple bot brain. */
+    botChoose: function (b, who, rng) {
+      rng = rng || Math.random;
+      var f = b[who];
+      var avail = f.abilities.filter(function (id) { return Engine.canUse(b, who, id); });
+      if (!avail.length) return null;
+      var hpPct = f.hp / f.maxHp;
+      if (hpPct < 0.35 && avail.indexOf("heal") >= 0 && rng() < 0.8) return "heal";
+      if (!f.focus && avail.indexOf("focus") >= 0 && rng() < 0.4) return "focus";
+      if (!f.reflect && avail.indexOf("reflect") >= 0 && rng() < 0.35) return "reflect";
+      if (!f.guard && avail.indexOf("guard") >= 0 && hpPct < 0.6 && rng() < 0.35) return "guard";
+      var attacks = avail.filter(function (id) { return ABILITIES[id].mult > 0; });
+      if (!attacks.length) return avail[Math.floor(rng() * avail.length)];
+      var total = 0;
+      attacks.forEach(function (id) { total += ABILITIES[id].mult; });
+      var r = rng() * total;
+      for (var i = 0; i < attacks.length; i++) { r -= ABILITIES[attacks[i]].mult; if (r <= 0) return attacks[i]; }
+      return attacks[attacks.length - 1];
+    }
+  };
+
+  /* ---------- Battle UI ---------- */
 
   var battle = null;
+  var view = { me: "a", pvp: false, animating: false, bot: null };
+  var botTimer = null;
 
   function renderBots() {
     var grid = $("#bot-grid");
@@ -574,59 +859,132 @@
       var ratio = pp / bot.power;
       var verdict = ratio >= 1.3 ? "Easy" : ratio >= 1 ? "Fair" : ratio >= 0.75 ? "Hard" : "Deadly";
       var vcls = ratio >= 1 ? "t-uncommon" : ratio >= 0.75 ? "t-legendary" : "t-forbidden";
+      var abil = bot.abilities.map(function (id) { return ABILITIES[id].icon; }).join(" ");
       card.innerHTML =
-        "<div class=\"row\"><div class=\"big-icon\">" + bot.icon + "</div><div><div class=\"card-title\">" + bot.name + "</div><div class=\"card-sub\">Power " + fmt(bot.power) + " · <span class=\"" + vcls + "\">" + verdict + "</span></div></div></div>" +
+        "<div class=\"row\"><div class=\"big-icon\">" + bot.icon + "</div><div><div class=\"card-title\">" + bot.name + "</div><div class=\"card-sub\">Power " + fmt(bot.power) + " · <span class=\"" + vcls + "\">" + verdict + "</span></div><div class=\"card-sub\">Abilities: " + abil + "</div></div></div>" +
         "<div class=\"row\"><span class=\"price\">+" + fmt(bot.reward) + " coins</span><span class=\"card-sub\">wins: " + wins + "</span></div>";
       var actions = document.createElement("div");
       actions.className = "actions";
       var btn = document.createElement("button");
       btn.className = "btn small primary";
       btn.textContent = "Fight";
-      btn.disabled = !!battle && !battle.over;
-      btn.addEventListener("click", function () { startFight(bot); });
+      btn.disabled = (!!battle && !battle.over) || PvP.status === "connected";
+      btn.addEventListener("click", function () { startBotFight(bot); });
       actions.appendChild(btn);
       card.appendChild(actions);
       grid.appendChild(card);
     });
   }
 
-  function startFight(bot) {
+  function myFighterSpec() {
+    var aura = equippedAura();
+    return {
+      name: (S.playerName || "You"), power: playerPower(), abilities: S.loadout.slice(),
+      auraId: aura ? aura.id : null, auraName: aura ? aura.name : "", isBot: false
+    };
+  }
+
+  function startBotFight(bot) {
     if (battle && !battle.over) return;
+    if (PvP.status === "connected") { toast("Leave the PvP room to fight bots", "bad"); return; }
     var aura = equippedAura();
     if (!aura) { toast("Equip an aura first", "bad"); return; }
-    var pp = playerPower();
-    battle = {
-      bot: bot, aura: aura,
-      pPower: pp, bPower: bot.power,
-      pHP: pp * 10, pMax: pp * 10,
-      bHP: bot.power * 10, bMax: bot.power * 10,
-      dmgMult: S.strengthReady ? POTIONS.strength.mult : 1,
-      turn: "player", over: false, timer: null
-    };
-    if (S.strengthReady) { S.strengthReady = false; logLine("💪 Strength potion empowers you (+50% damage)", "you"); }
+    if (S.loadout.length < 1) { toast("Equip at least one ability", "bad"); return; }
+    var spec = myFighterSpec();
+    spec.dmgMult = S.strengthReady ? POTIONS.strength.mult : 1;
+    var me = Engine.makeFighter(spec);
+    var them = Engine.makeFighter({ name: bot.name, power: bot.power, abilities: bot.abilities, icon: bot.icon, isBot: true });
+    battle = Engine.create(me, them, "a");
+    view = { me: "a", pvp: false, animating: false, bot: bot };
+    openArena();
+    $("#arena-banner").textContent = "Bot fight";
+    if (S.strengthReady) { S.strengthReady = false; logLine("💪 Strength potion: +50% damage this fight", "you"); }
+    logLine("⚔️ " + bot.name + " challenges you!", "");
+    renderArena();
+    renderAll();
+  }
+
+  function openArena() {
     var arena = $("#arena");
     arena.classList.remove("hidden");
     $("#battle-result").classList.add("hidden");
     $("#battle-log").innerHTML = "";
-    setOrb($("#arena-orb"), aura);
-    $("#arena-player-name").textContent = aura.name + " (" + fmt(pp) + ")";
-    $("#arena-bot-icon").textContent = bot.icon;
-    $("#arena-bot-name").textContent = bot.name + " (" + fmt(bot.power) + ")";
-    $("#btn-flee").disabled = false;
-    updateHP();
-    logLine("⚔️ " + bot.name + " challenges you!", "");
-    renderAll();
+    $("#post-battle").innerHTML = "";
+    switchTab("battle");
     arena.scrollIntoView({ behavior: "smooth", block: "start" });
-    battle.timer = setTimeout(doTurn, 700);
   }
 
-  function updateHP() {
-    $("#hp-player").style.width = Math.max(0, battle.pHP / battle.pMax * 100) + "%";
-    $("#hp-bot").style.width = Math.max(0, battle.bHP / battle.bMax * 100) + "%";
-    $("#hp-player-text").textContent = fmt(Math.max(0, battle.pHP)) + " / " + fmt(battle.pMax);
-    $("#hp-bot-text").textContent = fmt(Math.max(0, battle.bHP)) + " / " + fmt(battle.bMax);
-    $("#btn-heal").textContent = "❤️ Heal (" + (S.potions.heal || 0) + ")";
-    $("#btn-heal").disabled = !(S.potions.heal > 0) || battle.over;
+  function fighterVisual(f, el) {
+    el.innerHTML = "";
+    if (f.auraId !== null && f.auraId !== undefined && A.byId(f.auraId)) {
+      el.appendChild(makeOrb(A.byId(f.auraId), "small"));
+    } else {
+      var ic = document.createElement("div");
+      ic.className = "fighter-icon";
+      ic.textContent = f.icon || "🤖";
+      el.appendChild(ic);
+    }
+  }
+
+  function statusChips(f) {
+    var chips = [];
+    if (f.guard) chips.push(["🛡️ Guard", "good"]);
+    if (f.focus) chips.push(["🔮 Focus", "good"]);
+    if (f.reflect) chips.push(["🪞 Mirror", "good"]);
+    if (f.poison) chips.push(["☠️ Poison " + f.poison.turns, "bad"]);
+    if (f.weaken > 0) chips.push(["🌀 Weak " + f.weaken, "bad"]);
+    if (f.stunned) chips.push(["⚡ Stunned", "bad"]);
+    return chips;
+  }
+
+  function renderArena() {
+    if (!battle) return;
+    ["a", "b"].forEach(function (side) {
+      var f = battle[side];
+      fighterVisual(f, $("#visual-" + side));
+      $("#name-" + side).textContent = f.name + " (" + fmt(f.power) + ")";
+      $("#hp-" + side).style.width = Math.max(0, f.hp / f.maxHp * 100) + "%";
+      $("#hptext-" + side).textContent = fmt(Math.max(0, f.hp)) + " / " + fmt(f.maxHp);
+      var row = $("#status-" + side);
+      row.innerHTML = "";
+      statusChips(f).forEach(function (c) {
+        var s = document.createElement("span");
+        s.className = "status " + c[1];
+        s.textContent = c[0];
+        row.appendChild(s);
+      });
+      $("#fighter-" + side).classList.toggle("active-turn", battle.turn === side && !battle.over);
+    });
+    $("#hp-a").className = "hpfill " + (view.me === "a" ? "player" : "bot");
+    $("#hp-b").className = "hpfill " + (view.me === "b" ? "player" : "bot");
+    $("#arena-round").textContent = "Round " + battle.round;
+
+    var myTurn = battle.turn === view.me && !battle.over && !view.animating;
+    var ti = $("#turn-indicator");
+    if (battle.over) ti.textContent = "";
+    else if (view.animating) ti.textContent = "…";
+    else ti.textContent = myTurn ? "Your turn — choose an ability" : (view.pvp ? "Waiting for opponent…" : battle.b.name + " is thinking…");
+
+    var bar = $("#ability-bar");
+    bar.innerHTML = "";
+    var me = battle[view.me];
+    me.abilities.forEach(function (id) {
+      var ab = ABILITIES[id];
+      var btn = document.createElement("button");
+      btn.className = "ability-btn";
+      var cdLeft = me.cooldowns[id] || 0;
+      btn.disabled = !myTurn || cdLeft > 0;
+      btn.title = ab.desc;
+      var sub = ab.mult > 0 ? "~" + fmt(Math.round(me.power * ab.mult * me.dmgMult)) + " dmg" : "support";
+      btn.innerHTML = "<span class=\"ab-icon\">" + ab.icon + "</span><span class=\"ab-name\">" + ab.name + "</span><span class=\"ab-sub\">" + sub + "</span>" + (cdLeft > 0 ? "<span class=\"cd\">" + cdLeft + "</span>" : "");
+      btn.addEventListener("click", function () { chooseAbility(id); });
+      bar.appendChild(btn);
+    });
+
+    $("#btn-heal").classList.toggle("hidden", view.pvp);
+    $("#btn-heal").textContent = "❤️ Heal potion (" + (S.potions.heal || 0) + ")";
+    $("#btn-heal").disabled = !(S.potions.heal > 0) || battle.over || !myTurn;
+    $("#btn-flee").disabled = battle.over;
   }
 
   function logLine(text, cls) {
@@ -637,100 +995,484 @@
     log.insertBefore(d, log.firstChild);
   }
 
-  function floatDamage(target, text, crit) {
+  function floatText(side, text, cls) {
+    var target = $("#fighter-" + side);
     var el = document.createElement("div");
-    el.className = "dmg-float" + (crit ? " t-divine" : " t-forbidden");
+    el.className = "dmg-float " + (cls || "");
     el.textContent = text;
     var rect = target.getBoundingClientRect();
     el.style.left = (rect.left + rect.width / 2 - 20 + (Math.random() - 0.5) * 40) + "px";
     el.style.top = (rect.top + window.scrollY + 10) + "px";
-    el.style.position = "absolute";
     document.body.appendChild(el);
     setTimeout(function () { el.remove(); }, 900);
   }
 
-  function rollDamage(power) {
-    var crit = Math.random() < 0.12;
-    var dmg = power * (0.8 + Math.random() * 0.4) * (crit ? 2 : 1);
-    return { dmg: Math.max(1, Math.round(dmg)), crit: crit };
-  }
-
-  function doTurn() {
-    if (!battle || battle.over) return;
-    var r;
-    if (battle.turn === "player") {
-      r = rollDamage(battle.pPower * battle.dmgMult);
-      battle.bHP -= r.dmg;
-      flash($("#fighter-bot"));
-      floatDamage($("#fighter-bot"), "-" + fmt(r.dmg) + (r.crit ? "!" : ""), r.crit);
-      logLine((r.crit ? "💥 CRIT! " : "") + "You hit " + battle.bot.name + " for " + fmt(r.dmg), r.crit ? "crit" : "you");
-      battle.turn = "bot";
-    } else {
-      r = rollDamage(battle.bPower);
-      battle.pHP -= r.dmg;
-      flash($("#fighter-player"));
-      floatDamage($("#fighter-player"), "-" + fmt(r.dmg) + (r.crit ? "!" : ""), r.crit);
-      logLine((r.crit ? "💥 CRIT! " : "") + battle.bot.name + " hits you for " + fmt(r.dmg), r.crit ? "crit" : "them");
-      battle.turn = "player";
-    }
-    Sound.hit(r.crit);
-    updateHP();
-    if (battle.bHP <= 0) return endFight(true);
-    if (battle.pHP <= 0) return endFight(false);
-    battle.timer = setTimeout(doTurn, 650);
-  }
-
-  function flash(el) {
-    el.classList.remove("hit");
+  function flash(side, cls) {
+    var el = $("#fighter-" + side);
+    el.classList.remove(cls);
     void el.offsetWidth;
-    el.classList.add("hit");
+    el.classList.add(cls);
+  }
+
+  function sideName(side) { return battle[side].name; }
+  function isMe(side) { return side === view.me; }
+
+  /* Play a list of engine events with small delays, then call done(). */
+  function playEvents(events, done) {
+    view.animating = true;
+    renderArena();
+    var i = 0;
+    function step() {
+      if (!battle) { view.animating = false; return; }
+      if (i >= events.length) {
+        view.animating = false;
+        renderArena();
+        if (done) done();
+        return;
+      }
+      var e = events[i++];
+      var delay = 420;
+      switch (e.type) {
+        case "use":
+          logLine((isMe(e.who) ? "You use " : sideName(e.who) + " uses ") + ABILITIES[e.ability].icon + " " + ABILITIES[e.ability].name, isMe(e.who) ? "you" : "them");
+          delay = 250;
+          break;
+        case "damage":
+          flash(e.target, "hit");
+          floatText(e.target, "-" + fmt(e.amount) + (e.crit ? "!" : ""), e.crit ? "t-divine" : "t-forbidden");
+          Sound.hit(e.crit);
+          logLine((e.crit ? "💥 CRIT! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.blocked ? " (blocked 60%)" : ""), e.crit ? "crit" : (isMe(e.who) ? "you" : "them"));
+          setHP(e);
+          break;
+        case "heal":
+          flash(e.who, "healed");
+          floatText(e.who, "+" + fmt(e.amount), "heal");
+          Sound.heal();
+          logLine((isMe(e.who) ? "You heal" : sideName(e.who) + " heals") + " for " + fmt(e.amount), isMe(e.who) ? "you" : "them");
+          setHP(e);
+          break;
+        case "poison":
+          flash(e.who, "hit");
+          floatText(e.who, "-" + fmt(e.amount) + " ☠️", "t-uncommon");
+          logLine("☠️ " + (isMe(e.who) ? "You take" : sideName(e.who) + " takes") + " " + fmt(e.amount) + " poison damage", isMe(e.who) ? "them" : "you");
+          setHP(e);
+          break;
+        case "reflect":
+          flash(e.target, "hit");
+          floatText(e.target, "-" + fmt(e.amount) + " 🪞", "t-cosmic");
+          logLine("🪞 " + (isMe(e.who) ? "Your mirror reflects " : sideName(e.who) + "'s mirror reflects ") + fmt(e.amount) + " damage", isMe(e.who) ? "you" : "them");
+          setHP(e);
+          break;
+        case "buff":
+          logLine((isMe(e.who) ? "You gain " : sideName(e.who) + " gains ") + e.effect, isMe(e.who) ? "you" : "them");
+          delay = 250;
+          break;
+        case "debuff":
+          logLine((isMe(e.who) ? "You are " : sideName(e.who) + " is ") + (e.effect === "poison" ? "poisoned" : e.effect === "weaken" ? "weakened" : "stunned") + "!", isMe(e.who) ? "them" : "you");
+          break;
+        case "consume":
+          delay = 100;
+          break;
+        case "stunned":
+          logLine("⚡ " + (isMe(e.who) ? "You are stunned and skip a turn" : sideName(e.who) + " is stunned and skips a turn"), isMe(e.who) ? "them" : "you");
+          break;
+        case "end":
+          delay = 200;
+          break;
+      }
+      setTimeout(step, delay);
+    }
+    step();
+  }
+
+  function setHP(e) {
+    if (!battle) return;
+    $("#hp-a").style.width = Math.max(0, e.hpA / battle.a.maxHp * 100) + "%";
+    $("#hp-b").style.width = Math.max(0, e.hpB / battle.b.maxHp * 100) + "%";
+    $("#hptext-a").textContent = fmt(Math.max(0, e.hpA)) + " / " + fmt(battle.a.maxHp);
+    $("#hptext-b").textContent = fmt(Math.max(0, e.hpB)) + " / " + fmt(battle.b.maxHp);
+  }
+
+  function chooseAbility(id) {
+    if (!battle || battle.over || view.animating) return;
+    if (battle.turn !== view.me) return;
+    if (view.pvp) {
+      if (PvP.role === "host") {
+        var ev = Engine.act(battle, "a", id);
+        if (!ev.length) return;
+        pvpSend({ t: "events", events: ev, state: Engine.snapshot(battle) });
+        playEvents(ev, afterTurn);
+      } else {
+        if (!Engine.canUse(battle, "b", id)) return;
+        pvpSend({ t: "action", ability: id });
+        view.animating = true;
+        renderArena();
+      }
+      return;
+    }
+    var events = Engine.act(battle, "a", id);
+    if (!events.length) return;
+    playEvents(events, afterTurn);
+  }
+
+  function afterTurn() {
+    if (!battle) return;
+    if (battle.over) { finishBattle(); return; }
+    renderArena();
+    if (view.pvp && PvP.role === "host" && PvP.pendingAction) {
+      var pending = PvP.pendingAction;
+      PvP.pendingAction = null;
+      hostResolveGuestAction(pending);
+      return;
+    }
+    if (!view.pvp && battle.turn === "b") {
+      botTimer = setTimeout(function () {
+        if (!battle || battle.over) return;
+        var id = Engine.botChoose(battle, "b");
+        if (!id) { var ev = []; Engine.advance(battle, ev); playEvents(ev, afterTurn); return; }
+        playEvents(Engine.act(battle, "b", id), afterTurn);
+      }, 900);
+    }
   }
 
   function healInBattle() {
-    if (!battle || battle.over || !(S.potions.heal > 0)) return;
+    if (!battle || battle.over || view.pvp || !(S.potions.heal > 0)) return;
+    if (battle.turn !== view.me || view.animating) { toast("Wait for your turn", "bad"); return; }
     S.potions.heal--;
-    var amount = Math.round(battle.pMax * POTIONS.heal.pct);
-    battle.pHP = Math.min(battle.pMax, battle.pHP + amount);
-    logLine("❤️ You heal for " + fmt(amount), "you");
-    Sound.buy();
+    var me = battle.a;
+    var amount = Math.round(me.maxHp * POTIONS.heal.pct);
+    me.hp = Math.min(me.maxHp, me.hp + amount);
+    flash("a", "healed");
+    floatText("a", "+" + fmt(amount), "heal");
+    logLine("❤️ Healing potion restores " + fmt(amount) + " HP", "you");
+    Sound.heal();
     save();
-    updateHP();
+    renderArena();
     renderQuickbar();
   }
 
-  function endFight(won, fled) {
-    clearTimeout(battle.timer);
+  function forfeit() {
+    if (!battle || battle.over) return;
+    if (view.pvp) {
+      pvpSend({ t: "forfeit" });
+      battle.over = true;
+      battle.winner = Engine.other(view.me);
+      finishBattle(true);
+      return;
+    }
     battle.over = true;
+    battle.winner = "b";
+    finishBattle(true);
+  }
+
+  function finishBattle(fled) {
+    clearTimeout(botTimer);
+    view.animating = false;
+    var won = battle.winner === view.me;
     var res = $("#battle-result");
     res.classList.remove("hidden", "win", "lose");
-    if (fled) {
+    var oppName = battle[Engine.other(view.me)].name;
+    if (view.pvp) {
+      if (won) {
+        addCoins(PVP_WIN_REWARD);
+        S.stats.pvpWon++;
+        res.classList.add("win");
+        res.textContent = "Victory over " + oppName + "! +" + fmt(PVP_WIN_REWARD) + " coins";
+        Sound.win();
+      } else {
+        addCoins(PVP_LOSS_REWARD);
+        S.stats.pvpLost++;
+        res.classList.add("lose");
+        res.textContent = (fled ? "You forfeited. " : "Defeated by " + oppName + ". ") + "+" + fmt(PVP_LOSS_REWARD) + " coins";
+        Sound.lose();
+      }
+      var post = $("#post-battle");
+      post.innerHTML = "";
+      if (PvP.status === "connected") {
+        var rm = document.createElement("button");
+        rm.className = "btn small primary";
+        rm.textContent = "Rematch";
+        rm.addEventListener("click", function () { pvpRequestRematch(); rm.disabled = true; rm.textContent = "Waiting for opponent…"; });
+        post.appendChild(rm);
+      }
+    } else if (fled) {
       res.classList.add("lose");
-      res.textContent = "You fled.";
+      res.textContent = "You forfeited.";
       S.stats.streak = 0;
     } else if (won) {
-      var reward = battle.bot.reward;
+      var reward = view.bot.reward;
       addCoins(reward);
-      S.botWins[battle.bot.id] = (S.botWins[battle.bot.id] || 0) + 1;
+      S.botWins[view.bot.id] = (S.botWins[view.bot.id] || 0) + 1;
       S.stats.won++;
       S.stats.streak++;
       if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
       res.classList.add("win");
       res.textContent = "Victory! +" + fmt(reward) + " coins";
       Sound.win();
-      logLine("🏆 " + battle.bot.name + " defeated! +" + fmt(reward) + " coins", "crit");
+      logLine("🏆 " + oppName + " defeated! +" + fmt(reward) + " coins", "crit");
     } else {
       S.stats.lost++;
       S.stats.streak = 0;
       res.classList.add("lose");
-      res.textContent = "Defeated by " + battle.bot.name + "…";
+      res.textContent = "Defeated by " + oppName + "…";
       Sound.lose();
       logLine("💀 You were defeated.", "them");
     }
-    $("#btn-flee").disabled = true;
-    updateHP();
+    renderArena();
     save();
+    var finished = battle;
+    setTimeout(function () { if (battle === finished) battle = null; renderAll(); }, 500);
+  }
+
+  /* ---------- PvP (PeerJS data channel, 4-digit room codes) ---------- */
+
+  var PvP = { peer: null, conn: null, role: null, code: null, status: "idle", opp: null, hello: null, rematch: { me: false, them: false } };
+
+  function pvpSetStatus(text, cls) {
+    PvP.statusText = text;
+    PvP.statusCls = cls || "";
+    renderPvpPanel();
+  }
+
+  function renderPvpPanel() {
+    var st = $("#pvp-status");
+    st.textContent = PvP.statusText || "Not connected.";
+    st.className = "pvp-status " + (PvP.statusCls || "");
+    var codeEl = $("#pvp-code-display");
+    if (PvP.role === "host" && PvP.code && PvP.status !== "idle") {
+      codeEl.textContent = PvP.code;
+      codeEl.classList.remove("hidden");
+    } else {
+      codeEl.classList.add("hidden");
+    }
+    var idle = PvP.status === "idle";
+    $("#btn-pvp-host").disabled = !idle;
+    $("#btn-pvp-join").disabled = !idle;
+    $("#pvp-code").disabled = !idle;
+    $("#btn-pvp-leave").classList.toggle("hidden", idle);
+    if (document.activeElement !== $("#pvp-name")) $("#pvp-name").value = S.playerName;
+  }
+
+  function pvpTransportAvailable() {
+    return typeof window.Peer === "function";
+  }
+
+  function pvpCleanup() {
+    try { if (PvP.conn) PvP.conn.close(); } catch (e) { /* ignore */ }
+    try { if (PvP.peer) PvP.peer.destroy(); } catch (e) { /* ignore */ }
+    PvP.conn = null; PvP.peer = null; PvP.role = null; PvP.code = null; PvP.opp = null; PvP.hello = null;
+    PvP.status = "idle";
+    PvP.pendingAction = null;
+    PvP.rematch = { me: false, them: false };
+  }
+
+  function pvpLeave(silent) {
+    if (battle && view.pvp && !battle.over) {
+      battle.over = true;
+      battle.winner = Engine.other(view.me);
+      finishBattle(true);
+    }
+    pvpCleanup();
+    if (!silent) pvpSetStatus("Left the room.");
     renderAll();
-    setTimeout(function () { battle = null; renderBots(); }, 600);
+  }
+
+  function pvpHost() {
+    if (!pvpTransportAvailable()) { pvpSetStatus("PvP needs the PeerJS library, which failed to load. Check your connection and reload.", "err"); return; }
+    if (!equippedAura()) { toast("Equip an aura first", "bad"); return; }
+    pvpCleanup();
+    var code = String(Math.floor(1000 + Math.random() * 9000));
+    PvP.role = "host";
+    PvP.code = code;
+    PvP.status = "hosting";
+    pvpSetStatus("Creating room…");
+    var peer = new window.Peer(PEER_PREFIX + code, { debug: 0 });
+    PvP.peer = peer;
+    peer.on("open", function () {
+      if (PvP.peer !== peer) return;
+      pvpSetStatus("Room " + code + " is open. Waiting for a friend to join…", "ok");
+    });
+    peer.on("connection", function (conn) {
+      if (PvP.peer !== peer) return;
+      if (PvP.conn) { try { conn.close(); } catch (e) { /* ignore */ } return; }
+      pvpAttach(conn);
+    });
+    peer.on("error", function (err) {
+      if (PvP.peer !== peer) return;
+      if (err && err.type === "unavailable-id") { pvpHost(); return; }
+      pvpSetStatus("Connection error: " + (err && err.type ? err.type : err), "err");
+      pvpCleanup();
+      renderPvpPanel();
+    });
+    peer.on("disconnected", function () { if (PvP.peer === peer && PvP.status !== "connected") try { peer.reconnect(); } catch (e) { /* ignore */ } });
+  }
+
+  function pvpJoin(code) {
+    if (!pvpTransportAvailable()) { pvpSetStatus("PvP needs the PeerJS library, which failed to load. Check your connection and reload.", "err"); return; }
+    if (!/^\d{4}$/.test(code)) { pvpSetStatus("Enter the 4-digit room code.", "err"); return; }
+    if (!equippedAura()) { toast("Equip an aura first", "bad"); return; }
+    pvpCleanup();
+    PvP.role = "guest";
+    PvP.code = code;
+    PvP.status = "joining";
+    pvpSetStatus("Joining room " + code + "…");
+    var peer = new window.Peer({ debug: 0 });
+    PvP.peer = peer;
+    var joinTimer = setTimeout(function () {
+      if (PvP.peer === peer && PvP.status === "joining") { pvpSetStatus("Could not reach room " + code + ". Check the code and try again.", "err"); pvpCleanup(); renderPvpPanel(); }
+    }, 15000);
+    peer.on("open", function () {
+      if (PvP.peer !== peer) return;
+      pvpAttach(peer.connect(PEER_PREFIX + code, { reliable: true }));
+    });
+    peer.on("error", function (err) {
+      if (PvP.peer !== peer) return;
+      clearTimeout(joinTimer);
+      var t = err && err.type;
+      pvpSetStatus(t === "peer-unavailable" ? "No open room with code " + code + "." : "Connection error: " + (t || err), "err");
+      pvpCleanup();
+      renderPvpPanel();
+    });
+    peer.on("disconnected", function () { if (PvP.peer === peer && PvP.status !== "connected") try { peer.reconnect(); } catch (e) { /* ignore */ } });
+    PvP.joinTimer = joinTimer;
+  }
+
+  function pvpAttach(conn) {
+    PvP.conn = conn;
+    var opened = false;
+    var onOpen = function () {
+      if (PvP.conn !== conn || opened) return;
+      opened = true;
+      clearTimeout(PvP.joinTimer);
+      PvP.status = "connected";
+      pvpSetStatus("Connected! Exchanging loadouts…", "ok");
+      PvP.hello = myFighterSpec();
+      pvpSend({ t: "hello", spec: PvP.hello });
+      renderAll();
+    };
+    conn.on("open", onOpen);
+    if (conn.open) onOpen();
+    conn.on("data", function (data) { if (PvP.conn === conn) onPvpMessage(data); });
+    conn.on("close", function () {
+      if (PvP.conn !== conn) return;
+      var wasBattle = battle && view.pvp && !battle.over;
+      if (wasBattle) { battle.over = true; battle.winner = view.me; finishBattle(false); logLine("Opponent disconnected.", "them"); }
+      pvpCleanup();
+      pvpSetStatus("Opponent disconnected.", "err");
+      renderAll();
+    });
+    conn.on("error", function () {
+      if (PvP.conn !== conn) return;
+      pvpCleanup();
+      pvpSetStatus("Connection lost.", "err");
+      renderAll();
+    });
+  }
+
+  function pvpSend(msg) {
+    if (!PvP.conn) return;
+    try { PvP.conn.send(msg); } catch (e) { /* ignore */ }
+  }
+
+  function sanitizeSpec(spec) {
+    if (!spec || typeof spec !== "object") return null;
+    var name = String(spec.name || "Opponent").slice(0, 16).replace(/[<>]/g, "") || "Opponent";
+    var power = Math.max(1, Math.min(1e7, Math.floor(Number(spec.power) || 1)));
+    var abilities = Array.isArray(spec.abilities) ? spec.abilities.filter(function (id) { return !!ABILITIES[id]; }).slice(0, LOADOUT_SIZE) : [];
+    if (!abilities.length) abilities = ["strike"];
+    var auraId = Number.isInteger(spec.auraId) && A.byId(spec.auraId) ? spec.auraId : null;
+    return { name: name, power: power, abilities: abilities, auraId: auraId, isBot: false };
+  }
+
+  function pvpStartBattle() {
+    /* Host builds the battle: host is "a", guest is "b". */
+    var me = Engine.makeFighter(PvP.hello);
+    var them = Engine.makeFighter(PvP.opp);
+    var first = Math.random() < 0.5 ? "a" : "b";
+    battle = Engine.create(me, them, first);
+    view = { me: "a", pvp: true, animating: false, bot: null };
+    PvP.pendingAction = null;
+    PvP.rematch = { me: false, them: false };
+    pvpSend({ t: "start", state: Engine.snapshot(battle) });
+    openArena();
+    $("#arena-banner").textContent = "PvP · room " + PvP.code;
+    logLine("⚔️ " + them.name + " joins the arena! " + (first === "a" ? "You go first." : them.name + " goes first."), "");
+    renderArena();
+    renderAll();
+  }
+
+  /* Host resolves an ability chosen by the guest and streams the events back. */
+  function hostResolveGuestAction(id) {
+    if (!battle || battle.over || battle.turn !== "b") return;
+    var ev = Engine.act(battle, "b", id);
+    if (!ev.length) { pvpSend({ t: "events", events: [], state: Engine.snapshot(battle) }); return; }
+    pvpSend({ t: "events", events: ev, state: Engine.snapshot(battle) });
+    playEvents(ev, afterTurn);
+  }
+
+  function pvpRequestRematch() {
+    PvP.rematch.me = true;
+    pvpSend({ t: "rematch" });
+    if (PvP.role === "host" && PvP.rematch.them) pvpStartBattle();
+  }
+
+  function onPvpMessage(msg) {
+    if (!msg || typeof msg !== "object") return;
+    switch (msg.t) {
+      case "hello": {
+        PvP.opp = sanitizeSpec(msg.spec);
+        if (!PvP.opp) return;
+        if (!PvP.hello) PvP.hello = myFighterSpec();
+        pvpSetStatus("Fighting " + PvP.opp.name + " (" + fmt(PvP.opp.power) + " power)", "ok");
+        if (PvP.role === "host") pvpStartBattle();
+        break;
+      }
+      case "start": {
+        if (PvP.role !== "guest") return;
+        battle = msg.state;
+        if (!battle || !battle.a || !battle.b) { battle = null; return; }
+        view = { me: "b", pvp: true, animating: false, bot: null };
+        PvP.rematch = { me: false, them: false };
+        openArena();
+        $("#arena-banner").textContent = "PvP · room " + PvP.code;
+        logLine("⚔️ " + battle.a.name + " joins the arena! " + (battle.turn === "b" ? "You go first." : battle.a.name + " goes first."), "");
+        renderArena();
+        renderAll();
+        break;
+      }
+      case "action": {
+        if (PvP.role !== "host" || !battle || battle.over) return;
+        if (view.animating) { PvP.pendingAction = String(msg.ability); return; }
+        hostResolveGuestAction(String(msg.ability));
+        break;
+      }
+      case "events": {
+        if (PvP.role !== "guest" || !battle) return;
+        var state = msg.state;
+        var events = Array.isArray(msg.events) ? msg.events : [];
+        playEvents(events, function () {
+          if (!battle) return;
+          battle.a = state.a; battle.b = state.b; battle.turn = state.turn; battle.round = state.round; battle.over = state.over; battle.winner = state.winner;
+          afterTurn();
+        });
+        break;
+      }
+      case "forfeit": {
+        if (battle && view.pvp && !battle.over) {
+          battle.over = true;
+          battle.winner = view.me;
+          logLine("Opponent forfeited.", "them");
+          finishBattle(false);
+        }
+        break;
+      }
+      case "rematch": {
+        PvP.rematch.them = true;
+        if (PvP.role === "host" && PvP.rematch.me) pvpStartBattle();
+        else if (!PvP.rematch.me) toast(PvP.opp ? PvP.opp.name + " wants a rematch" : "Opponent wants a rematch");
+        break;
+      }
+    }
   }
 
   /* ---------- Index ---------- */
@@ -750,10 +1492,6 @@
     A.list.slice().sort(function (a, b) { return b.rarity - a.rarity; }).forEach(function (a) {
       var row = document.createElement("div");
       row.className = "idx-row";
-      var sw = document.createElement("span");
-      sw.className = "swatch";
-      sw.style.setProperty("--c1", a.c1);
-      sw.style.setProperty("--c2", a.c2);
       var name = document.createElement("span");
       name.className = "name";
       name.textContent = a.name;
@@ -765,12 +1503,12 @@
       odds.textContent = A.formatOdds(a.rarity);
       var cnt = document.createElement("span");
       cnt.className = "cnt";
-      row.appendChild(sw); row.appendChild(name); row.appendChild(tier); row.appendChild(odds); row.appendChild(cnt);
+      row.appendChild(makeSwatch(a)); row.appendChild(name); row.appendChild(tier); row.appendChild(odds); row.appendChild(cnt);
       if (a.cutscene > 0) {
         var pv = document.createElement("button");
         pv.className = "btn small";
         pv.textContent = "▶ Preview";
-        pv.title = "Preview this aura's cutscene";
+        pv.title = "Preview this aura's reveal";
         pv.addEventListener("click", function () { if (!busy) playCutscene(a, true); });
         row.appendChild(pv);
       } else {
@@ -821,11 +1559,12 @@
       ["Auras found", found + " / " + A.TOTAL],
       ["Best aura", best ? best.name + " (" + A.formatOdds(best.rarity) + ")" : "—"],
       ["Coins earned", fmt(S.stats.earned)],
-      ["Fights won", fmt(S.stats.won)],
-      ["Fights lost", fmt(S.stats.lost)],
+      ["Bot fights", fmt(S.stats.won) + " won · " + fmt(S.stats.lost) + " lost"],
+      ["PvP record", fmt(S.stats.pvpWon) + " won · " + fmt(S.stats.pvpLost) + " lost"],
       ["Win streak", fmt(S.stats.streak) + " (best " + fmt(S.stats.bestStreak) + ")"],
       ["Cutscenes triggered", fmt(S.stats.cutscenes)],
-      ["Training level", fmt(S.training)]
+      ["Training level", fmt(S.training)],
+      ["Abilities unlocked", S.ownedAbilities.length + " / " + ABILITY_ORDER.length]
     ];
     grid.innerHTML = "";
     items.forEach(function (it) {
@@ -840,12 +1579,146 @@
     $("#set-skip").checked = !!S.settings.skipCutscenes;
   }
 
-  /* ---------- Cutscenes ---------- */
+  /* ---------- Admin console ---------- */
+
+  function adminPrint(text, isCmd) {
+    var out = $("#admin-out");
+    var line = document.createElement("div");
+    if (isCmd) { line.innerHTML = "<b>&gt; </b>"; line.appendChild(document.createTextNode(text)); }
+    else line.textContent = text;
+    out.appendChild(line);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  function findAura(query) {
+    query = query.trim().toLowerCase();
+    if (!query) return null;
+    var exact = A.list.filter(function (a) { return a.name.toLowerCase() === query; })[0];
+    if (exact) return exact;
+    var idNum = Number(query);
+    if (Number.isInteger(idNum) && A.byId(idNum)) return A.byId(idNum);
+    return A.list.filter(function (a) { return a.name.toLowerCase().indexOf(query) >= 0; })[0] || null;
+  }
+
+  var ADMIN_HELP = [
+    "help                      show this list",
+    "luck <mult> [rolls]       add a luck boost, e.g. luck 1000 10",
+    "coins <amount>            add coins (negative to remove)",
+    "give <aura name|id>       add an aura to your inventory",
+    "roll <aura name|id>       force your next roll to be that aura (plays its reveal)",
+    "potion <key> [count]      add potions: " + POTION_ORDER.join(", "),
+    "ability <id|all>          unlock abilities: " + ABILITY_ORDER.join(", "),
+    "training <level>          set training level",
+    "unlockauto                unlock Auto Roll",
+    "clearluck                 remove all luck boosts",
+    "reset                     wipe the save"
+  ];
+
+  function runAdmin(line) {
+    var parts = line.trim().replace(/^\//, "").split(/\s+/);
+    var cmd = (parts.shift() || "").toLowerCase();
+    var rest = parts.join(" ");
+    if (!cmd) return;
+    adminPrint(line, true);
+    switch (cmd) {
+      case "help":
+        ADMIN_HELP.forEach(function (l) { adminPrint(l); });
+        break;
+      case "luck": {
+        var mult = Number(parts[0]);
+        var rolls = parts[1] !== undefined ? Number(parts[1]) : 10;
+        if (!(mult > 0) || !(rolls > 0)) { adminPrint("Usage: luck <mult> [rolls]"); break; }
+        S.luckEffects.push({ mult: Math.floor(mult), rolls: Math.floor(rolls) });
+        adminPrint("Luck x" + fmt(mult) + " for " + fmt(rolls) + " rolls.");
+        break;
+      }
+      case "coins": {
+        var n = Number(parts[0]);
+        if (!isFinite(n)) { adminPrint("Usage: coins <amount>"); break; }
+        S.coins = Math.max(0, S.coins + Math.floor(n));
+        adminPrint("Coins: " + fmt(S.coins));
+        break;
+      }
+      case "give": {
+        var a = findAura(rest);
+        if (!a) { adminPrint("No aura matches \"" + rest + "\"."); break; }
+        S.inventory[a.id] = (S.inventory[a.id] || 0) + 1;
+        if (S.stats.best === null || A.byId(S.stats.best).rarity < a.rarity) S.stats.best = a.id;
+        if (!equippedAura()) S.equipped = a.id;
+        adminPrint("Added " + a.name + " (" + A.formatOdds(a.rarity) + ").");
+        break;
+      }
+      case "roll": {
+        var ra = findAura(rest);
+        if (!ra) { adminPrint("No aura matches \"" + rest + "\"."); break; }
+        if (!canRoll()) { adminPrint("Can't roll right now (busy, cooling down or in a fight)."); break; }
+        adminPrint("Rolling " + ra.name + "…");
+        switchTab("roll");
+        doRoll(ra);
+        break;
+      }
+      case "potion": {
+        var key = (parts[0] || "").toLowerCase();
+        var cnt = parts[1] !== undefined ? Math.floor(Number(parts[1])) : 1;
+        if (!POTIONS[key] || !(cnt > 0)) { adminPrint("Usage: potion <" + POTION_ORDER.join("|") + "> [count]"); break; }
+        S.potions[key] = (S.potions[key] || 0) + cnt;
+        adminPrint("Added " + cnt + " x " + POTIONS[key].name + ".");
+        break;
+      }
+      case "ability": {
+        var ab = (parts[0] || "").toLowerCase();
+        if (ab === "all") { S.ownedAbilities = ABILITY_ORDER.slice(); adminPrint("All abilities unlocked."); break; }
+        if (!ABILITIES[ab]) { adminPrint("Usage: ability <" + ABILITY_ORDER.join("|") + "|all>"); break; }
+        if (S.ownedAbilities.indexOf(ab) < 0) S.ownedAbilities.push(ab);
+        adminPrint("Unlocked " + ABILITIES[ab].name + ".");
+        break;
+      }
+      case "training": {
+        var lv = Math.floor(Number(parts[0]));
+        if (!(lv >= 0)) { adminPrint("Usage: training <level>"); break; }
+        S.training = lv;
+        adminPrint("Training level " + lv + " (+" + fmt(lv * 10) + " power).");
+        break;
+      }
+      case "unlockauto":
+        S.autoUnlocked = true;
+        adminPrint("Auto Roll unlocked.");
+        break;
+      case "clearluck":
+        S.luckEffects = [];
+        adminPrint("Luck boosts cleared.");
+        break;
+      case "reset":
+        resetSave();
+        adminPrint("Save wiped.");
+        break;
+      default:
+        adminPrint("Unknown command \"" + cmd + "\". Type help.");
+    }
+    save();
+    renderAll();
+  }
+
+  function resetSave() {
+    pvpLeave(true);
+    clearTimeout(botTimer);
+    battle = null;
+    $("#arena").classList.add("hidden");
+    S = defaultState();
+    save();
+    autoOn = false;
+    resetRollDisplay();
+    renderAll();
+  }
+
+  /* ---------- Cutscenes: the screen is covered, the name fades in, then the odds, then it fades out after ~6s. ---------- */
 
   var CS = {
     el: $("#cutscene"), canvas: $("#cs-canvas"), pre: $("#cs-pre"), title: $("#cs-title"), odds: $("#cs-odds"), hint: $("#cs-hint"),
-    running: false, resolve: null, raf: 0, start: 0, draw: null, timers: [], endAt: 0
+    running: false, resolve: null, raf: 0, start: 0, draw: null, timers: [], endAt: 6, t: 0
   };
+  var CUTSCENE_SECONDS = 6;
+  var CUTSCENE_FADE = 0.7;
 
   function csTimer(ms, fn) { CS.timers.push(setTimeout(fn, ms)); }
 
@@ -870,12 +1743,14 @@
       CS.running = true;
       CS.resolve = resolve;
       CS.el.className = "cutscene kind-" + kind;
+      CS.el.style.opacity = "";
       CS.el.style.setProperty("--c1", aura.c1);
       CS.el.style.setProperty("--c2", aura.c2);
       CS.pre.className = "cs-pre"; CS.title.className = "cs-title"; CS.odds.className = "cs-odds"; CS.hint.className = "cs-hint";
       CS.pre.textContent = preview ? "Preview · " + tierName(aura) : tierName(aura) + " aura";
       CS.title.textContent = "";
       CS.odds.textContent = A.formatOdds(aura.rarity);
+      CS.endAt = CUTSCENE_SECONDS;
 
       var ctx = CS.canvas.getContext("2d");
       function resize() {
@@ -889,26 +1764,23 @@
       if (kind === "cosmic") {
         CS.draw = drawCosmic();
         Sound.cosmic();
-        csTimer(4700, function () { CS.pre.classList.add("show"); setLetters(CS.title, aura.name.toUpperCase()); CS.title.classList.add("show"); });
-        csTimer(6200, function () { CS.odds.classList.add("show"); });
-        csTimer(7600, function () { CS.hint.classList.add("show"); });
-        CS.endAt = 13;
+        csTimer(3300, function () { CS.pre.classList.add("show"); setLetters(CS.title, aura.name.toUpperCase()); CS.title.classList.add("show"); });
+        csTimer(4500, function () { CS.odds.classList.add("show"); });
       } else if (kind === "fury") {
         CS.draw = drawFury();
         Sound.fury();
-        csTimer(4300, function () { CS.title.textContent = aura.name.toUpperCase(); CS.title.classList.add("show"); });
-        csTimer(5400, function () { CS.pre.classList.add("show"); });
-        csTimer(5900, function () { CS.odds.classList.add("show"); });
-        csTimer(7600, function () { CS.hint.classList.add("show"); });
-        CS.endAt = 13;
+        csTimer(3100, function () { CS.title.textContent = aura.name.toUpperCase(); CS.title.classList.add("show"); });
+        csTimer(3900, function () { CS.pre.classList.add("show"); });
+        csTimer(4400, function () { CS.odds.classList.add("show"); });
       } else {
         CS.draw = drawGeneric(aura, level);
         Sound.rare(level);
-        csTimer(700, function () { CS.pre.classList.add("show"); CS.title.textContent = aura.name; CS.title.classList.add("show"); });
-        csTimer(1300, function () { CS.odds.classList.add("show"); });
-        csTimer(2200, function () { CS.hint.classList.add("show"); });
-        CS.endAt = 4.5 + level;
+        CS.title.classList.add("slow");
+        csTimer(900, function () { CS.pre.classList.add("show"); CS.title.textContent = aura.name; CS.title.classList.add("show"); });
+        csTimer(3000, function () { CS.odds.classList.add("show"); });
       }
+      csTimer(1200, function () { CS.hint.classList.add("show"); });
+      csTimer((CS.endAt - CUTSCENE_FADE) * 1000, function () { CS.el.style.opacity = "0"; });
 
       CS.el.classList.remove("hidden");
       CS.start = performance.now();
@@ -930,6 +1802,7 @@
     CS.timers = [];
     window.removeEventListener("resize", CS.onResize);
     CS.el.classList.add("hidden");
+    CS.el.style.opacity = "";
     CS.running = false;
     var r = CS.resolve;
     CS.resolve = null;
@@ -939,6 +1812,7 @@
   CS.el.addEventListener("click", function () { if (CS.running && CS.t > 1) endCutscene(); });
 
   function drawGeneric(aura, level) {
+    var colors = aura.colors;
     var c1 = aura.c1, c2 = aura.c2;
     var parts = null;
     return function (ctx, t, w, h) {
@@ -959,7 +1833,7 @@
         var rt = (t * 0.6 + i / rings) % 1;
         ctx.beginPath();
         ctx.arc(cx, cy, rt * m * 0.7, 0, Math.PI * 2);
-        ctx.strokeStyle = c1;
+        ctx.strokeStyle = colors[i % colors.length];
         ctx.lineWidth = 2 + (1 - rt) * 6;
         ctx.globalAlpha = (1 - rt) * 0.6;
         ctx.stroke();
@@ -968,7 +1842,7 @@
       if (!parts) {
         parts = [];
         for (var k = 0; k < 120 + level * 60; k++) {
-          parts.push({ a: Math.random() * Math.PI * 2, s: 60 + Math.random() * 260, r: Math.random() * 2 + 1, o: Math.random(), col: Math.random() < 0.5 ? c1 : c2 });
+          parts.push({ a: Math.random() * Math.PI * 2, s: 60 + Math.random() * 260, r: Math.random() * 2 + 1, o: Math.random(), col: colors[Math.floor(Math.random() * colors.length)] });
         }
       }
       ctx.globalCompositeOperation = "lighter";
@@ -994,6 +1868,7 @@
   }
 
   function drawCosmic() {
+    var FLASH = 3.1;
     var stars = [];
     for (var i = 0; i < 520; i++) stars.push({ x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2, z: Math.random() });
     var hues = [265, 285, 300, 230, 320, 250, 275];
@@ -1004,13 +1879,13 @@
       ctx.fillStyle = "#05010f";
       ctx.fillRect(0, 0, w, h);
       var shakeAmp = 0;
-      if (t > 2.5 && t < 4.6) shakeAmp = (t - 2.5) * 7;
-      else if (t >= 4.6 && t < 5.2) shakeAmp = (5.2 - t) * 25;
+      if (t > 1.6 && t < FLASH) shakeAmp = (t - 1.6) * 9;
+      else if (t >= FLASH && t < FLASH + 0.6) shakeAmp = (FLASH + 0.6 - t) * 25;
       ctx.save();
       ctx.translate((Math.random() - 0.5) * shakeAmp, (Math.random() - 0.5) * shakeAmp);
 
       ctx.globalCompositeOperation = "lighter";
-      var nebAlpha = Math.min(1, Math.max(0, (t - 0.8) / 1.5)) * 0.5;
+      var nebAlpha = Math.min(1, Math.max(0, (t - 0.4) / 1.2)) * 0.5;
       nebulae.forEach(function (n) {
         var x = (n.x + Math.sin(t * 0.2 + n.ph) * 0.05) * w;
         var y = (n.y + Math.cos(t * 0.17 + n.ph) * 0.05) * h;
@@ -1022,7 +1897,7 @@
         ctx.fillRect(x - r, y - r, r * 2, r * 2);
       });
 
-      var speed = t < 4.5 ? 0.002 + Math.pow(t / 4.5, 3) * 0.08 : 0.003;
+      var speed = t < FLASH ? 0.002 + Math.pow(t / FLASH, 3) * 0.08 : 0.003;
       ctx.strokeStyle = "#fff";
       ctx.lineCap = "round";
       stars.forEach(function (s) {
@@ -1039,8 +1914,8 @@
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
 
-      if (t > 2.2 && t < 5.6) {
-        var prog = (t - 2.2) / 2.3;
+      if (t > 1.2 && t < FLASH + 1.0) {
+        var prog = (t - 1.2) / 2.0;
         var veilY = -h * 0.3 + prog * h * 1.6;
         for (var layer = 0; layer < 3; layer++) {
           ctx.beginPath();
@@ -1066,12 +1941,12 @@
         }
       }
 
-      if (t > 4.5) {
+      if (t > FLASH) {
         if (!sparks) {
           sparks = [];
           for (var k = 0; k < 320; k++) sparks.push({ a: Math.random() * Math.PI * 2, s: 80 + Math.random() * 500, r: Math.random() * 2.5 + 0.8, hue: 250 + Math.random() * 70, spin: Math.random() * 2 });
         }
-        var bt = t - 4.5;
+        var bt = t - FLASH;
         ctx.globalCompositeOperation = "lighter";
         sparks.forEach(function (p) {
           var d = p.s * (1 - Math.exp(-bt * 1.4));
@@ -1093,16 +1968,16 @@
         ctx.fillRect(0, 0, w, h);
       }
 
-      if (t > 4.4 && t < 5.1) {
+      if (t > FLASH - 0.1 && t < FLASH + 0.6) {
         ctx.fillStyle = "#fff";
-        ctx.globalAlpha = Math.max(0, 1 - (t - 4.4) / 0.7);
+        ctx.globalAlpha = Math.max(0, 1 - (t - FLASH + 0.1) / 0.7);
         ctx.fillRect(0, 0, w, h);
         ctx.globalAlpha = 1;
       }
       ctx.restore();
-      if (t < 0.8) {
+      if (t < 0.6) {
         ctx.fillStyle = "#000";
-        ctx.globalAlpha = 1 - t / 0.8;
+        ctx.globalAlpha = 1 - t / 0.6;
         ctx.fillRect(0, 0, w, h);
         ctx.globalAlpha = 1;
       }
@@ -1110,6 +1985,7 @@
   }
 
   function drawFury() {
+    var BOOM = 2.9;
     var cracks = [];
     for (var i = 0; i < 14; i++) {
       var edge = Math.floor(Math.random() * 4);
@@ -1124,17 +2000,17 @@
         var jit = (Math.random() - 0.5) * 0.08;
         pts.push([tx + (-dy / len) * jit, ty + (dx / len) * jit]);
       }
-      cracks.push({ pts: pts, delay: Math.random() * 1.5 });
+      cracks.push({ pts: pts, delay: Math.random() * 1.0 });
     }
     var embers = [];
     for (var e = 0; e < 170; e++) embers.push({ x: Math.random(), y: Math.random(), s: 0.02 + Math.random() * 0.06, r: Math.random() * 2.5 + 1, ph: Math.random() * 6 });
-    var flashes = [4.0, 4.18, 5.6, 7.2, 9.5];
+    var flashes = [BOOM, BOOM + 0.18, 4.3, 5.3];
     return function (ctx, t, w, h) {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
       var beat = Math.pow(Math.max(0, Math.sin(t * Math.PI * 1.6)), 8);
-      var intensity = Math.min(1, t / 4);
-      var shakeAmp = t < 4 ? intensity * intensity * 10 : (t < 4.6 ? 28 : 3 + beat * 6);
+      var intensity = Math.min(1, t / BOOM);
+      var shakeAmp = t < BOOM ? intensity * intensity * 10 : (t < BOOM + 0.6 ? 28 : 3 + beat * 6);
       ctx.save();
       ctx.translate((Math.random() - 0.5) * shakeAmp, (Math.random() - 0.5) * shakeAmp);
 
@@ -1147,7 +2023,7 @@
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       cracks.forEach(function (c) {
-        var prog = Math.max(0, Math.min(1, (t - 0.6 - c.delay) / 2.4));
+        var prog = Math.max(0, Math.min(1, (t - 0.3 - c.delay) / 1.8));
         if (prog <= 0) return;
         var n = Math.floor(prog * (c.pts.length - 1));
         var frac = prog * (c.pts.length - 1) - n;
@@ -1183,8 +2059,8 @@
       });
       ctx.globalCompositeOperation = "source-over";
 
-      if (t > 4) {
-        var bt = t - 4;
+      if (t > BOOM) {
+        var bt = t - BOOM;
         var er = Math.min(1, bt * 2) * Math.min(w, h) * 0.18;
         var eg = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, er * 2.5 + 1);
         eg.addColorStop(0, "rgba(255,30,0,0.9)");
@@ -1203,13 +2079,184 @@
         }
       });
       ctx.restore();
-      if (t < 1) {
+      if (t < 0.8) {
         ctx.fillStyle = "#000";
-        ctx.globalAlpha = 1 - t;
+        ctx.globalAlpha = 1 - t / 0.8;
         ctx.fillRect(0, 0, w, h);
         ctx.globalAlpha = 1;
       }
     };
+  }
+
+  /* ---------- Accounts (local to this browser), save button, export / import ---------- */
+
+  function readAccounts() {
+    try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function writeAccounts(acc) {
+    try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(acc)); } catch (e) { /* ignore */ }
+  }
+
+  function hashPassword(password, salt) {
+    var text = salt + ":" + password;
+    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+      return window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+      }).catch(function () { return fallbackHash(text); });
+    }
+    return Promise.resolve(fallbackHash(text));
+  }
+  function fallbackHash(text) {
+    var h1 = 0x811c9dc5, h2 = 0x01000193;
+    for (var i = 0; i < text.length; i++) {
+      h1 ^= text.charCodeAt(i); h1 = Math.imul(h1, 0x01000193) >>> 0;
+      h2 ^= text.charCodeAt(i) * 31; h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+    }
+    return "f" + h1.toString(16) + h2.toString(16);
+  }
+  function randomSalt() {
+    var s = "";
+    for (var i = 0; i < 16; i++) s += Math.floor(Math.random() * 16).toString(16);
+    return s;
+  }
+
+  var loginMode = "login";
+
+  function openLogin() {
+    $("#login-modal").classList.remove("hidden");
+    $("#login-error").textContent = "";
+    $("#login-user").value = currentUser || "";
+    $("#login-pass").value = "";
+    setLoginMode(currentUser ? "account" : "login");
+    $("#save-code").value = "";
+  }
+  function closeLogin() { $("#login-modal").classList.add("hidden"); }
+
+  function setLoginMode(mode) {
+    loginMode = mode;
+    var loggedIn = mode === "account";
+    $("#login-title").textContent = loggedIn ? "Logged in as " + currentUser : (mode === "register" ? "Create account" : "Login");
+    $("#login-submit").textContent = mode === "register" ? "Create" : "Login";
+    $("#login-switch").textContent = mode === "register" ? "I have an account" : "Create account";
+    $("#login-user").disabled = loggedIn;
+    $("#login-pass").classList.toggle("hidden", loggedIn);
+    $("#login-submit").classList.toggle("hidden", loggedIn);
+    $("#login-switch").classList.toggle("hidden", loggedIn);
+    $("#btn-logout").classList.toggle("hidden", !loggedIn);
+  }
+
+  function renderAccount() {
+    $("#account-name").textContent = currentUser ? "👤 " + currentUser : "Guest";
+    $("#btn-login").textContent = currentUser ? "Account" : "Login";
+  }
+
+  function submitLogin(e) {
+    e.preventDefault();
+    var user = $("#login-user").value.trim();
+    var pass = $("#login-pass").value;
+    var err = $("#login-error");
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(user)) { err.textContent = "Username: 3-16 letters, numbers or underscores."; return; }
+    if (pass.length < 4) { err.textContent = "Password must be at least 4 characters."; return; }
+    var key = user.toLowerCase();
+    var acc = readAccounts();
+    if (loginMode === "register") {
+      if (acc[key]) { err.textContent = "That username is taken on this device."; return; }
+      var salt = randomSalt();
+      hashPassword(pass, salt).then(function (hash) {
+        acc[key] = { name: user, salt: salt, hash: hash, created: Date.now() };
+        writeAccounts(acc);
+        switchUser(user, true);
+        closeLogin();
+        toast("Account created. Welcome, " + user + "!");
+      });
+    } else {
+      var rec = acc[key];
+      if (!rec) { err.textContent = "No account with that name on this device."; return; }
+      hashPassword(pass, rec.salt).then(function (hash) {
+        if (hash !== rec.hash) { err.textContent = "Wrong password."; return; }
+        switchUser(rec.name, false);
+        closeLogin();
+        toast("Logged in as " + rec.name);
+      });
+    }
+  }
+
+  /* Save the current slot, switch slots and reload everything from the new one. */
+  function switchUser(user, isNew) {
+    save();
+    if (battle && !battle.over) forfeit();
+    pvpLeave(true);
+    var guestState = (!currentUser && isNew) ? JSON.parse(JSON.stringify(S)) : null;
+    currentUser = user;
+    try { if (user) localStorage.setItem(SESSION_KEY, user); else localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+    if (guestState && !localStorage.getItem(saveKey())) {
+      /* A brand new account inherits the guest progress it was created from. */
+      S = guestState;
+      save();
+    } else {
+      S = load();
+    }
+    autoOn = false;
+    resetRollDisplay();
+    renderAccount();
+    renderAll();
+  }
+
+  function resetRollDisplay() {
+    if (S.lastRoll !== null && S.inventory[S.lastRoll]) { showAura(A.byId(S.lastRoll)); return; }
+    $("#roll-name").textContent = "Ready to roll";
+    $("#roll-name").className = "roll-name";
+    $("#roll-name").style.backgroundImage = "";
+    $("#roll-tier").textContent = "Press ROLL to discover your first aura";
+    $("#roll-odds").textContent = "";
+    $("#btn-equip-last").disabled = true;
+    setOrb($("#orb"), A.list[0]);
+  }
+
+  function logout() {
+    switchUser(null, false);
+    closeLogin();
+    toast("Logged out. Playing as guest.");
+  }
+
+  function manualSave() {
+    save();
+    var btn = $("#btn-save");
+    btn.textContent = "✅ Saved";
+    setTimeout(function () { btn.textContent = "💾 Save"; }, 1500);
+    toast("Game saved" + (currentUser ? " for " + currentUser : ""));
+  }
+
+  function exportSave() {
+    save();
+    var json = JSON.stringify(S);
+    var code = "AR1." + btoa(unescape(encodeURIComponent(json)));
+    var ta = $("#save-code");
+    ta.value = code;
+    ta.select();
+    try { document.execCommand("copy"); toast("Save code copied to clipboard"); } catch (e) { toast("Save code ready: copy it from the box"); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).catch(function () { /* ignore */ });
+  }
+
+  function importSave() {
+    var code = $("#save-code").value.trim();
+    var err = $("#login-error");
+    if (code.indexOf("AR1.") !== 0) { err.textContent = "That is not a valid save code."; return; }
+    try {
+      var json = decodeURIComponent(escape(atob(code.slice(4))));
+      var data = JSON.parse(json);
+      if (!data || typeof data !== "object" || typeof data.rolls !== "number") throw new Error("bad");
+      if (!confirm("Import this save? It will replace the current progress for " + (currentUser || "guest") + ".")) return;
+      if (battle && !battle.over) forfeit();
+      S = hydrate(data);
+      save();
+      resetRollDisplay();
+      renderAll();
+      closeLogin();
+      toast("Save imported");
+    } catch (e) {
+      err.textContent = "Could not read that save code.";
+    }
   }
 
   /* ---------- Wiring ---------- */
@@ -1224,7 +2271,7 @@
     if (b) switchTab(b.dataset.tab);
   });
 
-  $("#btn-roll").addEventListener("click", doRoll);
+  $("#btn-roll").addEventListener("click", function () { doRoll(); });
   $("#btn-auto").addEventListener("click", function () {
     if (!S.autoUnlocked) { toast("Unlock Auto Roll in the Shop (" + fmt(AUTO_UNLOCK_COST) + " coins)", "bad"); return; }
     autoOn = !autoOn;
@@ -1232,32 +2279,61 @@
   });
   $("#btn-equip-last").addEventListener("click", function () { if (S.lastRoll !== null) equip(S.lastRoll); });
   $("#btn-heal").addEventListener("click", healInBattle);
-  $("#btn-flee").addEventListener("click", function () { if (battle && !battle.over) endFight(false, true); });
+  $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
   $("#btn-reset").addEventListener("click", function () {
     if (!confirm("Reset all progress? This cannot be undone.")) return;
-    S = defaultState();
-    save();
-    autoOn = false;
-    $("#roll-name").textContent = "Ready to roll";
-    $("#roll-name").className = "roll-name";
-    $("#roll-tier").textContent = "Press ROLL to discover your first aura";
-    $("#roll-odds").textContent = "";
-    renderAll();
+    resetSave();
     toast("Progress reset");
   });
+  $("#btn-save").addEventListener("click", manualSave);
+  $("#btn-login").addEventListener("click", openLogin);
+  $("#login-close").addEventListener("click", closeLogin);
+  $("#login-form").addEventListener("submit", submitLogin);
+  $("#login-switch").addEventListener("click", function () { setLoginMode(loginMode === "register" ? "login" : "register"); $("#login-error").textContent = ""; });
+  $("#btn-logout").addEventListener("click", logout);
+  $("#btn-export").addEventListener("click", exportSave);
+  $("#btn-import").addEventListener("click", importSave);
+  $("#login-modal").addEventListener("click", function (e) { if (e.target === $("#login-modal")) closeLogin(); });
+  $("#btn-pvp-host").addEventListener("click", pvpHost);
+  $("#btn-pvp-join").addEventListener("click", function () { pvpJoin($("#pvp-code").value.trim()); });
+  $("#pvp-code").addEventListener("keydown", function (e) { if (e.key === "Enter") pvpJoin($("#pvp-code").value.trim()); });
+  $("#btn-pvp-leave").addEventListener("click", function () { pvpLeave(); });
+  $("#pvp-name").addEventListener("change", function (e) { S.playerName = e.target.value.trim().slice(0, 16); save(); });
+  $("#admin-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var inp = $("#admin-in");
+    runAdmin(inp.value);
+    inp.value = "";
+  });
   document.addEventListener("keydown", function (e) {
-    if (e.code === "Space" && !e.repeat && document.activeElement.tagName !== "INPUT" && $("#tab-roll").classList.contains("active")) {
+    var typing = document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
+    if (e.code === "Space" && !e.repeat && !typing && $("#tab-roll").classList.contains("active")) {
       e.preventDefault();
       doRoll();
     }
+    if (e.key === "`" && !typing) {
+      e.preventDefault();
+      switchTab("stats");
+      $("#admin-in").focus();
+    }
   });
+  window.addEventListener("beforeunload", function () { if (PvP.conn) pvpSend({ t: "forfeit" }); });
 
   buildIndex();
-  if (S.lastRoll !== null && S.inventory[S.lastRoll]) showAura(A.byId(S.lastRoll));
+  resetRollDisplay();
+  renderAccount();
   renderAll();
 
-  /* Debug hooks for the console. */
-  window.AuraRealms = { state: function () { return S; }, preview: function (name) { var a = A.byName(name); if (a) playCutscene(a, true); } };
+  /* Console hooks. */
+  window.AuraRealms = {
+    state: function () { return S; },
+    preview: function (name) { var a = findAura(name); if (a) playCutscene(a, true); },
+    admin: runAdmin,
+    engine: Engine,
+    abilities: ABILITIES,
+    pvp: function () { return { status: PvP.status, role: PvP.role, code: PvP.code }; },
+    battle: function () { return battle; }
+  };
 })();

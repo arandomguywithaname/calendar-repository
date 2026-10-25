@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Aura Realms RNG</title>
-  <meta name="description" content="Roll for 784 auras, earn coins, brew potions and battle bots. Can you find the 1 in 1,000,000,000 Fury of Darkness?">
+  <meta name="description" content="Roll for 784 auras, earn coins, brew potions, battle bots and friends. Can you find the 1 in 1,000,000,000 Fury of Darkness?">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,9 +21,15 @@
       <div class="hud-item"><span class="hud-label">Rolls</span><span class="hud-value" id="hud-rolls">0</span></div>
       <div class="hud-item"><span class="hud-label">Power</span><span class="hud-value" id="hud-power">0</span></div>
     </div>
+    <div class="account">
+      <span class="account-name" id="account-name">Guest</span>
+      <button id="btn-save" class="btn small">💾 Save</button>
+      <button id="btn-login" class="btn small">Login</button>
+    </div>
     <nav class="tabs" id="tabs">
       <button class="tab active" data-tab="roll">Roll</button>
       <button class="tab" data-tab="inventory">Inventory</button>
+      <button class="tab" data-tab="abilities">Abilities</button>
       <button class="tab" data-tab="shop">Shop</button>
       <button class="tab" data-tab="battle">Battle</button>
       <button class="tab" data-tab="index">Index</button>
@@ -36,7 +42,7 @@
     <section id="tab-roll" class="panel active">
       <div class="roll-stage">
         <div class="orb-wrap">
-          <div id="orb" class="orb tier-common"><div class="orb-core"></div></div>
+          <div id="orb" class="orb tier-common"><div class="orb-fill"><div class="orb-paint"></div></div><div class="orb-core"></div><div class="orb-gloss"></div></div>
         </div>
         <div id="roll-name" class="roll-name">Ready to roll</div>
         <div id="roll-tier" class="roll-tier">Press ROLL to discover your first aura</div>
@@ -67,6 +73,15 @@
       <div id="inventory-grid" class="card-grid"></div>
     </section>
 
+    <!-- ABILITIES -->
+    <section id="tab-abilities" class="panel">
+      <div class="panel-head">
+        <h2>Abilities <span id="loadout-count" class="pill"></span></h2>
+        <p class="muted">Pick exactly 4 abilities for battle. Unlock more with coins. Damage scales with your equipped aura's power.</p>
+      </div>
+      <div id="ability-grid" class="card-grid"></div>
+    </section>
+
     <!-- SHOP -->
     <section id="tab-shop" class="panel">
       <div class="panel-head">
@@ -86,26 +101,58 @@
         <p class="muted">Fight bots with your equipped aura. Win coins. Lose nothing but pride.</p>
       </div>
       <div id="arena" class="arena hidden">
-        <div class="fighter" id="fighter-player">
-          <div class="fighter-orb orb small" id="arena-orb"><div class="orb-core"></div></div>
-          <div class="fighter-name" id="arena-player-name">You</div>
-          <div class="hpbar"><div class="hpfill player" id="hp-player"></div></div>
-          <div class="hptext" id="hp-player-text"></div>
+        <div class="arena-banner" id="arena-banner"></div>
+        <div class="fighter" id="fighter-a">
+          <div class="fighter-visual" id="visual-a"></div>
+          <div class="fighter-name" id="name-a">You</div>
+          <div class="hpbar"><div class="hpfill player" id="hp-a"></div></div>
+          <div class="hptext" id="hptext-a"></div>
+          <div class="status-row" id="status-a"></div>
         </div>
-        <div class="vs">VS</div>
-        <div class="fighter" id="fighter-bot">
-          <div class="fighter-icon" id="arena-bot-icon">🤖</div>
-          <div class="fighter-name" id="arena-bot-name">Bot</div>
-          <div class="hpbar"><div class="hpfill bot" id="hp-bot"></div></div>
-          <div class="hptext" id="hp-bot-text"></div>
+        <div class="vs"><div>VS</div><div class="round" id="arena-round"></div></div>
+        <div class="fighter" id="fighter-b">
+          <div class="fighter-visual" id="visual-b"></div>
+          <div class="fighter-name" id="name-b">Bot</div>
+          <div class="hpbar"><div class="hpfill bot" id="hp-b"></div></div>
+          <div class="hptext" id="hptext-b"></div>
+          <div class="status-row" id="status-b"></div>
         </div>
+        <div class="turn-indicator" id="turn-indicator"></div>
+        <div class="ability-bar" id="ability-bar"></div>
         <div class="arena-controls">
-          <button id="btn-heal" class="btn">❤️ Heal (0)</button>
-          <button id="btn-flee" class="btn danger">Flee</button>
+          <button id="btn-heal" class="btn small">❤️ Heal potion (0)</button>
+          <button id="btn-flee" class="btn small danger">Forfeit</button>
         </div>
         <div id="battle-log" class="battle-log"></div>
         <div id="battle-result" class="battle-result hidden"></div>
+        <div class="arena-controls" id="post-battle" ></div>
       </div>
+
+      <h3 class="section-title">PvP · play a friend</h3>
+      <div class="pvp-box">
+        <div class="pvp-row">
+          <label class="pvp-label">Your name</label>
+          <input id="pvp-name" type="text" maxlength="16" placeholder="Player">
+        </div>
+        <div class="pvp-actions">
+          <div class="pvp-col">
+            <button id="btn-pvp-host" class="btn primary">Create room</button>
+            <div class="muted small-text">Share the 4-digit code with your friend.</div>
+          </div>
+          <div class="pvp-col">
+            <div class="pvp-join">
+              <input id="pvp-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000">
+              <button id="btn-pvp-join" class="btn primary">Join room</button>
+            </div>
+            <div class="muted small-text">Enter a friend's code to fight them.</div>
+          </div>
+        </div>
+        <div id="pvp-code-display" class="pvp-code hidden"></div>
+        <div id="pvp-status" class="pvp-status">Not connected.</div>
+        <button id="btn-pvp-leave" class="btn small danger hidden">Leave room</button>
+      </div>
+
+      <h3 class="section-title">Fight bots</h3>
       <div id="bot-grid" class="card-grid"></div>
     </section>
 
@@ -137,6 +184,15 @@
         <label class="check"><input type="checkbox" id="set-skip"> Skip cutscenes</label>
         <button id="btn-reset" class="btn danger">Reset save</button>
       </div>
+      <h3 class="section-title">Admin console</h3>
+      <div class="admin">
+        <div id="admin-out" class="admin-out">Type <b>help</b> for commands. Shortcut: press ` anywhere.</div>
+        <form id="admin-form" class="admin-form" autocomplete="off">
+          <span class="prompt">&gt;</span>
+          <input id="admin-in" type="text" placeholder="luck 1000 10">
+          <button class="btn small primary" type="submit">Run</button>
+        </form>
+      </div>
     </section>
   </main>
 
@@ -153,8 +209,34 @@
     </div>
   </div>
 
+  <!-- Login / account modal -->
+  <div id="login-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2 id="login-title">Login</h2>
+      <p class="muted small-text">Accounts are stored in this browser only (there is no server). To play the same save on another device, export a save code here and import it there.</p>
+      <form id="login-form" class="login-form" autocomplete="off">
+        <input id="login-user" type="text" placeholder="Username" maxlength="16" autocomplete="username">
+        <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password">
+        <div id="login-error" class="form-error"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn small primary" id="login-submit">Login</button>
+          <button type="button" class="btn small" id="login-switch">Create account</button>
+          <button type="button" class="btn small danger hidden" id="btn-logout">Log out</button>
+        </div>
+      </form>
+      <h3 class="section-title">Save data</h3>
+      <div class="modal-actions">
+        <button type="button" class="btn small" id="btn-export">Export save code</button>
+        <button type="button" class="btn small" id="btn-import">Import save code</button>
+      </div>
+      <textarea id="save-code" class="save-code" rows="3" placeholder="Export puts your save code here. Paste a code here and press Import to load it."></textarea>
+      <div class="modal-actions"><button type="button" class="btn small" id="login-close">Close</button></div>
+    </div>
+  </div>
+
   <div id="toasts" class="toasts"></div>
 
+  <script src="peerjs.min.js"></script>
   <script src="auras.js"></script>
   <script src="game.js"></script>
 </body>
