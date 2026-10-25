@@ -26,14 +26,23 @@ loadout, and fight bots or a friend.
   the other joins. Peer-to-peer over WebRTC via the bundled PeerJS library (uses the
   free public PeerJS signalling server). The host runs the battle; both players
   choose abilities on their turn. Rematch supported.
-- **Potions**: luck boosts, double coins, haste, healing, strength.
+- **Daily gift**: claim once every 20 hours. A 7-day streak ladder gives coins plus
+  potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
+  Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
+  week. Miss two days and the streak restarts.
+- **23 potions** in three groups. Luck from x2 up to the Infinity Serum (x25,000 for
+  one roll) and a Rarity Magnet that forbids Common and Uncommon rolls. Coins and
+  speed: x2, x5 and x10 coin potions, Haste and Blitz, and a Mystery Potion that
+  turns into a random potion. Battle: healing, Greater Healing, Strength, Titan's
+  Brew (double damage), Iron Skin (start with a shield) and Second Wind (survive a
+  killing blow once).
 - **Login and save**: local accounts (username + password) stored in the browser,
   one save slot each, a Save button, and Export / Import save codes to move progress
   between devices. There is no server, so accounts only exist on the device where
   they were created.
 - **Admin console** (Stats tab, or press `` ` ``): `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `roll Fury of Darkness`, `potion zenith 3`, `ability all`,
-  `training 20`, `unlockauto`, `clearluck`, `reset`, `help`.
+  `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
 
 ## Deploy to Netlify
 

@@ -17,17 +17,49 @@
   /* ---------- Data ---------- */
 
   var POTIONS = {
-    lucky:    { name: "Lucky Potion",    icon: "🍀", cost: 150,    kind: "luck", mult: 2,    rolls: 20, desc: "x2 luck for 20 rolls" },
-    fortune:  { name: "Fortune Potion",  icon: "🧪", cost: 600,    kind: "luck", mult: 5,    rolls: 15, desc: "x5 luck for 15 rolls" },
-    heavenly: { name: "Heavenly Potion", icon: "✨", cost: 3000,   kind: "luck", mult: 25,   rolls: 10, desc: "x25 luck for 10 rolls" },
-    godly:    { name: "Godly Potion",    icon: "👑", cost: 20000,  kind: "luck", mult: 200,  rolls: 5,  desc: "x200 luck for 5 rolls" },
-    zenith:   { name: "Zenith Potion",   icon: "🌌", cost: 100000, kind: "luck", mult: 1000, rolls: 3,  desc: "x1000 luck for 3 rolls" },
-    gold:     { name: "Gold Potion",     icon: "💰", cost: 250,    kind: "gold", rolls: 30,  desc: "x2 coins from rolls for 30 rolls" },
-    haste:    { name: "Haste Potion",    icon: "⚡", cost: 200,    kind: "haste", seconds: 60, desc: "Roll cooldown halved for 60 seconds" },
-    heal:     { name: "Healing Potion",  icon: "❤️", cost: 100,    kind: "heal", pct: 0.4,   desc: "Restore 40% HP during a bot fight" },
-    strength: { name: "Strength Potion", icon: "💪", cost: 150,    kind: "strength", mult: 1.5, desc: "+50% damage in your next bot fight" }
+    /* Luck */
+    lucky:     { name: "Lucky Potion",      icon: "🍀", cost: 150,     group: "luck",   kind: "luck", mult: 2,     rolls: 20, desc: "x2 luck for 20 rolls" },
+    clover:    { name: "Clover Brew",       icon: "☘️", cost: 500,     group: "luck",   kind: "luck", mult: 3,     rolls: 50, desc: "x3 luck for 50 rolls" },
+    fortune:   { name: "Fortune Potion",    icon: "🧪", cost: 600,     group: "luck",   kind: "luck", mult: 5,     rolls: 15, desc: "x5 luck for 15 rolls" },
+    heavenly:  { name: "Heavenly Potion",   icon: "✨", cost: 3000,    group: "luck",   kind: "luck", mult: 25,    rolls: 10, desc: "x25 luck for 10 rolls" },
+    starlight: { name: "Starlight Elixir",  icon: "🌟", cost: 8000,    group: "luck",   kind: "luck", mult: 60,    rolls: 8,  desc: "x60 luck for 8 rolls" },
+    godly:     { name: "Godly Potion",      icon: "👑", cost: 20000,   group: "luck",   kind: "luck", mult: 200,   rolls: 5,  desc: "x200 luck for 5 rolls" },
+    voidess:   { name: "Void Essence",      icon: "🕳️", cost: 45000,   group: "luck",   kind: "luck", mult: 500,   rolls: 4,  desc: "x500 luck for 4 rolls" },
+    zenith:    { name: "Zenith Potion",     icon: "🌌", cost: 100000,  group: "luck",   kind: "luck", mult: 1000,  rolls: 3,  desc: "x1000 luck for 3 rolls" },
+    oblivion:  { name: "Oblivion Draught",  icon: "🌑", cost: 400000,  group: "luck",   kind: "luck", mult: 5000,  rolls: 2,  desc: "x5000 luck for 2 rolls" },
+    infinity:  { name: "Infinity Serum",    icon: "♾️", cost: 2000000, group: "luck",   kind: "luck", mult: 25000, rolls: 1,  desc: "x25000 luck for a single roll. The best potion money can buy." },
+    blessing:  { name: "Daily Blessing",    icon: "🎁", cost: 0,       group: "luck",   kind: "luck", mult: 50,    rolls: 1,  desc: "x50 luck for one roll. Only from the daily gift.", daily: true },
+    magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "luck",   kind: "floor", rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
+    /* Coins and speed */
+    gold:      { name: "Gold Potion",       icon: "💰", cost: 250,     group: "coins",  kind: "gold", mult: 2,  rolls: 30, desc: "x2 coins from rolls for 30 rolls" },
+    midas:     { name: "Midas Tonic",       icon: "🏆", cost: 1200,    group: "coins",  kind: "gold", mult: 5,  rolls: 20, desc: "x5 coins from rolls for 20 rolls" },
+    rush:      { name: "Golden Rush",       icon: "💎", cost: 3000,    group: "coins",  kind: "gold", mult: 10, rolls: 10, desc: "x10 coins from rolls for 10 rolls" },
+    haste:     { name: "Haste Potion",      icon: "⚡", cost: 200,     group: "coins",  kind: "haste", div: 2, seconds: 60,  desc: "Roll cooldown halved for 60 seconds" },
+    blitz:     { name: "Blitz Potion",      icon: "🌀", cost: 800,     group: "coins",  kind: "haste", div: 4, seconds: 120, desc: "Roll cooldown quartered for 2 minutes" },
+    mystery:   { name: "Mystery Potion",    icon: "❓", cost: 1000,    group: "coins",  kind: "mystery", desc: "Turns into a random potion. Usually cheap, sometimes amazing." },
+    /* Battle */
+    heal:      { name: "Healing Potion",    icon: "❤️", cost: 100,     group: "battle", kind: "heal", pct: 0.4,  desc: "Restore 40% HP during a bot fight" },
+    greatheal: { name: "Greater Healing",   icon: "💖", cost: 300,     group: "battle", kind: "heal", pct: 0.8,  desc: "Restore 80% HP during a bot fight" },
+    strength:  { name: "Strength Potion",   icon: "💪", cost: 150,     group: "battle", kind: "strength", mult: 1.5, desc: "+50% damage in your next bot fight" },
+    titan:     { name: "Titan's Brew",      icon: "🦾", cost: 500,     group: "battle", kind: "strength", mult: 2,   desc: "+100% damage in your next bot fight" },
+    ironskin:  { name: "Iron Skin",         icon: "🛡️", cost: 400,     group: "battle", kind: "shield", pct: 0.3, desc: "Start your next bot fight with a shield worth 30% of your HP" },
+    secondwind:{ name: "Second Wind",       icon: "🕊️", cost: 1500,    group: "battle", kind: "revive", pct: 0.4, desc: "Survive a killing blow once in your next bot fight and come back at 40% HP" }
   };
-  var POTION_ORDER = ["lucky", "fortune", "heavenly", "godly", "zenith", "gold", "haste", "heal", "strength"];
+  var POTION_ORDER = Object.keys(POTIONS);
+  var POTION_GROUPS = [["luck", "Luck potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
+
+  /* Daily gift ladder: day 1..7 of a streak. Coins scale up with every completed week. */
+  var DAILY_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+  var DAILY_STREAK_WINDOW_MS = 48 * 60 * 60 * 1000;
+  var DAILY_LADDER = [
+    { coins: 300,  potions: { blessing: 1 } },
+    { coins: 500,  potions: { blessing: 1, clover: 1 } },
+    { coins: 800,  potions: { blessing: 1, gold: 1 } },
+    { coins: 1200, potions: { blessing: 1, fortune: 1 } },
+    { coins: 1800, potions: { blessing: 1, haste: 1, greatheal: 1 } },
+    { coins: 2500, potions: { blessing: 1, heavenly: 1 } },
+    { coins: 5000, potions: { blessing: 2, godly: 1, mystery: 1 } }
+  ];
 
   var LOADOUT_SIZE = 4;
   var DEFAULT_LOADOUT = [0, 1, 2, 3];
@@ -60,9 +92,14 @@
       lastRoll: null,
       potions: {},
       luckEffects: [],
-      goldRolls: 0,
+      goldEffects: [],
+      floorRolls: 0,
       hasteUntil: 0,
-      strengthReady: false,
+      hasteDiv: 2,
+      strengthMult: 1,
+      shieldReady: 0,
+      reviveReady: 0,
+      daily: { last: 0, streak: 0, claims: 0 },
       training: 0,
       autoUnlocked: false,
       loadouts: {},
@@ -96,6 +133,12 @@
       merged.stats = Object.assign(defaultState().stats, saved.stats || {});
       merged.settings = Object.assign(defaultState().settings, saved.settings || {});
       if (!merged.loadouts || typeof merged.loadouts !== "object") merged.loadouts = {};
+      merged.daily = Object.assign(defaultState().daily, saved.daily || {});
+      if (!Array.isArray(merged.goldEffects)) merged.goldEffects = [];
+      if (saved.goldRolls > 0) merged.goldEffects.push({ mult: 2, rolls: saved.goldRolls });
+      if (saved.strengthReady) merged.strengthMult = Math.max(merged.strengthMult || 1, 1.5);
+      delete merged.goldRolls;
+      delete merged.strengthReady;
       return merged;
     } catch (e) {
       return base;
@@ -123,6 +166,13 @@
   }
 
   function hasteActive() { return Date.now() < S.hasteUntil; }
+  function rollCooldown() { return hasteActive() ? ROLL_COOLDOWN / (S.hasteDiv || 2) : ROLL_COOLDOWN; }
+
+  function currentGoldMult() {
+    var m = 1;
+    S.goldEffects.forEach(function (e) { if (e.mult > m) m = e.mult; });
+    return m;
+  }
 
   function equippedAura() {
     if (S.equipped === null || S.equipped === undefined) return null;
@@ -281,23 +331,41 @@
       el.textContent = "🍀 x" + fmt(e.mult) + " luck · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
       box.appendChild(el);
     });
-    if (S.goldRolls > 0) {
+    S.goldEffects.forEach(function (e) {
       var g = document.createElement("span");
       g.className = "effect gold";
-      g.textContent = "💰 x2 coins · " + S.goldRolls + " rolls";
+      g.textContent = "💰 x" + e.mult + " coins · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
       box.appendChild(g);
+    });
+    if (S.floorRolls > 0) {
+      var fl = document.createElement("span");
+      fl.className = "effect";
+      fl.textContent = "🧲 Rare or better · " + S.floorRolls + " roll" + (S.floorRolls === 1 ? "" : "s");
+      box.appendChild(fl);
     }
     if (hasteActive()) {
       var h = document.createElement("span");
       h.className = "effect haste";
-      h.textContent = "⚡ Haste · " + Math.ceil((S.hasteUntil - Date.now()) / 1000) + "s";
+      h.textContent = (S.hasteDiv >= 4 ? "🌀 Blitz" : "⚡ Haste") + " · " + Math.ceil((S.hasteUntil - Date.now()) / 1000) + "s";
       box.appendChild(h);
     }
-    if (S.strengthReady) {
+    if (S.strengthMult > 1) {
       var st = document.createElement("span");
       st.className = "effect strength";
-      st.textContent = "💪 Strength ready";
+      st.textContent = "💪 +" + Math.round((S.strengthMult - 1) * 100) + "% damage next fight";
       box.appendChild(st);
+    }
+    if (S.shieldReady > 0) {
+      var sh = document.createElement("span");
+      sh.className = "effect strength";
+      sh.textContent = "🛡️ Iron Skin ready";
+      box.appendChild(sh);
+    }
+    if (S.reviveReady > 0) {
+      var rv = document.createElement("span");
+      rv.className = "effect strength";
+      rv.textContent = "🕊️ Second Wind ready";
+      box.appendChild(rv);
     }
   }
 
@@ -343,6 +411,7 @@
     renderHUD();
     renderEffects();
     renderQuickbar();
+    renderDaily();
     renderHistory();
     renderInventory();
     renderAbilities();
@@ -362,11 +431,17 @@
   var autoOn = false;
   var spinTimer = null;
 
-  function pickAura(luck) {
+  var rareFloorList = null;
+  function pickAura(luck, floor) {
     var list = A.byRarityDesc;
     for (var i = 0; i < list.length; i++) {
+      if (floor && list[i].rarity < 1000) break;
       var p = Math.min(1, luck / list[i].rarity);
       if (Math.random() < p) return list[i];
+    }
+    if (floor) {
+      if (!rareFloorList) rareFloorList = A.list.filter(function (a) { return a.rarity >= 1000 && a.rarity < 2000; });
+      return rareFloorList[Math.floor(Math.random() * rareFloorList.length)];
     }
     return A.list[0];
   }
@@ -633,16 +708,18 @@
     $("#btn-roll").disabled = true;
     Sound.roll();
 
-    var aura = forced || pickAura(currentLuck());
+    var aura = forced || pickAura(currentLuck(), S.floorRolls > 0);
     var ti = tierIndex(aura);
 
     S.rolls++;
     if (!forced) {
       S.luckEffects.forEach(function (e) { e.rolls--; });
       S.luckEffects = S.luckEffects.filter(function (e) { return e.rolls > 0; });
+      if (S.floorRolls > 0) S.floorRolls--;
     }
-    var mult = S.goldRolls > 0 ? 2 : 1;
-    if (S.goldRolls > 0) S.goldRolls--;
+    var mult = currentGoldMult();
+    S.goldEffects.forEach(function (e) { e.rolls--; });
+    S.goldEffects = S.goldEffects.filter(function (e) { return e.rolls > 0; });
     var coins = aura.coins * mult;
     addCoins(coins);
     S.inventory[aura.id] = (S.inventory[aura.id] || 0) + 1;
@@ -667,7 +744,7 @@
         toast("+" + fmt(coins) + " coins", "gold");
         renderAll();
         busy = false;
-        cooldownUntil = Date.now() + (hasteActive() ? ROLL_COOLDOWN / 2 : ROLL_COOLDOWN);
+        cooldownUntil = Date.now() + rollCooldown();
         setTimeout(function () { $("#btn-roll").disabled = false; }, Math.max(0, cooldownUntil - Date.now()));
       };
       if (aura.cutscene > 0 && !S.settings.skipCutscenes) {
@@ -690,30 +767,118 @@
     if (hasteActive() || $("#active-effects").querySelector(".haste")) renderEffects();
   }, 1000);
 
+  /* ---------- Daily gift ---------- */
+
+  function dailyReady() { return Date.now() - (S.daily.last || 0) >= DAILY_COOLDOWN_MS; }
+
+  function formatWait(ms) {
+    var h = Math.floor(ms / 3600000), m = Math.ceil((ms % 3600000) / 60000);
+    if (m === 60) { h++; m = 0; }
+    return h > 0 ? h + "h " + m + "m" : m + "m";
+  }
+
+  function dailyReward(streak) {
+    var day = ((Math.max(1, streak) - 1) % DAILY_LADDER.length);
+    var weeks = Math.floor((Math.max(1, streak) - 1) / DAILY_LADDER.length);
+    var base = DAILY_LADDER[day];
+    return { day: day + 1, coins: Math.round(base.coins * (1 + weeks * 0.5)), potions: base.potions };
+  }
+
+  function renderDaily() {
+    var sub = $("#daily-sub"), btn = $("#btn-daily");
+    var nextStreak = (Date.now() - (S.daily.last || 0) <= DAILY_STREAK_WINDOW_MS) ? S.daily.streak + 1 : 1;
+    var r = dailyReward(nextStreak);
+    var list = Object.keys(r.potions).map(function (k) { return POTIONS[k].icon + " " + POTIONS[k].name + (r.potions[k] > 1 ? " x" + r.potions[k] : ""); }).join(" + ");
+    if (dailyReady()) {
+      sub.textContent = "Day " + r.day + " of 7 · " + fmt(r.coins) + " coins + " + list;
+      btn.disabled = false;
+      btn.textContent = "Claim";
+      $("#daily-card").classList.add("ready");
+    } else {
+      sub.textContent = "Next gift in " + formatWait(S.daily.last + DAILY_COOLDOWN_MS - Date.now()) + " · streak " + S.daily.streak + " · tomorrow: " + fmt(r.coins) + " coins + " + list;
+      btn.disabled = true;
+      btn.textContent = "Claimed";
+      $("#daily-card").classList.remove("ready");
+    }
+  }
+
+  function claimDaily() {
+    if (!dailyReady()) { toast("Come back in " + formatWait(S.daily.last + DAILY_COOLDOWN_MS - Date.now()), "bad"); return; }
+    var now = Date.now();
+    S.daily.streak = (now - (S.daily.last || 0) <= DAILY_STREAK_WINDOW_MS) ? S.daily.streak + 1 : 1;
+    S.daily.last = now;
+    S.daily.claims = (S.daily.claims || 0) + 1;
+    var r = dailyReward(S.daily.streak);
+    addCoins(r.coins);
+    var lines = ["+" + fmt(r.coins) + " coins"];
+    Object.keys(r.potions).forEach(function (k) {
+      S.potions[k] = (S.potions[k] || 0) + r.potions[k];
+      lines.push(POTIONS[k].icon + " " + POTIONS[k].name + (r.potions[k] > 1 ? " x" + r.potions[k] : ""));
+    });
+    Sound.win();
+    toast("🎁 Daily gift day " + r.day + ": " + lines.join(" · "), "gold");
+    FX.burst(["#fde68a", "#f59e0b", "#fff7ed", "#a78bfa"], 90, 0.7);
+    save();
+    renderAll();
+  }
+
+  setInterval(function () { if (!dailyReady()) renderDaily(); }, 30000);
+
   /* ---------- Potions ---------- */
 
   function usePotion(key) {
     var p = POTIONS[key];
-    if (!S.potions[key]) return;
+    if (!p || !S.potions[key]) return;
+    var note = "";
     if (p.kind === "luck") {
       S.luckEffects.push({ mult: p.mult, rolls: p.rolls });
+    } else if (p.kind === "floor") {
+      S.floorRolls += p.rolls;
     } else if (p.kind === "gold") {
-      S.goldRolls += p.rolls;
+      S.goldEffects.push({ mult: p.mult, rolls: p.rolls });
     } else if (p.kind === "haste") {
-      S.hasteUntil = Math.max(S.hasteUntil, Date.now()) + p.seconds * 1000;
+      var active = hasteActive();
+      if (active && p.div < S.hasteDiv) { toast("A stronger speed potion is already active", "bad"); return; }
+      S.hasteUntil = (active && p.div === S.hasteDiv ? S.hasteUntil : Date.now()) + p.seconds * 1000;
+      S.hasteDiv = p.div;
     } else if (p.kind === "strength") {
-      if (S.strengthReady) { toast("Strength is already active", "bad"); return; }
-      S.strengthReady = true;
+      if (S.strengthMult >= p.mult) { toast("An equal or stronger damage boost is already waiting", "bad"); return; }
+      S.strengthMult = p.mult;
+    } else if (p.kind === "shield") {
+      if (S.shieldReady > 0) { toast("Iron Skin is already waiting for your next fight", "bad"); return; }
+      S.shieldReady = p.pct;
+    } else if (p.kind === "revive") {
+      if (S.reviveReady > 0) { toast("Second Wind is already waiting for your next fight", "bad"); return; }
+      S.reviveReady = p.pct;
     } else if (p.kind === "heal") {
       if (!battle || battle.over || view.pvp) { toast("Healing potions are used during a bot fight", "bad"); return; }
-      healInBattle();
+      healInBattle(key);
+      return;
+    } else if (p.kind === "mystery") {
+      var won = rollMysteryPotion();
+      S.potions[key]--;
+      S.potions[won] = (S.potions[won] || 0) + 1;
+      Sound.buy();
+      toast("❓ The Mystery Potion became " + POTIONS[won].icon + " " + POTIONS[won].name + "!", "gold");
+      save();
+      renderAll();
       return;
     }
     S.potions[key]--;
     Sound.buy();
-    toast(p.icon + " " + p.name + " used");
+    toast(p.icon + " " + p.name + " used" + note);
     save();
     renderAll();
+  }
+
+  /* Mystery potion odds: mostly cheap potions, with a small shot at the great ones. */
+  function rollMysteryPotion() {
+    var pool = POTION_ORDER.filter(function (k) { return k !== "mystery" && !POTIONS[k].daily; });
+    var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
+    var total = weights.reduce(function (a, b) { return a + b; }, 0);
+    var r = Math.random() * total;
+    for (var i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+    return pool[0];
   }
 
   function buyPotion(key) {
@@ -728,10 +893,22 @@
   }
 
   function renderShop() {
-    var grid = $("#shop-grid");
-    grid.innerHTML = "";
+    var shop = $("#shop-grid");
+    shop.innerHTML = "";
+    POTION_GROUPS.forEach(function (gr) {
+      var h = document.createElement("h3");
+      h.className = "section-title sub";
+      h.textContent = gr[1];
+      shop.appendChild(h);
+      var grid = document.createElement("div");
+      grid.className = "card-grid";
+      grid.id = "shop-" + gr[0];
+      shop.appendChild(grid);
+    });
     POTION_ORDER.forEach(function (key) {
       var p = POTIONS[key];
+      if (p.daily) return;
+      var grid = $("#shop-" + p.group);
       var card = document.createElement("div");
       card.className = "card";
       card.innerHTML =
@@ -965,7 +1142,7 @@
       return {
         name: o.name, power: o.power, maxHp: o.power * 12, hp: o.power * 12,
         kit: o.kit, abilities: o.abilities.slice(), cooldowns: {},
-        guard: false, focus: false, reflect: false, stunned: false, skip: false, shield: 0,
+        guard: false, focus: false, reflect: false, stunned: false, skip: false, shield: 0, revive: 0,
         poison: null, weaken: 0, dmgMult: o.dmgMult || 1,
         auraId: o.auraId === undefined ? null : o.auraId, icon: o.icon || null, isBot: !!o.isBot
       };
@@ -983,6 +1160,18 @@
         a: b.a, b: b.b, turn: b.turn, round: b.round, over: b.over, winner: b.winner
       };
     },
+    /* True if the fighter is dead. A pending Second Wind brings them back instead. */
+    dead: function (b, who, ev) {
+      var f = b[who];
+      if (f.hp > 0) return false;
+      if (f.revive > 0) {
+        f.hp = Math.round(f.maxHp * f.revive);
+        f.revive = 0;
+        ev.push({ type: "revive", who: who, hpA: b.a.hp, hpB: b.b.hp });
+        return false;
+      }
+      return true;
+    },
     /* Start-of-turn upkeep for the fighter whose turn it is. */
     beginTurn: function (b, who, ev) {
       var f = b[who];
@@ -992,7 +1181,7 @@
         f.poison.turns--;
         ev.push({ type: "poison", who: who, amount: f.poison.dmg, hpA: b.a.hp, hpB: b.b.hp });
         if (f.poison.turns <= 0) f.poison = null;
-        if (f.hp <= 0) { b.over = true; b.winner = Engine.other(who); ev.push({ type: "end", winner: b.winner }); return; }
+        if (Engine.dead(b, who, ev)) { b.over = true; b.winner = Engine.other(who); ev.push({ type: "end", winner: b.winner }); return; }
       }
       if (f.stunned) {
         f.stunned = false;
@@ -1068,8 +1257,8 @@
         }
       }
 
-      if (them.hp <= 0) { b.over = true; b.winner = who; ev.push({ type: "end", winner: who }); return ev; }
-      if (me.hp <= 0) { b.over = true; b.winner = other; ev.push({ type: "end", winner: other }); return ev; }
+      if (Engine.dead(b, other, ev)) { b.over = true; b.winner = who; ev.push({ type: "end", winner: who }); return ev; }
+      if (Engine.dead(b, who, ev)) { b.over = true; b.winner = other; ev.push({ type: "end", winner: other }); return ev; }
 
       if (me.weaken > 0) me.weaken--;
       Engine.advance(b, ev);
@@ -1154,15 +1343,19 @@
     var aura = equippedAura();
     if (!aura) { toast("Equip an aura first", "bad"); return; }
     var spec = myFighterSpec();
-    spec.dmgMult = S.strengthReady ? POTIONS.strength.mult : 1;
+    spec.dmgMult = S.strengthMult > 1 ? S.strengthMult : 1;
     var me = fighterFromSpec(spec);
+    if (S.shieldReady > 0) { me.shield = Math.round(me.maxHp * S.shieldReady); }
+    if (S.reviveReady > 0) { me.revive = S.reviveReady; }
     var bkit = K.botKit(bot.id);
     var them = Engine.makeFighter({ name: bot.name, power: bot.power, kit: bkit, abilities: bkit.map(function (ab) { return ab.id; }), icon: bot.icon, isBot: true });
     battle = Engine.create(me, them, "a");
     view = { me: "a", pvp: false, animating: false, bot: bot };
     openArena();
     $("#arena-banner").textContent = "Bot fight";
-    if (S.strengthReady) { S.strengthReady = false; logLine("💪 Strength potion: +50% damage this fight", "you"); }
+    if (S.strengthMult > 1) { logLine("💪 +" + Math.round((S.strengthMult - 1) * 100) + "% damage this fight", "you"); S.strengthMult = 1; }
+    if (S.shieldReady > 0) { logLine("🛡️ Iron Skin: you start with a " + fmt(me.shield) + " shield", "you"); S.shieldReady = 0; }
+    if (S.reviveReady > 0) { logLine("🕊️ Second Wind is ready to save you once", "you"); S.reviveReady = 0; }
     logLine("⚔️ " + bot.name + " challenges you!", "");
     renderArena();
     renderAll();
@@ -1196,6 +1389,7 @@
     if (f.focus) chips.push(["🔮 Focus", "good"]);
     if (f.reflect) chips.push(["🪞 Mirror", "good"]);
     if (f.shield > 0) chips.push(["🔰 Shield " + fmt(f.shield), "good"]);
+    if (f.revive > 0) chips.push(["🕊️ Second Wind", "good"]);
     if (f.poison) chips.push(["☠️ Poison " + f.poison.turns, "bad"]);
     if (f.weaken > 0) chips.push(["🌀 Weak " + f.weaken, "bad"]);
     if (f.stunned) chips.push(["⚡ Stunned", "bad"]);
@@ -1248,8 +1442,9 @@
     });
 
     $("#btn-heal").classList.toggle("hidden", view.pvp);
-    $("#btn-heal").textContent = "❤️ Heal potion (" + (S.potions.heal || 0) + ")";
-    $("#btn-heal").disabled = !(S.potions.heal > 0) || battle.over || !myTurn;
+    var heals = (S.potions.heal || 0) + (S.potions.greatheal || 0);
+    $("#btn-heal").textContent = "❤️ Heal potion (" + heals + ")";
+    $("#btn-heal").disabled = !(heals > 0) || battle.over || !myTurn;
     $("#btn-flee").disabled = battle.over;
   }
 
@@ -1342,6 +1537,14 @@
         case "stunned":
           logLine("⚡ " + (isMe(e.who) ? "You are stunned and skip a turn" : sideName(e.who) + " is stunned and skips a turn"), isMe(e.who) ? "them" : "you");
           break;
+        case "revive":
+          flash(e.who, "healed");
+          floatText(e.who, "SECOND WIND", "heal");
+          Sound.heal();
+          logLine("🕊️ " + (isMe(e.who) ? "Second Wind saves you!" : sideName(e.who) + " refuses to fall!"), isMe(e.who) ? "you" : "them");
+          setHP(e);
+          delay = 700;
+          break;
         case "end":
           delay = 200;
           break;
@@ -1401,12 +1604,13 @@
     }
   }
 
-  function healInBattle() {
-    if (!battle || battle.over || view.pvp || !(S.potions.heal > 0)) return;
+  function healInBattle(key) {
+    key = key || (S.potions.heal > 0 ? "heal" : "greatheal");
+    if (!battle || battle.over || view.pvp || !(S.potions[key] > 0)) return;
     if (battle.turn !== view.me || view.animating) { toast("Wait for your turn", "bad"); return; }
-    S.potions.heal--;
+    S.potions[key]--;
     var me = battle.a;
-    var amount = Math.round(me.maxHp * POTIONS.heal.pct);
+    var amount = Math.round(me.maxHp * POTIONS[key].pct);
     me.hp = Math.min(me.maxHp, me.hp + amount);
     flash("a", "healed");
     floatText("a", "+" + fmt(amount), "heal");
@@ -1831,6 +2035,7 @@
       ["Win streak", fmt(S.stats.streak) + " (best " + fmt(S.stats.bestStreak) + ")"],
       ["Cutscenes triggered", fmt(S.stats.cutscenes)],
       ["Training level", fmt(S.training)],
+      ["Daily gifts", fmt(S.daily.claims || 0) + " claimed · streak " + fmt(S.daily.streak)],
       ["Equipped kit", equippedAura() ? loadoutFor(equippedAura()).map(function (i) { return K.kitFor(equippedAura())[i].name; }).join(", ") : "—"]
     ];
     grid.innerHTML = "";
@@ -1876,6 +2081,7 @@
     "potion <key> [count]      add potions: " + POTION_ORDER.join(", "),
     "training <level>          set training level",
     "unlockauto                unlock Auto Roll",
+    "daily reset               make the daily gift claimable again",
     "clearluck                 remove all luck boosts",
     "reset                     wipe the save"
   ];
@@ -1941,6 +2147,10 @@
       case "unlockauto":
         S.autoUnlocked = true;
         adminPrint("Auto Roll unlocked.");
+        break;
+      case "daily":
+        S.daily.last = 0;
+        adminPrint("Daily gift reset. Streak stays at " + S.daily.streak + ".");
         break;
       case "clearluck":
         S.luckEffects = [];
@@ -2638,7 +2848,7 @@
     renderAll();
   });
   $("#btn-equip-last").addEventListener("click", function () { if (S.lastRoll !== null) equip(S.lastRoll); });
-  $("#btn-heal").addEventListener("click", healInBattle);
+  $("#btn-heal").addEventListener("click", function () { healInBattle(); });
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
@@ -2648,6 +2858,7 @@
     toast("Progress reset");
   });
   $("#ability-aura").addEventListener("change", function (e) { abilitiesViewAura = Number(e.target.value); renderAbilities(); });
+  $("#btn-daily").addEventListener("click", claimDaily);
   $("#btn-save").addEventListener("click", manualSave);
   $("#btn-login").addEventListener("click", openLogin);
   $("#login-close").addEventListener("click", closeLogin);

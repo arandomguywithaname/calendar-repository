@@ -56,6 +56,13 @@
           <button id="btn-equip-last" class="btn" disabled>Equip</button>
         </div>
         <div id="active-effects" class="effects"></div>
+        <div id="daily-card" class="daily">
+          <div class="daily-text">
+            <div class="daily-title">🎁 Daily gift</div>
+            <div id="daily-sub" class="muted small-text"></div>
+          </div>
+          <button id="btn-daily" class="btn primary small">Claim</button>
+        </div>
         <div class="quickbar-wrap">
           <h3>Your potions <span class="muted">(click to use)</span></h3>
           <div id="quickbar" class="quickbar"></div>
@@ -94,10 +101,9 @@
     <section id="tab-shop" class="panel">
       <div class="panel-head">
         <h2>Potion Shop</h2>
-        <p class="muted">Spend coins on potions and upgrades. Luck potions do not stack: the strongest active one applies.</p>
+        <p class="muted">Spend coins on potions and upgrades. Luck and coin potions do not stack: the strongest active one applies while each counts down.</p>
       </div>
-      <h3 class="section-title">Potions</h3>
-      <div id="shop-grid" class="card-grid"></div>
+      <div id="shop-grid"></div>
       <h3 class="section-title">Upgrades</h3>
       <div id="upgrade-grid" class="card-grid"></div>
     </section>
