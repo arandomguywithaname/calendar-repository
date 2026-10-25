@@ -1980,16 +1980,29 @@
 
   function csTimer(ms, fn) { CS.timers.push(setTimeout(fn, ms)); }
 
-  function setLetters(el, text) {
+  /* Split a title into letters that animate in one after another. Returns the seconds until the last letter has landed. */
+  var LETTER_ANIM = 1.1;
+  function setLetters(el, text, step) {
     el.innerHTML = "";
     var i = 0;
     text.split("").forEach(function (ch) {
-      var s = document.createElement("span");
-      s.className = "ltr" + (ch === " " ? " space" : "");
-      s.textContent = ch === " " ? " " : ch;
-      s.style.setProperty("--d", (i * 0.09) + "s");
-      el.appendChild(s);
+      var sp = document.createElement("span");
+      sp.className = "ltr" + (ch === " " ? " space" : "");
+      sp.textContent = ch === " " ? "\u00a0" : ch;
+      sp.style.setProperty("--d", (i * step) + "s");
+      el.appendChild(sp);
       i++;
+    });
+    return i * step + LETTER_ANIM;
+  }
+
+  /* Show the title letter by letter starting at `at` ms, then the odds once the letters are in. */
+  function scheduleTitle(text, at, step, latestOdds) {
+    csTimer(at, function () {
+      var lettersDone = setLetters(CS.title, text, step);
+      CS.title.classList.add("show");
+      var oddsAt = Math.min(latestOdds, at + (lettersDone - LETTER_ANIM * 0.7) * 1000);
+      csTimer(Math.max(0, oddsAt - at), function () { CS.odds.classList.add("show"); });
     });
   }
 
@@ -2022,20 +2035,18 @@
       if (kind === "cosmic") {
         CS.draw = drawCosmic();
         Sound.cosmic();
-        csTimer(3300, function () { CS.pre.classList.add("show"); setLetters(CS.title, aura.name.toUpperCase()); CS.title.classList.add("show"); });
-        csTimer(4500, function () { CS.odds.classList.add("show"); });
+        csTimer(3300, function () { CS.pre.classList.add("show"); });
+        scheduleTitle(aura.name.toUpperCase(), 3300, 0.09, 4600);
       } else if (kind === "fury") {
         CS.draw = drawFury();
         Sound.fury();
-        csTimer(3100, function () { CS.title.textContent = aura.name.toUpperCase(); CS.title.classList.add("show"); });
+        scheduleTitle(aura.name.toUpperCase(), 3100, 0.08, 4600);
         csTimer(3900, function () { CS.pre.classList.add("show"); });
-        csTimer(4400, function () { CS.odds.classList.add("show"); });
       } else {
         CS.draw = drawGeneric(aura, level);
         Sound.rare(level);
-        CS.title.classList.add("slow");
-        csTimer(900, function () { CS.pre.classList.add("show"); CS.title.textContent = aura.name; CS.title.classList.add("show"); });
-        csTimer(3000, function () { CS.odds.classList.add("show"); });
+        csTimer(700, function () { CS.pre.classList.add("show"); });
+        scheduleTitle(aura.name, 900, Math.min(0.16, 2.6 / Math.max(1, aura.name.length)), 4300);
       }
       csTimer(1200, function () { CS.hint.classList.add("show"); });
       csTimer((CS.endAt - CUTSCENE_FADE) * 1000, function () { CS.el.style.opacity = "0"; });
