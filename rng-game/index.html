@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aura Realms RNG</title>
+  <meta name="description" content="Roll for 784 auras, earn coins, brew potions and battle bots. Can you find the 1 in 1,000,000,000 Fury of Darkness?">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-stars" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">✦ Aura Realms <span class="brand-sub">RNG</span></div>
+    <div class="hud">
+      <div class="hud-item"><span class="hud-label">Coins</span><span class="hud-value coins" id="hud-coins">0</span></div>
+      <div class="hud-item"><span class="hud-label">Luck</span><span class="hud-value" id="hud-luck">x1</span></div>
+      <div class="hud-item"><span class="hud-label">Rolls</span><span class="hud-value" id="hud-rolls">0</span></div>
+      <div class="hud-item"><span class="hud-label">Power</span><span class="hud-value" id="hud-power">0</span></div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="roll">Roll</button>
+      <button class="tab" data-tab="inventory">Inventory</button>
+      <button class="tab" data-tab="shop">Shop</button>
+      <button class="tab" data-tab="battle">Battle</button>
+      <button class="tab" data-tab="index">Index</button>
+      <button class="tab" data-tab="stats">Stats</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ROLL -->
+    <section id="tab-roll" class="panel active">
+      <div class="roll-stage">
+        <div class="orb-wrap">
+          <div id="orb" class="orb tier-common"><div class="orb-core"></div></div>
+        </div>
+        <div id="roll-name" class="roll-name">Ready to roll</div>
+        <div id="roll-tier" class="roll-tier">Press ROLL to discover your first aura</div>
+        <div id="roll-odds" class="roll-odds"></div>
+        <div class="roll-actions">
+          <button id="btn-roll" class="btn primary big">ROLL</button>
+          <button id="btn-auto" class="btn">Auto Roll: Off</button>
+          <button id="btn-equip-last" class="btn" disabled>Equip</button>
+        </div>
+        <div id="active-effects" class="effects"></div>
+        <div class="quickbar-wrap">
+          <h3>Your potions <span class="muted">(click to use)</span></h3>
+          <div id="quickbar" class="quickbar"></div>
+        </div>
+        <div class="history">
+          <h3>Recent rolls</h3>
+          <ul id="history"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- INVENTORY -->
+    <section id="tab-inventory" class="panel">
+      <div class="panel-head">
+        <h2>Inventory</h2>
+        <p class="muted">Equip an aura to fight with it. Rarer auras have more power.</p>
+      </div>
+      <div id="inventory-grid" class="card-grid"></div>
+    </section>
+
+    <!-- SHOP -->
+    <section id="tab-shop" class="panel">
+      <div class="panel-head">
+        <h2>Potion Shop</h2>
+        <p class="muted">Spend coins on potions and upgrades. Luck potions do not stack: the strongest active one applies.</p>
+      </div>
+      <h3 class="section-title">Potions</h3>
+      <div id="shop-grid" class="card-grid"></div>
+      <h3 class="section-title">Upgrades</h3>
+      <div id="upgrade-grid" class="card-grid"></div>
+    </section>
+
+    <!-- BATTLE -->
+    <section id="tab-battle" class="panel">
+      <div class="panel-head">
+        <h2>Battle Arena</h2>
+        <p class="muted">Fight bots with your equipped aura. Win coins. Lose nothing but pride.</p>
+      </div>
+      <div id="arena" class="arena hidden">
+        <div class="fighter" id="fighter-player">
+          <div class="fighter-orb orb small" id="arena-orb"><div class="orb-core"></div></div>
+          <div class="fighter-name" id="arena-player-name">You</div>
+          <div class="hpbar"><div class="hpfill player" id="hp-player"></div></div>
+          <div class="hptext" id="hp-player-text"></div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="fighter" id="fighter-bot">
+          <div class="fighter-icon" id="arena-bot-icon">🤖</div>
+          <div class="fighter-name" id="arena-bot-name">Bot</div>
+          <div class="hpbar"><div class="hpfill bot" id="hp-bot"></div></div>
+          <div class="hptext" id="hp-bot-text"></div>
+        </div>
+        <div class="arena-controls">
+          <button id="btn-heal" class="btn">❤️ Heal (0)</button>
+          <button id="btn-flee" class="btn danger">Flee</button>
+        </div>
+        <div id="battle-log" class="battle-log"></div>
+        <div id="battle-result" class="battle-result hidden"></div>
+      </div>
+      <div id="bot-grid" class="card-grid"></div>
+    </section>
+
+    <!-- INDEX -->
+    <section id="tab-index" class="panel">
+      <div class="panel-head">
+        <h2>Aura Index <span id="index-progress" class="pill"></span></h2>
+        <p class="muted">All 784 auras, from 1 in 2 to 1 in 1,000,000,000. Legendary and above play a cutscene when rolled.</p>
+      </div>
+      <div class="index-controls">
+        <input id="index-search" type="search" placeholder="Search auras…">
+        <select id="index-tier">
+          <option value="">All tiers</option>
+        </select>
+        <label class="check"><input type="checkbox" id="index-found"> Found only</label>
+      </div>
+      <div id="index-list" class="index-list"></div>
+    </section>
+
+    <!-- STATS -->
+    <section id="tab-stats" class="panel">
+      <div class="panel-head">
+        <h2>Stats &amp; Settings</h2>
+      </div>
+      <div id="stats-grid" class="stats-grid"></div>
+      <h3 class="section-title">Settings</h3>
+      <div class="settings">
+        <label class="check"><input type="checkbox" id="set-sound"> Sound effects</label>
+        <label class="check"><input type="checkbox" id="set-skip"> Skip cutscenes</label>
+        <button id="btn-reset" class="btn danger">Reset save</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">Aura Realms RNG · progress is saved in your browser</footer>
+
+  <!-- Cutscene overlay -->
+  <div id="cutscene" class="cutscene hidden">
+    <canvas id="cs-canvas"></canvas>
+    <div class="cs-text">
+      <div id="cs-pre" class="cs-pre"></div>
+      <div id="cs-title" class="cs-title"></div>
+      <div id="cs-odds" class="cs-odds"></div>
+      <div id="cs-hint" class="cs-hint">click to continue</div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="auras.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
