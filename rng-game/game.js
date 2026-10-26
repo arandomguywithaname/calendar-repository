@@ -6,9 +6,10 @@
   var K = window.KITS;
   var $ = function (s) { return document.querySelector(s); };
   var SAVE_BASE = "aura-realms-save-v2";
-  var ACCOUNTS_KEY = "aura-realms-accounts";
-  var SESSION_KEY = "aura-realms-session";
-  var currentUser = null;
+  var ACCOUNTS_KEY = "aura-realms-accounts-v2";
+  var OLD_ACCOUNTS_KEY = "aura-realms-accounts";
+  var SESSION_KEY = "aura-realms-session-v2";
+  var currentUser = null; /* the 7-digit ID of the logged-in player, or null for guest */
   function saveKey() { return currentUser ? SAVE_BASE + ":" + currentUser : SAVE_BASE; }
   var ROLL_COOLDOWN = 1000;
   var PEER_PREFIX = "aura-realms-v1-";
@@ -111,7 +112,11 @@
     };
   }
 
-  try { currentUser = localStorage.getItem(SESSION_KEY) || null; } catch (e) { currentUser = null; }
+  try {
+    var startupAccounts = readAccounts(); /* also migrates accounts from the password version */
+    currentUser = localStorage.getItem(SESSION_KEY) || null;
+    if (currentUser && !startupAccounts[currentUser]) currentUser = null;
+  } catch (e) { currentUser = null; }
   var S = load();
 
   function load() {
@@ -2653,96 +2658,147 @@
     };
   }
 
-  /* ---------- Accounts (local to this browser), save button, export / import ---------- */
+  /* ---------- Accounts: a name creates a random 7-digit ID; the ID logs you back in ---------- */
 
   function readAccounts() {
-    try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}") || {}; } catch (e) { return {}; }
+    var acc;
+    try { acc = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}") || {}; } catch (e) { acc = {}; }
+    migrateOldAccounts(acc);
+    return acc;
   }
   function writeAccounts(acc) {
     try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(acc)); } catch (e) { /* ignore */ }
   }
 
-  function hashPassword(password, salt) {
-    var text = salt + ":" + password;
-    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
-      return window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
-        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
-      }).catch(function () { return fallbackHash(text); });
-    }
-    return Promise.resolve(fallbackHash(text));
-  }
-  function fallbackHash(text) {
-    var h1 = 0x811c9dc5, h2 = 0x01000193;
-    for (var i = 0; i < text.length; i++) {
-      h1 ^= text.charCodeAt(i); h1 = Math.imul(h1, 0x01000193) >>> 0;
-      h2 ^= text.charCodeAt(i) * 31; h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
-    }
-    return "f" + h1.toString(16) + h2.toString(16);
-  }
-  function randomSalt() {
-    var s = "";
-    for (var i = 0; i < 16; i++) s += Math.floor(Math.random() * 16).toString(16);
-    return s;
+  /* Password accounts from the previous version become ID accounts and keep their saves. */
+  function migrateOldAccounts(acc) {
+    var raw;
+    try { raw = localStorage.getItem(OLD_ACCOUNTS_KEY); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var old = JSON.parse(raw) || {};
+      var oldSession = localStorage.getItem("aura-realms-session");
+      Object.keys(old).forEach(function (key) {
+        var rec = old[key];
+        var name = (rec && rec.name) || key;
+        var id = newAccountId(acc);
+        acc[id] = { id: id, name: name, created: (rec && rec.created) || Date.now() };
+        var saved = localStorage.getItem(SAVE_BASE + ":" + name);
+        if (saved) { localStorage.setItem(SAVE_BASE + ":" + id, saved); localStorage.removeItem(SAVE_BASE + ":" + name); }
+        if (oldSession && oldSession === name) localStorage.setItem(SESSION_KEY, id);
+      });
+      writeAccounts(acc);
+      localStorage.removeItem(OLD_ACCOUNTS_KEY);
+      localStorage.removeItem("aura-realms-session");
+    } catch (e) { /* ignore */ }
   }
 
-  var loginMode = "login";
+  function newAccountId(acc) {
+    var id;
+    do {
+      var buf = new Uint32Array(1);
+      if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(buf);
+      else buf[0] = Math.floor(Math.random() * 4294967296);
+      id = String(1000000 + (buf[0] % 9000000));
+    } while (acc[id]);
+    return id;
+  }
+
+  function accountName(id) {
+    var acc = readAccounts();
+    return acc[id] ? acc[id].name : null;
+  }
+
+  var loginMode = "new";
 
   function openLogin() {
     $("#login-modal").classList.remove("hidden");
     $("#login-error").textContent = "";
-    $("#login-user").value = currentUser || "";
-    $("#login-pass").value = "";
-    setLoginMode(currentUser ? "account" : "login");
+    $("#login-name").value = "";
+    $("#login-id").value = "";
     $("#save-code").value = "";
+    setLoginMode(currentUser ? "account" : "new");
+    renderKnownAccounts();
   }
   function closeLogin() { $("#login-modal").classList.add("hidden"); }
 
   function setLoginMode(mode) {
     loginMode = mode;
     var loggedIn = mode === "account";
-    $("#login-title").textContent = loggedIn ? "Logged in as " + currentUser : (mode === "register" ? "Create account" : "Login");
-    $("#login-submit").textContent = mode === "register" ? "Create" : "Login";
-    $("#login-switch").textContent = mode === "register" ? "I have an account" : "Create account";
-    $("#login-user").disabled = loggedIn;
-    $("#login-pass").classList.toggle("hidden", loggedIn);
+    $("#login-title").textContent = loggedIn ? "Logged in as " + (accountName(currentUser) || "player") : (mode === "returning" ? "Welcome back" : "New player");
+    $("#login-help").classList.toggle("hidden", loggedIn);
+    $(".mode-switch").classList.toggle("hidden", loggedIn);
+    $("#mode-new").classList.toggle("on", mode === "new");
+    $("#mode-returning").classList.toggle("on", mode === "returning");
+    $("#login-name").classList.toggle("hidden", mode !== "new");
+    $("#login-id").classList.toggle("hidden", mode !== "returning");
     $("#login-submit").classList.toggle("hidden", loggedIn);
-    $("#login-switch").classList.toggle("hidden", loggedIn);
+    $("#login-submit").textContent = mode === "returning" ? "Log in" : "Create my ID";
     $("#btn-logout").classList.toggle("hidden", !loggedIn);
+    $("#login-current").classList.toggle("hidden", !loggedIn);
+    if (loggedIn) $("#login-current-id").textContent = currentUser;
+    $("#login-known").classList.toggle("hidden", loggedIn);
+  }
+
+  function renderKnownAccounts() {
+    var acc = readAccounts();
+    var ids = Object.keys(acc).sort(function (a, b) { return (acc[b].created || 0) - (acc[a].created || 0); });
+    var list = $("#login-known-list");
+    list.innerHTML = "";
+    $("#login-known").classList.toggle("hidden", !ids.length || loginMode === "account");
+    ids.forEach(function (id) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "known-row";
+      var n = document.createElement("span"); n.textContent = acc[id].name;
+      var k = document.createElement("span"); k.className = "kid"; k.textContent = id;
+      row.appendChild(n); row.appendChild(k);
+      row.addEventListener("click", function () { setLoginMode("returning"); $("#login-id").value = id; });
+      list.appendChild(row);
+    });
   }
 
   function renderAccount() {
-    $("#account-name").textContent = currentUser ? "👤 " + currentUser : "Guest";
+    var name = currentUser ? accountName(currentUser) : null;
+    $("#account-name").textContent = name ? "👤 " + name : "Guest";
+    var badge = $("#account-id");
+    badge.classList.toggle("hidden", !currentUser);
+    badge.textContent = currentUser ? "ID " + currentUser : "";
     $("#btn-login").textContent = currentUser ? "Account" : "Login";
+  }
+
+  function copyId() {
+    if (!currentUser) return;
+    var done = function () { toast("ID " + currentUser + " copied"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(currentUser).then(done, done);
+    else done();
   }
 
   function submitLogin(e) {
     e.preventDefault();
-    var user = $("#login-user").value.trim();
-    var pass = $("#login-pass").value;
     var err = $("#login-error");
-    if (!/^[A-Za-z0-9_]{3,16}$/.test(user)) { err.textContent = "Username: 3-16 letters, numbers or underscores."; return; }
-    if (pass.length < 4) { err.textContent = "Password must be at least 4 characters."; return; }
-    var key = user.toLowerCase();
     var acc = readAccounts();
-    if (loginMode === "register") {
-      if (acc[key]) { err.textContent = "That username is taken on this device."; return; }
-      var salt = randomSalt();
-      hashPassword(pass, salt).then(function (hash) {
-        acc[key] = { name: user, salt: salt, hash: hash, created: Date.now() };
-        writeAccounts(acc);
-        switchUser(user, true);
-        closeLogin();
-        toast("Account created. Welcome, " + user + "!");
-      });
+    if (loginMode === "new") {
+      var name = $("#login-name").value.trim().replace(/\s+/g, " ");
+      if (name.length < 2 || name.length > 50) { err.textContent = "Name must be 2 to 50 characters."; return; }
+      if (!/^[\p{L}\p{N} _'.-]+$/u.test(name)) { err.textContent = "Use letters, numbers, spaces, _ ' . or -"; return; }
+      var id = newAccountId(acc);
+      acc[id] = { id: id, name: name, created: Date.now() };
+      writeAccounts(acc);
+      switchUser(id, true);
+      S.playerName = name.slice(0, 16);
+      save();
+      renderAll();
+      setLoginMode("account");
+      $("#login-error").textContent = "";
+      toast("Welcome, " + name + "! Your ID is " + id, "gold");
     } else {
-      var rec = acc[key];
-      if (!rec) { err.textContent = "No account with that name on this device."; return; }
-      hashPassword(pass, rec.salt).then(function (hash) {
-        if (hash !== rec.hash) { err.textContent = "Wrong password."; return; }
-        switchUser(rec.name, false);
-        closeLogin();
-        toast("Logged in as " + rec.name);
-      });
+      var typed = $("#login-id").value.trim();
+      if (!/^\d{7}$/.test(typed)) { err.textContent = "Enter your 7-digit ID."; return; }
+      if (!acc[typed]) { err.textContent = "No player with ID " + typed + " on this device. If you played elsewhere, import your save code below."; return; }
+      switchUser(typed, false);
+      closeLogin();
+      toast("Welcome back, " + acc[typed].name + "!");
     }
   }
 
@@ -2783,9 +2839,10 @@
   }
 
   function logout() {
+    var id = currentUser;
     switchUser(null, false);
     closeLogin();
-    toast("Logged out. Playing as guest.");
+    toast("Logged out. Your ID " + id + " logs you back in.");
   }
 
   function manualSave() {
@@ -2793,7 +2850,7 @@
     var btn = $("#btn-save");
     btn.textContent = "✅ Saved";
     setTimeout(function () { btn.textContent = "💾 Save"; }, 1500);
-    toast("Game saved" + (currentUser ? " for " + currentUser : ""));
+    toast("Game saved" + (currentUser ? " for " + (accountName(currentUser) || "ID " + currentUser) : ""));
   }
 
   function exportSave() {
@@ -2815,7 +2872,7 @@
       var json = decodeURIComponent(escape(atob(code.slice(4))));
       var data = JSON.parse(json);
       if (!data || typeof data !== "object" || typeof data.rolls !== "number") throw new Error("bad");
-      if (!confirm("Import this save? It will replace the current progress for " + (currentUser || "guest") + ".")) return;
+      if (!confirm("Import this save? It will replace the current progress for " + (currentUser ? accountName(currentUser) || currentUser : "guest") + ".")) return;
       if (battle && !battle.over) forfeit();
       S = hydrate(data);
       save();
@@ -2863,7 +2920,9 @@
   $("#btn-login").addEventListener("click", openLogin);
   $("#login-close").addEventListener("click", closeLogin);
   $("#login-form").addEventListener("submit", submitLogin);
-  $("#login-switch").addEventListener("click", function () { setLoginMode(loginMode === "register" ? "login" : "register"); $("#login-error").textContent = ""; });
+  $("#mode-new").addEventListener("click", function () { setLoginMode("new"); $("#login-error").textContent = ""; renderKnownAccounts(); });
+  $("#mode-returning").addEventListener("click", function () { setLoginMode("returning"); $("#login-error").textContent = ""; renderKnownAccounts(); });
+  $("#account-id").addEventListener("click", copyId);
   $("#btn-logout").addEventListener("click", logout);
   $("#btn-export").addEventListener("click", exportSave);
   $("#btn-import").addEventListener("click", importSave);

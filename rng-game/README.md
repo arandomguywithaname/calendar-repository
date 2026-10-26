@@ -36,10 +36,11 @@ loadout, and fight bots or a friend.
   turns into a random potion. Battle: healing, Greater Healing, Strength, Titan's
   Brew (double damage), Iron Skin (start with a shield) and Second Wind (survive a
   killing blow once).
-- **Login and save**: local accounts (username + password) stored in the browser,
-  one save slot each, a Save button, and Export / Import save codes to move progress
-  between devices. There is no server, so accounts only exist on the device where
-  they were created.
+- **Login by ID**: a new player enters a name (2 to 50 characters) and gets a random
+  7-digit ID, shown at the top of the page (click it to copy). Returning players log
+  in with that ID. Each ID has its own save slot. IDs are stored in the browser, so
+  there is no server and no password; the Export / Import save codes move progress
+  between devices. A Save button sits in the header.
 - **Admin console** (Stats tab, or press `` ` ``): `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `roll Fury of Darkness`, `potion zenith 3`, `ability all`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
