@@ -30,6 +30,7 @@
     oblivion:  { name: "Oblivion Draught",  icon: "🌑", cost: 400000,  group: "luck",   kind: "luck", mult: 5000,  rolls: 2,  desc: "x5000 luck for 2 rolls" },
     infinity:  { name: "Infinity Serum",    icon: "♾️", cost: 2000000, group: "luck",   kind: "luck", mult: 25000, rolls: 1,  desc: "x25000 luck for a single roll. The best potion money can buy." },
     blessing:  { name: "Daily Blessing",    icon: "🎁", cost: 0,       group: "luck",   kind: "luck", mult: 50,    rolls: 1,  desc: "x50 luck for one roll. Only from the daily gift.", daily: true },
+    secret:    { name: "Elixir of the Million", icon: "🗝️", cost: 1000000, group: "luck", kind: "luck", mult: 1000000, rolls: 1, desc: "x1,000,000 luck for a single roll. The shop never advertised this.", secret: true },
     magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "luck",   kind: "floor", rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
     /* Coins and speed */
     gold:      { name: "Gold Potion",       icon: "💰", cost: 250,     group: "coins",  kind: "gold", mult: 2,  rolls: 30, desc: "x2 coins from rolls for 30 rolls" },
@@ -81,6 +82,7 @@
   var PVP_WIN_REWARD = 500;
   var PVP_LOSS_REWARD = 100;
   function trainingCost(level) { return Math.floor(50 * Math.pow(1.35, level)); }
+  function secretUnlocked() { return !!S.secretUnlocked || S.coins >= 1000000; }
 
   /* ---------- State ---------- */
 
@@ -103,6 +105,7 @@
       daily: { last: 0, streak: 0, claims: 0 },
       training: 0,
       autoUnlocked: false,
+      secretUnlocked: false,
       loadouts: {},
       playerName: "",
       botWins: {},
@@ -754,7 +757,7 @@
     if (S.history.length > 12) S.history.length = 12;
     if (S.stats.best === null || A.byId(S.stats.best).rarity < aura.rarity) S.stats.best = aura.id;
     if (equippedAura() === null) S.equipped = aura.id;
-    if (aura.cutscene > 0) S.stats.cutscenes++;
+    if (ti >= 2) S.stats.cutscenes++;
     save();
 
     FX.clear();
@@ -773,7 +776,7 @@
         cooldownUntil = Date.now() + rollCooldown();
         setTimeout(function () { $("#btn-roll").disabled = false; }, Math.max(0, cooldownUntil - Date.now()));
       };
-      if (aura.cutscene > 0 && !S.settings.skipCutscenes) {
+      if (ti >= 2 && !S.settings.skipCutscenes) {
         /* A beat of suspense: the orb trembles and dims before the screen is taken over. */
         stage.classList.add("suspense");
         $("#roll-name").textContent = "…";
@@ -899,7 +902,7 @@
 
   /* Mystery potion odds: mostly cheap potions, with a small shot at the great ones. */
   function rollMysteryPotion() {
-    var pool = POTION_ORDER.filter(function (k) { return k !== "mystery" && !POTIONS[k].daily; });
+    var pool = POTION_ORDER.filter(function (k) { return k !== "mystery" && !POTIONS[k].daily && !POTIONS[k].secret; });
     var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var r = Math.random() * total;
@@ -937,6 +940,12 @@
       var grid = $("#shop-" + p.group);
       var card = document.createElement("div");
       card.className = "card";
+      if (p.secret && !secretUnlocked()) {
+        card.className = "card secret";
+        card.innerHTML = "<div class=\"row\"><div class=\"big-icon\">❔</div><div><div class=\"card-title\">? ? ?</div><div class=\"card-sub\">A potion the shop keeps under the counter. Rumour says it shows itself to anyone holding a million coins, or anyone who knows the right word.</div></div></div>";
+        grid.appendChild(card);
+        return;
+      }
       card.innerHTML =
         "<div class=\"row\"><div class=\"big-icon\">" + p.icon + "</div><div><div class=\"card-title\">" + p.name + "</div><div class=\"card-sub\">" + p.desc + "</div></div></div>" +
         "<div class=\"row\"><span class=\"price\">" + fmt(p.cost) + " coins</span><span class=\"card-sub\">owned: " + (S.potions[key] || 0) + "</span></div>";
@@ -2358,7 +2367,7 @@
       var cnt = document.createElement("span");
       cnt.className = "cnt";
       row.appendChild(makeSwatch(a)); row.appendChild(name); row.appendChild(tier); row.appendChild(odds); row.appendChild(cnt);
-      if (a.cutscene > 0) {
+      if (a.rarity >= 1000) {
         var pv = document.createElement("button");
         pv.className = "btn small";
         pv.textContent = "▶ Preview";
@@ -2416,7 +2425,7 @@
       ["Bot fights", fmt(S.stats.won) + " won · " + fmt(S.stats.lost) + " lost"],
       ["PvP record", fmt(S.stats.pvpWon) + " won · " + fmt(S.stats.pvpLost) + " lost"],
       ["Win streak", fmt(S.stats.streak) + " (best " + fmt(S.stats.bestStreak) + ")"],
-      ["Cutscenes triggered", fmt(S.stats.cutscenes)],
+      ["Reveals played", fmt(S.stats.cutscenes)],
       ["Training level", fmt(S.training)],
       ["Daily gifts", fmt(S.daily.claims || 0) + " claimed · streak " + fmt(S.daily.streak)],
       ["Equipped kit", equippedAura() ? loadoutFor(equippedAura()).map(function (i) { return K.kitFor(equippedAura())[i].name; }).join(", ") : "—"]
@@ -2535,6 +2544,10 @@
         S.daily.last = 0;
         adminPrint("Daily gift reset. Streak stays at " + S.daily.streak + ".");
         break;
+      case "secret":
+        S.secretUnlocked = true;
+        adminPrint("The shop whispers. Check the Luck potions.");
+        break;
       case "clearluck":
         S.luckEffects = [];
         adminPrint("Luck boosts cleared.");
@@ -2565,38 +2578,28 @@
   /* ---------- Cutscenes: the screen is covered, the name fades in, then the odds, then it fades out after ~6s. ---------- */
 
   var CS = {
-    el: $("#cutscene"), canvas: $("#cs-canvas"), pre: $("#cs-pre"), title: $("#cs-title"), odds: $("#cs-odds"), hint: $("#cs-hint"),
-    running: false, resolve: null, raf: 0, start: 0, draw: null, timers: [], endAt: 6, t: 0
+    el: $("#cutscene"), canvas: $("#cs-canvas"), overlay: $("#cs-overlay"), text: $("#cs-text"), pre: $("#cs-pre"), title: $("#cs-title"), odds: $("#cs-odds"), hint: $("#cs-hint"),
+    running: false, resolve: null, raf: 0, start: 0, draw: null, timers: [], endAt: 6, t: 0, cancelTitle: null
   };
-  var CUTSCENE_SECONDS = 6;
   var CUTSCENE_FADE = 0.7;
 
   function csTimer(ms, fn) { CS.timers.push(setTimeout(fn, ms)); }
 
-  /* Split a title into letters that animate in one after another. Returns the seconds until the last letter has landed. */
-  var LETTER_ANIM = 1.1;
-  function setLetters(el, text, step) {
-    el.innerHTML = "";
-    var i = 0;
-    text.split("").forEach(function (ch) {
-      var sp = document.createElement("span");
-      sp.className = "ltr" + (ch === " " ? " space" : "");
-      sp.textContent = ch === " " ? "\u00a0" : ch;
-      sp.style.setProperty("--d", (i * step) + "s");
-      el.appendChild(sp);
-      i++;
-    });
-    return i * step + LETTER_ANIM;
-  }
-
-  /* Show the title letter by letter starting at `at` ms, then the odds once the letters are in. */
-  function scheduleTitle(text, at, step, latestOdds) {
+  /* Show the title in the given style starting at `at` ms, then the odds once the letters are in. */
+  function scheduleTitle(text, at, style, step, latestOdds) {
     csTimer(at, function () {
-      var lettersDone = setLetters(CS.title, text, step);
+      var r = REVEALS.applyTitle(CS.title, text, style, step);
+      CS.cancelTitle = r.cancel;
       CS.title.classList.add("show");
-      var oddsAt = Math.min(latestOdds, at + (lettersDone - LETTER_ANIM * 0.7) * 1000);
+      var oddsAt = Math.min(latestOdds, at + Math.max(0.3, r.done - 0.5) * 1000);
       csTimer(Math.max(0, oddsAt - at), function () { CS.odds.classList.add("show"); });
     });
+  }
+
+  function revealDuration(aura) {
+    if (aura.special) return 6;
+    var ti = tierIndex(aura);
+    return ti === 2 ? 3.4 : ti === 3 ? 4.4 : 6;
   }
 
   function playCutscene(aura, preview) {
@@ -2604,17 +2607,20 @@
       if (CS.running) { resolve(); return; }
       var kind = aura.special || "generic";
       var level = aura.cutscene;
+      var dur = revealDuration(aura);
       CS.running = true;
       CS.resolve = resolve;
       CS.el.className = "cutscene kind-" + kind;
       CS.el.style.opacity = "";
       CS.el.style.setProperty("--c1", aura.c1);
       CS.el.style.setProperty("--c2", aura.c2);
+      CS.overlay.className = "cs-overlay";
+      CS.text.style.setProperty("--ty", "0.5");
       CS.pre.className = "cs-pre"; CS.title.className = "cs-title"; CS.odds.className = "cs-odds"; CS.hint.className = "cs-hint";
       CS.pre.textContent = preview ? "Preview · " + tierName(aura) : tierName(aura) + " aura";
       CS.title.textContent = "";
       CS.odds.textContent = A.formatOdds(aura.rarity);
-      CS.endAt = CUTSCENE_SECONDS;
+      CS.endAt = dur;
 
       var ctx = CS.canvas.getContext("2d");
       function resize() {
@@ -2629,17 +2635,24 @@
         CS.draw = drawCosmic();
         Sound.cosmic();
         csTimer(3300, function () { CS.pre.classList.add("show"); });
-        scheduleTitle(aura.name.toUpperCase(), 3300, 0.09, 4600);
+        scheduleTitle(aura.name.toUpperCase(), 3300, "stagger", 0.09, 4600);
       } else if (kind === "fury") {
         CS.draw = drawFury();
         Sound.fury();
-        scheduleTitle(aura.name.toUpperCase(), 3100, 0.08, 4600);
+        scheduleTitle(aura.name.toUpperCase(), 3100, "glitch", 0.08, 4600);
         csTimer(3900, function () { CS.pre.classList.add("show"); });
       } else {
-        CS.draw = drawGeneric(aura, level);
-        Sound.rare(level);
-        csTimer(700, function () { CS.pre.classList.add("show"); });
-        scheduleTitle(aura.name, 900, Math.min(0.16, 2.6 / Math.max(1, aura.name.length)), 4300);
+        var r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
+        var scene = REVEALS.SCENES[r.scene];
+        var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: aura.rarity, dur: dur, level: level, tierName: tierName(aura), rng: REVEALS.mulberry32(aura.id * 31 + 7) };
+        CS.draw = scene.make(env);
+        CS.overlay.classList.add("ov-" + r.overlay);
+        CS.text.style.setProperty("--ty", String(scene.textY || 0.5));
+        Sound.rare(Math.max(0, level));
+        var at = scene.titleAt * dur * 1000;
+        csTimer(Math.max(0, at - 300), function () { CS.pre.classList.add("show"); });
+        var step = Math.min(0.16, Math.max(0.05, (dur * 0.22) / Math.max(1, aura.name.length)));
+        scheduleTitle(aura.name, at, r.title, step, scene.oddsAt * dur * 1000);
       }
       csTimer(1200, function () { CS.hint.classList.add("show"); });
       csTimer((CS.endAt - CUTSCENE_FADE) * 1000, function () { CS.el.style.opacity = "0"; });
@@ -2668,6 +2681,7 @@
     cancelAnimationFrame(CS.raf);
     CS.timers.forEach(clearTimeout);
     CS.timers = [];
+    if (CS.cancelTitle) { CS.cancelTitle(); CS.cancelTitle = null; }
     window.removeEventListener("resize", CS.onResize);
     CS.el.classList.add("hidden");
     CS.el.style.opacity = "";
@@ -2678,142 +2692,6 @@
   }
 
   CS.el.addEventListener("click", function () { if (CS.running && performance.now() - CS.start > 1000) endCutscene(); });
-
-  /* Generic reveal. level 1 = Legendary (rings + sparks), 2 = Cosmic (+ star warp),
-     3 = Divine (+ god rays), 4 = Transcendent (+ lightning and colour cycling). */
-  function drawGeneric(aura, level) {
-    var colors = aura.colors;
-    var c1 = aura.c1, c2 = aura.c2;
-    var parts = null, stars = null, bolts = [], lastBolt = 0;
-    function makeBolt(w, h) {
-      var edge = Math.floor(Math.random() * 4);
-      var x = edge === 0 ? Math.random() * w : edge === 1 ? w : edge === 2 ? Math.random() * w : 0;
-      var y = edge === 0 ? 0 : edge === 1 ? Math.random() * h : edge === 2 ? h : Math.random() * h;
-      var pts = [[x, y]];
-      var cx = w / 2 + (Math.random() - 0.5) * w * 0.25, cy = h / 2 + (Math.random() - 0.5) * h * 0.25;
-      var n = 9;
-      for (var i = 1; i <= n; i++) {
-        var f = i / n;
-        pts.push([x + (cx - x) * f + (Math.random() - 0.5) * 60 * (1 - f), y + (cy - y) * f + (Math.random() - 0.5) * 60 * (1 - f)]);
-      }
-      return { pts: pts, born: performance.now() };
-    }
-    return function (ctx, t, w, h) {
-      var cx = w / 2, cy = h / 2, m = Math.max(w, h);
-      var cyc = level >= 4 ? Math.floor(t * 3) : 0;
-      var col = function (i) { return colors[(i + cyc) % colors.length]; };
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, w, h);
-      var shake = t < 1.5 ? (1.5 - t) * 5 * level : (level >= 3 ? 1.5 : 0);
-      ctx.save();
-      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
-      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, m * 0.6);
-      g.addColorStop(0, col(0)); g.addColorStop(0.35, col(1)); g.addColorStop(1, "rgba(0,0,0,1)");
-      ctx.globalAlpha = Math.min(1, t * 1.5) * (0.55 + 0.15 * Math.sin(t * 4));
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 1;
-
-      if (level >= 2) {
-        if (!stars) { stars = []; for (var si = 0; si < 320; si++) stars.push({ x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2, z: Math.random() }); }
-        var speed = 0.004 + Math.min(1, t / 2) * 0.03;
-        ctx.globalCompositeOperation = "lighter";
-        ctx.lineCap = "round";
-        stars.forEach(function (st) {
-          var pz = st.z;
-          st.z -= speed;
-          if (st.z <= 0.03) { st.z = 1; st.x = (Math.random() - 0.5) * 2; st.y = (Math.random() - 0.5) * 2; return; }
-          ctx.strokeStyle = Math.random() < 0.5 ? "#fff" : c1;
-          ctx.globalAlpha = Math.min(1, (1 - st.z) * 1.3) * Math.min(1, t);
-          ctx.lineWidth = (1 - st.z) * 2.2 + 0.4;
-          ctx.beginPath();
-          ctx.moveTo(cx + st.x / pz * cx, cy + st.y / pz * cy);
-          ctx.lineTo(cx + st.x / st.z * cx, cy + st.y / st.z * cy);
-          ctx.stroke();
-        });
-        ctx.globalAlpha = 1;
-        ctx.globalCompositeOperation = "source-over";
-      }
-
-      if (level >= 3) {
-        var rays = level >= 4 ? 20 : 14;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.globalCompositeOperation = "lighter";
-        for (var r = 0; r < rays; r++) {
-          var ang = t * 0.35 * (r % 2 ? 1 : -0.7) + r * Math.PI * 2 / rays;
-          var rg = ctx.createLinearGradient(0, 0, Math.cos(ang) * m, Math.sin(ang) * m);
-          rg.addColorStop(0, col(r)); rg.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.globalAlpha = (0.12 + 0.08 * Math.sin(t * 3 + r)) * Math.min(1, t / 1.2);
-          ctx.fillStyle = rg;
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(Math.cos(ang - 0.06) * m, Math.sin(ang - 0.06) * m);
-          ctx.lineTo(Math.cos(ang + 0.06) * m, Math.sin(ang + 0.06) * m);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.restore();
-        ctx.globalAlpha = 1;
-      }
-
-      var rings = 4 + level;
-      for (var i = 0; i < rings; i++) {
-        var rt = (t * 0.6 + i / rings) % 1;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rt * m * 0.7, 0, Math.PI * 2);
-        ctx.strokeStyle = col(i);
-        ctx.lineWidth = 2 + (1 - rt) * 6;
-        ctx.globalAlpha = (1 - rt) * 0.6;
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      if (!parts) {
-        parts = [];
-        for (var k = 0; k < 120 + level * 70; k++) {
-          parts.push({ a: Math.random() * Math.PI * 2, s: 60 + Math.random() * 260, r: Math.random() * 2 + 1, o: Math.random(), col: colors[Math.floor(Math.random() * colors.length)] });
-        }
-      }
-      ctx.globalCompositeOperation = "lighter";
-      parts.forEach(function (p) {
-        var lt = (t * 0.5 + p.o) % 1;
-        var d = lt * p.s * 3;
-        ctx.globalAlpha = 1 - lt;
-        ctx.fillStyle = p.col;
-        ctx.beginPath();
-        ctx.arc(cx + Math.cos(p.a) * d, cy + Math.sin(p.a) * d, p.r * (1 + level * 0.3), 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-
-      if (level >= 4) {
-        var now = performance.now();
-        if (now - lastBolt > 180 + Math.random() * 500 && t > 0.4) { bolts.push(makeBolt(w, h)); lastBolt = now; }
-        bolts = bolts.filter(function (b) { return now - b.born < 260; });
-        ctx.lineCap = "round"; ctx.lineJoin = "round";
-        bolts.forEach(function (b) {
-          var age = (now - b.born) / 260;
-          ctx.beginPath();
-          ctx.moveTo(b.pts[0][0], b.pts[0][1]);
-          for (var q = 1; q < b.pts.length; q++) ctx.lineTo(b.pts[q][0], b.pts[q][1]);
-          ctx.shadowColor = c1; ctx.shadowBlur = 25;
-          ctx.strokeStyle = c1; ctx.lineWidth = 5 * (1 - age); ctx.globalAlpha = 1 - age; ctx.stroke();
-          ctx.shadowBlur = 0; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
-          if (age < 0.15) { ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.25 * (1 - age / 0.15); ctx.fillRect(-20, -20, w + 40, h + 40); }
-          ctx.globalAlpha = 1;
-        });
-      }
-
-      if (t < 0.5) {
-        ctx.fillStyle = "#fff";
-        ctx.globalAlpha = (0.5 - t) * 2;
-        ctx.fillRect(0, 0, w, h);
-        ctx.globalAlpha = 1;
-      }
-      ctx.restore();
-    };
-  }
 
   function drawCosmic() {
     var FLASH = 3.1;
@@ -3294,6 +3172,11 @@
   });
   $("#ability-aura").addEventListener("change", function (e) { abilitiesViewAura = Number(e.target.value); renderAbilities(); });
   $("#btn-daily").addEventListener("click", claimDaily);
+  var brandClicks = 0;
+  $(".brand").addEventListener("click", function () {
+    brandClicks++;
+    if (brandClicks >= 7 && !S.secretUnlocked) { S.secretUnlocked = true; save(); renderAll(); toast("🗝️ The shop whispers… something new under the counter.", "gold"); }
+  });
   $("#btn-save").addEventListener("click", manualSave);
   $("#btn-login").addEventListener("click", openLogin);
   $("#login-close").addEventListener("click", closeLogin);
@@ -3339,6 +3222,7 @@
   window.AuraRealms = {
     state: function () { return S; },
     preview: function (name) { var a = findAura(name); if (a) playCutscene(a, true); },
+    reveals: REVEALS,
     admin: runAdmin,
     engine: Engine,
     kits: K,

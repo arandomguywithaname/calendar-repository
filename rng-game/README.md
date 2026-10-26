@@ -7,14 +7,22 @@ loadout, and fight bots or a friend.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, and a red
   storm for Fury of Darkness.
-- **Reveals that scale with rarity.** Common and Uncommon rolls are quick and plain.
-  Rare rolls slow down like a slot machine and land with a flash and a spark burst.
-  Epic adds screen shake, a tier banner and a glowing stage. Legendary and above get
-  a suspense build-up, a full-screen cutscene (name fades in, then the odds, gone by
-  itself after 6 seconds), then light beams, orbiting sparkles and shockwaves on the
-  roll screen. Cutscenes escalate too: star warp for Cosmic, god rays for Divine,
-  lightning and colour cycling for Transcendent, and unique sequences for Cosmic
-  Veil and Fury of Darkness. Preview any of them from the Index tab.
+- **A unique reveal for every aura.** Common and Uncommon rolls are quick and plain.
+  Everything from Rare upward takes over the screen with its own animation: 24
+  scene concepts (a rarity-over-time graph that climbs to the aura's odds, an
+  odometer, slot reels, a terminal readout, shattering glass, an eclipse, a portal,
+  a storm, meteors, falling code, an ECG heartbeat, a constellation, radar, an
+  equalizer, a vortex, a black hole, a warp tunnel, pulse rings, fireworks, ash,
+  a DNA helix, a waveform, a pixel dissolve, a racing clock) crossed with 8 title
+  styles and 5 overlays, assigned so no two auras share a combination. Beyond Axiom
+  always gets the graph. Cosmic Veil and Fury of Darkness keep their bespoke
+  sequences. Rare reveals last about 3 seconds, Epic 4, Legendary and up 6, then
+  the roll screen erupts with flash, sparks, rings, beams and a tier banner. Preview
+  any aura's reveal from the Index tab.
+- **Secret potion.** The shop has a "? ? ?" card under the counter. The Elixir of the
+  Million (1,000,000 coins, x1,000,000 luck for one roll) reveals itself to anyone
+  holding a million coins, anyone who clicks the ✦ logo seven times, or the admin
+  word `secret`.
 - **Turn-based battles with signature abilities.** Every aura has its own kit of 6
   abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova
   Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Choose 4 per
@@ -58,5 +66,6 @@ connect the repo and set the publish directory to `rng-game`.
 - `style.css` – styling and CSS animations
 - `auras.js` – deterministic generator for the 784 auras
 - `abilities.js` – ability mechanics and the per-aura signature kit generator
+- `reveals.js` – the 24 reveal scenes, title styles and the unique per-aura assignment
 - `game.js` – game logic, battle engine, PvP, accounts, cutscene engine
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections

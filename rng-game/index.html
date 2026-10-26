@@ -176,7 +176,7 @@
     <section id="tab-index" class="panel">
       <div class="panel-head">
         <h2>Aura Index <span id="index-progress" class="pill"></span></h2>
-        <p class="muted">All 784 auras, from 1 in 2 to 1 in 1,000,000,000. Legendary and above play a cutscene when rolled.</p>
+        <p class="muted">All 784 auras, from 1 in 2 to 1 in 1,000,000,000. Every aura from Rare upward has its own reveal animation, no two alike.</p>
       </div>
       <div class="index-controls">
         <input id="index-search" type="search" placeholder="Search auras…">
@@ -217,7 +217,8 @@
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
     <canvas id="cs-canvas"></canvas>
-    <div class="cs-text">
+    <div id="cs-overlay" class="cs-overlay"></div>
+    <div class="cs-text" id="cs-text">
       <div id="cs-pre" class="cs-pre"></div>
       <div id="cs-title" class="cs-title"></div>
       <div id="cs-odds" class="cs-odds"></div>
@@ -268,6 +269,7 @@
   <script src="peerjs.min.js"></script>
   <script src="auras.js"></script>
   <script src="abilities.js"></script>
+  <script src="reveals.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
