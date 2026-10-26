@@ -31,7 +31,10 @@ loadout, and fight bots or a friend.
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
   their own named kits. Every mechanic has its own battle animation (slashes, a
   falling hammer, lightning, a nova, a hex shield, a life-drain stream, and so on),
-  with the attacker lunging or casting and a matching sound.
+  with the attacker lunging or casting, a floating ability name, and a matching
+  sound. When the attacker's aura is Legendary or rarer, the ability takes over the
+  whole screen: a cinematic full-screen version of the effect plus a callout with
+  the ability's name.
 - **PvP with 4-digit room codes**: one player creates a room and shares the code,
   the other joins. Peer-to-peer over WebRTC via the bundled PeerJS library (uses the
   free public PeerJS signalling server). The host runs the battle; both players
