@@ -7,20 +7,32 @@ loadout, and fight bots or a friend.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, and a red
   storm for Fury of Darkness.
-- **A unique reveal for every aura.** Common, Uncommon and Rare rolls stay on the roll
-  screen (Rare still gets the slot-machine slowdown, flash and banner). Everything
-  from Epic upward takes over the screen with its own animation: 54 scene concepts
-  crossed with 8 title styles and 5 overlays (2,160 combinations), assigned so no
-  two auras share one. Scenes include a rarity-over-time graph, an odometer, slot
-  reels, a terminal readout, shattering glass, an eclipse, a portal, a storm,
-  meteors, falling code, an ECG heartbeat, a constellation, radar, a black hole, a
-  warp tunnel, fireworks, a DNA helix, a racing clock, northern lights, a summoning
-  circle, a VHS glitch, a growing tree, an hourglass, fortune cards, cherry
-  blossoms, a ringed planet, a lighthouse, a volcano, dice, crystals, a stained-glass
-  window, a circuit board, a neon sign, an underwater scene, fireflies, a solar
-  flare, a comet, a spirograph, a pendulum wave, a lava lamp, jellyfish, a maze, a
-  prism, a rocket launch, sky lanterns and a spinning globe. Beyond Axiom always
-  gets the graph; Cosmic Veil and Fury of Darkness keep bespoke sequences.
+- **Its own cutscene for every Epic+ aura.** Common, Uncommon and Rare rolls stay on
+  the roll screen (Rare still gets the slot-machine slowdown, flash and banner). Each
+  of the 641 auras from Epic upward takes over the screen with a cutscene no other
+  aura shares: one of 54 scenes paired with one of 14 effect layers (shooting stars,
+  snow, embers, rain, bubbles, searchlights, lightning, petals, orbiting motes,
+  glitch bars, god rays, drifting dust, bokeh, ribbons), and every scene + effect
+  pairing is used at most once, plus one of 8 title styles and 5 overlays. Scenes
+  include a rarity-over-time graph, an odometer, slot reels, a terminal readout,
+  shattering glass, an eclipse, a portal, a storm, meteors, falling code, an ECG
+  heartbeat, a constellation, radar, a black hole, a warp tunnel, fireworks, a DNA
+  helix, a racing clock, northern lights, a summoning circle, a VHS glitch, a growing
+  tree, an hourglass, fortune cards, cherry blossoms, a ringed planet, a lighthouse,
+  a volcano, dice, crystals, a stained-glass window, a circuit board, a neon sign, an
+  underwater scene, fireflies, a solar flare, a comet, a spirograph, a pendulum wave,
+  a lava lamp, jellyfish, a maze, a prism, a rocket launch, sky lanterns and a
+  spinning globe. Beyond Axiom always gets the graph; Cosmic Veil and Fury of
+  Darkness keep bespoke sequences.
+- **Shiny forms.** 615 of the 784 auras (78.4%, the closest whole number to 78.5%)
+  have a shiny form fixed at ×2, ×3, ×4 or ×5, spread evenly. Rolling one of them
+  has a 1-in-that-number chance of coming out shiny, so a ×4 shiny Fury of Darkness
+  is 1 in 4,000,000,000. Shinies are separate collectibles: their own inventory
+  card, a rainbow ring and sparkles on the orb, a rainbow name, more power (worked
+  out from the shiny odds), coins multiplied by the same number, and a rainbow sheen
+  plus chime over the cutscene. Rolled below Epic, a shiny still gets a banner and a
+  rainbow burst on the roll screen. The Index tags each aura's multiplier, counts
+  shinies found and has a ✨ button to preview the shiny cutscene.
 - **Reveals always finish.** The timeline is worked out per aura so rarer tiers
   build longer and the name and odds always finish before anything fades. Taps
   can't skip a reveal until the name and odds are fully shown, so quick taps on
@@ -63,7 +75,8 @@ loadout, and fight bots or a friend.
   there is no server and no password; the Export / Import save codes move progress
   between devices. A Save button sits in the header.
 - **Admin console** (Stats tab, or press `` ` ``): `luck 1000 10`, `coins 5000`,
-  `give Cosmic Veil`, `roll Fury of Darkness`, `potion zenith 3`, `ability all`,
+  `give Cosmic Veil`, `roll Fury of Darkness`, `give Cosmic Veil shiny`,
+  `roll Beyond Axiom shiny`, `potion zenith 3`, `ability all`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
 
 ## Deploy to Netlify
@@ -77,6 +90,7 @@ connect the repo and set the publish directory to `rng-game`.
 - `style.css` – styling and CSS animations
 - `auras.js` – deterministic generator for the 784 auras
 - `abilities.js` – ability mechanics and the per-aura signature kit generator
-- `reveals.js` – the 54 reveal scenes, title styles and the unique per-aura assignment
+- `reveals.js` – the 54 reveal scenes, 14 effect layers, the shiny sheen, title styles
+  and the unique per-aura assignment
 - `game.js` – game logic, battle engine, PvP, accounts, cutscene engine
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections

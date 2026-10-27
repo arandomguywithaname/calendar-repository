@@ -375,7 +375,7 @@ body.shake-3 { animation: shake3 .9s; }
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .check input { accent-color: var(--accent); width: 18px; height: 18px; }
 .index-list { display: flex; flex-direction: column; gap: 3px; }
-.idx-row { display: grid; grid-template-columns: 22px 1fr 110px 170px 70px 90px; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px; background: var(--card); border: 1px solid transparent; font-size: .95rem; }
+.idx-row { display: grid; grid-template-columns: 22px 1fr 110px 170px 70px 150px; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px; background: var(--card); border: 1px solid transparent; font-size: .95rem; }
 .idx-row:hover { border-color: var(--card-border); }
 .idx-row.undiscovered { opacity: .45; }
 .idx-row.undiscovered .swatch { filter: grayscale(1); box-shadow: none; }
@@ -482,6 +482,58 @@ body.shake-3 { animation: shake3 .9s; }
 .cutscene.kind-fury .cs-pre { color: #fca5a5; }
 @keyframes glitch { 0% { transform: translate(0,0) skewX(0); } 25% { transform: translate(-3px,1px) skewX(-2deg); } 50% { transform: translate(3px,-2px) skewX(1deg); } 75% { transform: translate(-1px,2px) skewX(2deg); } 100% { transform: translate(0,0); } }
 
+/* Shiny forms: prismatic ring, twinkling glints and a rainbow sheen over the tier look. */
+.orb-sparkle { position: absolute; inset: -12%; border-radius: 50%; pointer-events: none; z-index: 4; display: none; }
+.orb.is-shiny .orb-sparkle { display: block; animation: spin 9s linear infinite; }
+.orb.is-shiny .orb-sparkle::before { content: ""; position: absolute; inset: 9%; border-radius: 50%;
+  background: conic-gradient(#ff4d4d, #ffb84d, #fff35c, #5cff8a, #4dd2ff, #7a5cff, #ff5ce1, #ff4d4d);
+  -webkit-mask: radial-gradient(circle, transparent 64%, #000 66%, #000 69%, transparent 71%);
+          mask: radial-gradient(circle, transparent 64%, #000 66%, #000 69%, transparent 71%);
+  filter: drop-shadow(0 0 6px rgba(255,255,255,.8)); }
+.orb.is-shiny .orb-sparkle::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background:
+    radial-gradient(circle at 12% 30%, #fff 0 1.5px, transparent 3px),
+    radial-gradient(circle at 85% 18%, #fff 0 2px, transparent 4px),
+    radial-gradient(circle at 92% 70%, #fff 0 1.5px, transparent 3px),
+    radial-gradient(circle at 30% 92%, #fff 0 2px, transparent 4px),
+    radial-gradient(circle at 60% 6%, #fff 0 1px, transparent 2.5px),
+    radial-gradient(circle at 4% 62%, #fff 0 1px, transparent 2.5px);
+  animation: twinkle 1.4s ease-in-out infinite; }
+@keyframes twinkle { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+.orb.is-shiny .orb-fill::after { content: ""; position: absolute; inset: -25%; border-radius: 50%; z-index: 1; pointer-events: none;
+  background: conic-gradient(from 0deg, #ff4d4d, #ffb84d, #fff35c, #5cff8a, #4dd2ff, #7a5cff, #ff5ce1, #ff4d4d);
+  mix-blend-mode: overlay; opacity: .75; animation: spin-rev 5s linear infinite; }
+.roll-name.shiny-name, .roll-banner.shiny-banner {
+  background: linear-gradient(90deg, #ff4d4d, #ffb84d, #fff35c, #5cff8a, #4dd2ff, #7a5cff, #ff5ce1, #ff4d4d); background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.95)) drop-shadow(0 0 14px rgba(255,255,255,.35)); }
+.roll-name.shiny-name { animation: shimmer 3s linear infinite; }
+.roll-banner.shiny-banner.go, .roll-banner.shiny-banner.big { animation: bannerin .7s cubic-bezier(.2,1.4,.4,1) forwards, shimmer 3s linear infinite; }
+.card.shiny-card { border-color: rgba(255,255,255,.3); box-shadow: 0 0 22px rgba(255,92,225,.22), 0 0 40px rgba(77,210,255,.12); overflow: hidden; }
+.card.shiny-card.equipped { border-color: var(--accent); box-shadow: 0 0 24px rgba(167,139,250,.45), 0 0 40px rgba(255,92,225,.25); }
+.card.shiny-card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,92,225,.12) 44%, rgba(255,255,255,.16) 50%, rgba(77,210,255,.12) 56%, transparent 70%);
+  background-size: 250% 100%; animation: gloss 3.2s ease-in-out infinite; }
+.card .count-badge.shiny-badge { color: #fff; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: linear-gradient(90deg, #db2777, #7c3aed, #0891b2); }
+.card.shiny-card .row { margin-top: 12px; }
+.history li.shiny-row { border-color: rgba(255,255,255,.3); background: linear-gradient(90deg, rgba(255,92,225,.13), rgba(122,92,255,.1), rgba(77,210,255,.12)); }
+.idx-row .shiny-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 999px; font-size: .72rem; font-weight: 700; white-space: nowrap; vertical-align: middle;
+  background: linear-gradient(90deg, rgba(255,92,225,.25), rgba(77,210,255,.25)); border: 1px solid rgba(255,255,255,.25); }
+.idx-row .pv-wrap { display: flex; gap: 6px; justify-content: flex-end; }
+.idx-row .pv-wrap:empty { display: none; }
+.btn.shiny-btn { background: linear-gradient(135deg, #db2777, #7c3aed, #0891b2); border-color: transparent; }
+.btn.shiny-btn:hover:not(:disabled) { background: linear-gradient(135deg, #ec4899, #8b5cf6, #06b6d4); }
+.cs-title.shiny { animation: shinyglow 2.4s linear infinite; }
+.cutscene.kind-fury .cs-title.shiny { animation: glitch .25s steps(2) infinite, shinyglow 2.4s linear infinite; }
+@keyframes shinyglow {
+  0%, 100% { text-shadow: 0 0 18px #ff4d4d, 0 0 54px #ff5ce1; }
+  17% { text-shadow: 0 0 18px #ffb84d, 0 0 54px #ff4d4d; }
+  33% { text-shadow: 0 0 18px #fff35c, 0 0 54px #ffb84d; }
+  50% { text-shadow: 0 0 18px #5cff8a, 0 0 54px #4dd2ff; }
+  67% { text-shadow: 0 0 18px #4dd2ff, 0 0 54px #7a5cff; }
+  83% { text-shadow: 0 0 18px #7a5cff, 0 0 54px #ff5ce1; }
+}
+
 @media (max-width: 720px) {
   body { font-size: 16px; }
   .hud { margin-left: 0; width: 100%; justify-content: space-between; }
@@ -497,4 +549,5 @@ body.shake-3 { animation: shake3 .9s; }
   .idx-row .odds { grid-column: 2; }
   .idx-row .cnt, .idx-row .tierlabel { grid-column: 3; text-align: right; }
   .idx-row .btn { grid-column: 1 / -1; justify-self: start; }
+  .idx-row .pv-wrap { grid-column: 1 / -1; justify-content: flex-start; }
 }

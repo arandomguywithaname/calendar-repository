@@ -91,8 +91,11 @@
       coins: 100,
       rolls: 0,
       inventory: {},
+      shinyInventory: {},
       equipped: null,
+      equippedShiny: false,
       lastRoll: null,
+      lastShiny: false,
       potions: {},
       luckEffects: [],
       goldEffects: [],
@@ -110,7 +113,7 @@
       playerName: "",
       botWins: {},
       history: [],
-      stats: { best: null, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0 },
+      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0 },
       settings: { sound: true, skipCutscenes: false }
     };
   }
@@ -145,6 +148,9 @@
       if (!Array.isArray(merged.goldEffects)) merged.goldEffects = [];
       if (saved.goldRolls > 0) merged.goldEffects.push({ mult: 2, rolls: saved.goldRolls });
       if (saved.strengthReady) merged.strengthMult = Math.max(merged.strengthMult || 1, 1.5);
+      if (!merged.shinyInventory || typeof merged.shinyInventory !== "object") merged.shinyInventory = {};
+      /* History entries used to be bare ids; they are now { id, shiny }. */
+      merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
       delete merged.goldRolls;
       delete merged.strengthReady;
       return merged;
@@ -182,15 +188,33 @@
     return m;
   }
 
+  /* ---------- Shiny helpers ---------- */
+  function owns(id, shiny) { return ((shiny ? S.shinyInventory : S.inventory)[id] || 0) > 0; }
+  function ownsAny(id) { return owns(id, false) || owns(id, true); }
+  function isShiny(aura, shiny) { return !!(shiny && aura && aura.shiny); }
+  function effRarity(aura, shiny) { return isShiny(aura, shiny) ? aura.shinyRarity : aura.rarity; }
+  function auraPower(aura, shiny) { return isShiny(aura, shiny) ? aura.shinyPower : aura.power; }
+  function auraCoins(aura, shiny) { return isShiny(aura, shiny) ? aura.shinyCoins : aura.coins; }
+  function auraLabel(aura, shiny) { return (isShiny(aura, shiny) ? "✨ Shiny " : "") + aura.name; }
+  function oddsText(aura, shiny) { return A.formatOdds(effRarity(aura, shiny)) + (isShiny(aura, shiny) ? " · ✨×" + aura.shiny : ""); }
+  /* A shiny-capable aura rolls shiny 1 time in its multiplier, so a shiny's true odds are its normal odds × the multiplier. */
+  function rollShiny(aura) { return !!aura.shiny && Math.random() < 1 / aura.shiny; }
+
   function equippedAura() {
     if (S.equipped === null || S.equipped === undefined) return null;
-    if (!S.inventory[S.equipped]) return null;
+    if (!owns(S.equipped, !!S.equippedShiny)) return null;
     return A.byId(S.equipped);
   }
+  function equippedShiny() { return isShiny(equippedAura(), S.equippedShiny); }
 
   function playerPower() {
     var aura = equippedAura();
-    return (aura ? aura.power : 0) + S.training * 10;
+    return (aura ? auraPower(aura, S.equippedShiny) : 0) + S.training * 10;
+  }
+
+  function recordBest(aura, shiny) {
+    var best = S.stats.best !== null ? A.byId(S.stats.best) : null;
+    if (!best || effRarity(best, S.stats.bestShiny) < effRarity(aura, shiny)) { S.stats.best = aura.id; S.stats.bestShiny = isShiny(aura, shiny); }
   }
 
   /* Slot indices (0-5) of the chosen abilities for an aura. */
@@ -234,19 +258,21 @@
     return layers.join(", ");
   }
 
-  function setOrb(el, aura) {
+  function setOrb(el, aura, shiny) {
+    el.classList.toggle("is-shiny", isShiny(aura, shiny));
     el.style.setProperty("--c1", aura.c1);
     el.style.setProperty("--c2", aura.c2);
     var paint = el.querySelector(".orb-paint");
     if (paint) paint.style.background = fillStyle(aura);
     el.className = el.className.replace(/\b(tier|shine)-\S+/g, "").replace(/\s+/g, " ").trim() + " tier-" + aura.tier + " shine-" + shineLevel(aura);
+    if (!el.querySelector(".orb-sparkle")) { var sp = document.createElement("div"); sp.className = "orb-sparkle"; el.appendChild(sp); }
   }
 
-  function makeOrb(aura, cls) {
+  function makeOrb(aura, cls, shiny) {
     var el = document.createElement("div");
     el.className = "orb " + (cls || "");
-    el.innerHTML = "<div class=\"orb-fill\"><div class=\"orb-paint\"></div></div><div class=\"orb-core\"></div><div class=\"orb-gloss\"></div>";
-    setOrb(el, aura);
+    el.innerHTML = "<div class=\"orb-fill\"><div class=\"orb-paint\"></div></div><div class=\"orb-core\"></div><div class=\"orb-gloss\"></div><div class=\"orb-sparkle\"></div>";
+    setOrb(el, aura, shiny);
     return el;
   }
 
@@ -259,9 +285,10 @@
     return sw;
   }
 
-  function setNameStyle(el, aura) {
+  function setNameStyle(el, aura, shiny) {
     el.className = "roll-name t-" + aura.tier;
     el.style.backgroundImage = "";
+    if (isShiny(aura, shiny)) { el.classList.add("shiny-name"); return; }
     if (shineLevel(aura) >= 2) {
       el.classList.add("shine");
       el.style.backgroundImage = "linear-gradient(90deg, " + aura.colors.concat([aura.colors[0]]).join(", ") + ")";
@@ -297,6 +324,7 @@
       o.stop(t0 + dur + 0.05);
     },
     roll: function () { this.tone(520, 0, 0.07, "square", 0.025); },
+    shiny: function () { var s = this; [1568, 2093, 2637, 3136, 2637, 3520].forEach(function (f, i) { s.tone(f, i * 0.07, 0.35, "sine", 0.045); }); },
     tick: function (freq) { this.tone(freq, 0, 0.05, "square", 0.02); },
     boom: function (level) { this.tone(60, 0, 0.6, "sawtooth", 0.06 + level * 0.02); this.tone(90, 0.02, 0.4, "square", 0.04); },
     rare: function (level) {
@@ -420,17 +448,18 @@
   function renderHistory() {
     var ul = $("#history");
     ul.innerHTML = "";
-    S.history.forEach(function (id) {
-      var a = A.byId(id);
+    S.history.forEach(function (h) {
+      var a = A.byId(h.id), sh = isShiny(a, h.shiny);
       var li = document.createElement("li");
+      if (sh) li.classList.add("shiny-row");
       var name = document.createElement("span");
-      name.textContent = a.name;
+      name.textContent = auraLabel(a, sh);
       var tier = document.createElement("span");
       tier.className = "tierlabel t-" + a.tier;
       tier.textContent = tierName(a);
       var odds = document.createElement("span");
       odds.className = "odds";
-      odds.textContent = A.formatOdds(a.rarity);
+      odds.textContent = oddsText(a, sh);
       li.appendChild(makeSwatch(a)); li.appendChild(name); li.appendChild(tier); li.appendChild(odds);
       ul.appendChild(li);
     });
@@ -477,17 +506,17 @@
 
   function canRoll() { return !busy && Date.now() >= cooldownUntil && !battle && !CS.running; }
 
-  function showAura(aura) {
+  function showAura(aura, shiny) {
     var orb = $("#orb");
-    setOrb(orb, aura);
+    setOrb(orb, aura, shiny);
     orb.classList.remove("spinning", "pop");
     void orb.offsetWidth;
     orb.classList.add("pop");
     var nameEl = $("#roll-name");
-    nameEl.textContent = aura.name;
-    setNameStyle(nameEl, aura);
-    $("#roll-tier").textContent = tierName(aura) + " · " + fmt(aura.power) + " power";
-    $("#roll-odds").textContent = A.formatOdds(aura.rarity);
+    nameEl.textContent = auraLabel(aura, shiny);
+    setNameStyle(nameEl, aura, shiny);
+    $("#roll-tier").textContent = (isShiny(aura, shiny) ? "Shiny · " : "") + tierName(aura) + " · " + fmt(auraPower(aura, shiny)) + " power";
+    $("#roll-odds").textContent = oddsText(aura, shiny);
     $("#btn-equip-last").disabled = false;
   }
 
@@ -653,12 +682,14 @@
     setTimeout(function () { document.body.classList.remove("shake-" + level); }, 1000);
   }
 
-  function showBanner(aura, ti) {
+  function showBanner(aura, ti, shiny) {
     var b = $("#roll-banner");
     b.className = "roll-banner";
-    if (ti < 2) { b.textContent = ""; return; }
-    b.textContent = "✦ " + tierName(aura) + " ✦";
+    var sh = isShiny(aura, shiny);
+    if (ti < 2 && !sh) { b.textContent = ""; return; }
+    b.textContent = sh ? "✨ Shiny " + tierName(aura) + " ✨" : "✦ " + tierName(aura) + " ✦";
     b.classList.add("t-" + aura.tier);
+    if (sh) b.classList.add("shiny-banner");
     void b.offsetWidth;
     b.classList.add(ti >= 4 ? "big" : "go");
   }
@@ -673,13 +704,13 @@
   }
 
   /* Persistent look of the stage for the aura currently shown (used after a reveal and on load). */
-  function stageAmbient(aura) {
-    var ti = tierIndex(aura);
+  function stageAmbient(aura, shiny) {
+    var ti = tierIndex(aura), sh = isShiny(aura, shiny);
     setGlow(aura, ti);
     FX.ambient(aura, ti);
     var b = $("#roll-banner");
     b.className = "roll-banner";
-    if (ti >= 2) { b.textContent = "✦ " + tierName(aura) + " ✦"; b.classList.add("t-" + aura.tier, ti >= 4 ? "big" : "go"); }
+    if (ti >= 2 || sh) { b.textContent = sh ? "✨ Shiny " + tierName(aura) + " ✨" : "✦ " + tierName(aura) + " ✦"; b.classList.add("t-" + aura.tier, ti >= 4 ? "big" : "go"); if (sh) b.classList.add("shiny-banner"); }
     else b.textContent = "";
   }
 
@@ -720,14 +751,22 @@
     $("#orb").classList.remove("spinning");
   }
 
-  function revealEffects(aura, ti) {
+  var RAINBOW = ["#ff6b6b", "#ffd93d", "#6bff95", "#6bd8ff", "#b06bff"];
+  function revealEffects(aura, ti, shiny) {
+    if (isShiny(aura, shiny)) {
+      FX.burst(RAINBOW.concat(["#ffffff"]), 140, 0.9);
+      FX.ring("#ffd93d", 0.8);
+      setTimeout(function () { FX.ring("#6bd8ff", 0.6); }, 140);
+      Sound.shiny();
+      if (ti < 2) { showBanner(aura, ti, true); return; }
+    }
     if (ti < 2) return;
     var power = ti === 2 ? 0.5 : ti === 3 ? 0.8 : ti >= 7 ? 1.4 : 1.1;
     screenFlash(aura, power);
     FX.burst(aura.colors, ti === 2 ? 50 : ti === 3 ? 130 : ti >= 7 ? 420 : 260, power);
     FX.ring(aura.c1, power);
     if (ti >= 4) { FX.ring(aura.colors[2] || aura.c2, power * 0.7); setTimeout(function () { FX.ring("#ffffff", power * 0.5); }, 180); }
-    showBanner(aura, ti);
+    showBanner(aura, ti, shiny);
     setGlow(aura, ti);
     FX.ambient(aura, ti);
     shake(ti === 3 ? 1 : ti >= 7 ? 3 : ti >= 4 ? 2 : 0);
@@ -735,7 +774,7 @@
     else Sound.rare(ti - 2);
   }
 
-  function doRoll(forced) {
+  function doRoll(forced, forcedShiny) {
     if (!canRoll()) return;
     busy = true;
     $("#btn-roll").disabled = true;
@@ -743,6 +782,7 @@
 
     var aura = forced || pickAura(currentLuck(), S.floorRolls > 0);
     var ti = tierIndex(aura);
+    var shiny = forcedShiny === undefined ? rollShiny(aura) : isShiny(aura, forcedShiny);
 
     S.rolls++;
     if (!forced) {
@@ -753,14 +793,17 @@
     var mult = currentGoldMult();
     S.goldEffects.forEach(function (e) { e.rolls--; });
     S.goldEffects = S.goldEffects.filter(function (e) { return e.rolls > 0; });
-    var coins = aura.coins * mult;
+    var coins = auraCoins(aura, shiny) * mult;
     addCoins(coins);
-    S.inventory[aura.id] = (S.inventory[aura.id] || 0) + 1;
+    var bag = shiny ? S.shinyInventory : S.inventory;
+    bag[aura.id] = (bag[aura.id] || 0) + 1;
+    if (shiny) S.stats.shinies = (S.stats.shinies || 0) + 1;
     S.lastRoll = aura.id;
-    S.history.unshift(aura.id);
+    S.lastShiny = shiny;
+    S.history.unshift({ id: aura.id, shiny: shiny });
     if (S.history.length > 12) S.history.length = 12;
-    if (S.stats.best === null || A.byId(S.stats.best).rarity < aura.rarity) S.stats.best = aura.id;
-    if (equippedAura() === null) S.equipped = aura.id;
+    recordBest(aura, shiny);
+    if (equippedAura() === null) { S.equipped = aura.id; S.equippedShiny = shiny; }
     if (ti >= 3) S.stats.cutscenes++;
     save();
 
@@ -772,9 +815,9 @@
     runSpin(aura, ti, spinMs, function () {
       var finish = function () {
         stage.classList.remove("suspense");
-        showAura(aura);
-        revealEffects(aura, ti);
-        toast("+" + fmt(coins) + " coins", "gold");
+        showAura(aura, shiny);
+        revealEffects(aura, ti, shiny);
+        toast((shiny ? "✨ SHINY ×" + aura.shiny + "! " : "") + "+" + fmt(coins) + " coins", "gold");
         renderAll();
         busy = false;
         cooldownUntil = Date.now() + rollCooldown();
@@ -785,7 +828,7 @@
         stage.classList.add("suspense");
         $("#roll-name").textContent = "…";
         $("#roll-name").className = "roll-name";
-        setTimeout(function () { playCutscene(aura).then(finish); }, 650);
+        setTimeout(function () { playCutscene(aura, false, shiny).then(finish); }, 650);
       } else {
         finish();
       }
@@ -1029,38 +1072,48 @@
 
   /* ---------- Inventory ---------- */
 
+  function ownedIds() {
+    var ids = {};
+    [S.inventory, S.shinyInventory].forEach(function (bag) { Object.keys(bag).forEach(function (id) { if (bag[id] > 0) ids[id] = true; }); });
+    return Object.keys(ids).map(Number).filter(function (id) { return !!A.byId(id); });
+  }
+
   function renderInventory() {
     var grid = $("#inventory-grid");
     grid.innerHTML = "";
-    var ids = Object.keys(S.inventory).map(Number).filter(function (id) { return S.inventory[id] > 0; });
-    if (!ids.length) {
+    var entries = [];
+    ownedIds().forEach(function (id) {
+      if (owns(id, false)) entries.push({ id: id, shiny: false, n: S.inventory[id] });
+      if (owns(id, true)) entries.push({ id: id, shiny: true, n: S.shinyInventory[id] });
+    });
+    if (!entries.length) {
       grid.innerHTML = "<div class=\"empty-note\">Nothing yet. Roll to discover auras.</div>";
       return;
     }
-    ids.sort(function (a, b) { return A.byId(b).rarity - A.byId(a).rarity; });
-    var eq = equippedAura();
-    ids.forEach(function (id) {
-      var a = A.byId(id);
-      var isEq = !!(eq && eq.id === id);
+    entries.sort(function (x, y) { return effRarity(A.byId(y.id), y.shiny) - effRarity(A.byId(x.id), x.shiny); });
+    var eq = equippedAura(), eqShiny = equippedShiny();
+    entries.forEach(function (en) {
+      var a = A.byId(en.id), sh = isShiny(a, en.shiny);
+      var isEq = !!(eq && eq.id === en.id && eqShiny === sh);
       var card = document.createElement("div");
-      card.className = "card" + (isEq ? " equipped" : "");
+      card.className = "card" + (isEq ? " equipped" : "") + (sh ? " shiny-card" : "");
       var badge = document.createElement("div");
-      badge.className = "count-badge";
-      badge.textContent = "x" + S.inventory[id];
+      badge.className = "count-badge" + (sh ? " shiny-badge" : "");
+      badge.textContent = (sh ? "✨ ×" + a.shiny + " · " : "") + "x" + en.n;
       card.appendChild(badge);
       var row = document.createElement("div");
       row.className = "row";
-      row.appendChild(makeOrb(a));
+      row.appendChild(makeOrb(a, "", sh));
       var info = document.createElement("div");
       var title = document.createElement("div");
       title.className = "card-title";
-      title.textContent = a.name;
+      title.textContent = auraLabel(a, sh);
       var tier = document.createElement("div");
       tier.className = "tierlabel t-" + a.tier;
-      tier.textContent = tierName(a);
+      tier.textContent = (sh ? "Shiny " : "") + tierName(a);
       var sub = document.createElement("div");
       sub.className = "card-sub";
-      sub.textContent = A.formatOdds(a.rarity) + " · " + fmt(a.power) + " power";
+      sub.textContent = A.formatOdds(effRarity(a, sh)) + " · " + fmt(auraPower(a, sh)) + " power";
       info.appendChild(title); info.appendChild(tier); info.appendChild(sub);
       row.appendChild(info);
       card.appendChild(row);
@@ -1070,18 +1123,21 @@
       btn.className = "btn small" + (isEq ? "" : " primary");
       btn.textContent = isEq ? "Equipped" : "Equip";
       btn.disabled = isEq;
-      btn.addEventListener("click", function () { equip(id); });
+      btn.addEventListener("click", function () { equip(en.id, sh); });
       actions.appendChild(btn);
       card.appendChild(actions);
       grid.appendChild(card);
     });
   }
 
-  function equip(id) {
+  function equip(id, shiny) {
     if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
+    var a = A.byId(id), sh = isShiny(a, shiny) && owns(id, true);
+    if (!owns(id, sh)) return;
     S.equipped = id;
+    S.equippedShiny = sh;
     abilitiesViewAura = id;
-    toast("Equipped " + A.byId(id).name);
+    toast("Equipped " + auraLabel(a, sh));
     save();
     renderAll();
   }
@@ -1094,10 +1150,10 @@
     var grid = $("#ability-grid");
     var sel = $("#ability-aura");
     grid.innerHTML = "";
-    var ids = Object.keys(S.inventory).map(Number).filter(function (id) { return S.inventory[id] > 0; });
+    var ids = ownedIds();
     ids.sort(function (a, b) { return A.byId(b).rarity - A.byId(a).rarity; });
     var eq = equippedAura();
-    if (abilitiesViewAura === null || !S.inventory[abilitiesViewAura]) abilitiesViewAura = eq ? eq.id : (ids.length ? ids[0] : null);
+    if (abilitiesViewAura === null || !ownsAny(abilitiesViewAura)) abilitiesViewAura = eq ? eq.id : (ids.length ? ids[0] : null);
     sel.innerHTML = "";
     ids.forEach(function (id) {
       var a = A.byId(id);
@@ -1118,10 +1174,11 @@
     $("#loadout-count").textContent = loadout.length + " / " + LOADOUT_SIZE + " chosen";
     var head = $("#ability-aura-head");
     head.innerHTML = "";
-    head.appendChild(makeOrb(aura, "small"));
+    var headShiny = !!(eq && eq.id === aura.id && equippedShiny()) || (!owns(aura.id, false) && owns(aura.id, true));
+    head.appendChild(makeOrb(aura, "small", headShiny));
     var ht = document.createElement("div");
-    var hn = document.createElement("div"); hn.className = "card-title"; hn.textContent = aura.name + "'s kit";
-    var hs = document.createElement("div"); hs.className = "card-sub"; hs.textContent = tierName(aura) + " · " + fmt(aura.power) + " power" + (eq && eq.id === aura.id ? " · equipped" : " · not equipped");
+    var hn = document.createElement("div"); hn.className = "card-title"; hn.textContent = auraLabel(aura, headShiny) + "'s kit";
+    var hs = document.createElement("div"); hs.className = "card-sub"; hs.textContent = tierName(aura) + " · " + fmt(auraPower(aura, headShiny)) + " power" + (eq && eq.id === aura.id ? " · equipped" : " · not equipped");
     ht.appendChild(hn); ht.appendChild(hs);
     head.appendChild(ht);
     kit.forEach(function (ab, idx) {
@@ -1183,7 +1240,7 @@
         kit: o.kit, abilities: o.abilities.slice(), cooldowns: {},
         guard: false, focus: false, reflect: false, stunned: false, skip: false, shield: 0, revive: 0,
         poison: null, weaken: 0, dmgMult: o.dmgMult || 1,
-        auraId: o.auraId === undefined ? null : o.auraId, icon: o.icon || null, isBot: !!o.isBot
+        auraId: o.auraId === undefined ? null : o.auraId, shiny: !!o.shiny, icon: o.icon || null, isBot: !!o.isBot
       };
     },
     create: function (a, b, first) {
@@ -2017,7 +2074,7 @@
 
   function myFighterSpec() {
     var aura = equippedAura();
-    return { name: (S.playerName || "You"), power: playerPower(), auraId: aura ? aura.id : null, loadout: aura ? loadoutFor(aura) : DEFAULT_LOADOUT.slice(), isBot: false };
+    return { name: (S.playerName || "You"), power: playerPower(), auraId: aura ? aura.id : null, shiny: equippedShiny(), loadout: aura ? loadoutFor(aura) : DEFAULT_LOADOUT.slice(), isBot: false };
   }
 
   /* Build a fighter from a spec: its kit comes from the aura, its abilities from the loadout slots. */
@@ -2027,7 +2084,7 @@
     var slots = Array.isArray(spec.loadout) && spec.loadout.length ? spec.loadout : DEFAULT_LOADOUT;
     var abilities = slots.filter(function (i) { return kit[i]; }).map(function (i) { return kit[i].id; });
     if (!abilities.length) abilities = [kit[0].id];
-    return Engine.makeFighter({ name: spec.name, power: spec.power, kit: kit, abilities: abilities, auraId: aura ? aura.id : null, dmgMult: spec.dmgMult || 1, isBot: false });
+    return Engine.makeFighter({ name: spec.name, power: spec.power, kit: kit, abilities: abilities, auraId: aura ? aura.id : null, shiny: isShiny(aura, spec.shiny), dmgMult: spec.dmgMult || 1, isBot: false });
   }
 
   function startBotFight(bot) {
@@ -2069,7 +2126,7 @@
   function fighterVisual(f, el) {
     el.innerHTML = "";
     if (f.auraId !== null && f.auraId !== undefined && A.byId(f.auraId)) {
-      el.appendChild(makeOrb(A.byId(f.auraId), "small"));
+      el.appendChild(makeOrb(A.byId(f.auraId), "small", f.shiny));
     } else {
       var ic = document.createElement("div");
       ic.className = "fighter-icon";
@@ -2547,7 +2604,7 @@
     var raw = Array.isArray(spec.loadout) ? spec.loadout : [];
     var loadout = raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < K.KIT_SIZE && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE);
     if (!loadout.length) loadout = DEFAULT_LOADOUT.slice();
-    return { name: name, power: power, auraId: auraId, loadout: loadout, isBot: false };
+    return { name: name, power: power, auraId: auraId, shiny: auraId !== null && isShiny(A.byId(auraId), spec.shiny === true), loadout: loadout, isBot: false };
   }
 
   function pvpStartBattle() {
@@ -2661,6 +2718,7 @@
       var name = document.createElement("span");
       name.className = "name";
       name.textContent = a.name;
+      if (a.shiny) { var tag = document.createElement("span"); tag.className = "shiny-tag"; tag.textContent = "✨×" + a.shiny; tag.title = "Shiny form: 1 in " + fmt(a.shinyRarity); name.appendChild(tag); }
       var tier = document.createElement("span");
       tier.className = "tierlabel t-" + a.tier;
       tier.textContent = tierName(a);
@@ -2670,16 +2728,25 @@
       var cnt = document.createElement("span");
       cnt.className = "cnt";
       row.appendChild(makeSwatch(a)); row.appendChild(name); row.appendChild(tier); row.appendChild(odds); row.appendChild(cnt);
+      var wrap = document.createElement("span");
+      wrap.className = "pv-wrap";
       if (a.rarity >= 10000) {
         var pv = document.createElement("button");
         pv.className = "btn small";
         pv.textContent = "▶ Preview";
-        pv.title = "Preview this aura's reveal";
-        pv.addEventListener("click", function () { if (!busy) playCutscene(a, true); });
-        row.appendChild(pv);
-      } else {
-        row.appendChild(document.createElement("span"));
+        pv.title = "Preview this aura's cutscene";
+        pv.addEventListener("click", function () { if (!busy) playCutscene(a, true, false); });
+        wrap.appendChild(pv);
+        if (a.shiny) {
+          var ps = document.createElement("button");
+          ps.className = "btn small shiny-btn";
+          ps.textContent = "✨";
+          ps.title = "Preview the shiny version";
+          ps.addEventListener("click", function () { if (!busy) playCutscene(a, true, true); });
+          wrap.appendChild(ps);
+        }
       }
+      row.appendChild(wrap);
       indexRows.push({ aura: a, row: row, cnt: cnt });
       frag.appendChild(row);
     });
@@ -2690,14 +2757,15 @@
   }
 
   function updateIndex() {
-    var found = 0;
+    var found = 0, shinyFound = 0;
     indexRows.forEach(function (r) {
-      var n = S.inventory[r.aura.id] || 0;
-      if (n) found++;
-      r.row.classList.toggle("undiscovered", !n);
-      r.cnt.textContent = n ? "x" + n : "";
+      var n = S.inventory[r.aura.id] || 0, ns = S.shinyInventory[r.aura.id] || 0;
+      if (n || ns) found++;
+      if (ns) shinyFound++;
+      r.row.classList.toggle("undiscovered", !(n || ns));
+      r.cnt.textContent = (n ? "x" + n : "") + (ns ? (n ? " " : "") + "✨" + ns : "");
     });
-    $("#index-progress").textContent = found + " / " + A.TOTAL;
+    $("#index-progress").textContent = found + " / " + A.TOTAL + " · ✨ " + shinyFound + " / " + A.SHINY_COUNT;
     filterIndex();
   }
 
@@ -2709,7 +2777,7 @@
       var ok = true;
       if (q && r.aura.name.toLowerCase().indexOf(q) === -1) ok = false;
       if (tier && r.aura.tier !== tier) ok = false;
-      if (foundOnly && !S.inventory[r.aura.id]) ok = false;
+      if (foundOnly && !ownsAny(r.aura.id)) ok = false;
       r.row.style.display = ok ? "" : "none";
     });
   }
@@ -2718,12 +2786,14 @@
 
   function renderStats() {
     var grid = $("#stats-grid");
-    var found = Object.keys(S.inventory).filter(function (id) { return S.inventory[id] > 0; }).length;
+    var found = ownedIds().length;
+    var shinyFound = Object.keys(S.shinyInventory).filter(function (id) { return S.shinyInventory[id] > 0; }).length;
     var best = S.stats.best !== null ? A.byId(S.stats.best) : null;
     var items = [
       ["Total rolls", fmt(S.rolls)],
       ["Auras found", found + " / " + A.TOTAL],
-      ["Best aura", best ? best.name + " (" + A.formatOdds(best.rarity) + ")" : "—"],
+      ["Shinies found", shinyFound + " / " + A.SHINY_COUNT + " (" + fmt(S.stats.shinies || 0) + " rolled)"],
+      ["Best aura", best ? auraLabel(best, S.stats.bestShiny) + " (" + A.formatOdds(effRarity(best, S.stats.bestShiny)) + ")" : "—"],
       ["Coins earned", fmt(S.stats.earned)],
       ["Bot fights", fmt(S.stats.won) + " won · " + fmt(S.stats.lost) + " lost"],
       ["PvP record", fmt(S.stats.pvpWon) + " won · " + fmt(S.stats.pvpLost) + " lost"],
@@ -2771,8 +2841,8 @@
     "help                      show this list",
     "luck <mult> [rolls]       add a luck boost, e.g. luck 1000 10",
     "coins <amount>            add coins (negative to remove)",
-    "give <aura name|id>       add an aura to your inventory",
-    "roll <aura name|id>       force your next roll to be that aura (plays its reveal)",
+    "give <aura name|id> [shiny]  add an aura (or its shiny form) to your inventory",
+    "roll <aura name|id> [shiny]  force your next roll to be that aura (plays its reveal)",
     "potion <key> [count]      add potions: " + POTION_ORDER.join(", "),
     "training <level>          set training level",
     "unlockauto                unlock Auto Roll",
@@ -2807,21 +2877,24 @@
         break;
       }
       case "give": {
-        var a = findAura(rest);
+        var wantShiny = /\bshiny\b/i.test(rest), a = findAura(rest.replace(/\bshiny\b/ig, "").trim());
         if (!a) { adminPrint("No aura matches \"" + rest + "\"."); break; }
-        S.inventory[a.id] = (S.inventory[a.id] || 0) + 1;
-        if (S.stats.best === null || A.byId(S.stats.best).rarity < a.rarity) S.stats.best = a.id;
-        if (!equippedAura()) S.equipped = a.id;
-        adminPrint("Added " + a.name + " (" + A.formatOdds(a.rarity) + ").");
+        if (wantShiny && !a.shiny) { adminPrint(a.name + " has no shiny form."); break; }
+        var bag = wantShiny ? S.shinyInventory : S.inventory;
+        bag[a.id] = (bag[a.id] || 0) + 1;
+        recordBest(a, wantShiny);
+        if (!equippedAura()) { S.equipped = a.id; S.equippedShiny = wantShiny; }
+        adminPrint("Added " + auraLabel(a, wantShiny) + " (" + oddsText(a, wantShiny) + ").");
         break;
       }
       case "roll": {
-        var ra = findAura(rest);
+        var rollShinyWord = /\bshiny\b/i.test(rest), ra = findAura(rest.replace(/\bshiny\b/ig, "").trim());
         if (!ra) { adminPrint("No aura matches \"" + rest + "\"."); break; }
+        if (rollShinyWord && !ra.shiny) { adminPrint(ra.name + " has no shiny form."); break; }
         if (!canRoll()) { adminPrint("Can't roll right now (busy, cooling down or in a fight)."); break; }
-        adminPrint("Rolling " + ra.name + "…");
+        adminPrint("Rolling " + auraLabel(ra, rollShinyWord) + "…");
         switchTab("roll");
-        doRoll(ra);
+        doRoll(ra, rollShinyWord);
         break;
       }
       case "potion": {
@@ -2903,7 +2976,7 @@
 
   /* Work out the whole reveal timeline up front, in seconds, so the fade can never start
      before the name has spelled out and the odds have appeared and been on screen for `hold`. */
-  function revealTimeline(aura) {
+  function revealTimeline(aura, shiny) {
     var text, sceneDur, titleAt, style, step, oddsFloor, hold, r = null;
     if (aura.special === "cosmic") {
       text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.3; style = "stagger"; step = 0.09; oddsFloor = 4.6; hold = 3.5;
@@ -2917,6 +2990,7 @@
       titleAt = scene.titleAt * sceneDur; oddsFloor = scene.oddsAt * sceneDur;
       step = Math.min(0.16, Math.max(0.045, pace.spell / Math.max(1, text.length)));
     }
+    if (isShiny(aura, shiny)) hold += 0.6;
     var lettersIn = titleAt + text.length * step + Math.min(REVEALS.titleAnim(style), 0.6);
     var oddsAt = Math.max(oddsFloor, lettersIn - 0.2);
     /* 1s covers the odds fading in, with margin for slower devices. */
@@ -2937,12 +3011,13 @@
     csTimer(tl.oddsAt * 1000, function () { CS.odds.classList.add("show"); });
   }
 
-  function playCutscene(aura, preview) {
+  function playCutscene(aura, preview, shiny) {
     return new Promise(function (resolve) {
       if (CS.running) { resolve(); return; }
       var kind = aura.special || "generic";
       var level = aura.cutscene;
-      var tl = revealTimeline(aura);
+      var sh = isShiny(aura, shiny);
+      var tl = revealTimeline(aura, sh);
       CS.running = true;
       CS.resolve = resolve;
       CS.el.className = "cutscene kind-" + kind;
@@ -2952,9 +3027,10 @@
       CS.overlay.className = "cs-overlay";
       CS.text.style.setProperty("--ty", "0.5");
       CS.pre.className = "cs-pre"; CS.title.className = "cs-title"; CS.odds.className = "cs-odds"; CS.hint.className = "cs-hint";
-      CS.pre.textContent = preview ? "Preview · " + tierName(aura) : tierName(aura) + " aura";
+      CS.pre.textContent = (preview ? "Preview · " : "") + (sh ? "✨ Shiny " : "") + tierName(aura) + (preview ? "" : " aura");
       CS.title.textContent = "";
-      CS.odds.textContent = A.formatOdds(aura.rarity);
+      if (sh) CS.title.classList.add("shiny");
+      CS.odds.textContent = oddsText(aura, sh);
       CS.endAt = tl.end;
       CS.skipAt = tl.skipAt;
       CS.hint.textContent = tl.wait ? "tap anywhere to continue" : "tap to continue";
@@ -2968,6 +3044,7 @@
       CS.onResize = resize;
       window.addEventListener("resize", resize);
 
+      var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: effRarity(aura, sh), dur: tl.sceneDur, level: level, shiny: sh, tierName: (sh ? "Shiny " : "") + tierName(aura), rng: REVEALS.mulberry32(aura.id * 31 + 7) };
       if (kind === "cosmic") {
         CS.draw = drawCosmic();
         Sound.cosmic();
@@ -2981,13 +3058,18 @@
       } else {
         var r = tl.reveal;
         var scene = REVEALS.SCENES[r.scene];
-        var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: aura.rarity, dur: tl.sceneDur, level: level, tierName: tierName(aura), rng: REVEALS.mulberry32(aura.id * 31 + 7) };
-        CS.draw = scene.make(env);
+        var base = scene.make(env), accent = r.accent && REVEALS.ACCENTS[r.accent] ? REVEALS.ACCENTS[r.accent](env) : null;
+        CS.draw = accent ? function (ctx, t, w, h) { ctx.save(); base(ctx, t, w, h); ctx.restore(); ctx.save(); accent(ctx, t, w, h); ctx.restore(); } : base;
         CS.overlay.classList.add("ov-" + r.overlay);
         CS.text.style.setProperty("--ty", String(scene.textY || 0.5));
         Sound.rare(Math.max(0, level));
         csTimer(Math.max(0, tl.titleAt * 1000 - 300), function () { CS.pre.classList.add("show"); });
         scheduleTitle(tl);
+      }
+      if (sh) {
+        var under = CS.draw, shinyLayer = REVEALS.makeShinyLayer(env);
+        CS.draw = function (ctx, t, w, h) { ctx.save(); under(ctx, t, w, h); ctx.restore(); ctx.save(); shinyLayer(ctx, t, w, h); ctx.restore(); };
+        csTimer(Math.max(0, tl.titleAt * 1000 - 200), function () { Sound.shiny(); });
       }
       csTimer(tl.skipAt * 1000, function () { CS.hint.classList.add("show"); if (tl.wait) CS.hint.classList.add("wait"); });
       csTimer((CS.endAt - CUTSCENE_FADE) * 1000, function () { CS.el.style.opacity = "0"; });
@@ -3417,7 +3499,7 @@
 
   function resetRollDisplay() {
     FX.clear();
-    if (S.lastRoll !== null && S.inventory[S.lastRoll]) { showAura(A.byId(S.lastRoll)); stageAmbient(A.byId(S.lastRoll)); return; }
+    if (S.lastRoll !== null && ownsAny(S.lastRoll)) { var ls = owns(S.lastRoll, !!S.lastShiny) ? !!S.lastShiny : owns(S.lastRoll, true) && !owns(S.lastRoll, false); showAura(A.byId(S.lastRoll), ls); stageAmbient(A.byId(S.lastRoll), ls); return; }
     setGlow(null, 0);
     $("#roll-banner").className = "roll-banner";
     $("#roll-banner").textContent = "";
@@ -3496,7 +3578,7 @@
     autoOn = !autoOn;
     renderAll();
   });
-  $("#btn-equip-last").addEventListener("click", function () { if (S.lastRoll !== null) equip(S.lastRoll); });
+  $("#btn-equip-last").addEventListener("click", function () { if (S.lastRoll !== null) equip(S.lastRoll, !!S.lastShiny); });
   $("#btn-heal").addEventListener("click", function () { healInBattle(); });
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
@@ -3557,9 +3639,9 @@
   /* Console hooks. */
   window.AuraRealms = {
     state: function () { return S; },
-    preview: function (name) { var a = findAura(name); if (a) playCutscene(a, true); },
+    preview: function (name, shiny) { var a = findAura(name); if (a) playCutscene(a, true, !!shiny); },
     reveals: REVEALS,
-    revealTimeline: function (name) { var a = findAura(name); return a ? revealTimeline(a) : null; },
+    revealTimeline: function (name, shiny) { var a = findAura(name); return a ? revealTimeline(a, !!shiny) : null; },
     admin: runAdmin,
     engine: Engine,
     kits: K,

@@ -1613,34 +1613,142 @@
     };
   } };
 
+  /* ---------- Accent layers: a second effect drawn over the scene, so every Epic+ aura's
+     cutscene is a distinct scene + accent pairing. Each fades in over the first second. ---------- */
+
+  function fadeA(t) { return Math.min(1, t / 1.0); }
+
+  var ACCENTS = {
+    shooting: function (env) {
+      var m = arr(10, function () { return { x: env.rng() * 1.2, y: env.rng() * 0.5, o: env.rng(), len: 80 + env.rng() * 140 }; });
+      return function (ctx, t, w, h) {
+        ctx.lineCap = "round"; ctx.lineWidth = 2;
+        m.forEach(function (s) { var lp = (t * 0.35 + s.o) % 1; if (lp > 0.35) return; var q = lp / 0.35, x = (s.x - q * 0.5) * w, y = (s.y + q * 0.35) * h; var g = ctx.createLinearGradient(x, y, x + s.len, y - s.len * 0.6); g.addColorStop(0, "rgba(255,255,255," + 0.9 * fadeA(t) * (1 - q) + ")"); g.addColorStop(1, "rgba(255,255,255,0)"); ctx.strokeStyle = g; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + s.len, y - s.len * 0.6); ctx.stroke(); });
+      };
+    },
+    snow: function (env) {
+      var f = arr(140, function () { return { x: env.rng(), y: env.rng(), s: 1 + env.rng() * 2.5, sp: 0.04 + env.rng() * 0.06, ph: env.rng() * 6 }; });
+      return function (ctx, t, w, h) { ctx.fillStyle = "#fff"; f.forEach(function (p) { ctx.globalAlpha = 0.7 * fadeA(t); ctx.beginPath(); ctx.arc(((p.x + Math.sin(t * 0.8 + p.ph) * 0.02) % 1) * w, ((p.y + t * p.sp) % 1) * h, p.s, 0, TAU); ctx.fill(); }); };
+    },
+    embers: function (env) {
+      var f = arr(90, function () { return { x: env.rng(), y: env.rng(), s: 1 + env.rng() * 2.5, sp: 0.05 + env.rng() * 0.08, ph: env.rng() * 6 }; });
+      return function (ctx, t, w, h) { ctx.globalCompositeOperation = "lighter"; f.forEach(function (p) { var fl = 0.5 + 0.5 * Math.sin(t * 8 + p.ph); ctx.globalAlpha = (0.35 + 0.5 * fl) * fadeA(t); ctx.fillStyle = fl > 0.6 ? "#ffd27a" : env.c1; ctx.beginPath(); ctx.arc(((p.x + Math.sin(t + p.ph) * 0.02) % 1) * w, (1 - ((p.y + t * p.sp) % 1)) * h, p.s, 0, TAU); ctx.fill(); }); };
+    },
+    rain: function (env) {
+      var d = arr(160, function () { return { x: env.rng(), y: env.rng(), sp: 0.7 + env.rng() * 0.6, l: 10 + env.rng() * 18 }; });
+      return function (ctx, t, w, h) { ctx.strokeStyle = withAlpha(env.c1, 0.35 * fadeA(t)); ctx.lineWidth = 1.2; ctx.beginPath(); d.forEach(function (r) { var y = ((r.y + t * r.sp) % 1) * h, x = ((r.x - t * 0.05) % 1 + 1) % 1 * w; ctx.moveTo(x, y); ctx.lineTo(x - 3, y + r.l); }); ctx.stroke(); };
+    },
+    bubbles: function (env) {
+      var b = arr(45, function () { return { x: env.rng(), o: env.rng(), r: 2 + env.rng() * 6, sp: 0.06 + env.rng() * 0.08, ph: env.rng() * 6 }; });
+      return function (ctx, t, w, h) { ctx.strokeStyle = "rgba(255,255,255," + 0.45 * fadeA(t) + ")"; ctx.lineWidth = 1.2; b.forEach(function (p) { ctx.beginPath(); ctx.arc(p.x * w + Math.sin(t * 2 + p.ph) * 6, h * (1.05 - ((t * p.sp + p.o) % 1.1)), p.r, 0, TAU); ctx.stroke(); }); };
+    },
+    searchlights: function (env) {
+      return function (ctx, t, w, h) {
+        ctx.globalCompositeOperation = "lighter";
+        [[0.2, 1], [0.8, -1]].forEach(function (s, i) {
+          var bx = s[0] * w, a = -Math.PI / 2 + Math.sin(t * 0.6 + i * 2) * 0.55 * s[1], L = h * 1.3;
+          var g = ctx.createLinearGradient(bx, h, bx + Math.cos(a) * L, h + Math.sin(a) * L); g.addColorStop(0, withAlpha(env.c1, 0.28 * fadeA(t))); g.addColorStop(1, withAlpha(env.c1, 0));
+          ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(bx, h); ctx.lineTo(bx + Math.cos(a - 0.07) * L, h + Math.sin(a - 0.07) * L); ctx.lineTo(bx + Math.cos(a + 0.07) * L, h + Math.sin(a + 0.07) * L); ctx.closePath(); ctx.fill();
+        });
+      };
+    },
+    lightning: function (env) {
+      var next = 1, bolt = null;
+      return function (ctx, t, w, h) {
+        if (t > next) { var side = env.rng() < 0.5 ? 0.06 : 0.94, pts = [[side * w, 0]]; for (var i = 1; i <= 8; i++) pts.push([side * w + (env.rng() - 0.5) * w * 0.08, h * 0.5 * i / 8]); bolt = { pts: pts, born: t }; next = t + 1.2 + env.rng() * 1.6; }
+        if (!bolt || t - bolt.born > 0.22) return;
+        var a = 1 - (t - bolt.born) / 0.22;
+        ctx.globalAlpha = a; ctx.strokeStyle = env.c1; ctx.lineWidth = 3; glow(ctx, env.c1, 20); ctx.beginPath(); bolt.pts.forEach(function (P, i) { if (i === 0) ctx.moveTo(P[0], P[1]); else ctx.lineTo(P[0], P[1]); }); ctx.stroke(); noglow(ctx);
+        ctx.fillStyle = withAlpha(env.c1, 0.12 * a); ctx.fillRect(0, 0, w, h);
+      };
+    },
+    petals: function (env) {
+      var p = arr(60, function () { return { x: env.rng(), y: env.rng(), s: 3 + env.rng() * 5, sp: 0.05 + env.rng() * 0.05, rot: env.rng() * TAU, spin: (env.rng() - 0.5) * 3, col: env.colors[Math.floor(env.rng() * env.colors.length)] }; });
+      return function (ctx, t, w, h) { p.forEach(function (q) { ctx.save(); ctx.translate(((q.x + t * 0.04) % 1) * w, ((q.y + t * q.sp) % 1) * h); ctx.rotate(q.rot + t * q.spin); ctx.globalAlpha = 0.75 * fadeA(t); ctx.fillStyle = q.col; ctx.beginPath(); ctx.moveTo(0, -q.s); ctx.lineTo(q.s * 0.6, 0); ctx.lineTo(0, q.s); ctx.lineTo(-q.s * 0.6, 0); ctx.closePath(); ctx.fill(); ctx.restore(); }); };
+    },
+    orbit: function (env) {
+      var s = arr(28, function (i) { return { a: i / 28 * TAU, r: 0.9 + env.rng() * 0.2, col: env.colors[i % env.colors.length] }; });
+      return function (ctx, t, w, h) { var R = Math.min(w, h) * 0.42; ctx.globalCompositeOperation = "lighter"; s.forEach(function (q) { var a = q.a + t * 0.5, x = w / 2 + Math.cos(a) * R * q.r * 1.25, y = h / 2 + Math.sin(a) * R * q.r * 0.45; ctx.globalAlpha = (0.4 + 0.6 * (Math.sin(a) + 1) / 2) * fadeA(t); ctx.fillStyle = q.col; ctx.beginPath(); ctx.arc(x, y, 3 + 2 * (Math.sin(a) + 1) / 2, 0, TAU); ctx.fill(); }); };
+    },
+    glitch: function (env) {
+      return function (ctx, t, w, h) {
+        var burst = Math.sin(t * 2.3) > 0.85 || Math.sin(t * 3.7 + 1) > 0.92; if (!burst) return;
+        for (var i = 0; i < 6; i++) { ctx.fillStyle = withAlpha([env.c1, "#00ffff", "#ff00ff"][i % 3], 0.35 * fadeA(t)); ctx.fillRect(Math.random() * w, Math.random() * h, 40 + Math.random() * 200, 3 + Math.random() * 10); }
+      };
+    },
+    godrays: function (env) {
+      var rays = arr(7, function () { return { a: 0.35 + env.rng() * 0.7, wd: 0.025 + env.rng() * 0.04, ph: env.rng() * 6 }; });
+      return function (ctx, t, w, h) {
+        var L = Math.hypot(w, h); ctx.globalCompositeOperation = "lighter";
+        rays.forEach(function (r) { var a = r.a + Math.sin(t * 0.3 + r.ph) * 0.04, g = ctx.createLinearGradient(0, 0, Math.cos(a) * L, Math.sin(a) * L); g.addColorStop(0, "rgba(255,255,255," + 0.18 * fadeA(t) + ")"); g.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a - r.wd) * L, Math.sin(a - r.wd) * L); ctx.lineTo(Math.cos(a + r.wd) * L, Math.sin(a + r.wd) * L); ctx.closePath(); ctx.fill(); });
+      };
+    },
+    dust: function (env) {
+      var d = arr(120, function () { return { x: env.rng(), y: env.rng(), s: 0.6 + env.rng() * 1.4, ph: env.rng() * 6 }; });
+      return function (ctx, t, w, h) { ctx.fillStyle = "#fff"; d.forEach(function (p) { ctx.globalAlpha = (0.2 + 0.45 * Math.abs(Math.sin(t + p.ph))) * fadeA(t); ctx.fillRect(((p.x + Math.sin(t * 0.2 + p.ph) * 0.03) % 1 + 1) % 1 * w, ((p.y + Math.cos(t * 0.15 + p.ph) * 0.03) % 1 + 1) % 1 * h, p.s, p.s); }); };
+    },
+    bokeh: function (env) {
+      var b = arr(16, function () { return { x: env.rng(), y: env.rng(), r: 0.03 + env.rng() * 0.06, sp: 0.01 + env.rng() * 0.02, ph: env.rng() * 6, col: env.colors[Math.floor(env.rng() * env.colors.length)] }; });
+      return function (ctx, t, w, h) { var U = Math.min(w, h); ctx.globalCompositeOperation = "lighter"; b.forEach(function (p) { var x = ((p.x + t * p.sp) % 1) * w, y = (p.y + Math.sin(t * 0.4 + p.ph) * 0.03) * h, r = p.r * U; var g = ctx.createRadialGradient(x, y, r * 0.6, x, y, r); g.addColorStop(0, withAlpha(p.col, 0.16 * fadeA(t))); g.addColorStop(0.9, withAlpha(p.col, 0.22 * fadeA(t))); g.addColorStop(1, withAlpha(p.col, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }); };
+    },
+    ribbon: function (env) {
+      return function (ctx, t, w, h) {
+        for (var k = 0; k < 2; k++) {
+          ctx.strokeStyle = withAlpha(env.colors[k % env.colors.length], 0.5 * fadeA(t)); ctx.lineWidth = 2 + k; glow(ctx, env.colors[k % env.colors.length], 12); ctx.beginPath();
+          for (var x = 0; x <= w; x += 10) { var y = h * (0.12 + k * 0.76) + Math.sin(x * 0.008 + t * 1.4 + k * 2) * h * 0.04 + Math.sin(x * 0.02 - t * 2) * h * 0.012; if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+          ctx.stroke(); noglow(ctx);
+        }
+      };
+    }
+  };
+  var ACCENT_KEYS = Object.keys(ACCENTS);
+  /* Pairings that would just double up on what the scene already does. */
+  var SKIP_PAIRS = { "storm|rain": 1, "storm|lightning": 1, "ash|embers": 1, "sakura|petals": 1, "underwater|bubbles": 1, "jellyfish|bubbles": 1, "starfall|shooting": 1, "comet|shooting": 1, "vhs|glitch": 1, "volcano|embers": 1 };
+
+  /* Rainbow glints and a sweeping sheen laid over the whole reveal when the roll is shiny. */
+  function makeShinyLayer(env) {
+    var glints = arr(36, function () { return { x: env.rng(), y: env.rng(), s: 4 + env.rng() * 10, ph: env.rng() * 6, sp: 1.5 + env.rng() * 2.5 }; });
+    var rainbow = ["#ff6b6b", "#ffd93d", "#6bff95", "#6bd8ff", "#b06bff"];
+    return function (ctx, t, w, h) {
+      var a = fadeA(t), sweep = ((t * 0.35) % 1.6) - 0.3, L = w + h;
+      ctx.globalCompositeOperation = "lighter";
+      var g = ctx.createLinearGradient(0, 0, w, h);
+      rainbow.forEach(function (c, i) { var pos = sweep + i * 0.025; if (pos >= 0 && pos <= 1) g.addColorStop(pos, withAlpha(c, 0.16 * a)); });
+      if (sweep - 0.05 >= 0 && sweep - 0.05 <= 1) g.addColorStop(sweep - 0.05, "rgba(0,0,0,0)");
+      if (sweep + 0.18 >= 0 && sweep + 0.18 <= 1) g.addColorStop(sweep + 0.18, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      glints.forEach(function (gl, i) {
+        var tw = Math.pow(Math.max(0, Math.sin(t * gl.sp + gl.ph)), 4); if (tw < 0.05) return;
+        var x = gl.x * w, y = gl.y * h, s = gl.s * tw;
+        ctx.strokeStyle = withAlpha(rainbow[i % rainbow.length], 0.9 * a * tw); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x - s, y); ctx.lineTo(x + s, y); ctx.moveTo(x, y - s); ctx.lineTo(x, y + s); ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255," + a * tw + ")"; ctx.beginPath(); ctx.arc(x, y, 1.5, 0, TAU); ctx.fill();
+      });
+      void L;
+    };
+  }
+
   var SCENE_KEYS = Object.keys(SCENES);
   var TITLE_KEYS = ["stagger", "type", "slam", "blur", "flip", "rise", "glitch", "decode"];
   var OVERLAY_KEYS = ["none", "scanlines", "vignette", "grid", "noise"];
-  var FORCED = { "Beyond Axiom": { scene: "graph", title: "type", overlay: "grid" } };
+  var FORCED = { "Beyond Axiom": { scene: "graph", accent: "dust", title: "type", overlay: "grid" } };
 
-  function encode(f) {
-    return SCENE_KEYS.indexOf(f.scene) + SCENE_KEYS.length * (TITLE_KEYS.indexOf(f.title) + TITLE_KEYS.length * OVERLAY_KEYS.indexOf(f.overlay));
-  }
-  function decode(idx) {
-    var s = idx % SCENE_KEYS.length; idx = (idx - s) / SCENE_KEYS.length;
-    var t = idx % TITLE_KEYS.length; var o = (idx - t) / TITLE_KEYS.length;
-    return { scene: SCENE_KEYS[s], title: TITLE_KEYS[t], overlay: OVERLAY_KEYS[o] };
-  }
-
+  /* Every Epic+ aura gets its own scene + accent pairing (no two share one); title style and
+     overlay are added on top for extra variety. Below Epic there is no cutscene. */
   var assignments = null;
   function build(list) {
-    var total = SCENE_KEYS.length * TITLE_KEYS.length * OVERLAY_KEYS.length;
-    var rng = mulberry32(777);
-    var order = []; for (var i = 0; i < total; i++) order.push(i);
-    for (var j = total - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)); var tmp = order[j]; order[j] = order[k]; order[k] = tmp; }
-    var used = {}; assignments = {};
-    list.forEach(function (a) { var f = FORCED[a.name]; if (f) { used[encode(f)] = true; assignments[a.id] = f; } });
+    var rng = mulberry32(777), pick = mulberry32(4242), pairs = [], used = {};
+    SCENE_KEYS.forEach(function (sc) { ACCENT_KEYS.forEach(function (ac) { if (!SKIP_PAIRS[sc + "|" + ac]) pairs.push(sc + "|" + ac); }); });
+    for (var j = pairs.length - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)), tmp = pairs[j]; pairs[j] = pairs[k]; pairs[k] = tmp; }
+    assignments = {};
+    list.forEach(function (a) { var f = FORCED[a.name]; if (f) { used[f.scene + "|" + f.accent] = true; assignments[a.id] = f; } });
     var ptr = 0;
     list.forEach(function (a) {
       if (assignments[a.id] || a.rarity < 10000) return;
-      while (used[order[ptr]]) ptr++;
-      used[order[ptr]] = true;
-      assignments[a.id] = decode(order[ptr++]);
+      while (used[pairs[ptr]]) ptr++;
+      var pr = pairs[ptr++].split("|");
+      used[pr[0] + "|" + pr[1]] = true;
+      assignments[a.id] = { scene: pr[0], accent: pr[1], title: TITLE_KEYS[Math.floor(pick() * TITLE_KEYS.length)], overlay: OVERLAY_KEYS[Math.floor(pick() * OVERLAY_KEYS.length)] };
     });
   }
 
@@ -1689,6 +1797,6 @@
     return { done: text.length * step + anim, cancel: cancel };
   }
 
-  global.REVEALS = { SCENES: SCENES, SCENE_KEYS: SCENE_KEYS, TITLE_KEYS: TITLE_KEYS, OVERLAY_KEYS: OVERLAY_KEYS, assign: assign, applyTitle: applyTitle, titleAnim: titleAnim, mulberry32: mulberry32, _build: build };
+  global.REVEALS = { SCENES: SCENES, SCENE_KEYS: SCENE_KEYS, TITLE_KEYS: TITLE_KEYS, OVERLAY_KEYS: OVERLAY_KEYS, assign: assign, applyTitle: applyTitle, titleAnim: titleAnim, ACCENTS: ACCENTS, ACCENT_KEYS: ACCENT_KEYS, makeShinyLayer: makeShinyLayer, mulberry32: mulberry32, _build: build };
   if (typeof module !== "undefined" && module.exports) module.exports = global.REVEALS;
 })(typeof window !== "undefined" ? window : globalThis);

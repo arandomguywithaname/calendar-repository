@@ -39,6 +39,8 @@
     cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000
   };
 
+  function powerFor(rarity) { return Math.round(10 + 8 * Math.pow(Math.log2(rarity), 1.7)); }
+
   function tierOf(aura) {
     for (var i = 0; i < TIERS.length; i++) if (aura.rarity < TIERS[i].max) return TIERS[i];
     return TIERS[TIERS.length - 1];
@@ -191,7 +193,7 @@
       }
       a.c1 = a.colors[0];
       a.c2 = a.colors[1];
-      a.power = Math.round(10 + 8 * Math.pow(Math.log2(a.rarity), 1.7));
+      a.power = powerFor(a.rarity);
       a.coins = Math.max(1, Math.floor(2 * Math.log2(a.rarity))) + TIER_COIN_BONUS[tier.key];
       a.cutscene = tier.cutscene;
       a.id = idx;
@@ -201,10 +203,30 @@
   }
 
   var list = build();
+
+  /* Shiny forms: 78.5% of auras (615 of 784) get one. Each is fixed at x2, x3, x4 or x5,
+     the multipliers spread evenly. Rolling that aura has a 1-in-multiplier chance of being
+     shiny, so a shiny's true odds are its normal odds times the multiplier. */
+  var SHINY_SHARE = 0.785;
+  var SHINY_COUNT = Math.round(TOTAL * SHINY_SHARE);
+  (function () {
+    var rng = mulberry32(785), order = list.map(function (a) { return a.id; }), i;
+    for (i = order.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
+    list.forEach(function (a) { a.shiny = 0; });
+    for (i = 0; i < SHINY_COUNT; i++) {
+      var a = list[order[i]], k = 2 + (i % 4);
+      a.shiny = k;
+      a.shinyRarity = a.rarity * k;
+      a.shinyPower = powerFor(a.shinyRarity);
+      a.shinyCoins = a.coins * k;
+    }
+  })();
   var byRarityDesc = list.slice().sort(function (a, b) { return b.rarity - a.rarity; });
 
   var API = {
     TOTAL: TOTAL,
+    SHINY_COUNT: SHINY_COUNT,
+    powerFor: powerFor,
     list: list,
     byRarityDesc: byRarityDesc,
     TIERS: TIERS,
