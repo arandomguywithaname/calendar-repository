@@ -7,8 +7,9 @@ loadout, and fight bots or a friend.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, and a red
   storm for Fury of Darkness.
-- **A unique reveal for every aura.** Common and Uncommon rolls are quick and plain.
-  Everything from Rare upward takes over the screen with its own animation: 24
+- **A unique reveal for every aura.** Common, Uncommon and Rare rolls stay on the roll
+  screen (Rare still gets the slot-machine slowdown, flash and banner). Everything
+  from Epic upward takes over the screen with its own animation: 24
   scene concepts (a rarity-over-time graph that climbs to the aura's odds, an
   odometer, slot reels, a terminal readout, shattering glass, an eclipse, a portal,
   a storm, meteors, falling code, an ECG heartbeat, a constellation, radar, an
@@ -16,7 +17,7 @@ loadout, and fight bots or a friend.
   a DNA helix, a waveform, a pixel dissolve, a racing clock) crossed with 8 title
   styles and 5 overlays, assigned so no two auras share a combination. Beyond Axiom
   always gets the graph. Cosmic Veil and Fury of Darkness keep their bespoke
-  sequences. Rare reveals last about 3 seconds, Epic 4, Legendary and up 6, then
+  sequences. Epic reveals last about 4 seconds, Legendary and up 6, then
   the roll screen erupts with flash, sparks, rings, beams and a tier banner. Preview
   any aura's reveal from the Index tab.
 - **Secret potion.** The shop has a "? ? ?" card under the counter. The Elixir of the

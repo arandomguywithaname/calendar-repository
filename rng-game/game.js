@@ -757,7 +757,7 @@
     if (S.history.length > 12) S.history.length = 12;
     if (S.stats.best === null || A.byId(S.stats.best).rarity < aura.rarity) S.stats.best = aura.id;
     if (equippedAura() === null) S.equipped = aura.id;
-    if (ti >= 2) S.stats.cutscenes++;
+    if (ti >= 3) S.stats.cutscenes++;
     save();
 
     FX.clear();
@@ -776,8 +776,8 @@
         cooldownUntil = Date.now() + rollCooldown();
         setTimeout(function () { $("#btn-roll").disabled = false; }, Math.max(0, cooldownUntil - Date.now()));
       };
-      if (ti >= 2 && !S.settings.skipCutscenes) {
-        /* A beat of suspense: the orb trembles and dims before the screen is taken over. */
+      if (ti >= 3 && !S.settings.skipCutscenes) {
+        /* Epic and rarer: a beat of suspense, then the screen is taken over. */
         stage.classList.add("suspense");
         $("#roll-name").textContent = "…";
         $("#roll-name").className = "roll-name";
@@ -2666,7 +2666,7 @@
       var cnt = document.createElement("span");
       cnt.className = "cnt";
       row.appendChild(makeSwatch(a)); row.appendChild(name); row.appendChild(tier); row.appendChild(odds); row.appendChild(cnt);
-      if (a.rarity >= 1000) {
+      if (a.rarity >= 10000) {
         var pv = document.createElement("button");
         pv.className = "btn small";
         pv.textContent = "▶ Preview";
@@ -2898,7 +2898,7 @@
   function revealDuration(aura) {
     if (aura.special) return 6;
     var ti = tierIndex(aura);
-    return ti === 2 ? 3.4 : ti === 3 ? 4.4 : 6;
+    return ti <= 3 ? 4.4 : 6;
   }
 
   function playCutscene(aura, preview) {
