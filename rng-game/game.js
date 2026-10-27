@@ -555,8 +555,16 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
     function frame(now) {
-      var dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
+      /* rAF timestamps can be slightly earlier than the moment start() ran, so never step backwards. */
+      var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+      last = Math.max(last, now);
+      try { draw(now, dt); } catch (e) { parts = []; }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+      if (parts.length || orbit.length || beams.on) raf = requestAnimationFrame(frame);
+      else { running = false; ctx.clearRect(0, 0, canvas.width, canvas.height); }
+    }
+    function draw(now, dt) {
       if (now - lastLayout > 400) resize();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       var c = center();
@@ -608,7 +616,7 @@
           ctx.strokeStyle = p.color;
           ctx.lineWidth = p.width * p.life;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, Math.max(0, p.rad), 0, Math.PI * 2);
           ctx.stroke();
           return;
         }
@@ -619,13 +627,9 @@
         ctx.globalAlpha = Math.max(0, p.life);
         ctx.fillStyle = p.spark ? "#fff" : p.color;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (0.4 + p.life * 0.6), 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, Math.max(0, p.size * (0.4 + p.life * 0.6)), 0, Math.PI * 2);
         ctx.fill();
       });
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-      if (parts.length || orbit.length || beams.on) raf = requestAnimationFrame(frame);
-      else { running = false; ctx.clearRect(0, 0, canvas.width, canvas.height); }
     }
     window.addEventListener("resize", resize);
     return { burst: burst, ring: ring, ambient: ambient, clear: clear, resize: resize };
@@ -1354,12 +1358,12 @@
     }
     function spark(x, y, r, color, alpha) {
       ctx.globalAlpha = alpha; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, TAU); ctx.fill();
       ctx.globalAlpha = 1;
     }
     function ringAt(x, y, r, color, width, alpha) {
       ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, TAU); ctx.stroke();
       ctx.globalAlpha = 1;
     }
     function makeParts(n, fn) { var out = []; for (var i = 0; i < n; i++) out.push(fn(i)); return out; }
@@ -1670,7 +1674,7 @@
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.shadowBlur = 0;
       ctx.strokeStyle = "#fff"; ctx.lineWidth = Math.max(1, width * 0.3); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     }
-    function spark(x, y, r, color, a) { ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+    function spark(x, y, r, color, a) { ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
     function ring(x, y, r, color, width, a) { ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; }
     function parts(n, fn) { var o = []; for (var i = 0; i < n; i++) o.push(fn(i)); return o; }
     function seg(p, a, b) { return Math.max(0, Math.min(1, (p - a) / (b - a))); }
@@ -2887,22 +2891,24 @@
   /* Reveal pacing by tier: how long the scene builds, how long the name takes to spell out,
      and how long the finished name and odds stay fully on screen before the fade. */
   var REVEAL_PACE = {
-    3: { scene: 4.4, spell: 0.9, hold: 1.2 },  /* Epic */
-    4: { scene: 5.4, spell: 1.4, hold: 1.8 },  /* Legendary */
-    5: { scene: 6.0, spell: 1.7, hold: 2.3 },  /* Cosmic */
-    6: { scene: 6.6, spell: 2.0, hold: 2.7 },  /* Divine */
-    7: { scene: 7.2, spell: 2.3, hold: 3.1 },  /* Transcendent */
-    8: { scene: 7.2, spell: 2.3, hold: 3.4 }   /* Forbidden */
+    3: { scene: 4.4, spell: 0.9, hold: 1.4 },  /* Epic */
+    4: { scene: 5.6, spell: 1.4, hold: 2.2 },  /* Legendary */
+    5: { scene: 6.6, spell: 1.8, hold: 3.0 },  /* Cosmic */
+    6: { scene: 7.6, spell: 2.2, hold: 3.5 },  /* Divine */
+    7: { scene: 8.6, spell: 2.6, hold: 4.0 },  /* Transcendent */
+    8: { scene: 8.6, spell: 2.6, hold: 4.5 }   /* Forbidden */
   };
+  /* Cosmic and rarer stay up until the player taps; this is only a safety net so Auto Roll never stalls. */
+  var REVEAL_WAIT_MAX = 30;
 
   /* Work out the whole reveal timeline up front, in seconds, so the fade can never start
      before the name has spelled out and the odds have appeared and been on screen for `hold`. */
   function revealTimeline(aura) {
     var text, sceneDur, titleAt, style, step, oddsFloor, hold, r = null;
     if (aura.special === "cosmic") {
-      text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.3; style = "stagger"; step = 0.09; oddsFloor = 4.6; hold = 3.0;
+      text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.3; style = "stagger"; step = 0.09; oddsFloor = 4.6; hold = 3.5;
     } else if (aura.special === "fury") {
-      text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.1; style = "glitch"; step = 0.08; oddsFloor = 4.6; hold = 3.6;
+      text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.1; style = "glitch"; step = 0.08; oddsFloor = 4.6; hold = 4.5;
     } else {
       var pace = REVEAL_PACE[Math.max(3, Math.min(8, tierIndex(aura)))];
       r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
@@ -2915,7 +2921,11 @@
     var oddsAt = Math.max(oddsFloor, lettersIn - 0.2);
     /* 1s covers the odds fading in, with margin for slower devices. */
     var end = Math.max(sceneDur + 0.4, oddsAt + 1.0 + hold) + CUTSCENE_FADE;
-    return { text: text, sceneDur: sceneDur, titleAt: titleAt, style: style, step: step, oddsAt: oddsAt, lettersIn: lettersIn, hold: hold, end: end, reveal: r };
+    /* Taps can't skip until the whole name and the odds are on screen. */
+    var skipAt = Math.max(lettersIn, oddsAt + 0.8);
+    var wait = tierIndex(aura) >= 5;
+    if (wait) end = Math.max(end, REVEAL_WAIT_MAX);
+    return { text: text, sceneDur: sceneDur, titleAt: titleAt, style: style, step: step, oddsAt: oddsAt, lettersIn: lettersIn, hold: hold, end: end, skipAt: skipAt, wait: wait, reveal: r };
   }
 
   function scheduleTitle(tl) {
@@ -2946,6 +2956,8 @@
       CS.title.textContent = "";
       CS.odds.textContent = A.formatOdds(aura.rarity);
       CS.endAt = tl.end;
+      CS.skipAt = tl.skipAt;
+      CS.hint.textContent = tl.wait ? "tap anywhere to continue" : "tap to continue";
 
       var ctx = CS.canvas.getContext("2d");
       function resize() {
@@ -2977,7 +2989,7 @@
         csTimer(Math.max(0, tl.titleAt * 1000 - 300), function () { CS.pre.classList.add("show"); });
         scheduleTitle(tl);
       }
-      csTimer(1200, function () { CS.hint.classList.add("show"); });
+      csTimer(tl.skipAt * 1000, function () { CS.hint.classList.add("show"); if (tl.wait) CS.hint.classList.add("wait"); });
       csTimer((CS.endAt - CUTSCENE_FADE) * 1000, function () { CS.el.style.opacity = "0"; });
 
       CS.el.classList.remove("hidden");
@@ -3014,7 +3026,8 @@
     if (r) r();
   }
 
-  CS.el.addEventListener("click", function () { if (CS.running && performance.now() - CS.start > 1000) endCutscene(); });
+  /* A tap only skips once the name and odds are fully shown, so quick taps on Roll can't eat a rare reveal. */
+  CS.el.addEventListener("click", function () { if (CS.running && (performance.now() - CS.start) / 1000 >= CS.skipAt) endCutscene(); });
 
   function drawCosmic() {
     var FLASH = 3.1;
