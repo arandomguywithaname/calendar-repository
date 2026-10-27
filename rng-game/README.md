@@ -12,8 +12,9 @@ loadout, and fight bots or a friend.
   of the 641 auras from Epic upward takes over the screen with a cutscene no other
   aura shares: one of 54 scenes paired with one of 14 effect layers (shooting stars,
   snow, embers, rain, bubbles, searchlights, lightning, petals, orbiting motes,
-  glitch bars, god rays, drifting dust, bokeh, ribbons), and every scene + effect
-  pairing is used at most once, plus one of 8 title styles and 5 overlays. Scenes
+  glitch bars, god rays, drifting dust, bokeh, ribbons, halo rings, floating gems),
+  and every scene + effect pairing is used at most once, plus one of 8 title styles
+  and 5 overlays. Scenes
   include a rarity-over-time graph, an odometer, slot reels, a terminal readout,
   shattering glass, an eclipse, a portal, a storm, meteors, falling code, an ECG
   heartbeat, a constellation, radar, a black hole, a warp tunnel, fireworks, a DNA
@@ -30,9 +31,13 @@ loadout, and fight bots or a friend.
   is 1 in 4,000,000,000. Shinies are separate collectibles: their own inventory
   card, a rainbow ring and sparkles on the orb, a rainbow name, more power (worked
   out from the shiny odds), coins multiplied by the same number, and a rainbow sheen
-  plus chime over the cutscene. Rolled below Epic, a shiny still gets a banner and a
-  rainbow burst on the roll screen. The Index tags each aura's multiplier, counts
-  shinies found and has a ✨ button to preview the shiny cutscene.
+  plus chime over the cutscene. Every shiny gets a cutscene: Epic+ shinies play
+  their aura's cutscene with the rainbow treatment, and the 110 shinies of Common,
+  Uncommon and Rare auras each get their own short cutscene (a scene + effect
+  pairing no other aura or shiny uses), so all 751 cutscenes are different. The
+  Index tags each aura's multiplier, counts shinies found and has a ✨ button to
+  preview the shiny cutscene. Shinies are common enough (a shiny Common is 1 in 6)
+  that about 1 roll in 3 is shiny; the Skip cutscenes setting turns them all off.
 - **Reveals always finish.** The timeline is worked out per aura so rarer tiers
   build longer and the name and odds always finish before anything fades. Taps
   can't skip a reveal until the name and odds are fully shown, so quick taps on
@@ -74,7 +79,8 @@ loadout, and fight bots or a friend.
   in with that ID. Each ID has its own save slot. IDs are stored in the browser, so
   there is no server and no password; the Export / Import save codes move progress
   between devices. A Save button sits in the header.
-- **Admin console** (Stats tab, or press `` ` ``): `luck 1000 10`, `coins 5000`,
+- **Admin console**: scroll to the bottom of the Stats tab, or press `` ` `` (backtick)
+  anywhere on a keyboard. No password. Commands: `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `roll Fury of Darkness`, `give Cosmic Veil shiny`,
   `roll Beyond Axiom shiny`, `potion zenith 3`, `ability all`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
