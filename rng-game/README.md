@@ -9,17 +9,21 @@ loadout, and fight bots or a friend.
   storm for Fury of Darkness.
 - **A unique reveal for every aura.** Common, Uncommon and Rare rolls stay on the roll
   screen (Rare still gets the slot-machine slowdown, flash and banner). Everything
-  from Epic upward takes over the screen with its own animation: 24
+  from Epic upward takes over the screen with its own animation: 34
   scene concepts (a rarity-over-time graph that climbs to the aura's odds, an
   odometer, slot reels, a terminal readout, shattering glass, an eclipse, a portal,
   a storm, meteors, falling code, an ECG heartbeat, a constellation, radar, an
   equalizer, a vortex, a black hole, a warp tunnel, pulse rings, fireworks, ash,
-  a DNA helix, a waveform, a pixel dissolve, a racing clock) crossed with 8 title
-  styles and 5 overlays, assigned so no two auras share a combination. Beyond Axiom
-  always gets the graph. Cosmic Veil and Fury of Darkness keep their bespoke
-  sequences. Epic reveals last about 4 seconds, Legendary and up 6, then
-  the roll screen erupts with flash, sparks, rings, beams and a tier banner. Preview
-  any aura's reveal from the Index tab.
+  a DNA helix, a waveform, a pixel dissolve, a racing clock, northern lights, a
+  kaleidoscope, a summoning circle, a glitching VHS tape, a growing tree, an atom,
+  an hourglass, fortune cards, cherry blossoms and a ringed planet) crossed with 8
+  title styles and 5 overlays, assigned so no two auras share a combination.
+  Beyond Axiom always gets the graph. Cosmic Veil and Fury of Darkness keep their
+  bespoke sequences. Rarer tiers get longer reveals: the timeline is worked out up
+  front so the name always finishes spelling out and the odds stay on screen
+  before the fade (about 6 seconds for Epic, up to about 11 for Transcendent).
+  Afterwards the roll screen erupts with flash, sparks, rings, beams and a tier
+  banner. Preview any aura's reveal from the Index tab.
 - **Secret potion.** The shop has a "? ? ?" card under the counter. The Elixir of the
   Million (1,000,000 coins, x1,000,000 luck for one roll) reveals itself to anyone
   holding a million coins, anyone who clicks the ✦ logo seven times, or the admin
@@ -70,6 +74,6 @@ connect the repo and set the publish directory to `rng-game`.
 - `style.css` – styling and CSS animations
 - `auras.js` – deterministic generator for the 784 auras
 - `abilities.js` – ability mechanics and the per-aura signature kit generator
-- `reveals.js` – the 24 reveal scenes, title styles and the unique per-aura assignment
+- `reveals.js` – the 34 reveal scenes, title styles and the unique per-aura assignment
 - `game.js` – game logic, battle engine, PvP, accounts, cutscene engine
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections

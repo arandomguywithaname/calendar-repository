@@ -2884,21 +2884,47 @@
 
   function csTimer(ms, fn) { CS.timers.push(setTimeout(fn, ms)); }
 
-  /* Show the title in the given style starting at `at` ms, then the odds once the letters are in. */
-  function scheduleTitle(text, at, style, step, latestOdds) {
-    csTimer(at, function () {
-      var r = REVEALS.applyTitle(CS.title, text, style, step);
-      CS.cancelTitle = r.cancel;
-      CS.title.classList.add("show");
-      var oddsAt = Math.min(latestOdds, at + Math.max(0.3, r.done - 0.5) * 1000);
-      csTimer(Math.max(0, oddsAt - at), function () { CS.odds.classList.add("show"); });
-    });
+  /* Reveal pacing by tier: how long the scene builds, how long the name takes to spell out,
+     and how long the finished name and odds stay fully on screen before the fade. */
+  var REVEAL_PACE = {
+    3: { scene: 4.4, spell: 0.9, hold: 1.2 },  /* Epic */
+    4: { scene: 5.4, spell: 1.4, hold: 1.8 },  /* Legendary */
+    5: { scene: 6.0, spell: 1.7, hold: 2.3 },  /* Cosmic */
+    6: { scene: 6.6, spell: 2.0, hold: 2.7 },  /* Divine */
+    7: { scene: 7.2, spell: 2.3, hold: 3.1 },  /* Transcendent */
+    8: { scene: 7.2, spell: 2.3, hold: 3.4 }   /* Forbidden */
+  };
+
+  /* Work out the whole reveal timeline up front, in seconds, so the fade can never start
+     before the name has spelled out and the odds have appeared and been on screen for `hold`. */
+  function revealTimeline(aura) {
+    var text, sceneDur, titleAt, style, step, oddsFloor, hold, r = null;
+    if (aura.special === "cosmic") {
+      text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.3; style = "stagger"; step = 0.09; oddsFloor = 4.6; hold = 3.0;
+    } else if (aura.special === "fury") {
+      text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.1; style = "glitch"; step = 0.08; oddsFloor = 4.6; hold = 3.6;
+    } else {
+      var pace = REVEAL_PACE[Math.max(3, Math.min(8, tierIndex(aura)))];
+      r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
+      var scene = REVEALS.SCENES[r.scene];
+      text = aura.name; sceneDur = pace.scene; style = r.title; hold = pace.hold;
+      titleAt = scene.titleAt * sceneDur; oddsFloor = scene.oddsAt * sceneDur;
+      step = Math.min(0.16, Math.max(0.045, pace.spell / Math.max(1, text.length)));
+    }
+    var lettersIn = titleAt + text.length * step + Math.min(REVEALS.titleAnim(style), 0.6);
+    var oddsAt = Math.max(oddsFloor, lettersIn - 0.2);
+    /* 1s covers the odds fading in, with margin for slower devices. */
+    var end = Math.max(sceneDur + 0.4, oddsAt + 1.0 + hold) + CUTSCENE_FADE;
+    return { text: text, sceneDur: sceneDur, titleAt: titleAt, style: style, step: step, oddsAt: oddsAt, lettersIn: lettersIn, hold: hold, end: end, reveal: r };
   }
 
-  function revealDuration(aura) {
-    if (aura.special) return 6;
-    var ti = tierIndex(aura);
-    return ti <= 3 ? 4.4 : 6;
+  function scheduleTitle(tl) {
+    csTimer(tl.titleAt * 1000, function () {
+      var res = REVEALS.applyTitle(CS.title, tl.text, tl.style, tl.step);
+      CS.cancelTitle = res.cancel;
+      CS.title.classList.add("show");
+    });
+    csTimer(tl.oddsAt * 1000, function () { CS.odds.classList.add("show"); });
   }
 
   function playCutscene(aura, preview) {
@@ -2906,7 +2932,7 @@
       if (CS.running) { resolve(); return; }
       var kind = aura.special || "generic";
       var level = aura.cutscene;
-      var dur = revealDuration(aura);
+      var tl = revealTimeline(aura);
       CS.running = true;
       CS.resolve = resolve;
       CS.el.className = "cutscene kind-" + kind;
@@ -2919,7 +2945,7 @@
       CS.pre.textContent = preview ? "Preview · " + tierName(aura) : tierName(aura) + " aura";
       CS.title.textContent = "";
       CS.odds.textContent = A.formatOdds(aura.rarity);
-      CS.endAt = dur;
+      CS.endAt = tl.end;
 
       var ctx = CS.canvas.getContext("2d");
       function resize() {
@@ -2934,24 +2960,22 @@
         CS.draw = drawCosmic();
         Sound.cosmic();
         csTimer(3300, function () { CS.pre.classList.add("show"); });
-        scheduleTitle(aura.name.toUpperCase(), 3300, "stagger", 0.09, 4600);
+        scheduleTitle(tl);
       } else if (kind === "fury") {
         CS.draw = drawFury();
         Sound.fury();
-        scheduleTitle(aura.name.toUpperCase(), 3100, "glitch", 0.08, 4600);
+        scheduleTitle(tl);
         csTimer(3900, function () { CS.pre.classList.add("show"); });
       } else {
-        var r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
+        var r = tl.reveal;
         var scene = REVEALS.SCENES[r.scene];
-        var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: aura.rarity, dur: dur, level: level, tierName: tierName(aura), rng: REVEALS.mulberry32(aura.id * 31 + 7) };
+        var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: aura.rarity, dur: tl.sceneDur, level: level, tierName: tierName(aura), rng: REVEALS.mulberry32(aura.id * 31 + 7) };
         CS.draw = scene.make(env);
         CS.overlay.classList.add("ov-" + r.overlay);
         CS.text.style.setProperty("--ty", String(scene.textY || 0.5));
         Sound.rare(Math.max(0, level));
-        var at = scene.titleAt * dur * 1000;
-        csTimer(Math.max(0, at - 300), function () { CS.pre.classList.add("show"); });
-        var step = Math.min(0.16, Math.max(0.05, (dur * 0.22) / Math.max(1, aura.name.length)));
-        scheduleTitle(aura.name, at, r.title, step, scene.oddsAt * dur * 1000);
+        csTimer(Math.max(0, tl.titleAt * 1000 - 300), function () { CS.pre.classList.add("show"); });
+        scheduleTitle(tl);
       }
       csTimer(1200, function () { CS.hint.classList.add("show"); });
       csTimer((CS.endAt - CUTSCENE_FADE) * 1000, function () { CS.el.style.opacity = "0"; });
@@ -3522,6 +3546,7 @@
     state: function () { return S; },
     preview: function (name) { var a = findAura(name); if (a) playCutscene(a, true); },
     reveals: REVEALS,
+    revealTimeline: function (name) { var a = findAura(name); return a ? revealTimeline(a) : null; },
     admin: runAdmin,
     engine: Engine,
     kits: K,
