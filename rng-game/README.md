@@ -51,7 +51,10 @@ loadout, and fight bots or a friend.
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
-  their own named kits (Titan Bot has no healing move). Every mechanic has its own battle animation (slashes, a
+  their own named kits (Titan Bot has no healing move). 15 bots run from the Training
+  Dummy (power 15) to Eternity Bot (power 13,000, +250,000 coins); the top six (Inferno,
+  Glacier, Tempest, Phantom, Dragon and Eternity) need a Fury-class aura, and the last
+  ones also Titan's Brew and healing potions. Every mechanic has its own battle animation (slashes, a
   falling hammer, lightning, a nova, a hex shield, a life-drain stream, and so on),
   with the attacker lunging or casting, a floating ability name, and a matching
   sound. When the attacker's aura is Legendary or rarer, the ability takes over the

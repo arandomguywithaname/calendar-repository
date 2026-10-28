@@ -167,7 +167,13 @@
     titan:     [["heavy", "Boulder Fist"], ["shield", "Stone Skin"], ["strike", "Rock Throw"], ["burst", "Tectonic Slam"]], /* no healing */
     celestial: [["precision", "Judgement Ray"], ["heal", "Divine Light"], ["reflect", "Halo Mirror"], ["focus", "Silent Prayer"]],
     void:      [["poison", "Void Rot"], ["weaken", "Entropy Field"], ["drain", "Soul Siphon"], ["stun", "Null Pulse"]],
-    omega:     [["burst", "Omega Beam"], ["stun", "System Shock"], ["heal", "Reboot"], ["reflect", "Deflector Array"], ["barrage", "Gatling Protocol"]]
+    omega:     [["burst", "Omega Beam"], ["stun", "System Shock"], ["heal", "Reboot"], ["reflect", "Deflector Array"], ["barrage", "Gatling Protocol"]],
+    inferno:   [["strike", "Flame Lash"], ["heavy", "Magma Fist"], ["poison", "Searing Brand"], ["focus", "Stoke the Forge"]],
+    glacier:   [["strike", "Ice Shard"], ["stun", "Deep Freeze"], ["guard", "Ice Wall"], ["weaken", "Frostbite"], ["heavy", "Avalanche"]],
+    tempest:   [["strike", "Gale Slash"], ["precision", "Thunderbolt"], ["barrage", "Chain Lightning"], ["stun", "Static Shock"], ["focus", "Eye of the Storm"]],
+    phantom:   [["strike", "Spectral Claw"], ["drain", "Soul Rend"], ["reflect", "Ghost Veil"], ["weaken", "Haunting Wail"], ["execute", "Final Whisper"]],
+    dragon:    [["strike", "Claw Swipe"], ["burst", "Dragon's Breath"], ["heavy", "Tail Crash"], ["shield", "Scale Armor"], ["barrage", "Wing Storm"]],
+    eternity:  [["strike", "Endless Strike"], ["burst", "Big Bang"], ["execute", "Heat Death"], ["drain", "Entropy Drain"], ["stun", "Time Stop"], ["heal", "Rebirth of Stars"]]
   };
 
   function botKit(botId) {

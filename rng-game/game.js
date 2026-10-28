@@ -79,7 +79,13 @@
     { id: "titan",     name: "Titan Bot",      icon: "🗿", power: 1000, reward: 1800 },
     { id: "celestial", name: "Celestial Bot",  icon: "👼", power: 1500, reward: 3500 },
     { id: "void",      name: "Void Bot",       icon: "🕳️", power: 2200, reward: 7000 },
-    { id: "omega",     name: "Omega Bot",      icon: "💀", power: 3000, reward: 15000, boss: true }
+    { id: "omega",     name: "Omega Bot",      icon: "💀", power: 3000, reward: 15000, boss: true },
+    { id: "inferno",   name: "Inferno Bot",    icon: "🔥", power: 4000,  reward: 25000 },
+    { id: "glacier",   name: "Glacier Bot",    icon: "🧊", power: 5000,  reward: 40000 },
+    { id: "tempest",   name: "Tempest Bot",    icon: "⛈️", power: 6500,  reward: 65000 },
+    { id: "phantom",   name: "Phantom Bot",    icon: "👻", power: 8000,  reward: 100000 },
+    { id: "dragon",    name: "Dragon Bot",     icon: "🐉", power: 10000, reward: 160000, boss: true },
+    { id: "eternity",  name: "Eternity Bot",   icon: "♾️", power: 13000, reward: 250000, boss: true }
   ];
 
   var AUTO_UNLOCK_COST = 1000;
