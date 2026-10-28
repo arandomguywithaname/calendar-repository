@@ -74,11 +74,28 @@ loadout, and fight bots or a friend.
   turns into a random potion. Battle: healing, Greater Healing, Strength, Titan's
   Brew (double damage), Iron Skin (start with a shield) and Second Wind (survive a
   killing blow once).
-- **Login by ID**: a new player enters a name (2 to 50 characters) and gets a random
-  7-digit ID, shown at the top of the page (click it to copy). Returning players log
-  in with that ID. Each ID has its own save slot. IDs are stored in the browser, so
-  there is no server and no password; the Export / Import save codes move progress
-  between devices. A Save button sits in the header.
+- **Login on any device**: a new player enters a name (2 to 50 characters) and gets a
+  random 7-digit ID, shown at the top of the page (click it to copy). Entering that ID
+  on another phone or computer loads the same progress. Saves upload a few seconds
+  after each change and whenever the tab is hidden; an idle device quietly picks up
+  progress made elsewhere. A badge next to the ID shows ☁️ Online, Saving…, ⚠️ Offline
+  (keep playing; it syncs when the connection is back) or 💻 This device (the site has
+  no account server, see Deploy). Accounts made before this version go online
+  automatically and keep their ID (a new one is issued only if someone online already
+  has it). There is no password: anyone with an ID can open that account. Export /
+  Import save codes still work as a backup. A Save button sits in the header.
+- **One device rolls at a time**: rolling takes a 20-second "turn" on the account from
+  the server, renewed while you keep rolling, auto-rolling or watching a reveal. If
+  another device (or browser tab) tries to roll meanwhile, both devices get a red
+  **Error 145** warning: "You are rolling on two devices simultaneously!", and that
+  rolling on both might crash your account. The second device can roll about 20
+  seconds after the first one stops (straight away if it closes the tab), and it
+  first loads the first device's newest progress.
+- **Error codes**, shown in red: **145** two devices rolling at once, **404** network
+  or account-server problem, **435** buying a potion (not enough coins), **102** using
+  a potion (none left, a stronger one already active, healing outside a fight, not your
+  turn), **98** account problems (bad name or ID, no player with that ID, a bad save
+  code, or progress replaced by a newer save from another device).
 - **Admin console**: scroll to the bottom of the Stats tab, or press `` ` `` (backtick)
   anywhere on a keyboard. No password. Commands: `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `roll Fury of Darkness`, `give Cosmic Veil shiny`,
@@ -87,8 +104,19 @@ loadout, and fight bots or a friend.
 
 ## Deploy to Netlify
 
-No build step. Drag the zip (or this folder) onto https://app.netlify.com/drop, or
-connect the repo and set the publish directory to `rng-game`.
+No build step and no npm install.
+
+- **With online accounts (log in on any device, one device rolls at a time):** connect
+  the GitHub repo in Netlify (Add new site → Import an existing project) and set the
+  **base directory** to `rng-game`. `netlify.toml` publishes the folder, and Netlify
+  deploys the account function in `netlify/functions/account.mjs`, which stores
+  accounts in Netlify Blobs (built into Netlify, nothing to configure). The Netlify CLI
+  works too: `netlify deploy --prod` from the `rng-game` folder.
+- **Drag and drop** (the zip or this folder onto https://app.netlify.com/drop) publishes
+  the game. Functions are meant to be deployed from Git or the CLI, so if the account
+  function isn't running, IDs only work on the device that made them and logged-in
+  players see a one-time Error 404 note saying online accounts aren't set up.
+  Everything else plays normally.
 
 ## Files
 
@@ -96,7 +124,12 @@ connect the repo and set the publish directory to `rng-game`.
 - `style.css` – styling and CSS animations
 - `auras.js` – deterministic generator for the 784 auras
 - `abilities.js` – ability mechanics and the per-aura signature kit generator
-- `reveals.js` – the 54 reveal scenes, 14 effect layers, the shiny sheen, title styles
+- `reveals.js` – the 54 reveal scenes, 16 effect layers, the shiny sheen, title styles
   and the unique per-aura assignment
 - `game.js` – game logic, battle engine, PvP, accounts, cutscene engine
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections
+- `netlify/functions/account.mjs` – the online account server: create / load accounts,
+  upload saves (with revision checks so one device can't silently overwrite another),
+  and the one-device roll lease
+- `netlify/vendor/netlify-blobs.mjs` – @netlify/blobs 10.7.13 (MIT) bundled into one
+  file, so the function needs no npm install

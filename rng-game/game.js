@@ -9,6 +9,10 @@
   var ACCOUNTS_KEY = "aura-realms-accounts-v2";
   var OLD_ACCOUNTS_KEY = "aura-realms-accounts";
   var SESSION_KEY = "aura-realms-session-v2";
+  var TAB_KEY = "aura-realms-tab";
+  var CLOUD_URL = "/.netlify/functions/account";
+  /* Error codes shown to players. */
+  var ERR = { DUAL: 145, NETWORK: 404, POTION_BUY: 435, POTION_USE: 102, ACCOUNT: 98 };
   var currentUser = null; /* the 7-digit ID of the logged-in player, or null for guest */
   function saveKey() { return currentUser ? SAVE_BASE + ":" + currentUser : SAVE_BASE; }
   var ROLL_COOLDOWN = 1000;
@@ -160,17 +164,28 @@
   }
 
   function save() {
+    saveLocal();
+    cloudChanged();
+  }
+
+  /* Write the save to this browser only, without queueing an upload. */
+  function saveLocal() {
     try { localStorage.setItem(saveKey(), JSON.stringify(S)); } catch (e) { /* storage unavailable */ }
   }
 
   /* ---------- Helpers ---------- */
 
-  function toast(msg, cls) {
+  function toast(msg, cls, ms) {
     var el = document.createElement("div");
     el.className = "toast" + (cls ? " " + cls : "");
     el.textContent = msg;
     $("#toasts").appendChild(el);
-    setTimeout(function () { el.remove(); }, 2900);
+    setTimeout(function () { el.remove(); }, ms || 2900);
+  }
+
+  /* A red toast carrying one of the game's error codes (see ERR). */
+  function errorToast(code, msg) {
+    toast("⚠️ Error " + code + ": " + msg, "err", 5000);
   }
 
   function currentLuck() {
@@ -837,7 +852,7 @@
   }
 
   setInterval(function () {
-    if (autoOn && canRoll()) doRoll();
+    if (autoOn && canRoll()) requestRoll();
   }, 200);
 
   setInterval(function () {
@@ -905,7 +920,8 @@
 
   function usePotion(key) {
     var p = POTIONS[key];
-    if (!p || !S.potions[key]) return;
+    if (!p) return;
+    if (!S.potions[key]) { errorToast(ERR.POTION_USE, "You have no " + p.name + " left."); return; }
     var note = "";
     if (p.kind === "luck") {
       S.luckEffects.push({ mult: p.mult, rolls: p.rolls });
@@ -915,20 +931,20 @@
       S.goldEffects.push({ mult: p.mult, rolls: p.rolls });
     } else if (p.kind === "haste") {
       var active = hasteActive();
-      if (active && p.div < S.hasteDiv) { toast("A stronger speed potion is already active", "bad"); return; }
+      if (active && p.div < S.hasteDiv) { errorToast(ERR.POTION_USE, "A stronger speed potion is already active."); return; }
       S.hasteUntil = (active && p.div === S.hasteDiv ? S.hasteUntil : Date.now()) + p.seconds * 1000;
       S.hasteDiv = p.div;
     } else if (p.kind === "strength") {
-      if (S.strengthMult >= p.mult) { toast("An equal or stronger damage boost is already waiting", "bad"); return; }
+      if (S.strengthMult >= p.mult) { errorToast(ERR.POTION_USE, "An equal or stronger damage boost is already waiting."); return; }
       S.strengthMult = p.mult;
     } else if (p.kind === "shield") {
-      if (S.shieldReady > 0) { toast("Iron Skin is already waiting for your next fight", "bad"); return; }
+      if (S.shieldReady > 0) { errorToast(ERR.POTION_USE, "Iron Skin is already waiting for your next fight."); return; }
       S.shieldReady = p.pct;
     } else if (p.kind === "revive") {
-      if (S.reviveReady > 0) { toast("Second Wind is already waiting for your next fight", "bad"); return; }
+      if (S.reviveReady > 0) { errorToast(ERR.POTION_USE, "Second Wind is already waiting for your next fight."); return; }
       S.reviveReady = p.pct;
     } else if (p.kind === "heal") {
-      if (!battle || battle.over || view.pvp) { toast("Healing potions are used during a bot fight", "bad"); return; }
+      if (!battle || battle.over || view.pvp) { errorToast(ERR.POTION_USE, "Healing potions are used during a bot fight."); return; }
       healInBattle(key);
       return;
     } else if (p.kind === "mystery") {
@@ -960,7 +976,8 @@
 
   function buyPotion(key) {
     var p = POTIONS[key];
-    if (S.coins < p.cost) { toast("Not enough coins", "bad"); return; }
+    if (!p) return;
+    if (S.coins < p.cost) { errorToast(ERR.POTION_BUY, "Not enough coins for " + p.name + " (" + fmt(p.cost) + " needed)."); return; }
     S.coins -= p.cost;
     S.potions[key] = (S.potions[key] || 0) + 1;
     Sound.buy();
@@ -1000,9 +1017,8 @@
       var actions = document.createElement("div");
       actions.className = "actions";
       var buy = document.createElement("button");
-      buy.className = "btn small primary";
+      buy.className = "btn small primary" + (S.coins < p.cost ? " cant-afford" : "");
       buy.textContent = "Buy";
-      buy.disabled = S.coins < p.cost;
       buy.addEventListener("click", function () { buyPotion(key); });
       actions.appendChild(buy);
       if (S.potions[key]) {
@@ -2360,7 +2376,7 @@
   function healInBattle(key) {
     key = key || (S.potions.heal > 0 ? "heal" : "greatheal");
     if (!battle || battle.over || view.pvp || !(S.potions[key] > 0)) return;
-    if (battle.turn !== view.me || view.animating) { toast("Wait for your turn", "bad"); return; }
+    if (battle.turn !== view.me || view.animating) { errorToast(ERR.POTION_USE, "Wait for your turn to drink a potion."); return; }
     S.potions[key]--;
     var me = battle.a;
     var amount = Math.round(me.maxHp * POTIONS[key].pct);
@@ -2895,7 +2911,7 @@
         if (!canRoll()) { adminPrint("Can't roll right now (busy, cooling down or in a fight)."); break; }
         adminPrint("Rolling " + auraLabel(ra, rollShinyWord) + "…");
         switchTab("roll");
-        doRoll(ra, rollShinyWord);
+        requestRoll(ra, rollShinyWord);
         break;
       }
       case "potion": {
@@ -3442,6 +3458,7 @@
     badge.classList.toggle("hidden", !currentUser);
     badge.textContent = currentUser ? "ID " + currentUser : "";
     $("#btn-login").textContent = currentUser ? "Account" : "Login";
+    renderCloudStatus();
   }
 
   function copyId() {
@@ -3451,54 +3468,406 @@
     else done();
   }
 
+  function loginError(code, msg) {
+    $("#login-error").textContent = "⚠️ Error " + code + ": " + msg;
+  }
+
+  var loginBusy = false;
+  function setLoginBusy(on) {
+    loginBusy = on;
+    $("#login-submit").disabled = on;
+  }
+
   function submitLogin(e) {
     e.preventDefault();
-    var err = $("#login-error");
+    if (loginBusy) return;
+    $("#login-error").textContent = "";
     var acc = readAccounts();
     if (loginMode === "new") {
       var name = $("#login-name").value.trim().replace(/\s+/g, " ");
-      if (name.length < 2 || name.length > 50) { err.textContent = "Name must be 2 to 50 characters."; return; }
-      if (!/^[\p{L}\p{N} _'.-]+$/u.test(name)) { err.textContent = "Use letters, numbers, spaces, _ ' . or -"; return; }
-      var id = newAccountId(acc);
-      acc[id] = { id: id, name: name, created: Date.now() };
-      writeAccounts(acc);
-      switchUser(id, true);
-      S.playerName = name.slice(0, 16);
-      save();
-      renderAll();
-      setLoginMode("account");
-      $("#login-error").textContent = "";
-      toast("Welcome, " + name + "! Your ID is " + id, "gold");
+      if (name.length < 2 || name.length > 50) { loginError(ERR.ACCOUNT, "Name must be 2 to 50 characters."); return; }
+      if (!/^[\p{L}\p{N} _'.-]+$/u.test(name)) { loginError(ERR.ACCOUNT, "Use letters, numbers, spaces, _ ' . or -"); return; }
+      /* A brand new account starts from the guest progress it was created from. */
+      var start = currentUser ? defaultState() : JSON.parse(JSON.stringify(S));
+      start.playerName = name.slice(0, 16);
+      if (Cloud.state === "missing") { finishNewAccount(newAccountId(acc), name, start, 0); return; }
+      setLoginBusy(true);
+      cloudCall("create", { name: name, device: deviceId, save: start }).then(function (r) {
+        if (r.status === 200) finishNewAccount(r.data.id, r.data.name, start, r.data.rev);
+        else loginError(r.data.code || ERR.ACCOUNT, r.data.error || "Could not create your account.");
+      }, function (err) {
+        /* Offline: make the account on this device now; it goes online the next time the server answers. */
+        noteNetwork(err);
+        finishNewAccount(newAccountId(readAccounts()), name, start, 0);
+      }).then(function () { setLoginBusy(false); });
     } else {
       var typed = $("#login-id").value.trim();
-      if (!/^\d{7}$/.test(typed)) { err.textContent = "Enter your 7-digit ID."; return; }
-      if (!acc[typed]) { err.textContent = "No player with ID " + typed + " on this device. If you played elsewhere, import your save code below."; return; }
-      switchUser(typed, false);
-      closeLogin();
-      toast("Welcome back, " + acc[typed].name + "!");
+      if (!/^\d{7}$/.test(typed)) { loginError(ERR.ACCOUNT, "Enter your 7-digit ID."); return; }
+      if (acc[typed]) {
+        switchUser(typed);
+        closeLogin();
+        toast("Welcome back, " + acc[typed].name + "!");
+        return;
+      }
+      if (Cloud.state === "missing") { loginError(ERR.ACCOUNT, "No player with ID " + typed + " on this device. Online accounts aren't set up on this site, so import your save code below."); return; }
+      setLoginBusy(true);
+      cloudCall("load", { id: typed }).then(function (r) {
+        if (r.status !== 200) { loginError(r.data.code || ERR.ACCOUNT, r.data.error || "Could not load that account."); return; }
+        var list = readAccounts();
+        list[typed] = { id: typed, name: r.data.name, created: Date.now(), cloud: true, rev: r.data.rev, dirty: false };
+        writeAccounts(list);
+        try { localStorage.setItem(SAVE_BASE + ":" + typed, JSON.stringify(hydrate(r.data.save))); } catch (err) { /* ignore */ }
+        switchUser(typed);
+        closeLogin();
+        toast("Welcome back, " + r.data.name + "! Your progress is loaded.", "gold");
+      }, function (err) {
+        loginError(ERR.NETWORK, err && err.missing ? "Online accounts aren't set up on this site." : "Can't reach the account server. Check your connection and try again.");
+      }).then(function () { setLoginBusy(false); });
     }
   }
 
+  /* Store a newly made account on this device and switch to it. rev 0 means it is not online yet. */
+  function finishNewAccount(id, name, start, rev) {
+    var acc = readAccounts();
+    acc[id] = { id: id, name: name, created: Date.now(), cloud: rev > 0, rev: rev, dirty: false };
+    writeAccounts(acc);
+    try { localStorage.setItem(SAVE_BASE + ":" + id, JSON.stringify(start)); } catch (e) { /* ignore */ }
+    switchUser(id);
+    setLoginMode("account");
+    toast("Welcome, " + name + "! Your ID is " + id + (rev > 0 ? ". Use it to log in on any device." : ""), "gold");
+  }
+
   /* Save the current slot, switch slots and reload everything from the new one. */
-  function switchUser(user, isNew) {
-    save();
+  function switchUser(user) {
     if (battle && !battle.over) forfeit();
     pvpLeave(true);
-    var guestState = (!currentUser && isNew) ? JSON.parse(JSON.stringify(S)) : null;
+    save();
+    pushSave(true); /* upload the account being left straight away */
+    releaseLease();
     currentUser = user;
     try { if (user) localStorage.setItem(SESSION_KEY, user); else localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
-    if (guestState && !localStorage.getItem(saveKey())) {
-      /* A brand new account inherits the guest progress it was created from. */
-      S = guestState;
-      save();
-    } else {
-      S = load();
-    }
+    S = load();
     autoOn = false;
+    hideDualWarning();
     resetRollDisplay();
     renderAccount();
     renderAll();
+    syncAccount();
   }
+
+  /* ---------- Online accounts: the save lives on the server, so an ID works on every device ----------
+     Only one device (or browser tab) may roll on an account at a time: rolling takes a short lease from the
+     server, and while one device holds it the others get error 145. */
+
+  /* Each browser tab counts as its own device for the roll lock; the ID survives reloading the tab. */
+  var deviceId = (function () {
+    var d = null;
+    try { d = sessionStorage.getItem(TAB_KEY); } catch (e) { /* ignore */ }
+    if (!d || !/^[a-z0-9]{8,40}$/.test(d)) {
+      var buf = new Uint8Array(16);
+      if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(buf);
+      else for (var i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+      d = Array.prototype.map.call(buf, function (b) { return (b % 36).toString(36); }).join("");
+      try { sessionStorage.setItem(TAB_KEY, d); } catch (e) { /* ignore */ }
+    }
+    return d;
+  })();
+
+  var Cloud = {
+    state: "local",   /* local (nothing online yet), synced, saving, offline, missing (this site has no account server) */
+    leaseUntil: 0,    /* this tab may roll until then */
+    claiming: null,   /* in-flight claim */
+    pushTimer: null,
+    pushing: false,
+    changes: 0,       /* bumps on every save, so a finished upload knows whether newer changes are waiting */
+    contestSeen: 0,
+    netWarned: false
+  };
+  var CONFLICT_MSG = "This account was played on another device at the same time, so its newest save was loaded here.";
+
+  function accountMeta(id) {
+    var acc = readAccounts();
+    return id && acc[id] ? acc[id] : null;
+  }
+  function updateMeta(id, fields) {
+    var acc = readAccounts();
+    if (!acc[id]) return;
+    Object.assign(acc[id], fields);
+    writeAccounts(acc);
+  }
+  function cloudOn() {
+    var m = accountMeta(currentUser);
+    return !!(m && m.cloud) && Cloud.state !== "missing";
+  }
+  function setCloudState(st) {
+    Cloud.state = st;
+    renderCloudStatus();
+  }
+
+  /* POST one action to the account server. Resolves { status, data }; rejects { net: true } when the
+     server can't be reached, with missing: true when this site has no account server at all. */
+  function cloudCall(action, payload, keepalive) {
+    var body = JSON.stringify(Object.assign({ action: action }, payload || {}));
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+    var done = function () { if (timer) clearTimeout(timer); };
+    return fetch(CLOUD_URL, { method: "POST", headers: { "content-type": "application/json" }, body: body, keepalive: !!keepalive && body.length < 60000, signal: ctrl ? ctrl.signal : undefined })
+      .then(function (res) {
+        if ((res.headers.get("content-type") || "").indexOf("application/json") === -1) {
+          /* A plain page instead of JSON: the site was published without the account function. */
+          var missing = res.status === 404 || res.status === 405 || res.status === 501;
+          if (missing) setCloudState("missing");
+          throw { net: true, missing: missing };
+        }
+        return res.json().then(function (data) {
+          if (res.status >= 500) throw { net: true };
+          Cloud.netWarned = false;
+          return { status: res.status, data: data };
+        });
+      })
+      .then(function (r) { done(); return r; }, function (e) { done(); throw e && e.net ? e : { net: true }; });
+  }
+
+  /* Tell the player once per outage that the account server can't be reached. */
+  function noteNetwork(e) {
+    if (e && e.missing) {
+      if (!Cloud.netWarned && currentUser) errorToast(ERR.NETWORK, "Online accounts aren't set up on this site, so your ID only works on this device.");
+    } else {
+      setCloudState("offline");
+      if (!Cloud.netWarned) errorToast(ERR.NETWORK, "Can't reach the account server. You can keep playing; progress syncs when you're back online.");
+    }
+    Cloud.netWarned = true;
+  }
+
+  /* Called by save(): queue an upload, at most one every few seconds. */
+  function cloudChanged() {
+    if (!Cloud || !currentUser) return;
+    Cloud.changes++;
+    var m = accountMeta(currentUser);
+    if (!m) return;
+    if (!m.dirty) updateMeta(currentUser, { dirty: true });
+    if (m.cloud && Cloud.state !== "missing" && !Cloud.pushTimer) Cloud.pushTimer = setTimeout(pushSave, 3000);
+  }
+
+  /* Upload the save. Refused when another device is rolling (145) or saved first (98). */
+  function pushSave(keepalive) {
+    clearTimeout(Cloud.pushTimer);
+    Cloud.pushTimer = null;
+    var id = currentUser, m = accountMeta(id);
+    if (!m || !m.cloud || !m.dirty || Cloud.state === "missing") return;
+    if (Cloud.pushing && !keepalive) { Cloud.pushTimer = setTimeout(pushSave, 3000); return; }
+    Cloud.pushing = true;
+    var stamp = Cloud.changes;
+    setCloudState("saving");
+    cloudCall("save", { id: id, device: deviceId, rev: m.rev || 0, save: S }, keepalive).then(function (r) {
+      var still = id === currentUser && stamp !== Cloud.changes;
+      if (r.status === 200) {
+        updateMeta(id, { rev: r.data.rev, dirty: still });
+        setCloudState("synced");
+        if (still && !Cloud.pushTimer) Cloud.pushTimer = setTimeout(pushSave, 3000);
+      } else if (r.data.code === ERR.DUAL) {
+        setCloudState("synced");
+        if (id === currentUser) { showDualWarning(false, r.data.waitMs); Cloud.pushTimer = setTimeout(pushSave, 20000); }
+      } else if (r.data.code === ERR.ACCOUNT && r.data.save !== undefined) {
+        if (id === currentUser) adoptCloudSave(r.data, CONFLICT_MSG);
+      } else if (r.status === 404) {
+        /* The account is gone from the server (for example a fresh site): upload it again. */
+        updateMeta(id, { cloud: false });
+        if (id === currentUser) goOnline();
+      } else {
+        errorToast(ERR.ACCOUNT, r.data.error || "Your save could not be stored online.");
+      }
+    }, function (e) {
+      noteNetwork(e);
+      if (!e.missing && !Cloud.pushTimer) Cloud.pushTimer = setTimeout(pushSave, 15000);
+    }).then(function () { Cloud.pushing = false; });
+  }
+
+  /* Replace this device's progress with the account's newest save from the server. `lostMsg` is shown
+     when local changes had to be dropped; otherwise a friendly note, unless `quiet`. */
+  function adoptCloudSave(data, lostMsg, quiet) {
+    var hadChanges = !!(accountMeta(currentUser) || {}).dirty;
+    var incoming = hydrate(data.save);
+    if (JSON.stringify(incoming) === JSON.stringify(S)) {
+      /* Same progress (typically this device's own last upload, whose reply was lost): just catch up the revision. */
+      updateMeta(currentUser, { rev: data.rev, dirty: false });
+      setCloudState("synced");
+      return;
+    }
+    S = incoming;
+    saveLocal();
+    updateMeta(currentUser, { rev: data.rev, dirty: false, name: data.name || accountName(currentUser) });
+    Cloud.changes++;
+    setCloudState("synced");
+    resetRollDisplay();
+    renderAccount();
+    renderAll();
+    if (hadChanges && lostMsg) errorToast(ERR.ACCOUNT, lostMsg);
+    else if (!quiet) toast("☁️ Loaded your newest progress from your other device");
+  }
+
+  /* Ask the server for this tab's turn to roll. Resolves true when rolling may go ahead. */
+  function claimLease() {
+    if (Cloud.claiming) return Cloud.claiming;
+    var id = currentUser, m = accountMeta(id);
+    Cloud.claiming = cloudCall("claim", { id: id, device: deviceId, rev: m.rev || 0 }).then(function (r) {
+      if (id !== currentUser) return false;
+      if (r.status === 200) {
+        Cloud.leaseUntil = Date.now() + r.data.leaseMs;
+        if (r.data.save !== undefined) adoptCloudSave(r.data, CONFLICT_MSG);
+        if (Cloud.state !== "saving") setCloudState("synced");
+        if (r.data.contestAt && r.data.contestAt !== Cloud.contestSeen) {
+          Cloud.contestSeen = r.data.contestAt;
+          showDualWarning(true);
+        }
+        return true;
+      }
+      if (r.data.code === ERR.DUAL) {
+        Cloud.leaseUntil = 0;
+        if (autoOn) { autoOn = false; renderAll(); }
+        showDualWarning(false, r.data.waitMs);
+        return false;
+      }
+      if (r.status === 404) { updateMeta(id, { cloud: false }); goOnline(); return true; }
+      errorToast(ERR.ACCOUNT, r.data.error || "Your account could not be checked.");
+      return false;
+    }, function (e) {
+      /* Offline: keep playing on this device; the save syncs later. */
+      noteNetwork(e);
+      return true;
+    }).then(function (ok) { Cloud.claiming = null; return ok; });
+    return Cloud.claiming;
+  }
+
+  /* Give the roll lease back so another device can roll straight away. */
+  function releaseLease() {
+    if (!currentUser || Cloud.leaseUntil <= Date.now()) return;
+    Cloud.leaseUntil = 0;
+    cloudCall("release", { id: currentUser, device: deviceId }, true).catch(function () { /* the lease runs out by itself */ });
+  }
+
+  /* Roll, but on an online account first make sure no other device is rolling on it. */
+  function requestRoll(forced, forcedShiny) {
+    if (!canRoll()) return;
+    if (!cloudOn()) { doRoll(forced, forcedShiny); return; }
+    var left = Cloud.leaseUntil - Date.now();
+    if (left > 3000) {
+      doRoll(forced, forcedShiny);
+      if (left < 12000) claimLease();
+      return;
+    }
+    if (Cloud.claiming) return;
+    claimLease().then(function (ok) { if (ok && canRoll()) doRoll(forced, forcedShiny); });
+  }
+
+  /* Bring the logged-in account up to date: upload one that only exists here, or load newer progress. */
+  function syncAccount() {
+    var id = currentUser, m = accountMeta(id);
+    renderCloudStatus();
+    if (!m || Cloud.state === "missing") return;
+    if (!m.cloud) { goOnline(); return; }
+    cloudCall("load", { id: id }).then(function (r) {
+      if (id !== currentUser) return;
+      if (r.status === 404) { updateMeta(id, { cloud: false }); goOnline(); return; }
+      if (r.status !== 200) return;
+      setCloudState("synced");
+      var meta = accountMeta(id);
+      if (r.data.rev !== meta.rev) adoptCloudSave(r.data, CONFLICT_MSG);
+      else if (meta.dirty) pushSave();
+    }, noteNetwork);
+  }
+
+  /* Put the logged-in account (made on this device before accounts were online) on the server,
+     keeping its ID if nobody online has it. */
+  function goOnline() {
+    var id = currentUser, m = accountMeta(id);
+    if (!m || Cloud.state === "missing") return;
+    var name = String(m.name || "").replace(/[^\p{L}\p{N} _'.-]/gu, "").trim().slice(0, 50);
+    if (name.length < 2) name = "Player " + id;
+    var stamp = Cloud.changes;
+    cloudCall("create", { name: name, device: deviceId, save: S, preferId: id }).then(function (r) {
+      if (id !== currentUser) return;
+      if (r.status !== 200) { errorToast(r.data.code || ERR.ACCOUNT, r.data.error || "Your account could not be put online."); return; }
+      if (r.data.id !== id) moveAccount(id, r.data.id);
+      updateMeta(r.data.id, { cloud: true, rev: r.data.rev, dirty: stamp !== Cloud.changes, name: r.data.name });
+      setCloudState("synced");
+      renderAccount();
+      if (r.data.id === id) toast("☁️ Your account is online: log in with ID " + id + " on any device", "gold");
+      else toast("☁️ Your account is online with a new ID, " + r.data.id + " (someone already had " + id + "). Write it down!", "gold", 8000);
+      if (stamp !== Cloud.changes) pushSave();
+    }, noteNetwork);
+  }
+
+  /* Re-key the logged-in account to a new ID on this device. */
+  function moveAccount(oldId, newId) {
+    var acc = readAccounts();
+    acc[newId] = Object.assign({}, acc[oldId], { id: newId });
+    delete acc[oldId];
+    writeAccounts(acc);
+    try {
+      var slot = localStorage.getItem(SAVE_BASE + ":" + oldId);
+      if (slot) localStorage.setItem(SAVE_BASE + ":" + newId, slot);
+      localStorage.removeItem(SAVE_BASE + ":" + oldId);
+      localStorage.setItem(SESSION_KEY, newId);
+    } catch (e) { /* ignore */ }
+    currentUser = newId;
+  }
+
+  /* While this tab isn't rolling, pick up progress made on another device. */
+  function cloudCatchUp() {
+    if (!cloudOn() || Cloud.pushing || Cloud.claiming || busy || CS.running || (battle && !battle.over) || Cloud.leaseUntil > Date.now()) return;
+    var id = currentUser;
+    cloudCall("peek", { id: id }).then(function (r) {
+      if (id !== currentUser || r.status !== 200) return;
+      if (Cloud.state === "offline") setCloudState("synced");
+      var meta = accountMeta(id);
+      if (r.data.rev === meta.rev) { if (meta.dirty) pushSave(); return; }
+      return cloudCall("load", { id: id }).then(function (l) {
+        if (id !== currentUser || l.status !== 200 || busy || CS.running || (battle && !battle.over)) return;
+        adoptCloudSave(l.data, CONFLICT_MSG, true);
+      });
+    }, noteNetwork);
+  }
+
+  /* The red error 145 banner. `rolling` is true on the device that holds the lease and heard that another tried. */
+  function showDualWarning(rolling, waitMs) {
+    var secs = Math.max(1, Math.ceil((waitMs || 20000) / 1000));
+    $("#dual-text").textContent = rolling
+      ? "Another device just tried to roll on this account while this one is rolling. Rolling on both at once might crash your account. Only this device can roll until it stops for 20 seconds."
+      : "This account is already rolling on another device, so this one can't roll right now. Rolling on both at once might crash your account. Stop rolling on the other device, then try again in about " + secs + " seconds.";
+    $("#dual-warning").classList.remove("hidden");
+  }
+  function hideDualWarning() { $("#dual-warning").classList.add("hidden"); }
+
+  function renderCloudStatus() {
+    var el = $("#cloud-status");
+    var m = accountMeta(currentUser);
+    var st = !m ? "" : Cloud.state === "missing" || Cloud.state === "offline" ? Cloud.state : m.cloud ? (Cloud.state === "local" ? "synced" : Cloud.state) : "local";
+    var info = {
+      synced: ["☁️ Online", "Saved online: log in with this ID on any device."],
+      saving: ["☁️ Saving…", "Uploading your progress."],
+      offline: ["⚠️ Offline", "Error 404: can't reach the account server. Progress is kept here and syncs when you're back online."],
+      missing: ["💻 This device", "Online accounts aren't set up on this site, so this ID only works on this device."],
+      local: ["☁️ Connecting…", "Putting your account online."]
+    }[st];
+    el.className = "cloud-status cs-" + st + (info ? "" : " hidden");
+    el.textContent = info ? info[0] : "";
+    el.title = info ? info[1] : "";
+  }
+
+  /* Keep the lease while auto-rolling or watching a reveal; check for other devices' progress while idle. */
+  setInterval(function () {
+    if (!cloudOn()) return;
+    var left = Cloud.leaseUntil - Date.now();
+    if (left > 0 && left < 12000 && (autoOn || CS.running || busy)) claimLease();
+  }, 4000);
+  setInterval(function () { if (document.visibilityState === "visible") cloudCatchUp(); }, 20000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") cloudCatchUp();
+    else pushSave(true);
+  });
+  window.addEventListener("pagehide", function () { pushSave(true); releaseLease(); });
+  window.addEventListener("online", function () { if (currentUser) syncAccount(); });
 
   function resetRollDisplay() {
     FX.clear();
@@ -3517,7 +3886,7 @@
 
   function logout() {
     var id = currentUser;
-    switchUser(null, false);
+    switchUser(null);
     closeLogin();
     toast("Logged out. Your ID " + id + " logs you back in.");
   }
@@ -3543,8 +3912,7 @@
 
   function importSave() {
     var code = $("#save-code").value.trim();
-    var err = $("#login-error");
-    if (code.indexOf("AR1.") !== 0) { err.textContent = "That is not a valid save code."; return; }
+    if (code.indexOf("AR1.") !== 0) { loginError(ERR.ACCOUNT, "That is not a valid save code."); return; }
     try {
       var json = decodeURIComponent(escape(atob(code.slice(4))));
       var data = JSON.parse(json);
@@ -3558,7 +3926,7 @@
       closeLogin();
       toast("Save imported");
     } catch (e) {
-      err.textContent = "Could not read that save code.";
+      loginError(ERR.ACCOUNT, "Could not read that save code.");
     }
   }
 
@@ -3575,7 +3943,7 @@
     if (b) switchTab(b.dataset.tab);
   });
 
-  $("#btn-roll").addEventListener("click", function () { doRoll(); });
+  $("#btn-roll").addEventListener("click", function () { requestRoll(); });
   $("#btn-auto").addEventListener("click", function () {
     if (!S.autoUnlocked) { toast("Unlock Auto Roll in the Shop (" + fmt(AUTO_UNLOCK_COST) + " coins)", "bad"); return; }
     autoOn = !autoOn;
@@ -3609,6 +3977,7 @@
   $("#btn-export").addEventListener("click", exportSave);
   $("#btn-import").addEventListener("click", importSave);
   $("#login-modal").addEventListener("click", function (e) { if (e.target === $("#login-modal")) closeLogin(); });
+  $("#dual-ok").addEventListener("click", hideDualWarning);
   $("#btn-pvp-host").addEventListener("click", pvpHost);
   $("#btn-pvp-join").addEventListener("click", function () { pvpJoin($("#pvp-code").value.trim()); });
   $("#pvp-code").addEventListener("keydown", function (e) { if (e.key === "Enter") pvpJoin($("#pvp-code").value.trim()); });
@@ -3624,7 +3993,7 @@
     var typing = document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
     if (e.code === "Space" && !e.repeat && !typing && $("#tab-roll").classList.contains("active")) {
       e.preventDefault();
-      doRoll();
+      requestRoll();
     }
     if (e.key === "`" && !typing) {
       e.preventDefault();
@@ -3638,6 +4007,7 @@
   resetRollDisplay();
   renderAccount();
   renderAll();
+  syncAccount();
 
   /* Console hooks. */
   window.AuraRealms = {

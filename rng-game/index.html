@@ -24,6 +24,7 @@
     <div class="account">
       <span class="account-name" id="account-name">Guest</span>
       <button class="id-badge hidden" id="account-id" title="Your login ID. Click to copy."></button>
+      <span class="cloud-status hidden" id="cloud-status"></span>
       <button id="btn-save" class="btn small">💾 Save</button>
       <button id="btn-login" class="btn small">Login</button>
     </div>
@@ -230,7 +231,7 @@
   <div id="login-modal" class="modal hidden">
     <div class="modal-box">
       <h2 id="login-title">Login</h2>
-      <p class="muted small-text" id="login-help">New here? Enter a name and you'll get a 7-digit ID. Returning? Enter your ID. IDs live in this browser; use a save code to move to another device.</p>
+      <p class="muted small-text" id="login-help">New here? Enter a name and you'll get a 7-digit ID. Returning? Enter your ID on any device to load your progress. Only one device can roll on an account at a time.</p>
       <div class="mode-switch">
         <button type="button" class="btn small on" id="mode-new">New player</button>
         <button type="button" class="btn small" id="mode-returning">I have an ID</button>
@@ -247,7 +248,7 @@
       <div id="login-current" class="current-id hidden">
         <div class="muted small-text">Your login ID</div>
         <div class="big-id" id="login-current-id"></div>
-        <div class="muted small-text">Write it down. It is the only way to log back in.</div>
+        <div class="muted small-text">Write it down. It logs you in on any device.</div>
       </div>
       <div id="login-known" class="known hidden">
         <div class="muted small-text">Players on this device</div>
@@ -273,6 +274,14 @@
   </div>
   <div id="stage-flash" class="stage-flash"></div>
   <div id="toasts" class="toasts"></div>
+
+  <!-- Error 145: the same account rolling on two devices -->
+  <div id="dual-warning" class="dual-warning hidden" role="alert">
+    <div class="dw-code">⚠️ Error 145</div>
+    <div class="dw-title">You are rolling on two devices simultaneously!</div>
+    <div class="dw-text" id="dual-text"></div>
+    <button type="button" class="btn small" id="dual-ok">OK</button>
+  </div>
 
   <script src="peerjs.min.js"></script>
   <script src="auras.js"></script>
