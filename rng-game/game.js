@@ -819,7 +819,7 @@
     if (S.history.length > 12) S.history.length = 12;
     recordBest(aura, shiny);
     if (equippedAura() === null) { S.equipped = aura.id; S.equippedShiny = shiny; }
-    var cutscene = (ti >= 3 || shiny) && !S.settings.skipCutscenes;
+    var cutscene = ti >= 3 && !S.settings.skipCutscenes;
     if (cutscene) S.stats.cutscenes++;
     save();
 
@@ -840,7 +840,7 @@
         setTimeout(function () { $("#btn-roll").disabled = false; }, Math.max(0, cooldownUntil - Date.now()));
       };
       if (cutscene) {
-        /* Epic and rarer, and every shiny: a beat of suspense, then the screen is taken over. */
+        /* Epic and rarer: a beat of suspense, then the screen is taken over. */
         stage.classList.add("suspense");
         $("#roll-name").textContent = "…";
         $("#roll-name").className = "roll-name";
@@ -2754,14 +2754,14 @@
         pv.title = "Preview this aura's cutscene";
         pv.addEventListener("click", function () { if (!busy) playCutscene(a, true, false); });
         wrap.appendChild(pv);
-      }
-      if (a.shiny) {
-        var ps = document.createElement("button");
-        ps.className = "btn small shiny-btn";
-        ps.textContent = "✨";
-        ps.title = "Preview the shiny cutscene";
-        ps.addEventListener("click", function () { if (!busy) playCutscene(a, true, true); });
-        wrap.appendChild(ps);
+        if (a.shiny) {
+          var ps = document.createElement("button");
+          ps.className = "btn small shiny-btn";
+          ps.textContent = "✨";
+          ps.title = "Preview the shiny cutscene";
+          ps.addEventListener("click", function () { if (!busy) playCutscene(a, true, true); });
+          wrap.appendChild(ps);
+        }
       }
       row.appendChild(wrap);
       indexRows.push({ aura: a, row: row, cnt: cnt });
@@ -2988,8 +2988,6 @@
     7: { scene: 8.6, spell: 2.6, hold: 4.0 },  /* Transcendent */
     8: { scene: 8.6, spell: 2.6, hold: 4.5 }   /* Forbidden */
   };
-  /* Shiny Common, Uncommon and Rare rolls come up often, so their cutscene is short and snappy. */
-  var SHINY_LOW_PACE = { scene: 2.8, spell: 0.6, hold: 0.8 };
   /* Cosmic and rarer stay up until the player taps; this is only a safety net so Auto Roll never stalls. */
   var REVEAL_WAIT_MAX = 30;
 
@@ -3002,8 +3000,8 @@
     } else if (aura.special === "fury") {
       text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.1; style = "glitch"; step = 0.08; oddsFloor = 4.6; hold = 4.5;
     } else {
-      var pace = tierIndex(aura) < 3 ? SHINY_LOW_PACE : REVEAL_PACE[Math.min(8, tierIndex(aura))];
-      r = REVEALS.assign(aura, isShiny(aura, shiny)) || { scene: "pulse", title: "blur", overlay: "none" };
+      var pace = REVEAL_PACE[Math.max(3, Math.min(8, tierIndex(aura)))];
+      r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
       var scene = REVEALS.SCENES[r.scene];
       text = aura.name; sceneDur = pace.scene; style = r.title; hold = pace.hold;
       titleAt = scene.titleAt * sceneDur; oddsFloor = scene.oddsAt * sceneDur;

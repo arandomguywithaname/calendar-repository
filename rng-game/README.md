@@ -12,9 +12,8 @@ loadout, and fight bots or a friend.
   of the 641 auras from Epic upward takes over the screen with a cutscene no other
   aura shares: one of 54 scenes paired with one of 14 effect layers (shooting stars,
   snow, embers, rain, bubbles, searchlights, lightning, petals, orbiting motes,
-  glitch bars, god rays, drifting dust, bokeh, ribbons, halo rings, floating gems),
-  and every scene + effect pairing is used at most once, plus one of 8 title styles
-  and 5 overlays. Scenes
+  glitch bars, god rays, drifting dust, bokeh, ribbons), and every scene + effect
+  pairing is used at most once, plus one of 8 title styles and 5 overlays. Scenes
   include a rarity-over-time graph, an odometer, slot reels, a terminal readout,
   shattering glass, an eclipse, a portal, a storm, meteors, falling code, an ECG
   heartbeat, a constellation, radar, a black hole, a warp tunnel, fireworks, a DNA
@@ -31,13 +30,11 @@ loadout, and fight bots or a friend.
   coming out shiny, so a shiny Fury of Darkness is 1 in 10,000,000,000. Shinies are separate collectibles: their own inventory
   card, a rainbow ring and sparkles on the orb, a rainbow name, more power (worked
   out from the shiny odds), coins multiplied by the same number, and a rainbow sheen
-  plus chime over the cutscene. Every shiny gets a cutscene: Epic+ shinies play
-  their aura's cutscene with the rainbow treatment, and the 110 shinies of Common,
-  Uncommon and Rare auras each get their own short cutscene (a scene + effect
-  pairing no other aura or shiny uses), so all 751 cutscenes are different. The
-  Index tags each aura's multiplier, counts shinies found and has a ✨ button to
-  preview the shiny cutscene. Shinies are common enough (a shiny Common is 1 in 6)
-  that about 1 roll in 3 is shiny; the Skip cutscenes setting turns them all off.
+  plus chime over the cutscene. Only Epic and rarer shinies get a cutscene (their
+  aura's own, with the rainbow treatment); a Common, Uncommon or Rare shiny stays on
+  the roll screen with a shiny banner, rainbow burst and chime. The Index tags each
+  aura's multiplier, counts shinies found and, for Epic and rarer, has a ✨ button to
+  preview the shiny cutscene.
 - **Reveals always finish.** The timeline is worked out per aura so rarer tiers
   build longer and the name and odds always finish before anything fades. Taps
   can't skip a reveal until the name and odds are fully shown, so quick taps on
@@ -124,7 +121,7 @@ No build step and no npm install.
 - `style.css` – styling and CSS animations
 - `auras.js` – deterministic generator for the 784 auras
 - `abilities.js` – ability mechanics and the per-aura signature kit generator
-- `reveals.js` – the 54 reveal scenes, 16 effect layers, the shiny sheen, title styles
+- `reveals.js` – the 54 reveal scenes, 14 effect layers, the shiny sheen, title styles
   and the unique per-aura assignment
 - `game.js` – game logic, battle engine, PvP, accounts, cutscene engine
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections

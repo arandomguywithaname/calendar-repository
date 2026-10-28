@@ -1699,32 +1699,11 @@
           ctx.stroke(); noglow(ctx);
         }
       };
-    },
-    halo: function (env) {
-      return function (ctx, t, w, h) {
-        var R = Math.hypot(w, h) * 0.5; ctx.globalCompositeOperation = "lighter";
-        for (var i = 0; i < 4; i++) { var q = (t * 0.32 + i / 4) % 1, col = env.colors[i % env.colors.length]; ctx.globalAlpha = (1 - q) * 0.55 * fadeA(t); ctx.strokeStyle = col; ctx.lineWidth = 1 + 5 * (1 - q); glow(ctx, col, 14); ctx.beginPath(); ctx.arc(w / 2, h / 2, Math.max(0, q * R), 0, TAU); ctx.stroke(); noglow(ctx); }
-      };
-    },
-    gems: function (env) {
-      var g = arr(18, function () { return { x: env.rng(), y: env.rng(), s: 6 + env.rng() * 12, sp: 0.03 + env.rng() * 0.05, rot: env.rng() * 6, vr: (env.rng() - 0.5) * 2, col: env.colors[Math.floor(env.rng() * env.colors.length)] }; });
-      return function (ctx, t, w, h) {
-        ctx.lineWidth = 1;
-        g.forEach(function (p) {
-          var x = p.x * w + Math.sin(t * 0.6 + p.rot) * 12, y = ((p.y - t * p.sp) % 1 + 1) % 1 * h, s = p.s, sx = Math.cos(p.rot + t * p.vr) * s * 0.7;
-          ctx.globalAlpha = 0.75 * fadeA(t); ctx.fillStyle = withAlpha(p.col, 0.55); ctx.strokeStyle = "rgba(255,255,255,0.8)";
-          ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + sx, y - s * 0.25); ctx.lineTo(x, y + s); ctx.lineTo(x - sx, y - s * 0.25); ctx.closePath(); ctx.fill(); ctx.stroke();
-          var tw = Math.sin(t * 3 + p.rot * 5);
-          if (tw > 0.85) { ctx.fillStyle = "#fff"; ctx.globalAlpha = (tw - 0.85) / 0.15 * fadeA(t); ctx.fillRect(x - 0.75, y - s * 1.6, 1.5, s * 1.2); ctx.fillRect(x - s * 0.6, y - s - 0.75, s * 1.2, 1.5); }
-        });
-      };
     }
   };
   var ACCENT_KEYS = Object.keys(ACCENTS);
-  /* Added after the Epic+ cutscenes were handed out: kept out of that shuffle so no aura's cutscene changes. */
-  var LATE_ACCENTS = { halo: 1, gems: 1 };
   /* Pairings that would just double up on what the scene already does. */
-  var SKIP_PAIRS = { "storm|rain": 1, "storm|lightning": 1, "ash|embers": 1, "sakura|petals": 1, "underwater|bubbles": 1, "jellyfish|bubbles": 1, "starfall|shooting": 1, "comet|shooting": 1, "vhs|glitch": 1, "volcano|embers": 1, "pulse|halo": 1, "crystals|gems": 1, "prism|gems": 1 };
+  var SKIP_PAIRS = { "storm|rain": 1, "storm|lightning": 1, "ash|embers": 1, "sakura|petals": 1, "underwater|bubbles": 1, "jellyfish|bubbles": 1, "starfall|shooting": 1, "comet|shooting": 1, "vhs|glitch": 1, "volcano|embers": 1 };
 
   /* Rainbow glints and a sweeping sheen laid over the whole reveal when the roll is shiny. */
   function makeShinyLayer(env) {
@@ -1756,43 +1735,26 @@
 
   /* Every Epic+ aura gets its own scene + accent pairing (no two share one); title style and
      overlay are added on top for extra variety. Below Epic there is no cutscene. */
-  var assignments = null, shinyAssignments = {};
-  function shuffle(a, rng) {
-    for (var j = a.length - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)), tmp = a[j]; a[j] = a[k]; a[k] = tmp; }
-    return a;
-  }
-
-  /* Every Epic+ aura gets a scene + effect pairing nobody else has; shiny forms of auras below Epic
-     then take pairings from what is left, so their cutscenes are unique too. */
+  var assignments = null;
   function build(list) {
-    var rng = mulberry32(777), pick = mulberry32(4242), pairs = [], late = [], used = {};
-    SCENE_KEYS.forEach(function (sc) { ACCENT_KEYS.forEach(function (ac) { if (!SKIP_PAIRS[sc + "|" + ac]) (LATE_ACCENTS[ac] ? late : pairs).push(sc + "|" + ac); }); });
-    shuffle(pairs, rng);
+    var rng = mulberry32(777), pick = mulberry32(4242), pairs = [], used = {};
+    SCENE_KEYS.forEach(function (sc) { ACCENT_KEYS.forEach(function (ac) { if (!SKIP_PAIRS[sc + "|" + ac]) pairs.push(sc + "|" + ac); }); });
+    for (var j = pairs.length - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)), tmp = pairs[j]; pairs[j] = pairs[k]; pairs[k] = tmp; }
     assignments = {};
-    shinyAssignments = {};
     list.forEach(function (a) { var f = FORCED[a.name]; if (f) { used[f.scene + "|" + f.accent] = true; assignments[a.id] = f; } });
-    function take(from, i) {
-      var pr = from[i].split("|");
-      used[from[i]] = true;
-      return { scene: pr[0], accent: pr[1], title: TITLE_KEYS[Math.floor(pick() * TITLE_KEYS.length)], overlay: OVERLAY_KEYS[Math.floor(pick() * OVERLAY_KEYS.length)] };
-    }
     var ptr = 0;
     list.forEach(function (a) {
       if (assignments[a.id] || a.rarity < 10000) return;
       while (used[pairs[ptr]]) ptr++;
-      assignments[a.id] = take(pairs, ptr++);
-    });
-    var spare = shuffle(pairs.filter(function (pr) { return !used[pr]; }).concat(late), mulberry32(778)), sp = 0;
-    list.forEach(function (a) {
-      if (a.rarity >= 10000 || !a.shiny) return;
-      shinyAssignments[a.id] = take(spare, sp++);
+      var pr = pairs[ptr++].split("|");
+      used[pr[0] + "|" + pr[1]] = true;
+      assignments[a.id] = { scene: pr[0], accent: pr[1], title: TITLE_KEYS[Math.floor(pick() * TITLE_KEYS.length)], overlay: OVERLAY_KEYS[Math.floor(pick() * OVERLAY_KEYS.length)] };
     });
   }
 
-  /* The reveal for an aura; a shiny form below Epic has its own, every other shiny reuses its aura's. */
-  function assign(aura, shiny) {
+  function assign(aura) {
     if (!assignments) build(global.AURAS.list);
-    return (shiny && shinyAssignments[aura.id]) || assignments[aura.id] || null;
+    return assignments[aura.id] || null;
   }
 
   /* Seconds one letter takes to finish animating in, per title style. */
