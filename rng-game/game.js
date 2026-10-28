@@ -3706,7 +3706,10 @@
     resetRollDisplay();
     renderAccount();
     renderAll();
-    if (hadChanges && lostMsg) errorToast(ERR.ACCOUNT, lostMsg);
+    if (data.by === "admin") {
+      if (hadChanges) errorToast(ERR.ACCOUNT, "An admin changed this account, so its newest save was loaded here.");
+      else toast("🛠️ An admin updated your account", "gold");
+    } else if (hadChanges && lostMsg) errorToast(ERR.ACCOUNT, lostMsg);
     else if (!quiet) toast("☁️ Loaded your newest progress from your other device");
   }
 
@@ -3934,6 +3937,148 @@
     }
   }
 
+  /* ---------- Account admin: change any player's online account (locked by the site's ADMIN_KEY) ---------- */
+
+  var aaAccounts = []; /* the last "Show accounts" listing, for names in messages */
+
+  function aaPrint(text) {
+    var out = $("#aa-out");
+    var line = document.createElement("div");
+    line.textContent = text;
+    out.appendChild(line);
+    while (out.childNodes.length > 40) out.removeChild(out.firstChild);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  /* "Name (ID)" for an account from the last listing, or just the ID. */
+  function aaLabel(id) {
+    var a = aaAccounts.filter(function (x) { return x.id === id; })[0];
+    return a ? a.name + " (" + id + ")" : "ID " + id;
+  }
+
+  /* Send one admin command. Resolves the reply data, or null after printing the error. */
+  function accountAdmin(op, fields) {
+    var key = $("#aa-key").value;
+    if (!key) { aaPrint("⚠️ Error 98: Enter the admin key first."); return Promise.resolve(null); }
+    if (Cloud.state === "missing") { aaPrint("⚠️ Error 404: Online accounts aren't set up on this site, so there are no accounts to change."); return Promise.resolve(null); }
+    return cloudCall("admin", Object.assign({ key: key, op: op }, fields || {})).then(function (r) {
+      if (r.status === 200) return r.data;
+      aaPrint("⚠️ Error " + (r.data.code || ERR.ACCOUNT) + ": " + (r.data.error || "That didn't work."));
+      return null;
+    }, function (e) {
+      aaPrint("⚠️ Error 404: " + (e && e.missing ? "Online accounts aren't set up on this site." : "Can't reach the account server."));
+      return null;
+    });
+  }
+
+  /* The 7-digit ID typed in the panel, or null after saying what's wrong. */
+  function aaTargetId() {
+    var id = $("#aa-id").value.trim();
+    if (/^\d{7}$/.test(id)) return id;
+    aaPrint("⚠️ Error 98: Enter a 7-digit account ID, or click one in the list.");
+    return null;
+  }
+
+  /* After a change: reload this device's account if it was touched, and refresh the listing. */
+  function aaChanged(touchedMine) {
+    if (touchedMine) syncAccount();
+    if (!$("#aa-accounts").classList.contains("hidden")) aaList(true);
+  }
+
+  function aaShowWho() {
+    var id = $("#aa-id").value.trim();
+    var a = aaAccounts.filter(function (x) { return x.id === id; })[0];
+    $("#aa-who").textContent = a ? a.name + " · " + fmt(a.auras) + " auras · " + fmt(a.coins) + " coins" : "";
+    document.querySelectorAll("#aa-accounts tbody tr").forEach(function (tr) { tr.classList.toggle("on", tr.dataset.id === id); });
+  }
+
+  function aaList(quiet) {
+    return accountAdmin("list").then(function (d) {
+      if (!d) return;
+      aaAccounts = d.accounts;
+      var box = $("#aa-accounts");
+      box.innerHTML = "";
+      var table = document.createElement("table");
+      table.innerHTML = "<thead><tr><th>ID</th><th>Name</th><th>Auras</th><th>Coins</th><th>Luck</th><th>Rolls</th></tr></thead>";
+      var body = document.createElement("tbody");
+      d.accounts.forEach(function (a) {
+        var tr = document.createElement("tr");
+        tr.dataset.id = a.id;
+        [a.id, a.name, fmt(a.auras), fmt(a.coins), "x" + a.luck.toLocaleString("en-US"), fmt(a.rolls)].forEach(function (v) {
+          var td = document.createElement("td");
+          td.textContent = v;
+          tr.appendChild(td);
+        });
+        tr.addEventListener("click", function () { $("#aa-id").value = a.id; aaShowWho(); });
+        body.appendChild(tr);
+      });
+      table.appendChild(body);
+      box.appendChild(table);
+      box.classList.remove("hidden");
+      if (!quiet) aaPrint(d.accounts.length + " online account" + (d.accounts.length === 1 ? "" : "s") + ". Click one to pick it.");
+      aaShowWho();
+    });
+  }
+
+  function aaErase() {
+    var id = aaTargetId();
+    if (!id) return;
+    var name = $("#aa-aura").value.trim(), aura = null;
+    if (name) {
+      aura = findAura(name);
+      if (!aura) { aaPrint("⚠️ Error 98: No aura matches \"" + name + "\"."); return; }
+    }
+    if (!confirm((aura ? "Erase " + aura.name + " (and its shiny form)" : "Erase EVERY aura") + " from " + aaLabel(id) + "? This can't be undone.")) return;
+    accountAdmin("erase", { id: id, aura: aura ? aura.id : null }).then(function (d) {
+      if (!d) return;
+      aaPrint("Erased " + fmt(d.result) + " aura" + (d.result === 1 ? "" : "s") + (aura ? " (" + aura.name + ")" : "") + " from " + d.account.name + " (" + id + "). " + fmt(d.account.auras) + " left.");
+      aaChanged(id === currentUser);
+    });
+  }
+
+  function aaAddCoins() {
+    var id = aaTargetId();
+    if (!id) return;
+    var n = Math.trunc(Number($("#aa-coins").value));
+    if (!n) { aaPrint("⚠️ Error 98: Enter how many coins to add."); return; }
+    accountAdmin("coins", { id: id, amount: n }).then(function (d) {
+      if (!d) return;
+      aaPrint((n > 0 ? "Added " + fmt(n) + " coins to " : "Took " + fmt(-n) + " coins from ") + d.account.name + " (" + id + "). They have " + fmt(d.result) + " now.");
+      aaChanged(id === currentUser);
+    });
+  }
+
+  function aaAddLuck() {
+    var id = aaTargetId();
+    if (!id) return;
+    var mult = Number($("#aa-luck").value), rolls = Math.trunc(Number($("#aa-luck-rolls").value));
+    if (!(mult > 1)) { aaPrint("⚠️ Error 98: Enter a luck multiplier above 1."); return; }
+    if (!(rolls >= 1)) { aaPrint("⚠️ Error 98: Enter how many rolls the luck lasts."); return; }
+    accountAdmin("luck", { id: id, mult: mult, rolls: rolls }).then(function (d) {
+      if (!d) return;
+      aaPrint("Gave " + d.account.name + " (" + id + ") x" + mult.toLocaleString("en-US") + " luck for " + fmt(rolls) + " roll" + (rolls === 1 ? "" : "s") + ".");
+      aaChanged(id === currentUser);
+    });
+  }
+
+  function aaEraseAll() {
+    var id = aaTargetId();
+    if (!id) return;
+    if (!confirm("Erase EVERY aura on EVERY online account except " + aaLabel(id) + "? This can't be undone.")) return;
+    accountAdmin("eraseAll", { except: [id] }).then(function (d) {
+      if (!d) return;
+      aaPrint("Erased " + fmt(d.removed) + " auras on " + fmt(d.accounts) + " account" + (d.accounts === 1 ? "" : "s") + ". Kept " + aaLabel(id) + ".");
+      aaChanged(!!currentUser && currentUser !== id);
+    });
+  }
+
+  /* Aura names for the erase box's suggestions, filled the first time it's used. */
+  function fillAuraList() {
+    var list = $("#aa-aura-list"), frag = document.createDocumentFragment();
+    A.byRarityDesc.forEach(function (a) { var o = document.createElement("option"); o.value = a.name; frag.appendChild(o); });
+    list.appendChild(frag);
+  }
+
   /* ---------- Wiring ---------- */
 
   function switchTab(name) {
@@ -3982,6 +4127,13 @@
   $("#btn-import").addEventListener("click", importSave);
   $("#login-modal").addEventListener("click", function (e) { if (e.target === $("#login-modal")) closeLogin(); });
   $("#dual-ok").addEventListener("click", hideDualWarning);
+  $("#aa-list").addEventListener("click", function () { aaList(false); });
+  $("#aa-erase").addEventListener("click", aaErase);
+  $("#aa-add-coins").addEventListener("click", aaAddCoins);
+  $("#aa-add-luck").addEventListener("click", aaAddLuck);
+  $("#aa-erase-all").addEventListener("click", aaEraseAll);
+  $("#aa-id").addEventListener("input", aaShowWho);
+  $("#aa-aura").addEventListener("focus", fillAuraList, { once: true });
   $("#btn-pvp-host").addEventListener("click", pvpHost);
   $("#btn-pvp-join").addEventListener("click", function () { pvpJoin($("#pvp-code").value.trim()); });
   $("#pvp-code").addEventListener("keydown", function (e) { if (e.key === "Enter") pvpJoin($("#pvp-code").value.trim()); });

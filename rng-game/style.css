@@ -364,6 +364,15 @@ body.shake-3 { animation: shake3 .9s; }
 .admin-out b { color: var(--gold); }
 .admin-form { display: flex; gap: 8px; align-items: center; }
 .admin-form .prompt { font-family: ui-monospace, monospace; color: var(--accent); font-weight: 700; }
+.acct-admin { display: flex; flex-direction: column; gap: 10px; }
+.aa-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.aa-row input { flex: 1; min-width: 140px; background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--card-border); border-radius: 10px; padding: 9px 12px; font: 500 1rem var(--font-body); }
+.aa-accounts { max-height: 260px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 10px; }
+.aa-accounts table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.aa-accounts th, .aa-accounts td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--card-border); white-space: nowrap; }
+.aa-accounts th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--bg2); }
+.aa-accounts tbody tr { cursor: pointer; }
+.aa-accounts tbody tr:hover, .aa-accounts tbody tr.on { background: rgba(167,139,250,.15); }
 .admin-form input { flex: 1; background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--card-border); border-radius: 10px; padding: 9px 12px; font: 500 1rem ui-monospace, Menlo, Consolas, monospace; }
 
 /* Index */
