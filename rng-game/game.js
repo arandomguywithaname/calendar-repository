@@ -3937,9 +3937,10 @@
     }
   }
 
-  /* ---------- Account admin: change any player's online account (locked by the site's ADMIN_KEY) ---------- */
+  /* ---------- Admin panel: coins, luck and deleting auras on any player's online account (password locked) ---------- */
 
-  var aaAccounts = []; /* the last "Show accounts" listing, for names in messages */
+  var aaKey = "";      /* the admin password, kept only while the panel is unlocked */
+  var aaAccounts = []; /* the last account listing, for names in messages */
 
   function aaPrint(text) {
     var out = $("#aa-out");
@@ -3958,8 +3959,8 @@
 
   /* Send one admin command. Resolves the reply data, or null after printing the error. */
   function accountAdmin(op, fields) {
-    var key = $("#aa-key").value;
-    if (!key) { aaPrint("⚠️ Error 98: Enter the admin key first."); return Promise.resolve(null); }
+    var key = aaKey || $("#aa-key").value;
+    if (!key) { aaPrint("⚠️ Error 98: Type the admin password first."); return Promise.resolve(null); }
     if (Cloud.state === "missing") { aaPrint("⚠️ Error 404: Online accounts aren't set up on this site, so there are no accounts to change."); return Promise.resolve(null); }
     return cloudCall("admin", Object.assign({ key: key, op: op }, fields || {})).then(function (r) {
       if (r.status === 200) return r.data;
@@ -3975,14 +3976,14 @@
   function aaTargetId() {
     var id = $("#aa-id").value.trim();
     if (/^\d{7}$/.test(id)) return id;
-    aaPrint("⚠️ Error 98: Enter a 7-digit account ID, or click one in the list.");
+    aaPrint("⚠️ Error 98: Pick a player in the list, or type their 7-digit ID.");
     return null;
   }
 
   /* After a change: reload this device's account if it was touched, and refresh the listing. */
   function aaChanged(touchedMine) {
     if (touchedMine) syncAccount();
-    if (!$("#aa-accounts").classList.contains("hidden")) aaList(true);
+    if (aaKey) aaList(true);
   }
 
   function aaShowWho() {
@@ -3992,9 +3993,35 @@
     document.querySelectorAll("#aa-accounts tbody tr").forEach(function (tr) { tr.classList.toggle("on", tr.dataset.id === id); });
   }
 
+  /* Check the password, then show the panel with every player. */
+  function aaUnlock(e) {
+    e.preventDefault();
+    var key = $("#aa-key").value;
+    if (!key) { aaPrint("⚠️ Error 98: Type the admin password first."); return; }
+    aaKey = key;
+    aaList(true).then(function (ok) {
+      if (!ok) { aaKey = ""; return; }
+      $("#aa-key").value = "";
+      $("#aa-lock").classList.add("hidden");
+      $("#aa-panel").classList.remove("hidden");
+      aaPrint("🔓 Unlocked. " + aaAccounts.length + " player account" + (aaAccounts.length === 1 ? "" : "s") + ". Click one to pick them.");
+    });
+  }
+
+  function aaRelock() {
+    aaKey = "";
+    aaAccounts = [];
+    $("#aa-accounts").innerHTML = "";
+    $("#aa-id").value = "";
+    $("#aa-who").textContent = "";
+    $("#aa-panel").classList.add("hidden");
+    $("#aa-lock").classList.remove("hidden");
+    aaPrint("🔒 Locked.");
+  }
+
   function aaList(quiet) {
     return accountAdmin("list").then(function (d) {
-      if (!d) return;
+      if (!d) return false;
       aaAccounts = d.accounts;
       var box = $("#aa-accounts");
       box.innerHTML = "";
@@ -4014,9 +4041,9 @@
       });
       table.appendChild(body);
       box.appendChild(table);
-      box.classList.remove("hidden");
       if (!quiet) aaPrint(d.accounts.length + " online account" + (d.accounts.length === 1 ? "" : "s") + ". Click one to pick it.");
       aaShowWho();
+      return true;
     });
   }
 
@@ -4028,10 +4055,10 @@
       aura = findAura(name);
       if (!aura) { aaPrint("⚠️ Error 98: No aura matches \"" + name + "\"."); return; }
     }
-    if (!confirm((aura ? "Erase " + aura.name + " (and its shiny form)" : "Erase EVERY aura") + " from " + aaLabel(id) + "? This can't be undone.")) return;
+    if (!confirm((aura ? "Delete " + aura.name + " (and its shiny form)" : "Delete EVERY aura") + " from " + aaLabel(id) + "? This can't be undone.")) return;
     accountAdmin("erase", { id: id, aura: aura ? aura.id : null }).then(function (d) {
       if (!d) return;
-      aaPrint("Erased " + fmt(d.result) + " aura" + (d.result === 1 ? "" : "s") + (aura ? " (" + aura.name + ")" : "") + " from " + d.account.name + " (" + id + "). " + fmt(d.account.auras) + " left.");
+      aaPrint("🗑️ Deleted " + fmt(d.result) + " aura" + (d.result === 1 ? "" : "s") + (aura ? " (" + aura.name + ")" : "") + " from " + d.account.name + " (" + id + "). " + fmt(d.account.auras) + " left.");
       aaChanged(id === currentUser);
     });
   }
@@ -4043,7 +4070,7 @@
     if (!n) { aaPrint("⚠️ Error 98: Enter how many coins to add."); return; }
     accountAdmin("coins", { id: id, amount: n }).then(function (d) {
       if (!d) return;
-      aaPrint((n > 0 ? "Added " + fmt(n) + " coins to " : "Took " + fmt(-n) + " coins from ") + d.account.name + " (" + id + "). They have " + fmt(d.result) + " now.");
+      aaPrint("🪙 " + (n > 0 ? "Added " + fmt(n) + " coins to " : "Took " + fmt(-n) + " coins from ") + d.account.name + " (" + id + "). They have " + fmt(d.result) + " now.");
       aaChanged(id === currentUser);
     });
   }
@@ -4056,7 +4083,7 @@
     if (!(rolls >= 1)) { aaPrint("⚠️ Error 98: Enter how many rolls the luck lasts."); return; }
     accountAdmin("luck", { id: id, mult: mult, rolls: rolls }).then(function (d) {
       if (!d) return;
-      aaPrint("Gave " + d.account.name + " (" + id + ") x" + mult.toLocaleString("en-US") + " luck for " + fmt(rolls) + " roll" + (rolls === 1 ? "" : "s") + ".");
+      aaPrint("🍀 Gave " + d.account.name + " (" + id + ") x" + mult.toLocaleString("en-US") + " luck for " + fmt(rolls) + " roll" + (rolls === 1 ? "" : "s") + ".");
       aaChanged(id === currentUser);
     });
   }
@@ -4064,10 +4091,10 @@
   function aaEraseAll() {
     var id = aaTargetId();
     if (!id) return;
-    if (!confirm("Erase EVERY aura on EVERY online account except " + aaLabel(id) + "? This can't be undone.")) return;
+    if (!confirm("Delete EVERY aura on EVERY online account except " + aaLabel(id) + "? This can't be undone.")) return;
     accountAdmin("eraseAll", { except: [id] }).then(function (d) {
       if (!d) return;
-      aaPrint("Erased " + fmt(d.removed) + " auras on " + fmt(d.accounts) + " account" + (d.accounts === 1 ? "" : "s") + ". Kept " + aaLabel(id) + ".");
+      aaPrint("🗑️ Deleted " + fmt(d.removed) + " auras on " + fmt(d.accounts) + " account" + (d.accounts === 1 ? "" : "s") + ". Kept " + aaLabel(id) + ".");
       aaChanged(!!currentUser && currentUser !== id);
     });
   }
@@ -4127,7 +4154,8 @@
   $("#btn-import").addEventListener("click", importSave);
   $("#login-modal").addEventListener("click", function (e) { if (e.target === $("#login-modal")) closeLogin(); });
   $("#dual-ok").addEventListener("click", hideDualWarning);
-  $("#aa-list").addEventListener("click", function () { aaList(false); });
+  $("#aa-lock").addEventListener("submit", aaUnlock);
+  $("#aa-relock").addEventListener("click", aaRelock);
   $("#aa-erase").addEventListener("click", aaErase);
   $("#aa-add-coins").addEventListener("click", aaAddCoins);
   $("#aa-add-luck").addEventListener("click", aaAddLuck);

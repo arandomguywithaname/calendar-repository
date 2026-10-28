@@ -210,36 +210,50 @@
           <button class="btn small primary" type="submit">Run</button>
         </form>
       </div>
-      <h3 class="section-title">Account admin <span class="muted small-text">(every player's online account)</span></h3>
+      <h3 class="section-title">Admin <span class="muted small-text">(change any player's account)</span></h3>
       <div class="acct-admin">
-        <p class="muted small-text">Erase auras, add coins or add luck on any online account. Locked with the site's admin key: the ADMIN_KEY setting in Netlify.</p>
-        <div class="aa-row">
-          <input id="aa-key" type="password" placeholder="Admin key" autocomplete="off">
-          <button type="button" class="btn small" id="aa-list">Show accounts</button>
+        <form class="aa-row" id="aa-lock" autocomplete="off">
+          <input id="aa-key" type="password" placeholder="Admin password" autocomplete="off">
+          <button type="submit" class="btn small primary" id="aa-unlock">🔓 Unlock</button>
+        </form>
+        <div id="aa-panel" class="acct-admin hidden">
+          <div class="aa-head">
+            <span class="muted small-text">Click a player to pick them:</span>
+            <button type="button" class="btn small" id="aa-relock">🔒 Lock</button>
+          </div>
+          <div id="aa-accounts" class="aa-accounts"></div>
+          <div class="aa-row">
+            <input id="aa-id" type="text" inputmode="numeric" maxlength="7" placeholder="Player ID (7 digits)" autocomplete="off">
+            <span class="muted small-text" id="aa-who"></span>
+          </div>
+          <div class="aa-group">
+            <div class="aa-label">🪙 Coins</div>
+            <div class="aa-row">
+              <input id="aa-coins" type="number" step="1" placeholder="How many coins (minus takes away)">
+              <button type="button" class="btn small" id="aa-add-coins">Add coins</button>
+            </div>
+          </div>
+          <div class="aa-group">
+            <div class="aa-label">🍀 Luck</div>
+            <div class="aa-row">
+              <input id="aa-luck" type="number" min="1" placeholder="Luck × (like 1000)">
+              <input id="aa-luck-rolls" type="number" min="1" step="1" placeholder="For how many rolls">
+              <button type="button" class="btn small" id="aa-add-luck">Add luck</button>
+            </div>
+          </div>
+          <div class="aa-group">
+            <div class="aa-label">🗑️ Delete auras</div>
+            <div class="aa-row">
+              <input id="aa-aura" type="text" list="aa-aura-list" placeholder="Aura name (leave empty for all of them)" autocomplete="off">
+              <datalist id="aa-aura-list"></datalist>
+              <button type="button" class="btn small danger" id="aa-erase">Delete auras</button>
+            </div>
+            <div class="aa-row">
+              <button type="button" class="btn small danger" id="aa-erase-all">Delete auras on every account except this player</button>
+            </div>
+          </div>
         </div>
-        <div id="aa-accounts" class="aa-accounts hidden"></div>
-        <div class="aa-row">
-          <input id="aa-id" type="text" inputmode="numeric" maxlength="7" placeholder="Account ID (7 digits)" autocomplete="off">
-          <span class="muted small-text" id="aa-who"></span>
-        </div>
-        <div class="aa-row">
-          <input id="aa-aura" type="text" list="aa-aura-list" placeholder="Aura name (leave empty for every aura)" autocomplete="off">
-          <datalist id="aa-aura-list"></datalist>
-          <button type="button" class="btn small danger" id="aa-erase">Erase auras</button>
-        </div>
-        <div class="aa-row">
-          <input id="aa-coins" type="number" step="1" placeholder="Coins (minus takes away)">
-          <button type="button" class="btn small" id="aa-add-coins">Add coins</button>
-        </div>
-        <div class="aa-row">
-          <input id="aa-luck" type="number" min="1" placeholder="Luck ×">
-          <input id="aa-luck-rolls" type="number" min="1" step="1" placeholder="For how many rolls">
-          <button type="button" class="btn small" id="aa-add-luck">Add luck</button>
-        </div>
-        <div class="aa-row">
-          <button type="button" class="btn small danger" id="aa-erase-all">Erase auras on every account except this ID</button>
-        </div>
-        <div id="aa-out" class="admin-out">Enter the admin key, then pick an account.</div>
+        <div id="aa-out" class="admin-out">Type the admin password and press Unlock.</div>
       </div>
     </section>
   </main>

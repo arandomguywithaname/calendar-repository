@@ -9,7 +9,7 @@
      claim   { id, device, rev }            take or renew the roll lease; returns the newest save if `rev` is old
      save    { id, device, rev, save }      store a new save; refused while another device holds the lease
      release { id, device }                 give the lease back (tab closed, logged out)
-     admin   { key, op, ... }               owner tools, locked by the site's ADMIN_KEY environment variable:
+     admin   { key, op, ... }               owner tools, locked by the admin password (see ADMIN_HASH):
                list                             every account with its aura count, coins and luck
                erase    { id, aura }            remove one aura (both forms) or, without `aura`, every aura
                coins    { id, amount }          add coins (a negative amount takes them away)
@@ -18,7 +18,7 @@
 
    Error codes in replies match the game's: 145 two devices rolling at once, 98 account problem,
    404 server or network problem. */
-import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, randomInt, scrypt, timingSafeEqual } from "node:crypto";
 import { getStore } from "../vendor/netlify-blobs.mjs";
 
 const STORE_NAME = "aura-realms";
@@ -30,6 +30,11 @@ const DEVICE_RE = /^[a-z0-9]{8,40}$/;
 const NAME_RE = /^[\p{L}\p{N} _'.-]+$/u;
 const DUAL_MSG = "You are rolling on two devices simultaneously. Only one device can roll on an account at a time.";
 const ADMIN_DEVICE = "admin"; /* recorded as the last writer of admin edits; too short to be a real device ID */
+/* The admin password, stored only as an scrypt hash so reading this file doesn't reveal it. To change it, run
+   node -e "const c=require('crypto'),s=c.randomBytes(16).toString('hex');console.log(s,c.scryptSync('NEW PASSWORD',s,32,{N:16384,r:8,p:1}).toString('hex'))"
+   and paste the two values here. An ADMIN_KEY environment variable in Netlify, if set, is used instead. */
+const ADMIN_SALT = "cf2082650522161f0f20644d6fb1c019";
+const ADMIN_HASH = "f6afe587b1475b312509eeed68ab5a435258556fd048bb1f8c4f97c57468d2ef";
 
 const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
@@ -45,11 +50,15 @@ function checkSave(save) {
   return JSON.stringify(save).length <= MAX_SAVE_CHARS ? save : null;
 }
 
-/** True when `given` matches the site's admin key (compared in constant time). */
-function adminKeyOk(given, expected) {
-  const a = createHash("sha256").update(String(given || "")).digest();
-  const b = createHash("sha256").update(String(expected)).digest();
-  return timingSafeEqual(a, b);
+/** True when `given` is the admin password: the ADMIN_KEY environment variable if set, else the built-in hash. */
+async function adminKeyOk(given, envKey) {
+  if (envKey) {
+    const a = createHash("sha256").update(String(given || "")).digest();
+    const b = createHash("sha256").update(String(envKey)).digest();
+    return timingSafeEqual(a, b);
+  }
+  const got = await new Promise((resolve, reject) => scrypt(String(given || ""), ADMIN_SALT, 32, { N: 16384, r: 8, p: 1 }, (e, k) => (e ? reject(e) : resolve(k))));
+  return timingSafeEqual(got, Buffer.from(ADMIN_HASH, "hex"));
 }
 
 /** Run `fn` over `items`, at most `limit` at a time. */
@@ -193,10 +202,9 @@ const ACTIONS = {
   },
 
   async admin(body, store, now, env) {
-    if (!env.ADMIN_KEY) return reply(403, { ok: false, code: 98, error: "Admin isn't set up on this site: add an ADMIN_KEY environment variable in Netlify, then redeploy." });
-    if (!adminKeyOk(body.key, env.ADMIN_KEY)) {
+    if (!(await adminKeyOk(body.key, env.ADMIN_KEY))) {
       await new Promise((r) => setTimeout(r, 400)); /* slows down guessing */
-      return reply(403, { ok: false, code: 98, error: "Wrong admin key." });
+      return reply(403, { ok: false, code: 98, error: "Wrong admin password." });
     }
     if (body.op === "list") {
       const accts = await mapLimit(await allIds(store), 10, (id) => store.get(accountKey(id), { type: "json" }));
@@ -241,7 +249,7 @@ const ACTIONS = {
   }
 };
 
-/** Route one request; `store` is a Netlify Blobs store and `env` holds ADMIN_KEY (both passed in so tests can fake them). */
+/** Route one request; `store` is a Netlify Blobs store and `env` may hold ADMIN_KEY (both passed in so tests can fake them). */
 export async function handle(req, store, now = Date.now(), env = process.env) {
   if (req.method !== "POST") return reply(405, { ok: false, code: 98, error: "Use POST." });
   let body;

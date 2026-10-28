@@ -102,17 +102,16 @@ loadout, and fight bots or a friend.
   `roll Beyond Axiom shiny`, `potion zenith 3`, `ability all`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
   It only changes the account on the device you're using.
-- **Account admin** (Stats tab, under the console): changes other players' online
-  accounts. Enter the admin key, press Show accounts to list every account (auras,
-  coins, luck, rolls), click one, then **Erase auras** (type an aura name to erase just
-  that one, both forms, or leave it empty to erase all), **Add coins** (a minus number
-  takes coins away) or **Add luck** (a multiplier for a number of rolls). **Erase auras
-  on every account except this ID** wipes everyone else's auras and keeps the one
-  account you picked. Players who are online get the change within about 20 seconds,
-  with an "An admin updated your account" message. It is locked with the site's admin
-  key: in Netlify go to Site configuration → Environment variables, add `ADMIN_KEY`
-  with a long secret value, and redeploy. Without it the panel answers that admin isn't
-  set up; anyone without the key gets "Wrong admin key".
+- **Admin panel** (Stats tab, under the console): type the admin password and press
+  Unlock to see every online player account (auras, coins, luck, rolls). Click a player,
+  then **Add coins** (a minus number takes coins away), **Add luck** (a multiplier for a
+  number of rolls) or **Delete auras** (type an aura name to delete just that one, both
+  forms, or leave it empty to delete all). **Delete auras on every account except this
+  player** wipes everyone else's auras. Players who are online get the change within
+  about 20 seconds, with an "An admin updated your account" message. The password is
+  built into `netlify/functions/account.mjs` as a scrypt hash (the file explains how to
+  change it); an `ADMIN_KEY` environment variable in Netlify, if you add one, is used
+  instead. A wrong password gets Error 98. Lock closes the panel again.
 
 ## Deploy to Netlify
 
@@ -142,6 +141,6 @@ No build step and no npm install.
 - `peerjs.min.js` – PeerJS 1.5.4 (MIT) for PvP connections
 - `netlify/functions/account.mjs` – the online account server: create / load accounts,
   upload saves (with revision checks so one device can't silently overwrite another),
-  the one-device roll lease, and the admin tools locked by `ADMIN_KEY`
+  the one-device roll lease, and the password-locked admin tools
 - `netlify/vendor/netlify-blobs.mjs` – @netlify/blobs 10.7.13 (MIT) bundled into one
   file, so the function needs no npm install
