@@ -116,7 +116,10 @@ loadout, and fight bots or a friend.
   then **Add coins** (a minus number takes coins away), **Add luck** (a multiplier for a
   number of rolls) or **Delete auras** (type an aura name to delete just that one, both
   forms, or leave it empty to delete all). **Delete auras on every account except this
-  player** wipes everyone else's auras. **💥 Detonate** resets every other player's
+  player** wipes everyone else's auras. **Reset everyone's luck to x1** ends every
+  player's active luck boosts (and Rarity Magnet rolls) at once; anyone rolling right now
+  switches within a few seconds without losing a roll, and everyone else's next roll is
+  at x1. **💥 Detonate** resets every other player's
   account to a brand new save (all auras, coins, potions and stats) and keeps the account
   you're logged into; you have to type DETONATE to confirm. Reset players see "An admin
   reset this account" the next time their game syncs. Players who are online get the change within

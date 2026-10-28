@@ -3691,7 +3691,20 @@
   /* Replace this device's progress with the account's newest save from the server. `lostMsg` is shown
      when local changes had to be dropped; otherwise a friendly note, unless `quiet`. */
   function adoptCloudSave(data, lostMsg, quiet) {
-    var hadChanges = !!(accountMeta(currentUser) || {}).dirty;
+    var meta = accountMeta(currentUser) || {};
+    var hadChanges = !!meta.dirty;
+    if (data.by === "admin" && data.note === "luck" && (data.base === meta.rev || !hadChanges)) {
+      /* An admin cleared everyone's luck. If this device has progress newer than what the admin edited,
+         clear the luck here and keep that progress; otherwise just take the server's save. */
+      if (hadChanges) { S.luckEffects = []; S.floorRolls = 0; } else S = hydrate(data.save);
+      updateMeta(currentUser, { rev: data.rev });
+      saveLocal();
+      if (hadChanges) cloudChanged();
+      setCloudState("synced");
+      renderAll();
+      toast("🍀 An admin reset everyone's luck to x1", "gold");
+      return;
+    }
     var incoming = hydrate(data.save);
     if (JSON.stringify(incoming) === JSON.stringify(S)) {
       /* Same progress (typically this device's own last upload, whose reply was lost): just catch up the revision. */
@@ -4141,6 +4154,16 @@
     });
   }
 
+  /* End every player's active luck boosts. Players who are rolling right now get it within a few seconds. */
+  function aaResetLuck() {
+    if (!confirm("Reset the luck of EVERY player to x1? All active luck boosts end right away.")) return;
+    accountAdmin("resetLuck").then(function (d) {
+      if (!d) return;
+      aaPrint("🍀 Reset everyone's luck to x1. " + fmt(d.cleared) + " of " + fmt(d.accounts) + " account" + (d.accounts === 1 ? "" : "s") + " had luck" + (d.playing ? "; " + fmt(d.playing) + (d.playing === 1 ? " player is" : " players are") + " rolling right now and will get it within a few seconds." : "."));
+      aaChanged(true);
+    });
+  }
+
   /* Reset every other player's account to a brand new save, keeping the one logged in here. */
   function aaDetonate() {
     var me = currentUser, m = accountMeta(me);
@@ -4224,6 +4247,7 @@
   $("#aa-add-luck").addEventListener("click", aaAddLuck);
   $("#aa-erase-all").addEventListener("click", aaEraseAll);
   $("#aa-detonate").addEventListener("click", aaDetonate);
+  $("#aa-reset-luck").addEventListener("click", aaResetLuck);
   $("#aa-id").addEventListener("input", aaShowWho);
   $("#aa-aura").addEventListener("focus", fillAuraList, { once: true });
   $("#btn-pvp-host").addEventListener("click", pvpHost);

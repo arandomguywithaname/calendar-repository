@@ -16,6 +16,7 @@
                luck     { id, mult, rolls }     add a luck boost for a number of rolls
                eraseAll { except: [ids] }       remove every aura on every account except the ones listed
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
+               resetLuck                        clear every account's active luck boosts
 
    Error codes in replies match the game's: 145 two devices rolling at once, 98 account problem,
    404 server or network problem. */
@@ -106,11 +107,22 @@ async function adminEdit(store, id, now, change, note) {
     const acct = cur.data;
     const save = acct.save && typeof acct.save === "object" ? acct.save : { rolls: 0, coins: 0 };
     const result = change(save);
-    const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: ADMIN_DEVICE, adminNote: note || null };
+    const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: ADMIN_DEVICE, adminNote: note || null, adminBase: acct.rev };
     const res = await store.setJSON(accountKey(id), next, { onlyIfMatch: cur.etag });
     if (res.modified) return { acct: next, result };
   }
   throw new Error("Account " + id + " kept changing; try again.");
+}
+
+/** What a device needs to know about an admin edit when it gets the save back: who made it, what kind of
+    edit it was, and the revision it was made on top of (so a luck reset can be merged instead of replacing). */
+function adminInfo(acct) {
+  return acct.device === ADMIN_DEVICE ? { by: "admin", note: acct.adminNote || undefined, base: acct.adminBase } : {};
+}
+
+/** True when a save has an active luck boost (including Rarity Magnet rolls). */
+function hasLuck(save) {
+  return !!save && ((Array.isArray(save.luckEffects) && save.luckEffects.length > 0) || Number(save.floorRolls) > 0);
 }
 
 /** Every account ID in the store. */
@@ -148,7 +160,7 @@ const ACTIONS = {
   async load(body, store) {
     const acct = await store.get(accountKey(body.id), { type: "json" });
     if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
-    return reply(200, { ok: true, id: acct.id, name: acct.name, rev: acct.rev, save: acct.save, updatedAt: acct.updatedAt, by: acct.device === ADMIN_DEVICE ? "admin" : undefined, note: acct.device === ADMIN_DEVICE ? acct.adminNote || undefined : undefined });
+    return reply(200, { ok: true, id: acct.id, name: acct.name, rev: acct.rev, save: acct.save, updatedAt: acct.updatedAt, ...adminInfo(acct) });
   },
 
   async peek(body, store) {
@@ -176,7 +188,7 @@ const ACTIONS = {
         const out = { ok: true, leaseMs: LEASE_MS, rev: acct.rev, contestAt };
         /* Another device played since this one last synced: hand it the newest save before it rolls.
            (If this device made the newer save itself, its upload's reply just hasn't arrived yet.) */
-        if (acct.rev !== body.rev && acct.device !== body.device) { out.save = acct.save; out.name = acct.name; if (acct.device === ADMIN_DEVICE) { out.by = "admin"; out.note = acct.adminNote || undefined; } }
+        if (acct.rev !== body.rev && acct.device !== body.device) { out.save = acct.save; out.name = acct.name; Object.assign(out, adminInfo(acct)); }
         return reply(200, out);
       }
     }
@@ -195,7 +207,7 @@ const ACTIONS = {
       /* Someone else saved since this device last synced: send theirs back instead of overwriting it.
          A matching device means our own earlier save landed but its reply was lost, so it is safe. */
       if (acct.rev !== body.rev && acct.device !== body.device) {
-        return reply(409, { ok: false, code: 98, error: "This account was changed on another device.", rev: acct.rev, save: acct.save, name: acct.name, by: acct.device === ADMIN_DEVICE ? "admin" : undefined, note: acct.device === ADMIN_DEVICE ? acct.adminNote || undefined : undefined });
+        return reply(409, { ok: false, code: 98, error: "This account was changed on another device.", rev: acct.rev, save: acct.save, name: acct.name, ...adminInfo(acct) });
       }
       const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: body.device };
       const res = await store.setJSON(accountKey(body.id), next, { onlyIfMatch: cur.etag });
@@ -222,6 +234,14 @@ const ACTIONS = {
       const reset = (save) => { for (const k of Object.keys(save)) delete save[k]; Object.assign(save, { rolls: 0, coins: 100 }); return 1; };
       const done = await mapLimit(ids, 10, (id) => adminEdit(store, id, now, reset, "reset"));
       return reply(200, { ok: true, accounts: done.filter(Boolean).length, kept: [...keep] });
+    }
+    if (body.op === "resetLuck") {
+      const ids = await allIds(store);
+      const clear = (save) => { save.luckEffects = []; save.floorRolls = 0; return 1; };
+      /* Only accounts that have luck are touched, so nobody else's game reloads for nothing. */
+      const done = await mapLimit(ids, 10, async (id) => (hasLuck((await store.get(accountKey(id), { type: "json" }) || {}).save) ? adminEdit(store, id, now, clear, "luck") : null));
+      const leases = await mapLimit(ids, 10, (id) => store.get(leaseKey(id), { type: "json" }));
+      return reply(200, { ok: true, accounts: ids.length, cleared: done.filter(Boolean).length, playing: leases.filter((l) => l && l.until > now).length });
     }
     if (body.op === "eraseAll") {
       const keep = new Set((Array.isArray(body.except) ? body.except : []).map(String).filter((id) => ID_RE.test(id)));
