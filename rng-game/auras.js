@@ -1,9 +1,10 @@
-/* auras.js — generates the 784 auras of Aura Realms deterministically.
-   Rarity is expressed as "1 in N". Common is 1 in 2, Fury of Darkness is 1 in 1,000,000,000. */
+/* auras.js — generates the 794 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
+   up to Fury of Darkness at 1 in 1,000,000,000) plus 10 hand-made Forbidden auras beyond it, up to
+   Final Silence at 1 in 10,000,000,000. Rarity is expressed as "1 in N". */
 (function (global) {
   "use strict";
 
-  var TOTAL = 784;
+  var GENERATED = 784; /* the original generated set; later auras are appended after it so no ID changes */
 
   /* Small seeded PRNG so names/colours are identical for every player. */
   function mulberry32(seed) {
@@ -129,7 +130,7 @@
     });
 
     /* Generated rarities: log-spaced from 1,000 up to exactly 1,000,000,000. */
-    var gen = TOTAL - BASE.length;
+    var gen = GENERATED - BASE.length;
     var prev = BASE[BASE.length - 1][1];
     for (i = 0; i < gen; i++) {
       var r = roundSig(1000 * Math.pow(1e6, i / (gen - 1)), 3);
@@ -205,25 +206,58 @@
 
   var list = build();
 
-  /* Shiny forms: 78.5% of auras (615 of 784) get one. Each is fixed at x2, x3, x4 or x5,
-     the multipliers spread evenly. Rolling that aura has a 1-in-multiplier chance of being
-     shiny, so a shiny's true odds are its normal odds times the multiplier. */
+  /* Forbidden auras beyond Fury of Darkness: name, rarity, palette, shiny multiplier (0 = no shiny form).
+     They take IDs 784 and up, after the generated set. */
+  var EXTRA_FORBIDDEN = [
+    ["Abyssal Crown",       1250000000,  ["#a855f7", "#05000d", "#f0abfc", "#3b0764", "#c084fc"], 3],
+    ["Void Sovereign",      1500000000,  ["#38bdf8", "#00040d", "#0c4a6e", "#e0f2fe", "#0369a1"], 2],
+    ["Shattered Infinity",  2000000000,  ["#e2e8f0", "#0b0b12", "#94a3b8", "#f8fafc", "#475569"], 4],
+    ["Crimson Apocalypse",  2500000000,  ["#dc2626", "#120000", "#fb923c", "#450a0a", "#fecaca"], 0],
+    ["Nightmare Engine",    3000000000,  ["#22c55e", "#020a04", "#14532d", "#bbf7d0", "#065f46"], 5],
+    ["Bleeding Cosmos",     4000000000,  ["#f43f5e", "#0a0010", "#7e22ce", "#fda4af", "#4c0519"], 3],
+    ["Forsaken Genesis",    5000000000,  ["#fde047", "#0d0a00", "#ca8a04", "#fef9c3", "#713f12"], 2],
+    ["Wrath of the Unmade", 6500000000,  ["#f97316", "#0a0300", "#7c2d12", "#ffedd5", "#ea580c"], 0],
+    ["Eternal Damnation",   8000000000,  ["#ef4444", "#000000", "#991b1b", "#f87171", "#1f0000"], 4],
+    ["Final Silence",       10000000000, ["#ffffff", "#000000", "#525252", "#e5e5e5", "#171717"], 5]
+  ];
+  EXTRA_FORBIDDEN.forEach(function (e) {
+    var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };
+    var tier = tierOf(a);
+    a.tier = tier.key;
+    a.c1 = a.colors[0];
+    a.c2 = a.colors[1];
+    a.power = powerFor(a.rarity);
+    a.coins = Math.max(1, Math.floor(2 * Math.log2(a.rarity))) + TIER_COIN_BONUS[tier.key];
+    a.cutscene = tier.cutscene;
+    a.id = list.length;
+    a.extraShiny = e[3];
+    list.push(a);
+  });
+  var TOTAL = list.length;
+
+  /* Shiny forms: 78.5% of auras get one (615 of the 784 generated ones, 8 of the 10 extra Forbidden ones:
+     623 of 794). Each is fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a
+     1-in-multiplier chance of being shiny, so a shiny's true odds are its normal odds times the multiplier. */
   var SHINY_SHARE = 0.785;
-  var SHINY_COUNT = Math.round(TOTAL * SHINY_SHARE);
   /* Hand-picked shiny multipliers that override the even x2-x5 spread. */
   var SHINY_OVERRIDES = { "Fury of Darkness": 10 };
   (function () {
-    var rng = mulberry32(785), order = list.map(function (a) { return a.id; }), i;
-    for (i = order.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
-    list.forEach(function (a) { a.shiny = 0; });
-    for (i = 0; i < SHINY_COUNT; i++) {
-      var a = list[order[i]], k = SHINY_OVERRIDES[a.name] || 2 + (i % 4);
+    var setShiny = function (a, k) {
       a.shiny = k;
       a.shinyRarity = a.rarity * k;
       a.shinyPower = powerFor(a.shinyRarity);
       a.shinyCoins = a.coins * k;
+    };
+    var rng = mulberry32(785), order = list.slice(0, GENERATED).map(function (a) { return a.id; }), i;
+    for (i = order.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
+    list.forEach(function (a) { a.shiny = 0; });
+    for (i = 0; i < Math.round(GENERATED * SHINY_SHARE); i++) {
+      var a = list[order[i]];
+      setShiny(a, SHINY_OVERRIDES[a.name] || 2 + (i % 4));
     }
+    list.slice(GENERATED).forEach(function (a) { if (a.extraShiny) setShiny(a, a.extraShiny); delete a.extraShiny; });
   })();
+  var SHINY_COUNT = list.filter(function (a) { return a.shiny; }).length;
   var byRarityDesc = list.slice().sort(function (a, b) { return b.rarity - a.rarity; });
 
   var API = {

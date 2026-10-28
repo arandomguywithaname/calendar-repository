@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Aura Realms RNG</title>
-  <meta name="description" content="Roll for 784 auras, earn coins, brew potions, battle bots and friends. Can you find the 1 in 1,000,000,000 Fury of Darkness?">
+  <meta name="description" content="Roll for 794 auras, earn coins, brew potions, battle bots and friends. Can you find the 1 in 10,000,000,000 Final Silence?">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -177,7 +177,7 @@
     <section id="tab-index" class="panel">
       <div class="panel-head">
         <h2>Aura Index <span id="index-progress" class="pill"></span></h2>
-        <p class="muted">All 784 auras, from 1 in 2 to 1 in 1,000,000,000. Every aura from Epic upward has its own cutscene, no two alike; so do their shiny forms. Cosmic and rarer stay on screen until you tap. ✨×2 to ✨×5 (✨×10 for Fury of Darkness) marks auras with a shiny form: a rare variant whose odds are multiplied by that number. Press ✨ to preview an Epic or rarer shiny's cutscene.</p>
+        <p class="muted">All 794 auras, from 1 in 2 to 1 in 10,000,000,000. Every aura from Epic upward has its own cutscene, no two alike; so do their shiny forms. Cosmic and rarer stay on screen until you tap. ✨×2 to ✨×5 (✨×10 for Fury of Darkness) marks auras with a shiny form: a rare variant whose odds are multiplied by that number. Press ✨ to preview an Epic or rarer shiny's cutscene.</p>
       </div>
       <div class="index-controls">
         <input id="index-search" type="search" placeholder="Search auras…">
@@ -254,6 +254,13 @@
               </div>
               <div class="aa-row">
                 <button type="button" class="btn small danger" id="aa-erase-all">Delete auras on every account except this player</button>
+              </div>
+            </div>
+            <div class="aa-group aa-danger">
+              <div class="aa-label">💥 Detonate</div>
+              <div class="muted small-text">Erases ALL progress on every other player's account: auras, coins, potions, everything. Only the account you're logged into is kept.</div>
+              <div class="aa-row">
+                <button type="button" class="btn detonate-btn" id="aa-detonate">💥 DETONATE</button>
               </div>
             </div>
           </div>

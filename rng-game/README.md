@@ -3,13 +3,16 @@
 A static browser game: roll for auras, earn coins, buy potions, build an ability
 loadout, and fight bots or a friend.
 
-- **784 auras**, from Common (1 in 2) up to Fury of Darkness (1 in 1,000,000,000).
+- **794 auras**, from Common (1 in 2) up to Fury of Darkness (1 in 1,000,000,000), and ten
+  Forbidden auras beyond it: Abyssal Crown, Void Sovereign, Shattered Infinity, Crimson
+  Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis, Wrath of the Unmade,
+  Eternal Damnation and Final Silence (1 in 1.25 billion up to 1 in 10,000,000,000).
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, and a red
   storm for Fury of Darkness.
 - **Its own cutscene for every Epic+ aura.** Common, Uncommon and Rare rolls stay on
   the roll screen (Rare still gets the slot-machine slowdown, flash and banner). Each
-  of the 641 auras from Epic upward takes over the screen with a cutscene no other
+  of the 651 auras from Epic upward takes over the screen with a cutscene no other
   aura shares: one of 54 scenes paired with one of 14 effect layers (shooting stars,
   snow, embers, rain, bubbles, searchlights, lightning, petals, orbiting motes,
   glitch bars, god rays, drifting dust, bokeh, ribbons), and every scene + effect
@@ -24,10 +27,13 @@ loadout, and fight bots or a friend.
   a lava lamp, jellyfish, a maze, a prism, a rocket launch, sky lanterns and a
   spinning globe. Beyond Axiom always gets the graph; Cosmic Veil and Fury of
   Darkness keep bespoke sequences.
-- **Shiny forms.** 615 of the 784 auras (78.4%, the closest whole number to 78.5%)
+- **Shiny forms.** 623 of the 794 auras (78.5%: 615 of the 784 generated ones and 8 of
+  the 10 extra Forbidden ones)
   have a shiny form fixed at ×2, ×3, ×4 or ×5, spread evenly, except Fury of
   Darkness, whose shiny is ×10. Rolling one of them has a 1-in-that-number chance of
-  coming out shiny, so a shiny Fury of Darkness is 1 in 10,000,000,000. Shinies are separate collectibles: their own inventory
+  coming out shiny, so a shiny Fury of Darkness is 1 in 10,000,000,000 and the rarest
+  thing in the game, a ×5 shiny Final Silence, is 1 in 50,000,000,000. Shinies are
+  separate collectibles: their own inventory
   card, a rainbow ring and sparkles on the orb, a rainbow name, more power (worked
   out from the shiny odds), coins multiplied by the same number, and a rainbow sheen
   plus chime over the cutscene. Only Epic and rarer shinies get a cutscene (their
@@ -110,7 +116,10 @@ loadout, and fight bots or a friend.
   then **Add coins** (a minus number takes coins away), **Add luck** (a multiplier for a
   number of rolls) or **Delete auras** (type an aura name to delete just that one, both
   forms, or leave it empty to delete all). **Delete auras on every account except this
-  player** wipes everyone else's auras. Players who are online get the change within
+  player** wipes everyone else's auras. **💥 Detonate** resets every other player's
+  account to a brand new save (all auras, coins, potions and stats) and keeps the account
+  you're logged into; you have to type DETONATE to confirm. Reset players see "An admin
+  reset this account" the next time their game syncs. Players who are online get the change within
   about 20 seconds, with an "An admin updated your account" message. To change the
   password, update both hashes (`ADMIN_PW` in `game.js`, `ADMIN_SALT`/`ADMIN_HASH` in
   `netlify/functions/account.mjs`; each file shows the command). An `ADMIN_KEY`
@@ -137,7 +146,8 @@ No build step and no npm install.
 
 - `index.html` – markup
 - `style.css` – styling and CSS animations
-- `auras.js` – deterministic generator for the 784 auras
+- `auras.js` – deterministic generator for the 784 generated auras plus the 10 extra
+  Forbidden ones
 - `abilities.js` – ability mechanics and the per-aura signature kit generator
 - `reveals.js` – the 54 reveal scenes, 14 effect layers, the shiny sheen, title styles
   and the unique per-aura assignment

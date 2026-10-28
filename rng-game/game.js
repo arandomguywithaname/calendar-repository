@@ -3707,7 +3707,9 @@
     resetRollDisplay();
     renderAccount();
     renderAll();
-    if (data.by === "admin") {
+    if (data.by === "admin" && data.note === "reset") {
+      errorToast(ERR.ACCOUNT, "💥 An admin reset this account, so all its progress was erased.");
+    } else if (data.by === "admin") {
       if (hadChanges) errorToast(ERR.ACCOUNT, "An admin changed this account, so its newest save was loaded here.");
       else toast("🛠️ An admin updated your account", "gold");
     } else if (hadChanges && lostMsg) errorToast(ERR.ACCOUNT, lostMsg);
@@ -4139,6 +4141,27 @@
     });
   }
 
+  /* Reset every other player's account to a brand new save, keeping the one logged in here. */
+  function aaDetonate() {
+    var me = currentUser, m = accountMeta(me);
+    if (!m || !m.cloud) { aaPrint("⚠️ Error 98: Log in to your own online account first, so Detonate knows which account to keep."); return; }
+    var others = aaAccounts.filter(function (a) { return a.id !== me; }).length;
+    var mine = (accountName(me) || "you") + " (" + me + ")";
+    var typed = prompt("💥 DETONATE erases ALL progress on every other player's account" + (aaAccounts.length ? " (" + others + " account" + (others === 1 ? "" : "s") + ")" : "") + ". Only your account, " + mine + ", is kept. This can't be undone.\n\nType DETONATE to confirm.");
+    if (typed === null) return;
+    if (typed.trim().toUpperCase() !== "DETONATE") { aaPrint("Detonate cancelled: you didn't type DETONATE."); return; }
+    $("#aa-detonate").disabled = true;
+    accountAdmin("detonate", { except: [me] }).then(function (d) {
+      $("#aa-detonate").disabled = false;
+      if (!d) return;
+      screenFlash({ c1: "#f97316", c2: "#7f1d1d" }, 1);
+      shake(3);
+      Sound.boom(3);
+      aaPrint("💥 DETONATED! Erased " + fmt(d.accounts) + " account" + (d.accounts === 1 ? "" : "s") + ". Kept " + mine + ".");
+      aaChanged(false);
+    });
+  }
+
   /* Aura names for the erase box's suggestions, filled the first time it's used. */
   function fillAuraList() {
     var list = $("#aa-aura-list"), frag = document.createDocumentFragment();
@@ -4200,6 +4223,7 @@
   $("#aa-add-coins").addEventListener("click", aaAddCoins);
   $("#aa-add-luck").addEventListener("click", aaAddLuck);
   $("#aa-erase-all").addEventListener("click", aaEraseAll);
+  $("#aa-detonate").addEventListener("click", aaDetonate);
   $("#aa-id").addEventListener("input", aaShowWho);
   $("#aa-aura").addEventListener("focus", fillAuraList, { once: true });
   $("#btn-pvp-host").addEventListener("click", pvpHost);
