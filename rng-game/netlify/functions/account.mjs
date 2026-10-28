@@ -32,7 +32,8 @@ const DUAL_MSG = "You are rolling on two devices simultaneously. Only one device
 const ADMIN_DEVICE = "admin"; /* recorded as the last writer of admin edits; too short to be a real device ID */
 /* The admin password, stored only as an scrypt hash so reading this file doesn't reveal it. To change it, run
    node -e "const c=require('crypto'),s=c.randomBytes(16).toString('hex');console.log(s,c.scryptSync('NEW PASSWORD',s,32,{N:16384,r:8,p:1}).toString('hex'))"
-   and paste the two values here. An ADMIN_KEY environment variable in Netlify, if set, is used instead. */
+   and paste the two values here; also update ADMIN_PW in game.js, which checks the same password in the browser.
+   An ADMIN_KEY environment variable in Netlify, if set, is used instead of the built-in password. */
 const ADMIN_SALT = "bdc221214b42e7e3e3de23737b9c3a57";
 const ADMIN_HASH = "9746b9f763102389b6b66dd6966db0ddd399da13fa85b6e8f8e245fbb89dac0a";
 

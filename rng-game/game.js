@@ -2875,6 +2875,7 @@
   ];
 
   function runAdmin(line) {
+    if (!adminUnlocked) return; /* the console only works after the admin password */
     var parts = line.trim().replace(/^\//, "").split(/\s+/);
     var cmd = (parts.shift() || "").toLowerCase();
     var rest = parts.join(" ");
@@ -3939,7 +3940,13 @@
 
   /* ---------- Admin panel: coins, luck and deleting auras on any player's online account (password locked) ---------- */
 
-  var aaKey = "";      /* the admin password, kept only while the panel is unlocked */
+  /* The admin password, stored only as a PBKDF2 hash so the game's code doesn't reveal it. The account
+     server keeps its own scrypt hash of the same password (netlify/functions/account.mjs). To change it,
+     update both; for this one run
+     node -e "const c=require('crypto'),s=c.randomBytes(16).toString('hex');console.log(s,c.pbkdf2Sync('NEW PASSWORD',Buffer.from(s,'hex'),150000,32,'sha256').toString('hex'))" */
+  var ADMIN_PW = { salt: "5dbb466384fd7561529dc0f640552297", iterations: 150000, hash: "f6db0a3506768f23d93631b1be667437e07e602dbbe80ef3da3edb444fb70a47" };
+  var adminUnlocked = false;
+  var aaKey = "";      /* the admin password, kept only while admin is unlocked */
   var aaAccounts = []; /* the last account listing, for names in messages */
 
   function aaPrint(text) {
@@ -3959,8 +3966,8 @@
 
   /* Send one admin command. Resolves the reply data, or null after printing the error. */
   function accountAdmin(op, fields) {
-    var key = aaKey || $("#aa-key").value;
-    if (!key) { aaPrint("⚠️ Error 98: Type the admin password first."); return Promise.resolve(null); }
+    var key = aaKey;
+    if (!key) { aaPrint("⚠️ Error 98: Admin is locked. Type the admin password and press Unlock."); return Promise.resolve(null); }
     if (Cloud.state === "missing") { aaPrint("⚠️ Error 404: Online accounts aren't set up on this site, so there are no accounts to change."); return Promise.resolve(null); }
     return cloudCall("admin", Object.assign({ key: key, op: op }, fields || {})).then(function (r) {
       if (r.status === 200) return r.data;
@@ -3993,30 +4000,63 @@
     document.querySelectorAll("#aa-accounts tbody tr").forEach(function (tr) { tr.classList.toggle("on", tr.dataset.id === id); });
   }
 
-  /* Check the password, then show the panel with every player. */
+  /* True when `pw` is the admin password, checked against ADMIN_PW in this browser. */
+  function checkAdminPassword(pw) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!subtle || !window.TextEncoder) return Promise.resolve(false);
+    var salt = new Uint8Array(ADMIN_PW.salt.match(/../g).map(function (b) { return parseInt(b, 16); }));
+    return subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]).then(function (k) {
+      return subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: salt, iterations: ADMIN_PW.iterations }, k, 256);
+    }).then(function (bits) {
+      return Array.prototype.map.call(new Uint8Array(bits), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("") === ADMIN_PW.hash;
+    }, function () { return false; });
+  }
+
+  /* Unlock the console and the player panel. The account server is asked too, in case the site set
+     its own ADMIN_KEY in Netlify. Resolves true when the password was right. */
+  function unlockAdmin(key) {
+    return checkAdminPassword(key).then(function (ok) {
+      if (ok || Cloud.state === "missing") return ok;
+      return cloudCall("admin", { key: key, op: "list" }).then(function (r) { return r.status === 200; }, function () { return false; });
+    }).then(function (ok) {
+      if (!ok) return new Promise(function (resolve) { setTimeout(function () { resolve(false); }, 400); }); /* slows down guessing */
+      adminUnlocked = true;
+      aaKey = key;
+      $("#aa-lock").classList.add("hidden");
+      $("#aa-lock-msg").textContent = "";
+      $("#admin-area").classList.remove("hidden");
+      aaList(true).then(function (listed) {
+        $("#aa-panel").classList.toggle("hidden", !listed);
+        if (listed) aaPrint(aaAccounts.length + " player account" + (aaAccounts.length === 1 ? "" : "s") + ". Click one to pick them.");
+      });
+      return true;
+    });
+  }
+
   function aaUnlock(e) {
     e.preventDefault();
     var key = $("#aa-key").value;
-    if (!key) { aaPrint("⚠️ Error 98: Type the admin password first."); return; }
-    aaKey = key;
-    aaList(true).then(function (ok) {
-      if (!ok) { aaKey = ""; return; }
+    if (!key) { $("#aa-lock-msg").textContent = "⚠️ Error 98: Type the admin password first."; return; }
+    $("#aa-unlock").disabled = true;
+    unlockAdmin(key).then(function (ok) {
+      $("#aa-unlock").disabled = false;
       $("#aa-key").value = "";
-      $("#aa-lock").classList.add("hidden");
-      $("#aa-panel").classList.remove("hidden");
-      aaPrint("🔓 Unlocked. " + aaAccounts.length + " player account" + (aaAccounts.length === 1 ? "" : "s") + ". Click one to pick them.");
+      if (!ok) $("#aa-lock-msg").textContent = "⚠️ Error 98: Wrong admin password.";
     });
   }
 
   function aaRelock() {
+    adminUnlocked = false;
     aaKey = "";
     aaAccounts = [];
     $("#aa-accounts").innerHTML = "";
     $("#aa-id").value = "";
     $("#aa-who").textContent = "";
+    $("#aa-out").innerHTML = "";
     $("#aa-panel").classList.add("hidden");
+    $("#admin-area").classList.add("hidden");
     $("#aa-lock").classList.remove("hidden");
-    aaPrint("🔒 Locked.");
+    $("#aa-lock-msg").textContent = "🔒 Locked.";
   }
 
   function aaList(quiet) {
@@ -4182,7 +4222,7 @@
     if (e.key === "`" && !typing) {
       e.preventDefault();
       switchTab("stats");
-      $("#admin-in").focus();
+      $(adminUnlocked ? "#admin-in" : "#aa-key").focus();
     }
   });
   window.addEventListener("beforeunload", function () { if (PvP.conn) pvpSend({ t: "forfeit" }); });
@@ -4200,6 +4240,7 @@
     reveals: REVEALS,
     revealTimeline: function (name, shiny) { var a = findAura(name); return a ? revealTimeline(a, !!shiny) : null; },
     admin: runAdmin,
+    unlockAdmin: unlockAdmin,
     engine: Engine,
     kits: K,
     bfx: BFX,

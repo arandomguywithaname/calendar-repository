@@ -367,6 +367,7 @@ body.shake-3 { animation: shake3 .9s; }
 .acct-admin { display: flex; flex-direction: column; gap: 10px; }
 .aa-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .aa-row input { flex: 1; min-width: 140px; background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--card-border); border-radius: 10px; padding: 9px 12px; font: 500 1rem var(--font-body); }
+.admin-area { display: flex; flex-direction: column; gap: 10px; }
 .aa-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .aa-group { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--card-border); }
 .aa-label { font-weight: 700; }

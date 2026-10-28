@@ -96,22 +96,26 @@ loadout, and fight bots or a friend.
   a potion (none left, a stronger one already active, healing outside a fight, not your
   turn), **98** account problems (bad name or ID, no player with that ID, a bad save
   code, or progress replaced by a newer save from another device).
-- **Admin console**: scroll to the bottom of the Stats tab, or press `` ` `` (backtick)
-  anywhere on a keyboard. No password. Commands: `luck 1000 10`, `coins 5000`,
+- **Admin** (bottom of the Stats tab, or press `` ` `` (backtick) anywhere on a keyboard):
+  locked with the admin password. Unlock opens the console and the player panel below;
+  Lock closes both. The password is checked against a hash in `game.js` (PBKDF2) and
+  in the account function (scrypt), so it isn't written anywhere in the code.
+- **Admin console** (your own account, after unlocking). Commands: `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `roll Fury of Darkness`, `give Cosmic Veil shiny`,
   `roll Beyond Axiom shiny`, `potion zenith 3`, `ability all`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
   It only changes the account on the device you're using.
-- **Admin panel** (Stats tab, under the console): type the admin password and press
-  Unlock to see every online player account (auras, coins, luck, rolls). Click a player,
+- **Player panel** (Stats tab, under the console, after unlocking): lists every online
+  player account (auras, coins, luck, rolls). Click a player,
   then **Add coins** (a minus number takes coins away), **Add luck** (a multiplier for a
   number of rolls) or **Delete auras** (type an aura name to delete just that one, both
   forms, or leave it empty to delete all). **Delete auras on every account except this
   player** wipes everyone else's auras. Players who are online get the change within
-  about 20 seconds, with an "An admin updated your account" message. The password is
-  built into `netlify/functions/account.mjs` as a scrypt hash (the file explains how to
-  change it); an `ADMIN_KEY` environment variable in Netlify, if you add one, is used
-  instead. A wrong password gets Error 98. Lock closes the panel again.
+  about 20 seconds, with an "An admin updated your account" message. To change the
+  password, update both hashes (`ADMIN_PW` in `game.js`, `ADMIN_SALT`/`ADMIN_HASH` in
+  `netlify/functions/account.mjs`; each file shows the command). An `ADMIN_KEY`
+  environment variable in Netlify, if you add one, replaces the built-in password for
+  the server. A wrong password gets Error 98.
 
 ## Deploy to Netlify
 
