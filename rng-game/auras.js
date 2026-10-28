@@ -39,7 +39,8 @@
     cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000
   };
 
-  function powerFor(rarity) { return Math.round(10 + 8 * Math.pow(Math.log2(rarity), 1.7)); }
+  /* Battle power grows with rarity; every aura gets twice the base curve. */
+  function powerFor(rarity) { return 2 * Math.round(10 + 8 * Math.pow(Math.log2(rarity), 1.7)); }
 
   function tierOf(aura) {
     for (var i = 0; i < TIERS.length; i++) if (aura.rarity < TIERS[i].max) return TIERS[i];

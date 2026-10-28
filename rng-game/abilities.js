@@ -164,7 +164,7 @@
     guard:     [["strike", "Riot Baton"], ["guard", "Tower Shield"], ["heal", "Repair Protocol"]],
     knight:    [["strike", "Lance Thrust"], ["heavy", "Mace Overhead"], ["guard", "Kite Shield"], ["heal", "Squire's Aid"]],
     warlord:   [["strike", "Cleave"], ["heavy", "Skullsplitter"], ["focus", "Bloodlust"], ["drain", "Vampiric Axe"]],
-    titan:     [["heavy", "Boulder Fist"], ["shield", "Stone Skin"], ["heal", "Regrowth"], ["burst", "Tectonic Slam"]],
+    titan:     [["heavy", "Boulder Fist"], ["shield", "Stone Skin"], ["strike", "Rock Throw"], ["burst", "Tectonic Slam"]], /* no healing */
     celestial: [["precision", "Judgement Ray"], ["heal", "Divine Light"], ["reflect", "Halo Mirror"], ["focus", "Silent Prayer"]],
     void:      [["poison", "Void Rot"], ["weaken", "Entropy Field"], ["drain", "Soul Siphon"], ["stun", "Null Pulse"]],
     omega:     [["burst", "Omega Beam"], ["stun", "System Shock"], ["heal", "Reboot"], ["reflect", "Deflector Array"], ["barrage", "Gatling Protocol"]]
