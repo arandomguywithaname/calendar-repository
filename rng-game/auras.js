@@ -209,12 +209,14 @@
      shiny, so a shiny's true odds are its normal odds times the multiplier. */
   var SHINY_SHARE = 0.785;
   var SHINY_COUNT = Math.round(TOTAL * SHINY_SHARE);
+  /* Hand-picked shiny multipliers that override the even x2-x5 spread. */
+  var SHINY_OVERRIDES = { "Fury of Darkness": 10 };
   (function () {
     var rng = mulberry32(785), order = list.map(function (a) { return a.id; }), i;
     for (i = order.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
     list.forEach(function (a) { a.shiny = 0; });
     for (i = 0; i < SHINY_COUNT; i++) {
-      var a = list[order[i]], k = 2 + (i % 4);
+      var a = list[order[i]], k = SHINY_OVERRIDES[a.name] || 2 + (i % 4);
       a.shiny = k;
       a.shinyRarity = a.rarity * k;
       a.shinyPower = powerFor(a.shinyRarity);

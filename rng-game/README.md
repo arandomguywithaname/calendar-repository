@@ -26,9 +26,9 @@ loadout, and fight bots or a friend.
   spinning globe. Beyond Axiom always gets the graph; Cosmic Veil and Fury of
   Darkness keep bespoke sequences.
 - **Shiny forms.** 615 of the 784 auras (78.4%, the closest whole number to 78.5%)
-  have a shiny form fixed at ×2, ×3, ×4 or ×5, spread evenly. Rolling one of them
-  has a 1-in-that-number chance of coming out shiny, so a ×4 shiny Fury of Darkness
-  is 1 in 4,000,000,000. Shinies are separate collectibles: their own inventory
+  have a shiny form fixed at ×2, ×3, ×4 or ×5, spread evenly, except Fury of
+  Darkness, whose shiny is ×10. Rolling one of them has a 1-in-that-number chance of
+  coming out shiny, so a shiny Fury of Darkness is 1 in 10,000,000,000. Shinies are separate collectibles: their own inventory
   card, a rainbow ring and sparkles on the orb, a rainbow name, more power (worked
   out from the shiny odds), coins multiplied by the same number, and a rainbow sheen
   plus chime over the cutscene. Every shiny gets a cutscene: Epic+ shinies play
