@@ -185,6 +185,11 @@ No build step and no npm install.
   function isn't running, IDs only work on the device that made them and logged-in
   players see a one-time Error 404 note saying online accounts aren't set up.
   Everything else plays normally.
+- **Check which version is live.** The bottom of every page shows "Version N". Each
+  update raises N, together with the `?v=N` on the script and style links in
+  `index.html`, so browsers fetch the new files instead of reusing old ones. If the
+  live site shows an older number than the newest zip, the site is still running an
+  old copy: deploy the newest zip again and reload the page.
 
 ## Files
 
