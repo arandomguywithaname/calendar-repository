@@ -288,6 +288,9 @@ body.shake-3 { animation: shake3 .9s; }
 .card.locked { opacity: .55; }
 .card.secret { opacity: 1; border-style: dashed; border-color: rgba(251,191,36,.35); }
 .card.secret .card-title { color: var(--gold); letter-spacing: .3em; }
+.collect-progress { margin-top: 10px; }
+.collect-missing { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; font-size: 18px; line-height: 1.2; }
+.collect-missing span { cursor: help; }
 .card.boss { border-color: rgba(239,68,68,.35); }
 .empty-note { color: var(--muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
 

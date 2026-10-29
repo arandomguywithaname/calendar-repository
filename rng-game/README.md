@@ -107,6 +107,14 @@ loadout, and fight bots or a friend.
   or full HP). Potions of the same kind don't stack: the strongest one counts, and a
   stronger shield or revive replaces a weaker one that is waiting. Battle potions are
   used up the moment the fight starts.
+- **Collector's potion.** A locked 🔒 "? ? ?" card in the Luck potions shows how many
+  of the 37 shop potions you have bought (and the icons of the ones still to buy).
+  Buy each of them at least once (Celestial Nectar, Potion of Destiny and the Elixir
+  of the Million don't count, and potions from mystery potions, the daily gift or the
+  admin console aren't "bought") and ⚗️ **Potion of Everything** appears for
+  5,000,000 coins: x50,000 luck, always shiny, Epic or better and x100 coins for 3
+  rolls, Time Warp speed, and a Godslayer Tonic, Steel Wall and Phoenix Feather for
+  the next bot fight. Mystery potions never turn into it.
 - **Login on any device**: a new player enters a name (2 to 50 characters) and gets a
   random 7-digit ID, shown at the top of the page (click it to copy). Entering that ID
   on another phone or computer loads the same progress. Saves upload a few seconds

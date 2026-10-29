@@ -38,6 +38,8 @@
     destiny:   { name: "Potion of Destiny", icon: "🌠", cost: 100000000, group: "luck", kind: "luck", mult: 10000000, rolls: 1, desc: "x10,000,000 luck for a single roll. The best potion money can buy." },
     blessing:  { name: "Daily Blessing",    icon: "🎁", cost: 0,       group: "luck",   kind: "luck", mult: 50,    rolls: 1,  desc: "x50 luck for one roll. Only from the daily gift.", daily: true },
     secret:    { name: "Elixir of the Million", icon: "🗝️", cost: 1000000, group: "luck", kind: "luck", mult: 1000000, rolls: 1, desc: "x1,000,000 luck for a single roll. The shop never advertised this.", secret: true },
+    everything:{ name: "Potion of Everything", icon: "⚗️", cost: 5000000, group: "luck", kind: "everything", mult: 50000, rolls: 3, collector: true,
+                 desc: "Every kind of potion in one bottle: x50,000 luck, always shiny, Epic or better and x100 coins for 3 rolls, Time Warp speed, and a Godslayer Tonic, Steel Wall and Phoenix Feather for your next bot fight." },
     /* Magnets and shiny */
     magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "special", kind: "floor", min: 1000,  rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
     epicmagnet:{ name: "Epic Magnet",       icon: "🧿", cost: 15000,   group: "special", kind: "floor", min: 10000, rolls: 3,  desc: "Your next 3 rolls are Epic or better" },
@@ -126,6 +128,15 @@
   function trainingCost(level) { return Math.floor(50 * Math.pow(1.35, level)); }
   function secretUnlocked() { return !!S.secretUnlocked || S.coins >= 1000000; }
 
+  /* The collector's potion (Potion of Everything) appears once every other shop potion has been bought at
+     least once, apart from these three. */
+  var COLLECTION_SKIP = ["celestial", "destiny", "secret"];
+  function collectionKeys() {
+    return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && COLLECTION_SKIP.indexOf(k) < 0; });
+  }
+  function collectionMissing() { return collectionKeys().filter(function (k) { return !(S.bought[k] > 0); }); }
+  function collectionDone() { return collectionMissing().length === 0; }
+
   /* ---------- State ---------- */
 
   function defaultState() {
@@ -139,6 +150,7 @@
       lastRoll: null,
       lastShiny: false,
       potions: {},
+      bought: {},
       luckEffects: [],
       goldEffects: [],
       floorEffects: [],
@@ -196,6 +208,7 @@
       if (saved.floorRolls > 0) merged.floorEffects.push({ min: 1000, rolls: saved.floorRolls });
       if (saved.strengthReady) merged.strengthMult = Math.max(merged.strengthMult || 1, 1.5);
       if (!merged.shinyInventory || typeof merged.shinyInventory !== "object") merged.shinyInventory = {};
+      if (!merged.bought || typeof merged.bought !== "object") merged.bought = {};
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
       delete merged.goldRolls;
@@ -1040,6 +1053,18 @@
     } else if (p.kind === "revive") {
       if (S.reviveReady >= p.pct) { errorToast(ERR.POTION_USE, waitingName("revive", S.reviveReady) + " is already waiting for your next fight."); return; }
       S.reviveReady = p.pct;
+    } else if (p.kind === "everything") {
+      /* The best of each kind at once; anything already stronger stays as it is. */
+      S.luckEffects.push({ mult: p.mult, rolls: p.rolls });
+      S.shinyEffects.push({ mult: POTIONS.prism.mult, rolls: p.rolls });
+      S.floorEffects.push({ min: POTIONS.epicmagnet.min, rolls: p.rolls });
+      S.goldEffects.push({ mult: POTIONS.hoard.mult, rolls: p.rolls });
+      var warp = POTIONS.timewarp;
+      S.hasteUntil = (hasteActive() && S.hasteDiv === warp.div ? S.hasteUntil : Date.now()) + warp.seconds * 1000;
+      S.hasteDiv = Math.max(S.hasteDiv, warp.div);
+      S.strengthMult = Math.max(S.strengthMult, POTIONS.godslayer.mult);
+      S.shieldReady = Math.max(S.shieldReady, POTIONS.steelwall.pct);
+      S.reviveReady = Math.max(S.reviveReady, POTIONS.phoenix.pct);
     } else if (p.kind === "heal") {
       if (!battle || battle.over || view.pvp) { errorToast(ERR.POTION_USE, "Healing potions are used during a bot fight."); return; }
       healInBattle(key);
@@ -1064,7 +1089,7 @@
   /* Mystery potion odds: mostly cheap potions, with a small shot at the great ones. The mystery potion's
      `minCost` and `maxCost` bound which potions it can become. */
   function rollMysteryPotion(m) {
-    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity); });
+    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity); });
     var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var r = Math.random() * total;
@@ -1075,11 +1100,19 @@
   function buyPotion(key) {
     var p = POTIONS[key];
     if (!p) return;
+    if (p.collector && !collectionDone()) return;
     if (S.coins < p.cost) { errorToast(ERR.POTION_BUY, "Not enough coins for " + p.name + " (" + fmt(p.cost) + " needed)."); return; }
+    var wasDone = collectionDone();
     S.coins -= p.cost;
     S.potions[key] = (S.potions[key] || 0) + 1;
+    S.bought[key] = (S.bought[key] || 0) + 1;
     Sound.buy();
     toast("Bought " + p.name);
+    if (!wasDone && collectionDone()) {
+      var ev = POTIONS.everything;
+      toast(ev.icon + " You bought every potion! A new one appeared in the shop: " + ev.name, "gold", 7000);
+      Sound.rare(1);
+    }
     save();
     renderAll();
   }
@@ -1106,6 +1139,15 @@
       if (p.secret && !secretUnlocked()) {
         card.className = "card secret";
         card.innerHTML = "<div class=\"row\"><div class=\"big-icon\">❔</div><div><div class=\"card-title\">? ? ?</div><div class=\"card-sub\">A potion the shop keeps under the counter. Rumour says it shows itself to anyone holding a million coins, or anyone who knows the right word.</div></div></div>";
+        grid.appendChild(card);
+        return;
+      }
+      if (p.collector && !collectionDone()) {
+        var need = collectionKeys(), missing = collectionMissing();
+        card.className = "card secret";
+        card.innerHTML = "<div class=\"row\"><div class=\"big-icon\">🔒</div><div><div class=\"card-title\">? ? ?</div><div class=\"card-sub\">A potion only true collectors ever see. Buy every potion in the shop at least once to make it appear (Celestial Nectar, Potion of Destiny and the Elixir of the Million don't count).</div></div></div>" +
+          "<div class=\"collect-progress\"><div class=\"card-sub\"><b>Bought " + (need.length - missing.length) + " of " + need.length + "</b> · still to buy:</div><div class=\"collect-missing\">" +
+          missing.map(function (k) { return "<span title=\"" + POTIONS[k].name + "\">" + POTIONS[k].icon + "</span>"; }).join("") + "</div></div>";
         grid.appendChild(card);
         return;
       }
