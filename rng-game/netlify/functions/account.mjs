@@ -120,9 +120,10 @@ function adminInfo(acct) {
   return acct.device === ADMIN_DEVICE ? { by: "admin", note: acct.adminNote || undefined, base: acct.adminBase } : {};
 }
 
-/** True when a save has an active luck boost (including Rarity Magnet rolls). */
+/** True when a save has an active luck boost (including magnet and shiny potions). */
 function hasLuck(save) {
-  return !!save && ((Array.isArray(save.luckEffects) && save.luckEffects.length > 0) || Number(save.floorRolls) > 0);
+  const active = (list) => Array.isArray(list) && list.length > 0;
+  return !!save && (active(save.luckEffects) || active(save.floorEffects) || active(save.shinyEffects) || Number(save.floorRolls) > 0);
 }
 
 /** Every account ID in the store. */
@@ -237,7 +238,7 @@ const ACTIONS = {
     }
     if (body.op === "resetLuck") {
       const ids = await allIds(store);
-      const clear = (save) => { save.luckEffects = []; save.floorRolls = 0; return 1; };
+      const clear = (save) => { save.luckEffects = []; save.floorEffects = []; save.shinyEffects = []; delete save.floorRolls; return 1; };
       /* Only accounts that have luck are touched, so nobody else's game reloads for nothing. */
       const done = await mapLimit(ids, 10, async (id) => (hasLuck((await store.get(accountKey(id), { type: "json" }) || {}).save) ? adminEdit(store, id, now, clear, "luck") : null));
       const leases = await mapLimit(ids, 10, (id) => store.get(leaseKey(id), { type: "json" }));

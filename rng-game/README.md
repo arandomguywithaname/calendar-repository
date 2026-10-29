@@ -91,12 +91,22 @@ loadout, and fight bots or a friend.
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
   week. Miss two days and the streak restarts.
-- **23 potions** in three groups. Luck from x2 up to the Infinity Serum (x25,000 for
-  one roll) and a Rarity Magnet that forbids Common and Uncommon rolls. Coins and
-  speed: x2, x5 and x10 coin potions, Haste and Blitz, and a Mystery Potion that
-  turns into a random potion. Battle: healing, Greater Healing, Strength, Titan's
-  Brew (double damage), Iron Skin (start with a shield) and Second Wind (survive a
-  killing blow once).
+- **39 potions** in four groups. Luck from x2 up to the Potion of Destiny
+  (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
+  rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
+  way. Magnets and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
+  Magnet (Epic or better), Legend Lure (Legendary or better), the Shimmer Potion (x2
+  shiny chance) and the Prism Potion (every roll that can be shiny is). Coins and
+  speed: x2 up to x100 coin potions (Treasure Tonic x25, Dragon's Hoard x100), Haste,
+  Blitz and Time Warp (roll cooldown cut to 1/8), a Mystery Potion that turns into a
+  random potion (up to the Infinity Serum) and a Mega Mystery Potion that only turns
+  into potions worth 1,000 coins or more (up to Celestial Nectar). Battle: healing,
+  Greater Healing and Full Restore; Strength, Titan's Brew, Rage Potion and Godslayer
+  Tonic (+50% up to +400% damage); Iron Skin and Steel Wall (start with a 30% or 60%
+  shield); Second Wind and Phoenix Feather (survive a killing blow once, back at 40%
+  or full HP). Potions of the same kind don't stack: the strongest one counts, and a
+  stronger shield or revive replaces a weaker one that is waiting. Battle potions are
+  used up the moment the fight starts.
 - **Login on any device**: a new player enters a name (2 to 50 characters) and gets a
   random 7-digit ID, shown at the top of the page (click it to copy). Entering that ID
   on another phone or computer loads the same progress. Saves upload a few seconds
@@ -140,7 +150,7 @@ loadout, and fight bots or a friend.
   number of rolls) or **Delete auras** (type an aura name to delete just that one, both
   forms, or leave it empty to delete all). **Delete auras on every account except this
   player** wipes everyone else's auras. **Reset everyone's luck to x1** ends every
-  player's active luck boosts (and Rarity Magnet rolls) at once; anyone rolling right now
+  player's active luck boosts (and magnet and shiny potions) at once; anyone rolling right now
   switches within a few seconds without losing a roll, and everyone else's next roll is
   at x1. **💥 Detonate** resets every other player's
   account to a brand new save (all auras, coins, potions and stats) and keeps the account

@@ -27,32 +27,49 @@
     clover:    { name: "Clover Brew",       icon: "☘️", cost: 500,     group: "luck",   kind: "luck", mult: 3,     rolls: 50, desc: "x3 luck for 50 rolls" },
     fortune:   { name: "Fortune Potion",    icon: "🧪", cost: 600,     group: "luck",   kind: "luck", mult: 5,     rolls: 15, desc: "x5 luck for 15 rolls" },
     heavenly:  { name: "Heavenly Potion",   icon: "✨", cost: 3000,    group: "luck",   kind: "luck", mult: 25,    rolls: 10, desc: "x25 luck for 10 rolls" },
+    rainbow:   { name: "Rainbow Potion",    icon: "🌈", cost: 6000,    group: "luck",   kind: "luck", mult: 10,    rolls: 100, desc: "x10 luck for 100 rolls" },
     starlight: { name: "Starlight Elixir",  icon: "🌟", cost: 8000,    group: "luck",   kind: "luck", mult: 60,    rolls: 8,  desc: "x60 luck for 8 rolls" },
     godly:     { name: "Godly Potion",      icon: "👑", cost: 20000,   group: "luck",   kind: "luck", mult: 200,   rolls: 5,  desc: "x200 luck for 5 rolls" },
     voidess:   { name: "Void Essence",      icon: "🕳️", cost: 45000,   group: "luck",   kind: "luck", mult: 500,   rolls: 4,  desc: "x500 luck for 4 rolls" },
     zenith:    { name: "Zenith Potion",     icon: "🌌", cost: 100000,  group: "luck",   kind: "luck", mult: 1000,  rolls: 3,  desc: "x1000 luck for 3 rolls" },
     oblivion:  { name: "Oblivion Draught",  icon: "🌑", cost: 400000,  group: "luck",   kind: "luck", mult: 5000,  rolls: 2,  desc: "x5000 luck for 2 rolls" },
-    infinity:  { name: "Infinity Serum",    icon: "♾️", cost: 2000000, group: "luck",   kind: "luck", mult: 25000, rolls: 1,  desc: "x25000 luck for a single roll. The best potion money can buy." },
+    infinity:  { name: "Infinity Serum",    icon: "♾️", cost: 2000000, group: "luck",   kind: "luck", mult: 25000, rolls: 1,  desc: "x25000 luck for a single roll" },
+    celestial: { name: "Celestial Nectar",  icon: "🪐", cost: 10000000, group: "luck",  kind: "luck", mult: 100000, rolls: 2, desc: "x100,000 luck for 2 rolls" },
+    destiny:   { name: "Potion of Destiny", icon: "🌠", cost: 100000000, group: "luck", kind: "luck", mult: 10000000, rolls: 1, desc: "x10,000,000 luck for a single roll. The best potion money can buy." },
     blessing:  { name: "Daily Blessing",    icon: "🎁", cost: 0,       group: "luck",   kind: "luck", mult: 50,    rolls: 1,  desc: "x50 luck for one roll. Only from the daily gift.", daily: true },
     secret:    { name: "Elixir of the Million", icon: "🗝️", cost: 1000000, group: "luck", kind: "luck", mult: 1000000, rolls: 1, desc: "x1,000,000 luck for a single roll. The shop never advertised this.", secret: true },
-    magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "luck",   kind: "floor", rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
+    /* Magnets and shiny */
+    magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "special", kind: "floor", min: 1000,  rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
+    epicmagnet:{ name: "Epic Magnet",       icon: "🧿", cost: 15000,   group: "special", kind: "floor", min: 10000, rolls: 3,  desc: "Your next 3 rolls are Epic or better" },
+    lure:      { name: "Legend Lure",       icon: "🪝", cost: 150000,  group: "special", kind: "floor", min: 100000, rolls: 2, desc: "Your next 2 rolls are Legendary or better" },
+    shimmer:   { name: "Shimmer Potion",    icon: "💫", cost: 2000,    group: "special", kind: "shiny", mult: 2,  rolls: 10, desc: "x2 shiny chance for 10 rolls" },
+    prism:     { name: "Prism Potion",      icon: "💠", cost: 25000,   group: "special", kind: "shiny", mult: 10, rolls: 5,  desc: "Your next 5 rolls are shiny whenever the aura has a shiny form" },
     /* Coins and speed */
     gold:      { name: "Gold Potion",       icon: "💰", cost: 250,     group: "coins",  kind: "gold", mult: 2,  rolls: 30, desc: "x2 coins from rolls for 30 rolls" },
     midas:     { name: "Midas Tonic",       icon: "🏆", cost: 1200,    group: "coins",  kind: "gold", mult: 5,  rolls: 20, desc: "x5 coins from rolls for 20 rolls" },
     rush:      { name: "Golden Rush",       icon: "💎", cost: 3000,    group: "coins",  kind: "gold", mult: 10, rolls: 10, desc: "x10 coins from rolls for 10 rolls" },
+    treasure:  { name: "Treasure Tonic",    icon: "🪙", cost: 8000,    group: "coins",  kind: "gold", mult: 25, rolls: 10, desc: "x25 coins from rolls for 10 rolls" },
+    hoard:     { name: "Dragon's Hoard",    icon: "🐉", cost: 40000,   group: "coins",  kind: "gold", mult: 100, rolls: 5, desc: "x100 coins from rolls for 5 rolls" },
     haste:     { name: "Haste Potion",      icon: "⚡", cost: 200,     group: "coins",  kind: "haste", div: 2, seconds: 60,  desc: "Roll cooldown halved for 60 seconds" },
     blitz:     { name: "Blitz Potion",      icon: "🌀", cost: 800,     group: "coins",  kind: "haste", div: 4, seconds: 120, desc: "Roll cooldown quartered for 2 minutes" },
-    mystery:   { name: "Mystery Potion",    icon: "❓", cost: 1000,    group: "coins",  kind: "mystery", desc: "Turns into a random potion. Usually cheap, sometimes amazing." },
+    timewarp:  { name: "Time Warp",         icon: "⏳", cost: 5000,    group: "coins",  kind: "haste", div: 8, seconds: 90,  desc: "Roll cooldown cut to 1/8 for 90 seconds" },
+    mystery:   { name: "Mystery Potion",    icon: "❓", cost: 1000,    group: "coins",  kind: "mystery", maxCost: 2000000, desc: "Turns into a random potion. Usually cheap, sometimes amazing." },
+    megamystery:{ name: "Mega Mystery Potion", icon: "🎲", cost: 10000, group: "coins", kind: "mystery", minCost: 1000, maxCost: 10000000, desc: "Turns into a random potion worth at least 1,000 coins. It might even be a Celestial Nectar!" },
     /* Battle */
     heal:      { name: "Healing Potion",    icon: "❤️", cost: 100,     group: "battle", kind: "heal", pct: 0.4,  desc: "Restore 40% HP during a bot fight" },
     greatheal: { name: "Greater Healing",   icon: "💖", cost: 300,     group: "battle", kind: "heal", pct: 0.8,  desc: "Restore 80% HP during a bot fight" },
+    fullheal:  { name: "Full Restore",      icon: "💝", cost: 1000,    group: "battle", kind: "heal", pct: 1,    desc: "Restore all your HP during a bot fight" },
     strength:  { name: "Strength Potion",   icon: "💪", cost: 150,     group: "battle", kind: "strength", mult: 1.5, desc: "+50% damage in your next bot fight" },
     titan:     { name: "Titan's Brew",      icon: "🦾", cost: 500,     group: "battle", kind: "strength", mult: 2,   desc: "+100% damage in your next bot fight" },
+    rage:      { name: "Rage Potion",       icon: "😡", cost: 2000,    group: "battle", kind: "strength", mult: 3,   desc: "+200% damage in your next bot fight" },
+    godslayer: { name: "Godslayer Tonic",   icon: "☄️", cost: 10000,   group: "battle", kind: "strength", mult: 5,   desc: "+400% damage in your next bot fight" },
     ironskin:  { name: "Iron Skin",         icon: "🛡️", cost: 400,     group: "battle", kind: "shield", pct: 0.3, desc: "Start your next bot fight with a shield worth 30% of your HP" },
-    secondwind:{ name: "Second Wind",       icon: "🕊️", cost: 1500,    group: "battle", kind: "revive", pct: 0.4, desc: "Survive a killing blow once in your next bot fight and come back at 40% HP" }
+    steelwall: { name: "Steel Wall",        icon: "🧱", cost: 1500,    group: "battle", kind: "shield", pct: 0.6, desc: "Start your next bot fight with a shield worth 60% of your HP" },
+    secondwind:{ name: "Second Wind",       icon: "🕊️", cost: 1500,    group: "battle", kind: "revive", pct: 0.4, desc: "Survive a killing blow once in your next bot fight and come back at 40% HP" },
+    phoenix:   { name: "Phoenix Feather",   icon: "🪶", cost: 6000,    group: "battle", kind: "revive", pct: 1,   desc: "Survive a killing blow once in your next bot fight and come back at full HP" }
   };
   var POTION_ORDER = Object.keys(POTIONS);
-  var POTION_GROUPS = [["luck", "Luck potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
+  var POTION_GROUPS = [["luck", "Luck potions"], ["special", "Magnets and shiny potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
 
   /* Daily gift ladder: day 1..7 of a streak. Coins scale up with every completed week. */
   var DAILY_COOLDOWN_MS = 20 * 60 * 60 * 1000;
@@ -124,7 +141,8 @@
       potions: {},
       luckEffects: [],
       goldEffects: [],
-      floorRolls: 0,
+      floorEffects: [],
+      shinyEffects: [],
       hasteUntil: 0,
       hasteDiv: 2,
       strengthMult: 1,
@@ -172,11 +190,16 @@
       merged.daily = Object.assign(defaultState().daily, saved.daily || {});
       if (!Array.isArray(merged.goldEffects)) merged.goldEffects = [];
       if (saved.goldRolls > 0) merged.goldEffects.push({ mult: 2, rolls: saved.goldRolls });
+      if (!Array.isArray(merged.floorEffects)) merged.floorEffects = [];
+      if (!Array.isArray(merged.shinyEffects)) merged.shinyEffects = [];
+      /* Rarity Magnet rolls used to be a bare count, always with a Rare floor. */
+      if (saved.floorRolls > 0) merged.floorEffects.push({ min: 1000, rolls: saved.floorRolls });
       if (saved.strengthReady) merged.strengthMult = Math.max(merged.strengthMult || 1, 1.5);
       if (!merged.shinyInventory || typeof merged.shinyInventory !== "object") merged.shinyInventory = {};
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
       delete merged.goldRolls;
+      delete merged.floorRolls;
       delete merged.strengthReady;
       return merged;
     } catch (e) {
@@ -224,6 +247,34 @@
     return m;
   }
 
+  function currentShinyMult() {
+    var m = 1;
+    S.shinyEffects.forEach(function (e) { if (e.mult > m) m = e.mult; });
+    return m;
+  }
+
+  /* The lowest rarity a magnet potion allows right now (0 when none is active). The strongest magnet wins. */
+  function currentFloor() {
+    var min = 0;
+    S.floorEffects.forEach(function (e) { if (e.min > min) min = e.min; });
+    return min;
+  }
+
+  /* One roll passes for a list of roll-counted effects; finished ones drop off. */
+  function countDown(list) {
+    list.forEach(function (e) { e.rolls--; });
+    return list.filter(function (e) { return e.rolls > 0; });
+  }
+
+  /* The potion of a kind whose `field` matches a stored value, e.g. which shield potion set shieldReady. */
+  function potionMatching(kind, field, value) {
+    for (var i = 0; i < POTION_ORDER.length; i++) {
+      var p = POTIONS[POTION_ORDER[i]];
+      if (p.kind === kind && p[field] === value) return p;
+    }
+    return null;
+  }
+
   /* ---------- Shiny helpers ---------- */
   function owns(id, shiny) { return ((shiny ? S.shinyInventory : S.inventory)[id] || 0) > 0; }
   function ownsAny(id) { return owns(id, false) || owns(id, true); }
@@ -234,7 +285,7 @@
   function auraLabel(aura, shiny) { return (isShiny(aura, shiny) ? "✨ Shiny " : "") + aura.name; }
   function oddsText(aura, shiny) { return A.formatOdds(effRarity(aura, shiny)) + (isShiny(aura, shiny) ? " · ✨×" + aura.shiny : ""); }
   /* A shiny-capable aura rolls shiny 1 time in its multiplier, so a shiny's true odds are its normal odds × the multiplier. */
-  function rollShiny(aura) { return !!aura.shiny && Math.random() < 1 / aura.shiny; }
+  function rollShiny(aura) { return !!aura.shiny && Math.random() < Math.min(1, currentShinyMult() / aura.shiny); }
 
   function equippedAura() {
     if (S.equipped === null || S.equipped === undefined) return null;
@@ -432,16 +483,25 @@
       g.textContent = "💰 x" + e.mult + " coins · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
       box.appendChild(g);
     });
-    if (S.floorRolls > 0) {
+    S.shinyEffects.forEach(function (e) {
+      var sp = potionMatching("shiny", "mult", e.mult);
+      var el = document.createElement("span");
+      el.className = "effect";
+      el.textContent = (sp ? sp.icon : "💫") + " x" + fmt(e.mult) + " shiny chance · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
+      box.appendChild(el);
+    });
+    S.floorEffects.forEach(function (e) {
+      var fp = potionMatching("floor", "min", e.min);
       var fl = document.createElement("span");
       fl.className = "effect";
-      fl.textContent = "🧲 Rare or better · " + S.floorRolls + " roll" + (S.floorRolls === 1 ? "" : "s");
+      fl.textContent = (fp ? fp.icon : "🧲") + " " + tierName({ rarity: e.min }) + " or better · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
       box.appendChild(fl);
-    }
+    });
     if (hasteActive()) {
+      var hp = potionMatching("haste", "div", S.hasteDiv);
       var h = document.createElement("span");
       h.className = "effect haste";
-      h.textContent = (S.hasteDiv >= 4 ? "🌀 Blitz" : "⚡ Haste") + " · " + Math.ceil((S.hasteUntil - Date.now()) / 1000) + "s";
+      h.textContent = (hp ? hp.icon + " " + hp.name.replace(/ Potion$/, "") : "⚡ Haste") + " · " + Math.ceil((S.hasteUntil - Date.now()) / 1000) + "s";
       box.appendChild(h);
     }
     if (S.strengthMult > 1) {
@@ -453,15 +513,25 @@
     if (S.shieldReady > 0) {
       var sh = document.createElement("span");
       sh.className = "effect strength";
-      sh.textContent = "🛡️ Iron Skin ready";
+      sh.textContent = readyLabel("shield", S.shieldReady, "🛡️ Iron Skin") + " ready";
       box.appendChild(sh);
     }
     if (S.reviveReady > 0) {
       var rv = document.createElement("span");
       rv.className = "effect strength";
-      rv.textContent = "🕊️ Second Wind ready";
+      rv.textContent = readyLabel("revive", S.reviveReady, "🕊️ Second Wind") + " ready";
       box.appendChild(rv);
     }
+  }
+
+  /* Icon and name of the shield or revive potion waiting for the next fight. */
+  function readyLabel(kind, pct, fallback) {
+    var p = potionMatching(kind, "pct", pct);
+    return p ? p.icon + " " + p.name : fallback;
+  }
+  function waitingName(kind, pct) {
+    var p = potionMatching(kind, "pct", pct);
+    return p ? p.name : "A stronger potion";
   }
 
   function renderQuickbar() {
@@ -527,17 +597,19 @@
   var autoOn = false;
   var spinTimer = null;
 
-  var rareFloorList = null;
+  var floorLists = {};
+  /* `floor` is the lowest rarity allowed (0 for none). If nothing at or above it hits, one of the auras
+     just above the floor is picked. */
   function pickAura(luck, floor) {
     var list = A.byRarityDesc;
     for (var i = 0; i < list.length; i++) {
-      if (floor && list[i].rarity < 1000) break;
+      if (floor && list[i].rarity < floor) break;
       var p = Math.min(1, luck / list[i].rarity);
       if (Math.random() < p) return list[i];
     }
     if (floor) {
-      if (!rareFloorList) rareFloorList = A.list.filter(function (a) { return a.rarity >= 1000 && a.rarity < 2000; });
-      return rareFloorList[Math.floor(Math.random() * rareFloorList.length)];
+      if (!floorLists[floor]) floorLists[floor] = A.list.filter(function (a) { return a.rarity >= floor && a.rarity < floor * 2; });
+      return floorLists[floor][Math.floor(Math.random() * floorLists[floor].length)];
     }
     return A.list[0];
   }
@@ -818,19 +890,18 @@
     $("#btn-roll").disabled = true;
     Sound.roll();
 
-    var aura = forced || pickAura(currentLuck(), S.floorRolls > 0);
+    var aura = forced || pickAura(currentLuck(), currentFloor());
     var ti = tierIndex(aura);
     var shiny = forcedShiny === undefined ? rollShiny(aura) : isShiny(aura, forcedShiny);
 
     S.rolls++;
     if (!forced) {
-      S.luckEffects.forEach(function (e) { e.rolls--; });
-      S.luckEffects = S.luckEffects.filter(function (e) { return e.rolls > 0; });
-      if (S.floorRolls > 0) S.floorRolls--;
+      S.luckEffects = countDown(S.luckEffects);
+      S.floorEffects = countDown(S.floorEffects);
+      S.shinyEffects = countDown(S.shinyEffects);
     }
     var mult = currentGoldMult();
-    S.goldEffects.forEach(function (e) { e.rolls--; });
-    S.goldEffects = S.goldEffects.filter(function (e) { return e.rolls > 0; });
+    S.goldEffects = countDown(S.goldEffects);
     var coins = auraCoins(aura, shiny) * mult;
     addCoins(coins);
     var bag = shiny ? S.shinyInventory : S.inventory;
@@ -949,7 +1020,9 @@
     if (p.kind === "luck") {
       S.luckEffects.push({ mult: p.mult, rolls: p.rolls });
     } else if (p.kind === "floor") {
-      S.floorRolls += p.rolls;
+      S.floorEffects.push({ min: p.min, rolls: p.rolls });
+    } else if (p.kind === "shiny") {
+      S.shinyEffects.push({ mult: p.mult, rolls: p.rolls });
     } else if (p.kind === "gold") {
       S.goldEffects.push({ mult: p.mult, rolls: p.rolls });
     } else if (p.kind === "haste") {
@@ -961,21 +1034,22 @@
       if (S.strengthMult >= p.mult) { errorToast(ERR.POTION_USE, "An equal or stronger damage boost is already waiting."); return; }
       S.strengthMult = p.mult;
     } else if (p.kind === "shield") {
-      if (S.shieldReady > 0) { errorToast(ERR.POTION_USE, "Iron Skin is already waiting for your next fight."); return; }
+      /* A stronger shield replaces a weaker one that is waiting; an equal or stronger one blocks it. */
+      if (S.shieldReady >= p.pct) { errorToast(ERR.POTION_USE, waitingName("shield", S.shieldReady) + " is already waiting for your next fight."); return; }
       S.shieldReady = p.pct;
     } else if (p.kind === "revive") {
-      if (S.reviveReady > 0) { errorToast(ERR.POTION_USE, "Second Wind is already waiting for your next fight."); return; }
+      if (S.reviveReady >= p.pct) { errorToast(ERR.POTION_USE, waitingName("revive", S.reviveReady) + " is already waiting for your next fight."); return; }
       S.reviveReady = p.pct;
     } else if (p.kind === "heal") {
       if (!battle || battle.over || view.pvp) { errorToast(ERR.POTION_USE, "Healing potions are used during a bot fight."); return; }
       healInBattle(key);
       return;
     } else if (p.kind === "mystery") {
-      var won = rollMysteryPotion();
+      var won = rollMysteryPotion(p);
       S.potions[key]--;
       S.potions[won] = (S.potions[won] || 0) + 1;
       Sound.buy();
-      toast("❓ The Mystery Potion became " + POTIONS[won].icon + " " + POTIONS[won].name + "!", "gold");
+      toast(p.icon + " The " + p.name + " became " + POTIONS[won].icon + " " + POTIONS[won].name + "!", "gold");
       save();
       renderAll();
       return;
@@ -987,9 +1061,10 @@
     renderAll();
   }
 
-  /* Mystery potion odds: mostly cheap potions, with a small shot at the great ones. */
-  function rollMysteryPotion() {
-    var pool = POTION_ORDER.filter(function (k) { return k !== "mystery" && !POTIONS[k].daily && !POTIONS[k].secret; });
+  /* Mystery potion odds: mostly cheap potions, with a small shot at the great ones. The mystery potion's
+     `minCost` and `maxCost` bound which potions it can become. */
+  function rollMysteryPotion(m) {
+    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity); });
     var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var r = Math.random() * total;
@@ -2179,7 +2254,11 @@
     spec.dmgMult = S.strengthMult > 1 ? S.strengthMult : 1;
     var me = fighterFromSpec(spec);
     if (S.shieldReady > 0) { me.shield = Math.round(me.maxHp * S.shieldReady); }
-    if (S.reviveReady > 0) { me.revive = S.reviveReady; }
+    if (S.reviveReady > 0) {
+      var rp = potionMatching("revive", "pct", S.reviveReady);
+      me.revive = S.reviveReady;
+      if (rp) { me.reviveName = rp.name; me.reviveIcon = rp.icon; }
+    }
     var bkit = K.botKit(bot.id);
     var them = Engine.makeFighter({ name: bot.name, power: bot.power, kit: bkit, abilities: bkit.map(function (ab) { return ab.id; }), icon: bot.icon, isBot: true });
     battle = Engine.create(me, them, "a");
@@ -2187,9 +2266,11 @@
     openArena();
     $("#arena-banner").textContent = "Bot fight";
     if (S.strengthMult > 1) { logLine("💪 +" + Math.round((S.strengthMult - 1) * 100) + "% damage this fight", "you"); S.strengthMult = 1; }
-    if (S.shieldReady > 0) { logLine("🛡️ Iron Skin: you start with a " + fmt(me.shield) + " shield", "you"); S.shieldReady = 0; }
-    if (S.reviveReady > 0) { logLine("🕊️ Second Wind is ready to save you once", "you"); S.reviveReady = 0; }
+    if (S.shieldReady > 0) { logLine(readyLabel("shield", S.shieldReady, "🛡️ Iron Skin") + ": you start with a " + fmt(me.shield) + " shield", "you"); S.shieldReady = 0; }
+    if (S.reviveReady > 0) { logLine(readyLabel("revive", S.reviveReady, "🕊️ Second Wind") + " is ready to save you once", "you"); S.reviveReady = 0; }
     logLine("⚔️ " + bot.name + " challenges you!", "");
+    /* Saved now so the potions this fight used up stay used up even if the page is reloaded mid-fight. */
+    save();
     renderArena();
     renderAll();
   }
@@ -2224,7 +2305,7 @@
     if (f.focus) chips.push(["🔮 Focus", "good"]);
     if (f.reflect) chips.push(["🪞 Mirror", "good"]);
     if (f.shield > 0) chips.push(["🔰 Shield " + fmt(f.shield), "good"]);
-    if (f.revive > 0) chips.push(["🕊️ Second Wind", "good"]);
+    if (f.revive > 0) chips.push([(f.reviveIcon || "🕊️") + " " + (f.reviveName || "Second Wind"), "good"]);
     if (f.poison) chips.push(["☠️ Poison " + f.poison.turns, "bad"]);
     if (f.weaken > 0) chips.push(["🌀 Weak " + f.weaken, "bad"]);
     if (f.stunned) chips.push(["⚡ Stunned", "bad"]);
@@ -2277,7 +2358,7 @@
     });
 
     $("#btn-heal").classList.toggle("hidden", view.pvp);
-    var heals = (S.potions.heal || 0) + (S.potions.greatheal || 0);
+    var heals = healKeys().reduce(function (n, k) { return n + (S.potions[k] || 0); }, 0);
     $("#btn-heal").textContent = "❤️ Heal potion (" + heals + ")";
     $("#btn-heal").disabled = !(heals > 0) || battle.over || !myTurn;
     $("#btn-flee").disabled = battle.over;
@@ -2375,9 +2456,10 @@
           break;
         case "revive":
           flash(e.who, "healed");
-          floatText(e.who, "SECOND WIND", "heal");
+          var rf = battle[e.who];
+          floatText(e.who, (rf.reviveName || "Second Wind").toUpperCase(), "heal");
           Sound.heal();
-          logLine("🕊️ " + (isMe(e.who) ? "Second Wind saves you!" : sideName(e.who) + " refuses to fall!"), isMe(e.who) ? "you" : "them");
+          logLine((rf.reviveIcon || "🕊️") + " " + (isMe(e.who) ? (rf.reviveName || "Second Wind") + " saves you!" : sideName(e.who) + " refuses to fall!"), isMe(e.who) ? "you" : "them");
           setHP(e);
           delay = 700;
           break;
@@ -2440,8 +2522,11 @@
     }
   }
 
+  /* Every healing potion, weakest first (the order the Heal button uses them up). */
+  function healKeys() { return POTION_ORDER.filter(function (k) { return POTIONS[k].kind === "heal"; }); }
+
   function healInBattle(key) {
-    key = key || (S.potions.heal > 0 ? "heal" : "greatheal");
+    key = key || healKeys().filter(function (k) { return S.potions[k] > 0; })[0];
     if (!battle || battle.over || view.pvp || !(S.potions[key] > 0)) return;
     if (battle.turn !== view.me || view.animating) { errorToast(ERR.POTION_USE, "Wait for your turn to drink a potion."); return; }
     S.potions[key]--;
@@ -2450,7 +2535,7 @@
     me.hp = Math.min(me.maxHp, me.hp + amount);
     flash("a", "healed");
     floatText("a", "+" + fmt(amount), "heal");
-    logLine("❤️ Healing potion restores " + fmt(amount) + " HP", "you");
+    logLine(POTIONS[key].icon + " " + POTIONS[key].name + " restores " + fmt(amount) + " HP", "you");
     Sound.heal();
     save();
     renderArena();
@@ -3013,6 +3098,8 @@
         break;
       case "clearluck":
         S.luckEffects = [];
+        S.floorEffects = [];
+        S.shinyEffects = [];
         adminPrint("Luck boosts cleared.");
         break;
       case "reset":
@@ -3761,7 +3848,7 @@
     if (data.by === "admin" && data.note === "luck" && (data.base === meta.rev || !hadChanges)) {
       /* An admin cleared everyone's luck. If this device has progress newer than what the admin edited,
          clear the luck here and keep that progress; otherwise just take the server's save. */
-      if (hadChanges) { S.luckEffects = []; S.floorRolls = 0; } else S = hydrate(data.save);
+      if (hadChanges) { S.luckEffects = []; S.floorEffects = []; S.shinyEffects = []; } else S = hydrate(data.save);
       updateMeta(currentUser, { rev: data.rev });
       saveLocal();
       if (hadChanges) cloudChanged();
