@@ -109,8 +109,13 @@ loadout, and fight bots or a friend.
   used up the moment the fight starts.
 - **Buy amount.** A row at the top of the Potion Shop picks how many potions each Buy
   button buys: x1, x2, x5, x10, x100, x1000 or **Max** (as many as your coins cover).
-  The cards show the total price, the choice is remembered, and if you can't afford
-  the whole amount nothing is bought (Error 435).
+  It works for **Training** too (x10 trains 10 levels, Max as many levels as you can
+  afford; each level costs 35% more than the last and adds +10 power). The cards show
+  the total price, the choice is remembered, and if you can't afford the whole amount
+  nothing is bought (Error 435).
+- **Taps never get lost.** Auto roll redraws the page after every roll; while a mouse
+  button or finger is down the redraw waits until the click has gone through, so
+  Buy, Train, Equip and Fight buttons always respond.
 - **Collector's potion.** A locked 🔒 "? ? ?" card in the Luck potions shows how many
   of the 37 shop potions you have bought (and the icons of the ones still to buy).
   Buy each of them at least once (Celestial Nectar, Potion of Destiny and the Elixir
@@ -139,7 +144,7 @@ loadout, and fight bots or a friend.
   seconds after the first one stops (straight away if it closes the tab), and it
   first loads the first device's newest progress.
 - **Error codes**, shown in red: **145** two devices rolling at once, **404** network
-  or account-server problem, **435** buying a potion (not enough coins), **102** using
+  or account-server problem, **435** buying a potion, training or Auto Roll (not enough coins), **102** using
   a potion (none left, a stronger one already active, healing outside a fight, not your
   turn), **98** account problems (bad name or ID, no player with that ID, a bad save
   code, or progress replaced by a newer save from another device).

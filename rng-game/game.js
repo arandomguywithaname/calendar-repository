@@ -18,6 +18,8 @@
   var ROLL_COOLDOWN = 1000;
   var PEER_PREFIX = "aura-realms-v1-";
   var fmt = function (n) { return Math.floor(n).toLocaleString("en-US"); };
+  /* Coin amounts too big to ever have (many training levels at once) read as words, not 100 digits. */
+  var fmtCost = function (n) { return n < 1e15 ? fmt(n) : "more than 1,000,000,000,000,000"; };
 
   /* ---------- Data ---------- */
 
@@ -128,6 +130,18 @@
   var PVP_WIN_REWARD = 500;
   var PVP_LOSS_REWARD = 100;
   function trainingCost(level) { return Math.floor(50 * Math.pow(1.35, level)); }
+  /* Levels one Train click buys with the shop's Buy amount, and what they cost together (Max: as many as
+     the coins cover). */
+  function trainingPlan() {
+    var amt = S.settings.buyAmount, want = amt === "max" ? 10000 : amt, levels = 0, cost = 0;
+    while (levels < want) {
+      var next = trainingCost(S.training + levels);
+      if (amt === "max" && cost + next > S.coins) break;
+      cost += next;
+      levels++;
+    }
+    return { levels: levels, cost: cost };
+  }
   function secretUnlocked() { return !!S.secretUnlocked || S.coins >= 1000000; }
 
   /* The collector's potion (Potion of Everything) appears once every other shop potion has been bought at
@@ -589,7 +603,23 @@
     });
   }
 
+  /* A redraw rebuilds the cards and their buttons, and auto roll redraws after every roll. While a mouse
+     button or finger is down the redraw waits until the click has gone through; otherwise the press would
+     land on a button that was just replaced and the click would be lost. */
+  var press = 0, pressedAt = 0, redrawPending = false;
+  function pressSettled(id) {
+    if (id !== press) return;
+    pressedAt = 0;
+    if (redrawPending) renderAll();
+  }
+  document.addEventListener("pointerdown", function () { press++; pressedAt = Date.now(); }, true);
+  document.addEventListener("click", function () { var id = press; setTimeout(function () { pressSettled(id); }, 0); }, true);
+  document.addEventListener("pointercancel", function () { var id = press; setTimeout(function () { pressSettled(id); }, 0); }, true);
+  document.addEventListener("pointerup", function () { var id = press; setTimeout(function () { pressSettled(id); }, 350); }, true);
+
   function renderAll() {
+    if (pressedAt && Date.now() - pressedAt < 1500) { redrawPending = true; return; }
+    redrawPending = false;
     renderHUD();
     renderEffects();
     renderQuickbar();
@@ -1194,24 +1224,33 @@
     var ug = $("#upgrade-grid");
     ug.innerHTML = "";
 
-    var tc = trainingCost(S.training);
+    var tc = trainingCost(S.training), plan = trainingPlan();
     var train = document.createElement("div");
     train.className = "card";
     train.innerHTML =
-      "<div class=\"row\"><div class=\"big-icon\">🏋️</div><div><div class=\"card-title\">Training · Lv " + S.training + "</div><div class=\"card-sub\">+10 power per level, applied to any equipped aura</div></div></div>" +
-      "<div class=\"row\"><span class=\"price\">" + fmt(tc) + " coins</span><span class=\"card-sub\">bonus: +" + fmt(S.training * 10) + "</span></div>";
+      "<div class=\"row\"><div class=\"big-icon\">🏋️</div><div><div class=\"card-title\">Training · Lv " + fmt(S.training) + "</div><div class=\"card-sub\">+10 power per level, applied to any equipped aura</div></div></div>" +
+      "<div class=\"row\"><span class=\"price\">" + fmtCost(tc) + " coins</span><span class=\"card-sub\">bonus: +" + fmt(S.training * 10) + "</span></div>";
+    if (S.settings.buyAmount !== 1) {
+      var ttotal = document.createElement("div");
+      ttotal.className = "card-sub buy-total";
+      ttotal.textContent = plan.levels > 0 ? "x" + fmt(plan.levels) + " levels = " + fmtCost(plan.cost) + " coins" : "Not enough coins for one level yet";
+      train.appendChild(ttotal);
+    }
     var ta = document.createElement("div");
     ta.className = "actions";
     var tb = document.createElement("button");
-    tb.className = "btn small primary";
-    tb.textContent = "Train";
-    tb.disabled = S.coins < tc;
+    tb.className = "btn small primary" + (plan.levels < 1 || S.coins < plan.cost ? " cant-afford" : "");
+    tb.textContent = S.settings.buyAmount === 1 ? "Train" : S.settings.buyAmount === "max" && plan.levels < 1 ? "Train max" : "Train x" + fmt(plan.levels);
     tb.addEventListener("click", function () {
-      if (S.coins < tc) return;
-      S.coins -= tc;
-      S.training++;
+      var pl = trainingPlan();
+      if (pl.levels < 1 || S.coins < pl.cost) {
+        errorToast(ERR.POTION_BUY, "Not enough coins to train" + (pl.levels > 1 ? " " + fmt(pl.levels) + " levels" : "") + " (" + fmtCost(pl.levels > 1 ? pl.cost : trainingCost(S.training)) + " needed).");
+        return;
+      }
+      S.coins -= pl.cost;
+      S.training += pl.levels;
       Sound.buy();
-      toast("Training level " + S.training);
+      toast(pl.levels > 1 ? "Trained " + fmt(pl.levels) + " levels for " + fmt(pl.cost) + " coins: level " + fmt(S.training) + " (+" + fmt(S.training * 10) + " power)" : "Training level " + fmt(S.training) + " (+" + fmt(S.training * 10) + " power)");
       save();
       renderAll();
     });
@@ -1228,11 +1267,10 @@
       var aa = document.createElement("div");
       aa.className = "actions";
       var ab = document.createElement("button");
-      ab.className = "btn small primary";
+      ab.className = "btn small primary" + (S.coins < AUTO_UNLOCK_COST ? " cant-afford" : "");
       ab.textContent = "Unlock";
-      ab.disabled = S.coins < AUTO_UNLOCK_COST;
       ab.addEventListener("click", function () {
-        if (S.coins < AUTO_UNLOCK_COST) return;
+        if (S.coins < AUTO_UNLOCK_COST) { errorToast(ERR.POTION_BUY, "Not enough coins for Auto Roll (" + fmt(AUTO_UNLOCK_COST) + " needed)."); return; }
         S.coins -= AUTO_UNLOCK_COST;
         S.autoUnlocked = true;
         Sound.buy();
