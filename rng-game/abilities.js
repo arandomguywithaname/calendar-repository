@@ -72,6 +72,10 @@
 
   /* Hand-written kits for the headline auras. [archetype, name, optional mult override] */
   var SPECIAL_KITS = {
+    "The Chosen One": [
+      ["strike", "Chosen Strike"], ["barrage", "Prophecy Storm"], ["shield", "Fated Aegis"],
+      ["heal", "Second Coming"], ["execute", "Final Judgement"], ["burst", "Destiny Unbound", 3.2]
+    ],
     "Cosmic Veil": [
       ["strike", "Starlight Lash"], ["barrage", "Meteor Cascade"], ["shield", "The Veil"],
       ["focus", "Gaze of the Cosmos"], ["reflect", "Nebula Mirror"], ["burst", "Supernova Unveiled", 2.8]
@@ -94,7 +98,7 @@
     ]
   };
 
-  var BASE_THEMES = { Common: "Dust", Uncommon: "Moss", Good: "Spark", Natural: "Root", Breeze: "Wind", Stone: "Stone" };
+  var BASE_THEMES = { Common: "Dust", Uncommon: "Moss", Good: "Spark", Natural: "Root", Breeze: "Wind", Stone: "Stone", "The Chosen One": "Destiny" };
 
   function themeWords(aura) {
     if (BASE_THEMES[aura.name]) return [BASE_THEMES[aura.name]];

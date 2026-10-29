@@ -1,6 +1,7 @@
-/* auras.js — generates the 806 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
+/* auras.js — generates the 847 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
    up to Fury of Darkness at 1 in 1,000,000,000), 20 hand-made Forbidden auras beyond it (up to Null Dominion at
-   1 in 80,000,000,000) and the two Administrative auras, the last rank. Rarity is expressed as "1 in N". */
+   1 in 80,000,000,000) and the 43 Administrative auras of the last rank, ending with The Chosen One at
+   1 in 1,000,000,000,000,000. Rarity is expressed as "1 in N". */
 (function (global) {
   "use strict";
 
@@ -234,6 +235,29 @@
     ["Root Access",         500000000000,  ["#22d3ee", "#001014", "#a5f3fc", "#0e7490", "#ecfeff"], 0, 10000],
     ["Absolute Authority",  1000000000000, ["#fde68a", "#050505", "#22d3ee", "#ffffff", "#f59e0b"], 0, 12000]
   ];
+  /* 40 more Administrative auras between Absolute Authority (1 in a trillion) and The Chosen One (1 in a
+     quadrillion): odds spread evenly on a log scale and rounded to two digits, power rising 500 at a time from
+     12,500 to 32,000. Every fifth one has no shiny form, so 32 of the 40 do. */
+  var ADMIN_NAMES = [
+    "Kernel Panic", "Firewall Sentinel", "System Override", "Admin Overlord", "Master Key",
+    "Sudo Command", "Debug Mode", "Server Throne", "Source Code", "Data Sovereign",
+    "Binary Emperor", "Cipher King", "Protocol Zero", "Prime Directive", "Root Warden",
+    "Mainframe Titan", "Quantum Admin", "Code Architect", "Neural Monarch", "Network Deity",
+    "Glitch Emperor", "Bytecore Sage", "Console Deity", "Encrypted Crown", "Logic Tyrant",
+    "Server Seraph", "Admin Ascendant", "Hotfix Herald", "Backdoor Phantom", "Overclock Wraith",
+    "Infinite Loop", "Null Pointer", "Stack Overflow", "Recursion Lord", "Supreme Moderator",
+    "Command Nexus", "Omega Protocol", "Genesis Compiler", "Celestial Admin", "Eternal Operator"
+  ];
+  var adminShiny = 0;
+  ADMIN_NAMES.forEach(function (name, i) {
+    var exact = 1e12 * Math.pow(10, 3 * (i + 1) / (ADMIN_NAMES.length + 1));
+    var step = Math.pow(10, Math.floor(Math.log10(exact)) - 1);
+    var prng = mulberry32(9001 + i), hue = 165 + Math.floor(prng() * 60), gold = 38 + Math.floor(prng() * 14);
+    var colors = ["hsl(" + hue + ", 95%, 62%)", "hsl(" + hue + ", 80%, 6%)", "hsl(" + gold + ", 95%, 65%)", "hsl(" + ((hue + 30) % 360) + ", 90%, 80%)", "#ffffff"];
+    EXTRA_AURAS.push([name, Math.round(exact / step) * step, colors, i % 5 === 4 ? 0 : 2 + (adminShiny++ % 4), 12500 + i * 500]);
+  });
+  /* The last aura of all: one of a kind, no shiny form. */
+  EXTRA_AURAS.push(["The Chosen One", 1e15, ["#fff7cc", "#0b0700", "#fde047", "#ffffff", "#f59e0b"], 0, 50000]);
   EXTRA_AURAS.forEach(function (e) {
     var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };
     var tier = tierOf(a);
@@ -241,6 +265,7 @@
     a.c1 = a.colors[0];
     a.c2 = a.colors[1];
     a.power = e[4] || powerFor(a.rarity);
+    a.fixedPower = !!e[4];
     a.coins = Math.max(1, Math.floor(2 * Math.log2(a.rarity))) + TIER_COIN_BONUS[tier.key];
     a.cutscene = tier.cutscene;
     a.id = list.length;
@@ -249,8 +274,8 @@
   });
   var TOTAL = list.length;
 
-  /* Shiny forms: 78.5% of auras get one (615 of the 784 generated ones and 18 of the 20 extra Forbidden ones;
-     the two Administrative auras have none: 633 of 806). Each is fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a
+  /* Shiny forms: 78.5% of auras get one (615 of the 784 generated ones, 18 of the 20 extra Forbidden ones and
+     32 of the 40 later Administrative ones; Root Access, Absolute Authority and The Chosen One have none: 665 of 847). Each is fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a
      1-in-multiplier chance of being shiny, so a shiny's true odds are its normal odds times the multiplier. */
   var SHINY_SHARE = 0.785;
   /* Hand-picked shiny multipliers that override the even x2-x5 spread. */
@@ -259,7 +284,8 @@
     var setShiny = function (a, k) {
       a.shiny = k;
       a.shinyRarity = a.rarity * k;
-      a.shinyPower = powerFor(a.shinyRarity);
+      /* An aura with a hand-set power gets +10% per shiny multiplier step instead of the rarity curve. */
+      a.shinyPower = a.fixedPower ? Math.round(a.power * (1 + 0.1 * k)) : powerFor(a.shinyRarity);
       a.shinyCoins = a.coins * k;
     };
     var rng = mulberry32(785), order = list.slice(0, GENERATED).map(function (a) { return a.id; }), i;

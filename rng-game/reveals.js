@@ -1731,7 +1731,10 @@
   var SCENE_KEYS = Object.keys(SCENES);
   var TITLE_KEYS = ["stagger", "type", "slam", "blur", "flip", "rise", "glitch", "decode"];
   var OVERLAY_KEYS = ["none", "scanlines", "vignette", "grid", "noise"];
-  var FORCED = { "Beyond Axiom": { scene: "graph", accent: "dust", title: "type", overlay: "grid" } };
+  var FORCED = {
+    "Beyond Axiom": { scene: "graph", accent: "dust", title: "type", overlay: "grid" },
+    "The Chosen One": { scene: "constellation", accent: "godrays", title: "slam", overlay: "vignette" }
+  };
 
   /* Every Epic+ aura gets its own scene + accent pairing (no two share one); title style and
      overlay are added on top for extra variety. Below Epic there is no cutscene. */
