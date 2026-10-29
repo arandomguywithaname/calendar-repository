@@ -59,7 +59,8 @@
     cosmic:       ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
     divine:       ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
     transcendent: ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
-    forbidden:    ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"]
+    forbidden:    ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
+    administrative: ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"]
   };
   var FINISHERS = ["burst", "execute", "barrage"];
 
@@ -130,7 +131,7 @@
     } else {
       var pool = (TIER_POOLS[aura.tier] || TIER_POOLS.common).slice();
       var picks = ["strike"];
-      var tierIdx = ["common", "uncommon", "rare", "epic", "legendary", "cosmic", "divine", "transcendent", "forbidden"].indexOf(aura.tier);
+      var tierIdx = ["common", "uncommon", "rare", "epic", "legendary", "cosmic", "divine", "transcendent", "forbidden", "administrative"].indexOf(aura.tier);
       if (tierIdx >= 4) {
         var fin = FINISHERS[Math.floor(rng() * FINISHERS.length)];
         picks.push(fin);

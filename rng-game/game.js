@@ -2994,7 +2994,8 @@
     5: { scene: 6.6, spell: 1.8, hold: 3.0 },  /* Cosmic */
     6: { scene: 7.6, spell: 2.2, hold: 3.5 },  /* Divine */
     7: { scene: 8.6, spell: 2.6, hold: 4.0 },  /* Transcendent */
-    8: { scene: 8.6, spell: 2.6, hold: 4.5 }   /* Forbidden */
+    8: { scene: 8.6, spell: 2.6, hold: 4.5 },  /* Forbidden */
+    9: { scene: 9.6, spell: 3.0, hold: 5.0 }   /* Administrative */
   };
   /* Cosmic and rarer stay up until the player taps; this is only a safety net so Auto Roll never stalls. */
   var REVEAL_WAIT_MAX = 30;
@@ -3008,7 +3009,7 @@
     } else if (aura.special === "fury") {
       text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.1; style = "glitch"; step = 0.08; oddsFloor = 4.6; hold = 4.5;
     } else {
-      var pace = REVEAL_PACE[Math.max(3, Math.min(8, tierIndex(aura)))];
+      var pace = REVEAL_PACE[Math.max(3, Math.min(9, tierIndex(aura)))];
       r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
       var scene = REVEALS.SCENES[r.scene];
       text = aura.name; sceneDur = pace.scene; style = r.title; hold = pace.hold;
@@ -3045,7 +3046,7 @@
       var tl = revealTimeline(aura, sh);
       CS.running = true;
       CS.resolve = resolve;
-      CS.el.className = "cutscene kind-" + kind;
+      CS.el.className = "cutscene kind-" + kind + " tier-" + aura.tier;
       CS.el.style.opacity = "";
       CS.el.style.setProperty("--c1", aura.c1);
       CS.el.style.setProperty("--c2", aura.c2);

@@ -3,16 +3,21 @@
 A static browser game: roll for auras, earn coins, buy potions, build an ability
 loadout, and fight bots or a friend.
 
-- **794 auras**, from Common (1 in 2) up to Fury of Darkness (1 in 1,000,000,000), and ten
-  Forbidden auras beyond it: Abyssal Crown, Void Sovereign, Shattered Infinity, Crimson
-  Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis, Wrath of the Unmade,
-  Eternal Damnation and Final Silence (1 in 1.25 billion up to 1 in 10,000,000,000).
+- **806 auras in 10 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
+  1,000,000,000), then twenty more Forbidden auras beyond it (Abyssal Crown, Void Sovereign,
+  Shattered Infinity, Crimson Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis,
+  Wrath of the Unmade, Eternal Damnation, Final Silence, Obsidian Requiem, Hellfire Monarch,
+  Ruined Eternity, Doomsday Pulse, Cursed Singularity, Phantom Armageddon, Drowned Leviathan,
+  Endless Torment, Chaos Incarnate and Null Dominion: 1 in 1.25 billion up to 1 in 80
+  billion). The last rank, **Administrative**, has only two auras: Root Access (1 in
+  500,000,000,000, 10,000 power) and Absolute Authority (1 in 1,000,000,000,000, 12,000
+  power), with their own cyan orb style and the longest reveal.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
-  swirling paint, orbiting rings, sparkles, light rays, colour shifting, and a red
-  storm for Fury of Darkness.
+  swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
+  Fury of Darkness and the Forbidden rank, and a cyan system glow for Administrative.
 - **Its own cutscene for every Epic+ aura.** Common, Uncommon and Rare rolls stay on
   the roll screen (Rare still gets the slot-machine slowdown, flash and banner). Each
-  of the 651 auras from Epic upward takes over the screen with a cutscene no other
+  of the 663 auras from Epic upward takes over the screen with a cutscene no other
   aura shares: one of 54 scenes paired with one of 14 effect layers (shooting stars,
   snow, embers, rain, bubbles, searchlights, lightning, petals, orbiting motes,
   glitch bars, god rays, drifting dust, bokeh, ribbons), and every scene + effect
@@ -27,13 +32,12 @@ loadout, and fight bots or a friend.
   a lava lamp, jellyfish, a maze, a prism, a rocket launch, sky lanterns and a
   spinning globe. Beyond Axiom always gets the graph; Cosmic Veil and Fury of
   Darkness keep bespoke sequences.
-- **Shiny forms.** 623 of the 794 auras (78.5%: 615 of the 784 generated ones and 8 of
-  the 10 extra Forbidden ones)
-  have a shiny form fixed at ×2, ×3, ×4 or ×5, spread evenly, except Fury of
-  Darkness, whose shiny is ×10. Rolling one of them has a 1-in-that-number chance of
-  coming out shiny, so a shiny Fury of Darkness is 1 in 10,000,000,000 and the rarest
-  thing in the game, a ×5 shiny Final Silence, is 1 in 50,000,000,000. Shinies are
-  separate collectibles: their own inventory
+- **Shiny forms.** 633 of the 806 auras (78.5%: 615 of the 784 generated ones and 18 of
+  the 20 extra Forbidden ones; the two Administrative auras have none) have a shiny form
+  fixed at ×2, ×3, ×4 or ×5, spread evenly, except Fury of Darkness, whose shiny is ×10.
+  Rolling one of them has a 1-in-that-number chance of coming out shiny, so a shiny
+  Fury of Darkness is 1 in 10,000,000,000 and a ×4 shiny Null Dominion is 1 in
+  320,000,000,000. Shinies are separate collectibles: their own inventory
   card, a rainbow ring and sparkles on the orb, a rainbow name, more power (worked
   out from the shiny odds), coins multiplied by the same number, and a rainbow sheen
   plus chime over the cutscene. Only Epic and rarer shinies get a cutscene (their

@@ -1,6 +1,6 @@
-/* auras.js — generates the 794 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
-   up to Fury of Darkness at 1 in 1,000,000,000) plus 10 hand-made Forbidden auras beyond it, up to
-   Final Silence at 1 in 10,000,000,000. Rarity is expressed as "1 in N". */
+/* auras.js — generates the 806 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
+   up to Fury of Darkness at 1 in 1,000,000,000), 20 hand-made Forbidden auras beyond it (up to Null Dominion at
+   1 in 80,000,000,000) and the two Administrative auras, the last rank. Rarity is expressed as "1 in N". */
 (function (global) {
   "use strict";
 
@@ -32,12 +32,13 @@
     { key: "cosmic",       name: "Cosmic",       max: 1e7,      color: "#e879f9", cutscene: 2 },
     { key: "divine",       name: "Divine",       max: 1e8,      color: "#fde047", cutscene: 3 },
     { key: "transcendent", name: "Transcendent", max: 1e9,      color: "#f472b6", cutscene: 4 },
-    { key: "forbidden",    name: "Forbidden",    max: Infinity, color: "#ef4444", cutscene: 5 }
+    { key: "forbidden",    name: "Forbidden",    max: 1e11,     color: "#ef4444", cutscene: 5 },
+    { key: "administrative", name: "Administrative", max: Infinity, color: "#22d3ee", cutscene: 6 }
   ];
 
   var TIER_COIN_BONUS = {
     common: 0, uncommon: 0, rare: 10, epic: 40, legendary: 200,
-    cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000
+    cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000, administrative: 2500000
   };
 
   /* Battle power grows with rarity; every aura gets twice the base curve. */
@@ -206,9 +207,9 @@
 
   var list = build();
 
-  /* Forbidden auras beyond Fury of Darkness: name, rarity, palette, shiny multiplier (0 = no shiny form).
-     They take IDs 784 and up, after the generated set. */
-  var EXTRA_FORBIDDEN = [
+  /* Hand-made auras beyond Fury of Darkness: name, rarity, palette, shiny multiplier (0 = no shiny form) and,
+     for the Administrative rank, a fixed power. They take IDs 784 and up in this order, so no ID ever changes. */
+  var EXTRA_AURAS = [
     ["Abyssal Crown",       1250000000,  ["#a855f7", "#05000d", "#f0abfc", "#3b0764", "#c084fc"], 3],
     ["Void Sovereign",      1500000000,  ["#38bdf8", "#00040d", "#0c4a6e", "#e0f2fe", "#0369a1"], 2],
     ["Shattered Infinity",  2000000000,  ["#e2e8f0", "#0b0b12", "#94a3b8", "#f8fafc", "#475569"], 4],
@@ -218,15 +219,28 @@
     ["Forsaken Genesis",    5000000000,  ["#fde047", "#0d0a00", "#ca8a04", "#fef9c3", "#713f12"], 2],
     ["Wrath of the Unmade", 6500000000,  ["#f97316", "#0a0300", "#7c2d12", "#ffedd5", "#ea580c"], 0],
     ["Eternal Damnation",   8000000000,  ["#ef4444", "#000000", "#991b1b", "#f87171", "#1f0000"], 4],
-    ["Final Silence",       10000000000, ["#ffffff", "#000000", "#525252", "#e5e5e5", "#171717"], 5]
+    ["Final Silence",       10000000000, ["#ffffff", "#000000", "#525252", "#e5e5e5", "#171717"], 5],
+    ["Obsidian Requiem",    12500000000, ["#a3a3a3", "#020202", "#3f3f46", "#e4e4e7", "#18181b"], 2],
+    ["Hellfire Monarch",    15000000000, ["#ff4500", "#140000", "#fbbf24", "#7f1d1d", "#fed7aa"], 3],
+    ["Ruined Eternity",     18000000000, ["#c4b5fd", "#07031a", "#6d28d9", "#ede9fe", "#2e1065"], 4],
+    ["Doomsday Pulse",      22000000000, ["#f43f5e", "#0f0005", "#fda4af", "#881337", "#ffe4e6"], 5],
+    ["Cursed Singularity",  27000000000, ["#8b5cf6", "#000000", "#22d3ee", "#1e1b4b", "#c4b5fd"], 2],
+    ["Phantom Armageddon",  33000000000, ["#94a3b8", "#05070a", "#f97316", "#1e293b", "#e2e8f0"], 3],
+    ["Drowned Leviathan",   40000000000, ["#0ea5e9", "#00030a", "#082f49", "#7dd3fc", "#0c4a6e"], 4],
+    ["Endless Torment",     50000000000, ["#dc2626", "#050000", "#a855f7", "#450a0a", "#fca5a5"], 5],
+    ["Chaos Incarnate",     65000000000, ["#facc15", "#0a0014", "#ec4899", "#3b0764", "#fef08a"], 3],
+    ["Null Dominion",       80000000000, ["#e5e7eb", "#000000", "#ef4444", "#111827", "#ffffff"], 4],
+    /* Administrative: the last rank, with only these two auras. */
+    ["Root Access",         500000000000,  ["#22d3ee", "#001014", "#a5f3fc", "#0e7490", "#ecfeff"], 0, 10000],
+    ["Absolute Authority",  1000000000000, ["#fde68a", "#050505", "#22d3ee", "#ffffff", "#f59e0b"], 0, 12000]
   ];
-  EXTRA_FORBIDDEN.forEach(function (e) {
+  EXTRA_AURAS.forEach(function (e) {
     var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };
     var tier = tierOf(a);
     a.tier = tier.key;
     a.c1 = a.colors[0];
     a.c2 = a.colors[1];
-    a.power = powerFor(a.rarity);
+    a.power = e[4] || powerFor(a.rarity);
     a.coins = Math.max(1, Math.floor(2 * Math.log2(a.rarity))) + TIER_COIN_BONUS[tier.key];
     a.cutscene = tier.cutscene;
     a.id = list.length;
@@ -235,8 +249,8 @@
   });
   var TOTAL = list.length;
 
-  /* Shiny forms: 78.5% of auras get one (615 of the 784 generated ones, 8 of the 10 extra Forbidden ones:
-     623 of 794). Each is fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a
+  /* Shiny forms: 78.5% of auras get one (615 of the 784 generated ones and 18 of the 20 extra Forbidden ones;
+     the two Administrative auras have none: 633 of 806). Each is fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a
      1-in-multiplier chance of being shiny, so a shiny's true odds are its normal odds times the multiplier. */
   var SHINY_SHARE = 0.785;
   /* Hand-picked shiny multipliers that override the even x2-x5 spread. */

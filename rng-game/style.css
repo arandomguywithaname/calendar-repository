@@ -190,11 +190,11 @@ body.shake-3 { animation: shake3 .9s; }
 .orb.tier-cosmic .orb-core { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.8), rgba(255,255,255,0) 42%), radial-gradient(circle at 50% 50%, rgba(255,255,255,.45) 0%, rgba(255,255,255,0) 32%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%); }
 
 /* Divine: rotating light rays behind the orb. */
-.orb.tier-divine::before, .orb.tier-transcendent::before, .orb.tier-forbidden::before { opacity: .9; inset: -34%; animation: spin 14s linear infinite;
+.orb.tier-divine::before, .orb.tier-transcendent::before, .orb.tier-forbidden::before, .orb.tier-administrative::before { opacity: .9; inset: -34%; animation: spin 14s linear infinite;
   background: repeating-conic-gradient(from 0deg, transparent 0deg 9deg, color-mix(in srgb, var(--c1) 55%, white) 9deg 12deg, transparent 12deg 20deg);
   -webkit-mask: radial-gradient(circle, transparent 36%, #000 42%, transparent 72%); mask: radial-gradient(circle, transparent 36%, #000 42%, transparent 72%); }
-.orb.tier-divine::after, .orb.tier-transcendent::after, .orb.tier-forbidden::after { opacity: 1; inset: -10px; border: 2px dashed color-mix(in srgb, var(--c1) 85%, white); animation: spin-rev 6s linear infinite; }
-.orb.tier-divine .orb-core, .orb.tier-transcendent .orb-core, .orb.tier-forbidden .orb-core { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.85), rgba(255,255,255,0) 42%), radial-gradient(circle at 50% 50%, rgba(255,255,255,.6) 0%, rgba(255,255,255,0) 34%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%); }
+.orb.tier-divine::after, .orb.tier-transcendent::after, .orb.tier-forbidden::after, .orb.tier-administrative::after { opacity: 1; inset: -10px; border: 2px dashed color-mix(in srgb, var(--c1) 85%, white); animation: spin-rev 6s linear infinite; }
+.orb.tier-divine .orb-core, .orb.tier-transcendent .orb-core, .orb.tier-forbidden .orb-core, .orb.tier-administrative .orb-core { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.85), rgba(255,255,255,0) 42%), radial-gradient(circle at 50% 50%, rgba(255,255,255,.6) 0%, rgba(255,255,255,0) 34%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%); }
 .orb.tier-divine { animation: pulse 1.6s ease-in-out infinite; }
 
 /* Transcendent: colours shift through the spectrum while the rays spin faster. */
@@ -208,6 +208,13 @@ body.shake-3 { animation: shake3 .9s; }
 .orb.tier-forbidden .orb-paint { animation: spin 2s linear infinite; }
 .orb.tier-forbidden::before { animation-duration: 3s; background: repeating-conic-gradient(from 0deg, transparent 0deg 7deg, #ff2a00 7deg 9deg, transparent 9deg 15deg, #7f1d1d 15deg 16deg, transparent 16deg 22deg); }
 .orb.tier-forbidden::after { border-color: #ff3b1f; border-style: solid; box-shadow: 0 0 20px #ff0000, inset 0 0 20px rgba(255,0,0,.5); animation-duration: 2s; }
+
+/* Administrative: the last rank. A cyan system glow, scanning rays and a hard white ring. */
+.orb.tier-administrative { animation: admin-pulse 1.4s ease-in-out infinite; }
+.orb.tier-administrative .orb-paint { animation: spin 3s linear infinite; }
+.orb.tier-administrative::before { animation-duration: 6s; background: repeating-conic-gradient(from 0deg, transparent 0deg 10deg, #22d3ee 10deg 11.5deg, transparent 11.5deg 20deg, #ffffff 20deg 20.6deg); }
+.orb.tier-administrative::after { border: 2px solid #a5f3fc; box-shadow: 0 0 24px #22d3ee, inset 0 0 18px rgba(34,211,238,.55); animation-duration: 3s; }
+@keyframes admin-pulse { 0%,100% { box-shadow: 0 0 50px 6px rgba(34,211,238,.55), 0 0 0 2px rgba(255,255,255,.4); } 50% { box-shadow: 0 0 110px 26px rgba(34,211,238,.8), 0 0 0 4px rgba(255,255,255,.75); } }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes spin-rev { to { transform: rotate(-360deg); } }
@@ -413,6 +420,7 @@ body.shake-3 { animation: shake3 .9s; }
 /* Tier colours */
 .t-common { color: #b4b4b4; } .t-uncommon { color: #4ade80; } .t-rare { color: #60a5fa; } .t-epic { color: #c084fc; }
 .t-legendary { color: #fb923c; } .t-cosmic { color: #e879f9; } .t-divine { color: #fde047; } .t-transcendent { color: #f472b6; } .t-forbidden { color: #ef4444; }
+.t-administrative { color: #22d3ee; text-shadow: 0 0 10px rgba(34,211,238,.6); }
 
 /* Modal */
 .modal { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.7); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -507,6 +515,8 @@ body.shake-3 { animation: shake3 .9s; }
 @keyframes shimmer { to { background-position: 300% 0; } }
 .cutscene.kind-fury .cs-title { color: #ff2d2d; text-shadow: 0 0 10px #ff0000, 0 0 40px #7f0000, 2px 0 0 #000, -2px 0 0 #000; animation: glitch .25s steps(2) infinite; }
 .cutscene.kind-fury .cs-odds { color: #fecaca; }
+.cutscene.tier-administrative .cs-title { color: #ecfeff; text-shadow: 0 0 12px #22d3ee, 0 0 40px #0891b2, 0 0 90px #22d3ee; letter-spacing: .12em; }
+.cutscene.tier-administrative .cs-pre, .cutscene.tier-administrative .cs-odds { color: #a5f3fc; }
 .cutscene.kind-fury .cs-pre { color: #fca5a5; }
 @keyframes glitch { 0% { transform: translate(0,0) skewX(0); } 25% { transform: translate(-3px,1px) skewX(-2deg); } 50% { transform: translate(3px,-2px) skewX(1deg); } 75% { transform: translate(-1px,2px) skewX(2deg); } 100% { transform: translate(0,0); } }
 
