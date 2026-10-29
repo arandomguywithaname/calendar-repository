@@ -3,23 +3,25 @@
 A static browser game: roll for auras, earn coins, buy potions, build an ability
 loadout, and fight bots or a friend.
 
-- **847 auras in 10 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
+- **847 auras in 11 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
   1,000,000,000), then twenty more Forbidden auras beyond it (Abyssal Crown, Void Sovereign,
   Shattered Infinity, Crimson Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis,
   Wrath of the Unmade, Eternal Damnation, Final Silence, Obsidian Requiem, Hellfire Monarch,
   Ruined Eternity, Doomsday Pulse, Cursed Singularity, Phantom Armageddon, Drowned Leviathan,
   Endless Torment, Chaos Incarnate and Null Dominion: 1 in 1.25 billion up to 1 in 80
-  billion). The last rank, **Administrative**, has 43 auras with hand-set power: Root
+  billion). **Administrative** has 42 auras with hand-set power: Root
   Access (1 in 500 billion, 10,000 power), Absolute Authority (1 in 1 trillion, 12,000
   power), 40 more from Kernel Panic (1 in 1.2 trillion, 12,500 power) to Eternal Operator
-  (1 in 840 trillion, 32,000 power), and last of all **The Chosen One**: 1 in
-  1,000,000,000,000,000 (a quadrillion), 50,000 power, its own named moves (Chosen Strike,
-  Prophecy Storm, Fated Aegis, Second Coming, Final Judgement, Destiny Unbound) and a
-  constellation-and-god-rays reveal. Administrative auras have a cyan orb style and the
-  longest reveal.
+  (1 in 840 trillion, 32,000 power). The last rank, **Chosen**, holds only **The Chosen
+  One**: 1 in 1,000,000,000,000,000 (a quadrillion), 50,000 power, its own named moves
+  (Chosen Strike, Prophecy Storm, Fated Aegis, Second Coming, Final Judgement and 🌟
+  **Destiny Unbound**, exactly 1,000,000 damage that nothing can block, shield, reflect
+  or boost, 4 turn cooldown), a gold orb, banner and title, and a constellation-and-god-
+  rays reveal, the longest in the game. Administrative auras have a cyan orb style.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
-  Fury of Darkness and the Forbidden rank, and a cyan system glow for Administrative.
+  Fury of Darkness and the Forbidden rank, a cyan system glow for Administrative and
+  golden sun rays for Chosen.
 - **Its own cutscene for every Epic+ aura.** Common, Uncommon and Rare rolls stay on
   the roll screen (Rare still gets the slot-machine slowdown, flash and banner). Each
   of the 704 auras from Epic upward takes over the screen with a cutscene no other
@@ -69,10 +71,11 @@ loadout, and fight bots or a friend.
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
-  their own named kits (Titan Bot has no healing move). 15 bots run from the Training
-  Dummy (power 15) to Eternity Bot (power 13,000, +250,000 coins); the top six (Inferno,
-  Glacier, Tempest, Phantom, Dragon and Eternity) need a Fury-class aura, and the last
-  ones also Titan's Brew and healing potions. Every mechanic has its own battle animation (slashes, a
+  their own named kits (Titan Bot has no healing move). 30 bots run from the Training
+  Dummy (power 15) to Creator Bot (power 120,000, +10,000,000 coins): after Eternity Bot
+  come Nova, Kraken, Sentinel Prime, Cyber Hydra, Grim, Colossus, Storm Titan, Abyss
+  Lord, Solar, Lunar, Galaxy, Chrono, Quantum, Overlord and Creator, tuned by simulation
+  for Administrative-strength auras; only The Chosen One reliably beats Creator Bot. Every mechanic has its own battle animation (slashes, a
   falling hammer, lightning, a nova, a hex shield, a life-drain stream, and so on),
   with the attacker lunging or casting, a floating ability name, and a matching
   sound. When the attacker's aura is Legendary or rarer, the ability takes over the

@@ -48,7 +48,9 @@
     shield:    { icon: "🔰", mult: 0,    cd: 3, effect: "shield", shieldPct: 0.25, names: ["{T} Barrier", "{T} Veil", "Shield of {T}", "{T} Sanctuary", "{T} Bastion"],
                  desc: "Raises a barrier of {T} that absorbs damage equal to 25% of your max HP." },
     snap:      { icon: "🫰", mult: 0,    cd: 7, flat: 100000, names: ["Snap"],
-                 desc: "Snaps reality for exactly 100,000 damage. Nothing can block, shield, reflect or boost it." }
+                 desc: "Snaps reality for exactly 100,000 damage. Nothing can block, shield, reflect or boost it." },
+    destiny:   { icon: "🌟", mult: 0,    cd: 4, flat: 1000000, names: ["Destiny Unbound"],
+                 desc: "Unleashes destiny for exactly 1,000,000 damage. Nothing can block, shield, reflect or boost it." }
   };
 
   /* Which mechanics each tier can roll. Later tiers unlock the nastier ones. */
@@ -62,7 +64,8 @@
     divine:       ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
     transcendent: ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
     forbidden:    ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
-    administrative: ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"]
+    administrative: ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"],
+    chosen:       ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"]
   };
   var FINISHERS = ["burst", "execute", "barrage"];
   /* Extra signature moves some auras get on top of their usual six. */
@@ -74,7 +77,7 @@
   var SPECIAL_KITS = {
     "The Chosen One": [
       ["strike", "Chosen Strike"], ["barrage", "Prophecy Storm"], ["shield", "Fated Aegis"],
-      ["heal", "Second Coming"], ["execute", "Final Judgement"], ["burst", "Destiny Unbound", 3.2]
+      ["heal", "Second Coming"], ["execute", "Final Judgement"], ["destiny", "Destiny Unbound"]
     ],
     "Cosmic Veil": [
       ["strike", "Starlight Lash"], ["barrage", "Meteor Cascade"], ["shield", "The Veil"],
@@ -141,7 +144,7 @@
     } else {
       var pool = (TIER_POOLS[aura.tier] || TIER_POOLS.common).slice();
       var picks = ["strike"];
-      var tierIdx = ["common", "uncommon", "rare", "epic", "legendary", "cosmic", "divine", "transcendent", "forbidden", "administrative"].indexOf(aura.tier);
+      var tierIdx = ["common", "uncommon", "rare", "epic", "legendary", "cosmic", "divine", "transcendent", "forbidden", "administrative", "chosen"].indexOf(aura.tier);
       if (tierIdx >= 4) {
         var fin = FINISHERS[Math.floor(rng() * FINISHERS.length)];
         picks.push(fin);
@@ -189,7 +192,22 @@
     tempest:   [["strike", "Gale Slash"], ["precision", "Thunderbolt"], ["barrage", "Chain Lightning"], ["stun", "Static Shock"], ["focus", "Eye of the Storm"]],
     phantom:   [["strike", "Spectral Claw"], ["drain", "Soul Rend"], ["reflect", "Ghost Veil"], ["weaken", "Haunting Wail"], ["execute", "Final Whisper"]],
     dragon:    [["strike", "Claw Swipe"], ["burst", "Dragon's Breath"], ["heavy", "Tail Crash"], ["shield", "Scale Armor"], ["barrage", "Wing Storm"]],
-    eternity:  [["strike", "Endless Strike"], ["burst", "Big Bang"], ["execute", "Heat Death"], ["drain", "Entropy Drain"], ["stun", "Time Stop"], ["heal", "Rebirth of Stars"]]
+    eternity:  [["strike", "Endless Strike"], ["burst", "Big Bang"], ["execute", "Heat Death"], ["drain", "Entropy Drain"], ["stun", "Time Stop"], ["heal", "Rebirth of Stars"]],
+    nova:      [["strike", "Star Spark"], ["burst", "Supernova"], ["focus", "Fusion Core"], ["barrage", "Solar Flare"]],
+    kraken:    [["strike", "Tentacle Lash"], ["drain", "Ink Siphon"], ["stun", "Crushing Grip"], ["guard", "Shell Curl"], ["heavy", "Tidal Slam"]],
+    sentinel:  [["precision", "Orbital Laser"], ["strike", "Rail Shot"], ["shield", "Force Field"], ["stun", "EMP Burst"], ["barrage", "Missile Swarm"]],
+    hydra:     [["strike", "Venom Fang"], ["poison", "Toxic Breath"], ["barrage", "Nine Heads"], ["heal", "Regrow Head"], ["heavy", "Coil Crush"]],
+    grim:      [["strike", "Scythe Swing"], ["execute", "Soul Harvest"], ["drain", "Life Steal"], ["weaken", "Grave Chill"], ["reflect", "Death Mirror"]],
+    colossus:  [["strike", "Boulder Toss"], ["heavy", "Earthshaker"], ["guard", "Granite Hide"], ["stun", "Tremor"], ["burst", "Landslide"]],
+    stormtitan:[["strike", "Gale Fist"], ["barrage", "Thunder Rain"], ["stun", "Lightning Lock"], ["focus", "Eye of the Cyclone"], ["burst", "Hurricane"]],
+    abyss:     [["strike", "Shadow Claw"], ["drain", "Blood Moon"], ["weaken", "Dread Aura"], ["execute", "Abyssal Doom"], ["reflect", "Void Mirror"], ["heal", "Dark Pact"]],
+    solar:     [["precision", "Sunbeam"], ["strike", "Corona Lash"], ["burst", "Solar Storm"], ["shield", "Photon Shield"], ["focus", "Sunrise"]],
+    lunar:     [["strike", "Moon Blade"], ["weaken", "Eclipse Shroud"], ["barrage", "Meteor Shower"], ["reflect", "Lunar Mirror"], ["heal", "Moonlight"], ["stun", "Tidal Pull"]],
+    galaxy:    [["strike", "Star Cluster"], ["burst", "Galactic Core"], ["barrage", "Nebula Storm"], ["shield", "Dark Matter"], ["drain", "Gravity Well"], ["focus", "Cosmic Sight"]],
+    chrono:    [["strike", "Time Slice"], ["stun", "Time Freeze"], ["focus", "Rewind"], ["execute", "End of Time"], ["heal", "Second Chance"], ["barrage", "Time Loop"]],
+    quantum:   [["precision", "Particle Beam"], ["strike", "Wave Function"], ["reflect", "Superposition"], ["burst", "Quantum Collapse"], ["shield", "Entanglement"], ["stun", "Uncertainty"]],
+    overlord:  [["strike", "Overlord Strike"], ["burst", "Dominion Blast"], ["execute", "Final Order"], ["shield", "Iron Will"], ["heal", "Restore Order"], ["weaken", "Crushing Gaze"]],
+    creator:   [["strike", "Creation Spark"], ["burst", "Big Crunch"], ["execute", "Unmaking"], ["heal", "Genesis"], ["shield", "World Shell"], ["drain", "Life Thread"], ["stun", "Stop Time"]]
   };
 
   function botKit(botId) {

@@ -1,6 +1,6 @@
 /* auras.js — generates the 847 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
    up to Fury of Darkness at 1 in 1,000,000,000), 20 hand-made Forbidden auras beyond it (up to Null Dominion at
-   1 in 80,000,000,000) and the 43 Administrative auras of the last rank, ending with The Chosen One at
+   1 in 80,000,000,000), 42 Administrative auras and, alone in the last rank (Chosen), The Chosen One at
    1 in 1,000,000,000,000,000. Rarity is expressed as "1 in N". */
 (function (global) {
   "use strict";
@@ -34,12 +34,13 @@
     { key: "divine",       name: "Divine",       max: 1e8,      color: "#fde047", cutscene: 3 },
     { key: "transcendent", name: "Transcendent", max: 1e9,      color: "#f472b6", cutscene: 4 },
     { key: "forbidden",    name: "Forbidden",    max: 1e11,     color: "#ef4444", cutscene: 5 },
-    { key: "administrative", name: "Administrative", max: Infinity, color: "#22d3ee", cutscene: 6 }
+    { key: "administrative", name: "Administrative", max: 1e15,  color: "#22d3ee", cutscene: 6 },
+    { key: "chosen",       name: "Chosen",       max: Infinity, color: "#ffd700", cutscene: 7 }
   ];
 
   var TIER_COIN_BONUS = {
     common: 0, uncommon: 0, rare: 10, epic: 40, legendary: 200,
-    cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000, administrative: 2500000
+    cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000, administrative: 2500000, chosen: 25000000
   };
 
   /* Battle power grows with rarity; every aura gets twice the base curve. */
@@ -256,7 +257,7 @@
     var colors = ["hsl(" + hue + ", 95%, 62%)", "hsl(" + hue + ", 80%, 6%)", "hsl(" + gold + ", 95%, 65%)", "hsl(" + ((hue + 30) % 360) + ", 90%, 80%)", "#ffffff"];
     EXTRA_AURAS.push([name, Math.round(exact / step) * step, colors, i % 5 === 4 ? 0 : 2 + (adminShiny++ % 4), 12500 + i * 500]);
   });
-  /* The last aura of all: one of a kind, no shiny form. */
+  /* The last aura of all, the only one of the Chosen rank: one of a kind, no shiny form. */
   EXTRA_AURAS.push(["The Chosen One", 1e15, ["#fff7cc", "#0b0700", "#fde047", "#ffffff", "#f59e0b"], 0, 50000]);
   EXTRA_AURAS.forEach(function (e) {
     var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };

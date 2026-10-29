@@ -85,7 +85,22 @@
     { id: "tempest",   name: "Tempest Bot",    icon: "⛈️", power: 6500,  reward: 65000 },
     { id: "phantom",   name: "Phantom Bot",    icon: "👻", power: 8000,  reward: 100000 },
     { id: "dragon",    name: "Dragon Bot",     icon: "🐉", power: 10000, reward: 160000, boss: true },
-    { id: "eternity",  name: "Eternity Bot",   icon: "♾️", power: 13000, reward: 250000, boss: true }
+    { id: "eternity",  name: "Eternity Bot",   icon: "♾️", power: 13000, reward: 250000, boss: true },
+    { id: "nova",      name: "Nova Bot",       icon: "✴️", power: 16000,  reward: 300000 },
+    { id: "kraken",    name: "Kraken Bot",     icon: "🦑", power: 19000,  reward: 400000 },
+    { id: "sentinel",  name: "Sentinel Prime", icon: "🛰️", power: 22000,  reward: 500000 },
+    { id: "hydra",     name: "Cyber Hydra",    icon: "🐍", power: 25000,  reward: 650000 },
+    { id: "grim",      name: "Grim Bot",       icon: "⚰️", power: 28000,  reward: 800000 },
+    { id: "colossus",  name: "Colossus Bot",   icon: "⛰️", power: 31000,  reward: 1000000 },
+    { id: "stormtitan",name: "Storm Titan",    icon: "🌪️", power: 35000,  reward: 1250000 },
+    { id: "abyss",     name: "Abyss Lord",     icon: "🦇", power: 39000,  reward: 1500000, boss: true },
+    { id: "solar",     name: "Solar Bot",      icon: "☀️", power: 43000,  reward: 2000000 },
+    { id: "lunar",     name: "Lunar Bot",      icon: "🌙", power: 48000,  reward: 2500000 },
+    { id: "galaxy",    name: "Galaxy Bot",     icon: "🌌", power: 53000,  reward: 3000000 },
+    { id: "chrono",    name: "Chrono Bot",     icon: "⏳", power: 58000,  reward: 4000000 },
+    { id: "quantum",   name: "Quantum Bot",    icon: "⚛️", power: 64000,  reward: 5000000 },
+    { id: "overlord",  name: "Overlord Bot",   icon: "👁️", power: 72000,  reward: 7000000, boss: true },
+    { id: "creator",   name: "Creator Bot",    icon: "✨", power: 120000, reward: 10000000, boss: true }
   ];
 
   var AUTO_UNLOCK_COST = 1000;
@@ -386,6 +401,7 @@
         case "execute": s.tone(1400, 0, 0.3, "sawtooth", 0.03); s.tone(70, 0.35, 0.6, "square", 0.08); break;
         case "shield": s.tone(523, 0, 0.4, "triangle", 0.04); s.tone(784, 0.15, 0.4, "triangle", 0.04); break;
         case "snap": s.tone(2600, 0, 0.04, "square", 0.08); s.tone(1300, 0.02, 0.06, "square", 0.05); s.tone(45, 0.3, 1.3, "sawtooth", 0.1); s.tone(90, 0.32, 1, "square", 0.06); break;
+        case "destiny": [523, 659, 784, 1047].forEach(function (f, i) { s.tone(f, i * 0.08, 0.5, "triangle", 0.06); }); s.tone(40, 0.4, 1.6, "sawtooth", 0.11); s.tone(80, 0.42, 1.3, "square", 0.07); break;
         default: s.tone(600, 0, 0.1, "square", 0.03);
       }
     },
@@ -1343,9 +1359,9 @@
       }
 
       if (ab.flat) {
-        /* Snap: a fixed amount of damage that guards, shields, reflects, crits and boosts don't touch. */
+        /* Snap, Destiny Unbound: a fixed amount of damage that guards, shields, reflects, crits and boosts don't touch. */
         them.hp -= ab.flat;
-        ev.push({ type: "damage", who: who, target: other, amount: ab.flat, absorbed: 0, crit: false, blocked: false, executed: false, snap: true, hpA: b.a.hp, hpB: b.b.hp });
+        ev.push({ type: "damage", who: who, target: other, amount: ab.flat, absorbed: 0, crit: false, blocked: false, executed: false, flat: true, flatName: ab.name, flatIcon: ab.icon, hpA: b.a.hp, hpB: b.b.hp });
       }
 
       if (ab.mult > 0) {
@@ -1454,6 +1470,17 @@
       ctx.globalAlpha = 1;
     }
     function makeParts(n, fn) { var out = []; for (var i = 0; i < n; i++) out.push(fn(i)); return out; }
+    /* A fixed-damage hit (Snap, Destiny Unbound): white flash, a ring and cracks bursting from the target. */
+    function flatHitFx(ringCol, sparkCol, crackCol) {
+      return { dur: 900, parts: function () { return makeParts(40, function () { return { a: rnd(0, Math.PI * 2), s: rnd(40, 200), r: rnd(2, 4) }; }); },
+        draw: function (p, e, parts) {
+          var t = e.to;
+          if (p < 0.2) { ctx.fillStyle = "#fff"; ctx.globalAlpha = (0.2 - p) * 4; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.globalAlpha = 1; }
+          ringAt(t.x, t.y, t.r * (0.5 + ease(p) * 2.5), ringCol, 5 * (1 - p) + 1, 1 - p);
+          for (var k = 0; k < 6; k++) { var a = k / 6 * Math.PI * 2 + 0.3, L = t.r * 1.8 * Math.min(1, p * 3); glowLine(t.x, t.y, t.x + Math.cos(a) * L, t.y + Math.sin(a) * L, crackCol, 2, 10); }
+          parts.forEach(function (s) { var d = s.s * ease(p); spark(t.x + Math.cos(s.a) * d, t.y + Math.sin(s.a) * d, s.r, sparkCol, 1 - p); });
+        } };
+    }
 
     /* Each entry: duration in ms and a draw(p, env) where p runs 0..1. env = { from, to, c1, c2 }. */
     var LIB = {
@@ -1640,14 +1667,8 @@
         ctx.fillStyle = "#fff"; ctx.fillRect(x - 4, gy - 6, w + 8, 12);
         ctx.globalAlpha = 1;
       } },
-      snap: { dur: 900, parts: function () { return makeParts(40, function () { return { a: rnd(0, Math.PI * 2), s: rnd(40, 200), r: rnd(2, 4) }; }); },
-        draw: function (p, e, parts) {
-          var t = e.to;
-          if (p < 0.2) { ctx.fillStyle = "#fff"; ctx.globalAlpha = (0.2 - p) * 4; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.globalAlpha = 1; }
-          ringAt(t.x, t.y, t.r * (0.5 + ease(p) * 2.5), "#22d3ee", 5 * (1 - p) + 1, 1 - p);
-          for (var k = 0; k < 6; k++) { var a = k / 6 * Math.PI * 2 + 0.3, L = t.r * 1.8 * Math.min(1, p * 3); glowLine(t.x, t.y, t.x + Math.cos(a) * L, t.y + Math.sin(a) * L, "#ecfeff", 2, 10); }
-          parts.forEach(function (s) { var d = s.s * ease(p); spark(t.x + Math.cos(s.a) * d, t.y + Math.sin(s.a) * d, s.r, "#a5f3fc", 1 - p); });
-        } },
+      snap: flatHitFx("#22d3ee", "#a5f3fc", "#ecfeff"),
+      destiny: flatHitFx("#f59e0b", "#fde68a", "#fffbeb"),
       burst: { dur: 950, parts: function () { return makeParts(70, function () { return { a: rnd(0, TAU), s: rnd(60, 260), r: rnd(2, 5) }; }); },
         draw: function (p, e, parts) {
           var t = e.to;
@@ -1773,6 +1794,28 @@
     function ring(x, y, r, color, width, a) { ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; }
     function parts(n, fn) { var o = []; for (var i = 0; i < n; i++) o.push(fn(i)); return o; }
     function seg(p, a, b) { return Math.max(0, Math.min(1, (p - a) / (b - a))); }
+    /* Full-screen fixed-damage hit: a point of light charges, then a flash, a shockwave across the screen
+       and reality cracking. Colours: main, light, crack rgb, glitch rgb. */
+    function flatUltFx(main, light, crackRgb, glitchRgb) {
+      return { dur: 1800, parts: function () { return parts(140, function () { return { a: Math.random() * TAU, s: rnd(0.3, 1.2), r: rnd(1.5, 4.5) }; }); },
+        draw: function (p, e, ps) {
+          var R = Math.hypot(e.w, e.h) / 2;
+          ctx.fillStyle = "rgba(0,0,0," + (0.85 * Math.min(1, p / 0.15) * (1 - seg(p, 0.85, 1))) + ")"; ctx.fillRect(0, 0, e.w, e.h);
+          if (p < 0.3) {
+            var q = p / 0.3;
+            spark(e.cx, e.cy, 4 + q * 18, "#fff", 0.6 + q * 0.4);
+            for (var k = 0; k < 6; k++) { var a = k / 6 * TAU + q * 2; glowLine(e.cx, e.cy, e.cx + Math.cos(a) * 60 * q, e.cy + Math.sin(a) * 60 * q, main, 2, 12); }
+          } else {
+            var q2 = seg(p, 0.3, 1);
+            flash((0.42 - p) * 6, "#ffffff");
+            ring(e.cx, e.cy, R * ease(q2), light, 10 * (1 - q2) + 1, 1 - q2);
+            ring(e.cx, e.cy, R * 0.7 * ease(q2), "#ffffff", 4, (1 - q2) * 0.8);
+            ps.forEach(function (s) { var d = R * s.s * ease(q2); spark(e.cx + Math.cos(s.a) * d, e.cy + Math.sin(s.a) * d, s.r, s.s > 0.8 ? main : "#fff", 1 - q2); });
+            if (q2 < 0.5) for (var g = 0; g < 8; g++) { ctx.fillStyle = g % 2 ? "rgba(" + glitchRgb + ",.35)" : "rgba(255,255,255,.25)"; ctx.fillRect(0, Math.random() * e.h, e.w, 2 + Math.random() * 10); }
+            for (var c = 0; c < 7; c++) { var ca = c / 7 * TAU + 0.4, L = R * Math.min(1, q2 * 2); glowLine(e.cx, e.cy, e.cx + Math.cos(ca) * L, e.cy + Math.sin(ca) * L, "rgba(" + crackRgb + "," + (1 - q2) + ")", 2, 10); }
+          }
+        } };
+    }
 
     /* Every entry: dur in ms, draw(p, e). e = { w, h, cx, cy, from, to, c1, c2, colors }. */
     var LIB = {
@@ -1928,26 +1971,8 @@
         }
         if (p > 0.3 && p < 0.4) flash((0.4 - p) * 4, "#e0f2fe");
       } },
-      snap: { dur: 1800, parts: function () { return parts(140, function () { return { a: Math.random() * TAU, s: rnd(0.3, 1.2), r: rnd(1.5, 4.5) }; }); },
-        draw: function (p, e, ps) {
-          var R = Math.hypot(e.w, e.h) / 2;
-          ctx.fillStyle = "rgba(0,0,0," + (0.85 * Math.min(1, p / 0.15) * (1 - seg(p, 0.85, 1))) + ")"; ctx.fillRect(0, 0, e.w, e.h);
-          if (p < 0.3) {
-            /* the fingers come together: a point of light charging up */
-            var q = p / 0.3;
-            spark(e.cx, e.cy, 4 + q * 18, "#fff", 0.6 + q * 0.4);
-            for (var k = 0; k < 6; k++) { var a = k / 6 * TAU + q * 2; glowLine(e.cx, e.cy, e.cx + Math.cos(a) * 60 * q, e.cy + Math.sin(a) * 60 * q, "#22d3ee", 2, 12); }
-          } else {
-            /* SNAP: white flash, a shockwave across the whole screen, reality cracking */
-            var q2 = seg(p, 0.3, 1);
-            flash((0.42 - p) * 6, "#ffffff");
-            ring(e.cx, e.cy, R * ease(q2), "#a5f3fc", 10 * (1 - q2) + 1, 1 - q2);
-            ring(e.cx, e.cy, R * 0.7 * ease(q2), "#ffffff", 4, (1 - q2) * 0.8);
-            ps.forEach(function (s) { var d = R * s.s * ease(q2); spark(e.cx + Math.cos(s.a) * d, e.cy + Math.sin(s.a) * d, s.r, s.s > 0.8 ? "#22d3ee" : "#fff", 1 - q2); });
-            if (q2 < 0.5) for (var g = 0; g < 8; g++) { ctx.fillStyle = g % 2 ? "rgba(34,211,238,.35)" : "rgba(255,255,255,.25)"; ctx.fillRect(0, Math.random() * e.h, e.w, 2 + Math.random() * 10); }
-            for (var c = 0; c < 7; c++) { var ca = c / 7 * TAU + 0.4, L = R * Math.min(1, q2 * 2); glowLine(e.cx, e.cy, e.cx + Math.cos(ca) * L, e.cy + Math.sin(ca) * L, "rgba(236,254,255," + (1 - q2) + ")", 2, 10); }
-          }
-        } },
+      snap: flatUltFx("#22d3ee", "#a5f3fc", "236,254,255", "34,211,238"),
+      destiny: flatUltFx("#f59e0b", "#fde68a", "255,251,235", "251,191,36"),
       burst: { dur: 1500, parts: function (e) { return parts(160, function () { return { a: Math.random() * TAU, s: rnd(0.2, 1), r: rnd(3, 8) }; }); },
         draw: function (p, e, ps) {
           dim(p, 0.8);
@@ -2310,9 +2335,10 @@
           break;
         case "damage":
           flash(e.target, "hit");
-          floatText(e.target, "-" + fmt(e.amount) + (e.snap ? " 🫰" : e.crit ? "!" : ""), e.snap ? "t-administrative" : e.crit ? "t-divine" : "t-forbidden");
+          var flatTag = e.flat ? String(e.flatIcon || "").slice(0, 4) : "";
+          floatText(e.target, "-" + fmt(e.amount) + (e.flat ? " " + flatTag : e.crit ? "!" : ""), e.flat ? "t-chosen" : e.crit ? "t-divine" : "t-forbidden");
           Sound.hit(e.crit);
-          logLine((e.snap ? "🫰 SNAP! " : "") + (e.crit ? "💥 CRIT! " : "") + (e.executed ? "EXECUTE! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.absorbed ? " (" + fmt(e.absorbed) + " absorbed)" : "") + (e.blocked ? " (blocked 60%)" : ""), e.crit || e.executed ? "crit" : (isMe(e.who) ? "you" : "them"));
+          logLine((e.flat ? flatTag + " " + String(e.flatName || "").slice(0, 30).toUpperCase() + "! " : "") + (e.crit ? "💥 CRIT! " : "") + (e.executed ? "EXECUTE! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.absorbed ? " (" + fmt(e.absorbed) + " absorbed)" : "") + (e.blocked ? " (blocked 60%)" : ""), e.crit || e.executed ? "crit" : (isMe(e.who) ? "you" : "them"));
           setHP(e);
           break;
         case "heal":
@@ -3031,7 +3057,8 @@
     6: { scene: 7.6, spell: 2.2, hold: 3.5 },  /* Divine */
     7: { scene: 8.6, spell: 2.6, hold: 4.0 },  /* Transcendent */
     8: { scene: 8.6, spell: 2.6, hold: 4.5 },  /* Forbidden */
-    9: { scene: 9.6, spell: 3.0, hold: 5.0 }   /* Administrative */
+    9: { scene: 9.6, spell: 3.0, hold: 5.0 },  /* Administrative */
+    10: { scene: 10.6, spell: 3.4, hold: 5.5 } /* Chosen */
   };
   /* Cosmic and rarer stay up until the player taps; this is only a safety net so Auto Roll never stalls. */
   var REVEAL_WAIT_MAX = 30;
@@ -3045,7 +3072,7 @@
     } else if (aura.special === "fury") {
       text = aura.name.toUpperCase(); sceneDur = 6; titleAt = 3.1; style = "glitch"; step = 0.08; oddsFloor = 4.6; hold = 4.5;
     } else {
-      var pace = REVEAL_PACE[Math.max(3, Math.min(9, tierIndex(aura)))];
+      var pace = REVEAL_PACE[Math.max(3, Math.min(10, tierIndex(aura)))];
       r = REVEALS.assign(aura) || { scene: "pulse", title: "blur", overlay: "none" };
       var scene = REVEALS.SCENES[r.scene];
       text = aura.name; sceneDur = pace.scene; style = r.title; hold = pace.hold;
