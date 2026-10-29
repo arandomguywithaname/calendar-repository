@@ -57,7 +57,9 @@ loadout, and fight bots or a friend.
   word `secret`.
 - **Turn-based battles with signature abilities.** Every aura has its own kit of 6
   abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova
-  Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Choose 4 per
+  Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Absolute
+  Authority gets a 7th: 🫰 **Snap**, exactly 100,000 damage that nothing can block,
+  shield, reflect or boost, with a 7 turn cooldown. Choose 4 per
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have

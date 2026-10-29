@@ -46,7 +46,9 @@
     execute:   { icon: "🗡️", mult: 1.2,  cd: 3, executeBelow: 0.35, names: ["{T} Execution", "{T} Guillotine", "End of {T}", "{T} Finale", "{T} Reckoning"],
                  desc: "{P}% power, doubled against an enemy below 35% HP." },
     shield:    { icon: "🔰", mult: 0,    cd: 3, effect: "shield", shieldPct: 0.25, names: ["{T} Barrier", "{T} Veil", "Shield of {T}", "{T} Sanctuary", "{T} Bastion"],
-                 desc: "Raises a barrier of {T} that absorbs damage equal to 25% of your max HP." }
+                 desc: "Raises a barrier of {T} that absorbs damage equal to 25% of your max HP." },
+    snap:      { icon: "🫰", mult: 0,    cd: 7, flat: 100000, names: ["Snap"],
+                 desc: "Snaps reality for exactly 100,000 damage. Nothing can block, shield, reflect or boost it." }
   };
 
   /* Which mechanics each tier can roll. Later tiers unlock the nastier ones. */
@@ -63,6 +65,10 @@
     administrative: ["heavy", "guard", "heal", "focus", "drain", "precision", "poison", "weaken", "stun", "barrage", "shield", "reflect", "execute", "burst"]
   };
   var FINISHERS = ["burst", "execute", "barrage"];
+  /* Extra signature moves some auras get on top of their usual six. */
+  var EXTRA_MOVES = {
+    "Absolute Authority": [["snap", "Snap"]]
+  };
 
   /* Hand-written kits for the headline auras. [archetype, name, optional mult override] */
   var SPECIAL_KITS = {
@@ -108,7 +114,7 @@
   function makeAbility(id, archKey, name, theme, multOverride) {
     var arch = ARCH[archKey];
     var ab = { id: id, arch: archKey, name: name, icon: arch.icon, mult: multOverride !== undefined ? multOverride : arch.mult, cd: arch.cd };
-    ["effect", "pct", "alwaysCrit", "lifesteal", "poison", "weaken", "stunChance", "hits", "executeBelow", "shieldPct"].forEach(function (k) {
+    ["effect", "pct", "alwaysCrit", "lifesteal", "poison", "weaken", "stunChance", "hits", "executeBelow", "shieldPct", "flat"].forEach(function (k) {
       if (arch[k] !== undefined) ab[k] = arch[k];
     });
     ab.desc = fillTemplate(arch.desc, theme, ab);
@@ -117,7 +123,7 @@
 
   var cache = {};
 
-  /* The 6 signature abilities of an aura. */
+  /* The 6 signature abilities of an aura (plus any EXTRA_MOVES). */
   function kitFor(aura) {
     if (cache[aura.id]) return cache[aura.id];
     var kit = [];
@@ -154,6 +160,9 @@
         kit.push(makeAbility("k" + aura.id + "-" + i, archKey, name, theme));
       });
     }
+    (EXTRA_MOVES[aura.name] || []).forEach(function (s, i) {
+      kit.push(makeAbility("k" + aura.id + "-x" + i, s[0], s[1], themes[0], s[2]));
+    });
     /* Frozen so the browser console can't power up an ability in the shared cache. */
     kit.forEach(Object.freeze);
     cache[aura.id] = Object.freeze(kit);

@@ -238,10 +238,10 @@
     if (!best || effRarity(best, S.stats.bestShiny) < effRarity(aura, shiny)) { S.stats.best = aura.id; S.stats.bestShiny = isShiny(aura, shiny); }
   }
 
-  /* Slot indices (0-5) of the chosen abilities for an aura. */
+  /* Slot indices (0-5, or 0-6 for an aura with an extra move) of the chosen abilities for an aura. */
   function loadoutFor(aura) {
-    var raw = S.loadouts[aura.id];
-    var clean = Array.isArray(raw) ? raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < K.KIT_SIZE && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE) : [];
+    var raw = S.loadouts[aura.id], size = K.kitFor(aura).length;
+    var clean = Array.isArray(raw) ? raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < size && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE) : [];
     return clean.length ? clean : DEFAULT_LOADOUT.slice();
   }
 
@@ -385,6 +385,7 @@
         case "barrage": [0, 0.2, 0.4].forEach(function (d) { s.tone(700, d, 0.08, "square", 0.03); s.tone(250, d + 0.25, 0.12, "sawtooth", 0.04); }); break;
         case "execute": s.tone(1400, 0, 0.3, "sawtooth", 0.03); s.tone(70, 0.35, 0.6, "square", 0.08); break;
         case "shield": s.tone(523, 0, 0.4, "triangle", 0.04); s.tone(784, 0.15, 0.4, "triangle", 0.04); break;
+        case "snap": s.tone(2600, 0, 0.04, "square", 0.08); s.tone(1300, 0.02, 0.06, "square", 0.05); s.tone(45, 0.3, 1.3, "sawtooth", 0.1); s.tone(90, 0.32, 1, "square", 0.06); break;
         default: s.tone(600, 0, 0.1, "square", 0.03);
       }
     },
@@ -1214,7 +1215,7 @@
         sl.textContent = "SLOT " + (slot + 1);
         card.appendChild(sl);
       }
-      var stat = ab.mult > 0 ? fmt(Math.round(ab.mult * 100)) + "% power" + (ab.hits ? " x" + ab.hits : "") : "support";
+      var stat = ab.flat ? fmt(ab.flat) + " damage" : ab.mult > 0 ? fmt(Math.round(ab.mult * 100)) + "% power" + (ab.hits ? " x" + ab.hits : "") : "support";
       var row = document.createElement("div");
       row.className = "row";
       row.innerHTML = "<div class=\"big-icon\">" + ab.icon + "</div>";
@@ -1339,6 +1340,12 @@
       } else if (ab.effect === "guard" || ab.effect === "focus" || ab.effect === "reflect") {
         me[ab.effect] = true;
         ev.push({ type: "buff", who: who, effect: ab.effect });
+      }
+
+      if (ab.flat) {
+        /* Snap: a fixed amount of damage that guards, shields, reflects, crits and boosts don't touch. */
+        them.hp -= ab.flat;
+        ev.push({ type: "damage", who: who, target: other, amount: ab.flat, absorbed: 0, crit: false, blocked: false, executed: false, snap: true, hpA: b.a.hp, hpB: b.b.hp });
       }
 
       if (ab.mult > 0) {
@@ -1633,6 +1640,14 @@
         ctx.fillStyle = "#fff"; ctx.fillRect(x - 4, gy - 6, w + 8, 12);
         ctx.globalAlpha = 1;
       } },
+      snap: { dur: 900, parts: function () { return makeParts(40, function () { return { a: rnd(0, Math.PI * 2), s: rnd(40, 200), r: rnd(2, 4) }; }); },
+        draw: function (p, e, parts) {
+          var t = e.to;
+          if (p < 0.2) { ctx.fillStyle = "#fff"; ctx.globalAlpha = (0.2 - p) * 4; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.globalAlpha = 1; }
+          ringAt(t.x, t.y, t.r * (0.5 + ease(p) * 2.5), "#22d3ee", 5 * (1 - p) + 1, 1 - p);
+          for (var k = 0; k < 6; k++) { var a = k / 6 * Math.PI * 2 + 0.3, L = t.r * 1.8 * Math.min(1, p * 3); glowLine(t.x, t.y, t.x + Math.cos(a) * L, t.y + Math.sin(a) * L, "#ecfeff", 2, 10); }
+          parts.forEach(function (s) { var d = s.s * ease(p); spark(t.x + Math.cos(s.a) * d, t.y + Math.sin(s.a) * d, s.r, "#a5f3fc", 1 - p); });
+        } },
       burst: { dur: 950, parts: function () { return makeParts(70, function () { return { a: rnd(0, TAU), s: rnd(60, 260), r: rnd(2, 5) }; }); },
         draw: function (p, e, parts) {
           var t = e.to;
@@ -1913,6 +1928,26 @@
         }
         if (p > 0.3 && p < 0.4) flash((0.4 - p) * 4, "#e0f2fe");
       } },
+      snap: { dur: 1800, parts: function () { return parts(140, function () { return { a: Math.random() * TAU, s: rnd(0.3, 1.2), r: rnd(1.5, 4.5) }; }); },
+        draw: function (p, e, ps) {
+          var R = Math.hypot(e.w, e.h) / 2;
+          ctx.fillStyle = "rgba(0,0,0," + (0.85 * Math.min(1, p / 0.15) * (1 - seg(p, 0.85, 1))) + ")"; ctx.fillRect(0, 0, e.w, e.h);
+          if (p < 0.3) {
+            /* the fingers come together: a point of light charging up */
+            var q = p / 0.3;
+            spark(e.cx, e.cy, 4 + q * 18, "#fff", 0.6 + q * 0.4);
+            for (var k = 0; k < 6; k++) { var a = k / 6 * TAU + q * 2; glowLine(e.cx, e.cy, e.cx + Math.cos(a) * 60 * q, e.cy + Math.sin(a) * 60 * q, "#22d3ee", 2, 12); }
+          } else {
+            /* SNAP: white flash, a shockwave across the whole screen, reality cracking */
+            var q2 = seg(p, 0.3, 1);
+            flash((0.42 - p) * 6, "#ffffff");
+            ring(e.cx, e.cy, R * ease(q2), "#a5f3fc", 10 * (1 - q2) + 1, 1 - q2);
+            ring(e.cx, e.cy, R * 0.7 * ease(q2), "#ffffff", 4, (1 - q2) * 0.8);
+            ps.forEach(function (s) { var d = R * s.s * ease(q2); spark(e.cx + Math.cos(s.a) * d, e.cy + Math.sin(s.a) * d, s.r, s.s > 0.8 ? "#22d3ee" : "#fff", 1 - q2); });
+            if (q2 < 0.5) for (var g = 0; g < 8; g++) { ctx.fillStyle = g % 2 ? "rgba(34,211,238,.35)" : "rgba(255,255,255,.25)"; ctx.fillRect(0, Math.random() * e.h, e.w, 2 + Math.random() * 10); }
+            for (var c = 0; c < 7; c++) { var ca = c / 7 * TAU + 0.4, L = R * Math.min(1, q2 * 2); glowLine(e.cx, e.cy, e.cx + Math.cos(ca) * L, e.cy + Math.sin(ca) * L, "rgba(236,254,255," + (1 - q2) + ")", 2, 10); }
+          }
+        } },
       burst: { dur: 1500, parts: function (e) { return parts(160, function () { return { a: Math.random() * TAU, s: rnd(0.2, 1), r: rnd(3, 8) }; }); },
         draw: function (p, e, ps) {
           dim(p, 0.8);
@@ -2210,7 +2245,7 @@
       var cdLeft = me.cooldowns[id] || 0;
       btn.disabled = !myTurn || cdLeft > 0;
       btn.title = ab.desc;
-      var sub = ab.mult > 0 ? "~" + fmt(Math.round(me.power * ab.mult * me.dmgMult)) + " dmg" + (ab.hits ? " x" + ab.hits : "") : "support";
+      var sub = ab.flat ? fmt(ab.flat) + " dmg" : ab.mult > 0 ? "~" + fmt(Math.round(me.power * ab.mult * me.dmgMult)) + " dmg" + (ab.hits ? " x" + ab.hits : "") : "support";
       btn.innerHTML = "<span class=\"ab-icon\">" + ab.icon + "</span><span class=\"ab-name\">" + ab.name + "</span><span class=\"ab-sub\">" + sub + "</span>" + (cdLeft > 0 ? "<span class=\"cd\">" + cdLeft + "</span>" : "");
       btn.addEventListener("click", function () { chooseAbility(id); });
       bar.appendChild(btn);
@@ -2275,9 +2310,9 @@
           break;
         case "damage":
           flash(e.target, "hit");
-          floatText(e.target, "-" + fmt(e.amount) + (e.crit ? "!" : ""), e.crit ? "t-divine" : "t-forbidden");
+          floatText(e.target, "-" + fmt(e.amount) + (e.snap ? " 🫰" : e.crit ? "!" : ""), e.snap ? "t-administrative" : e.crit ? "t-divine" : "t-forbidden");
           Sound.hit(e.crit);
-          logLine((e.crit ? "💥 CRIT! " : "") + (e.executed ? "EXECUTE! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.absorbed ? " (" + fmt(e.absorbed) + " absorbed)" : "") + (e.blocked ? " (blocked 60%)" : ""), e.crit || e.executed ? "crit" : (isMe(e.who) ? "you" : "them"));
+          logLine((e.snap ? "🫰 SNAP! " : "") + (e.crit ? "💥 CRIT! " : "") + (e.executed ? "EXECUTE! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.absorbed ? " (" + fmt(e.absorbed) + " absorbed)" : "") + (e.blocked ? " (blocked 60%)" : ""), e.crit || e.executed ? "crit" : (isMe(e.who) ? "you" : "them"));
           setHP(e);
           break;
         case "heal":
@@ -2625,7 +2660,8 @@
     var power = Math.max(1, Math.min(1e7, Math.floor(Number(spec.power) || 1)));
     var auraId = Number.isInteger(spec.auraId) && A.byId(spec.auraId) ? spec.auraId : null;
     var raw = Array.isArray(spec.loadout) ? spec.loadout : [];
-    var loadout = raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < K.KIT_SIZE && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE);
+    var size = auraId !== null ? K.kitFor(A.byId(auraId)).length : K.KIT_SIZE;
+    var loadout = raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < size && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE);
     if (!loadout.length) loadout = DEFAULT_LOADOUT.slice();
     return { name: name, power: power, auraId: auraId, shiny: auraId !== null && isShiny(A.byId(auraId), spec.shiny === true), loadout: loadout, isBot: false };
   }
