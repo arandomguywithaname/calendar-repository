@@ -273,6 +273,10 @@
     formatOdds: function (r) { return "1 in " + r.toLocaleString("en-US"); }
   };
 
+  /* Frozen so the browser console can't rewrite an aura's power, odds or coins mid-game. */
+  list.forEach(function (a) { Object.freeze(a.colors); Object.freeze(a); });
+  TIERS.forEach(Object.freeze);
+  [list, byRarityDesc, TIERS, API].forEach(Object.freeze);
   global.AURAS = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof window !== "undefined" ? window : globalThis);

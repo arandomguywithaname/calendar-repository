@@ -153,7 +153,9 @@
         kit.push(makeAbility("k" + aura.id + "-" + i, archKey, name, theme));
       });
     }
-    cache[aura.id] = kit;
+    /* Frozen so the browser console can't power up an ability in the shared cache. */
+    kit.forEach(Object.freeze);
+    cache[aura.id] = Object.freeze(kit);
     return kit;
   }
 
@@ -182,6 +184,7 @@
     });
   }
 
-  global.KITS = { ARCH: ARCH, kitFor: kitFor, botKit: botKit, KIT_SIZE: 6 };
+  Object.keys(ARCH).forEach(function (k) { Object.freeze(ARCH[k]); });
+  global.KITS = Object.freeze({ ARCH: Object.freeze(ARCH), kitFor: kitFor, botKit: botKit, KIT_SIZE: 6 });
   if (typeof module !== "undefined" && module.exports) module.exports = global.KITS;
 })(typeof window !== "undefined" ? window : globalThis);

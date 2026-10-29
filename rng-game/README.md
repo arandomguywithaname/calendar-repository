@@ -89,7 +89,9 @@ loadout, and fight bots or a friend.
   no account server, see Deploy). Accounts made before this version go online
   automatically and keep their ID (a new one is issued only if someone online already
   has it). There is no password: anyone with an ID can open that account. Export /
-  Import save codes still work as a backup. A Save button sits in the header.
+  Import save codes still work as a backup; each code carries a fingerprint, so a
+  hand-edited code is refused (Error 98), and codes from before fingerprints can only be
+  imported with admin unlocked. A Save button sits in the header.
 - **One device rolls at a time**: rolling takes a 20-second "turn" on the account from
   the server, renewed while you keep rolling, auto-rolling or watching a reveal. If
   another device (or browser tab) tries to roll meanwhile, both devices get a red
@@ -104,8 +106,12 @@ loadout, and fight bots or a friend.
   code, or progress replaced by a newer save from another device).
 - **Admin** (bottom of the Stats tab, or press `` ` `` (backtick) anywhere on a keyboard):
   locked with the admin password. Unlock opens the console and the player panel below;
-  Lock closes both. The password is checked against a hash in `game.js` (PBKDF2) and
-  in the account function (scrypt), so it isn't written anywhere in the code.
+  Lock closes both, and admin also locks itself when you leave the page or after 5
+  minutes without using it. The password is checked against a hash in `game.js`
+  (PBKDF2) and in the account function (scrypt), so it isn't written anywhere in the
+  code, and the password box tells browsers not to fill in a saved password. While
+  admin is locked, the browser console can't change the game either: the debug hooks
+  hand out copies, and aura and ability data is frozen.
 - **Admin console** (your own account, after unlocking). Commands: `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `roll Fury of Darkness`, `give Cosmic Veil shiny`,
   `roll Beyond Axiom shiny`, `potion zenith 3`, `ability all`,

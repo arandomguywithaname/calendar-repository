@@ -2876,6 +2876,7 @@
 
   function runAdmin(line) {
     if (!adminUnlocked) return; /* the console only works after the admin password */
+    adminTouched();
     var parts = line.trim().replace(/^\//, "").split(/\s+/);
     var cmd = (parts.shift() || "").toLowerCase();
     var rest = parts.join(" ");
@@ -3922,10 +3923,22 @@
     toast("Game saved" + (currentUser ? " for " + (accountName(currentUser) || "ID " + currentUser) : ""));
   }
 
+  /* Fingerprint for save codes, so a hand-edited code is refused on import. */
+  function codeSum(body) {
+    var h1 = 0x811c9dc5, h2 = 0x9e3779b9, text = "aura-realms-save:" + body;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+      h2 = Math.imul((h2 ^ c) >>> 0, 2246822519) >>> 0;
+      h2 = ((h2 << 13) | (h2 >>> 19)) >>> 0;
+    }
+    return ("0000000" + h1.toString(16)).slice(-8) + ("0000000" + h2.toString(16)).slice(-8);
+  }
+
   function exportSave() {
     save();
-    var json = JSON.stringify(S);
-    var code = "AR1." + btoa(unescape(encodeURIComponent(json)));
+    var body = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+    var code = "AR2." + body + "." + codeSum(body);
     var ta = $("#save-code");
     ta.value = code;
     ta.select();
@@ -3934,10 +3947,21 @@
   }
 
   function importSave() {
-    var code = $("#save-code").value.trim();
-    if (code.indexOf("AR1.") !== 0) { loginError(ERR.ACCOUNT, "That is not a valid save code."); return; }
+    var code = $("#save-code").value.replace(/\s+/g, ""), body;
+    if (code.indexOf("AR2.") === 0) {
+      var dot = code.lastIndexOf(".");
+      body = code.slice(4, dot);
+      if (dot <= 4 || codeSum(body) !== code.slice(dot + 1)) { loginError(ERR.ACCOUNT, "That save code was changed or is broken, so it can't be imported."); return; }
+    } else if (code.indexOf("AR1.") === 0) {
+      /* Codes from before fingerprints can't be checked, so only an admin may import them. */
+      if (!adminUnlocked) { loginError(ERR.ACCOUNT, "That's an old save code. Unlock admin to import it, or export a new one."); return; }
+      body = code.slice(4);
+    } else {
+      loginError(ERR.ACCOUNT, "That is not a valid save code.");
+      return;
+    }
     try {
-      var json = decodeURIComponent(escape(atob(code.slice(4))));
+      var json = decodeURIComponent(escape(atob(body)));
       var data = JSON.parse(json);
       if (!data || typeof data !== "object" || typeof data.rolls !== "number") throw new Error("bad");
       if (!confirm("Import this save? It will replace the current progress for " + (currentUser ? accountName(currentUser) || currentUser : "guest") + ".")) return;
@@ -3962,6 +3986,14 @@
   var ADMIN_PW = { salt: "5dbb466384fd7561529dc0f640552297", iterations: 150000, hash: "f6db0a3506768f23d93631b1be667437e07e602dbbe80ef3da3edb444fb70a47" };
   var adminUnlocked = false;
   var aaKey = "";      /* the admin password, kept only while admin is unlocked */
+  var ADMIN_IDLE_MS = 5 * 60 * 1000; /* admin locks itself after this long without being used */
+  var adminIdleTimer = null;
+
+  /* Note admin activity, restarting the auto-lock countdown. */
+  function adminTouched() {
+    clearTimeout(adminIdleTimer);
+    if (adminUnlocked) adminIdleTimer = setTimeout(function () { aaRelock("🔒 Locked after 5 minutes without admin use."); }, ADMIN_IDLE_MS);
+  }
   var aaAccounts = []; /* the last account listing, for names in messages */
 
   function aaPrint(text) {
@@ -3983,6 +4015,7 @@
   function accountAdmin(op, fields) {
     var key = aaKey;
     if (!key) { aaPrint("⚠️ Error 98: Admin is locked. Type the admin password and press Unlock."); return Promise.resolve(null); }
+    adminTouched();
     if (Cloud.state === "missing") { aaPrint("⚠️ Error 404: Online accounts aren't set up on this site, so there are no accounts to change."); return Promise.resolve(null); }
     return cloudCall("admin", Object.assign({ key: key, op: op }, fields || {})).then(function (r) {
       if (r.status === 200) return r.data;
@@ -4037,6 +4070,7 @@
       if (!ok) return new Promise(function (resolve) { setTimeout(function () { resolve(false); }, 400); }); /* slows down guessing */
       adminUnlocked = true;
       aaKey = key;
+      adminTouched();
       $("#aa-lock").classList.add("hidden");
       $("#aa-lock-msg").textContent = "";
       $("#admin-area").classList.remove("hidden");
@@ -4060,9 +4094,11 @@
     });
   }
 
-  function aaRelock() {
+  function aaRelock(msg) {
     adminUnlocked = false;
     aaKey = "";
+    clearTimeout(adminIdleTimer);
+    $("#admin-in").value = "";
     aaAccounts = [];
     $("#aa-accounts").innerHTML = "";
     $("#aa-id").value = "";
@@ -4071,7 +4107,7 @@
     $("#aa-panel").classList.add("hidden");
     $("#admin-area").classList.add("hidden");
     $("#aa-lock").classList.remove("hidden");
-    $("#aa-lock-msg").textContent = "🔒 Locked.";
+    $("#aa-lock-msg").textContent = msg || "🔒 Locked.";
   }
 
   function aaList(quiet) {
@@ -4241,7 +4277,10 @@
   $("#login-modal").addEventListener("click", function (e) { if (e.target === $("#login-modal")) closeLogin(); });
   $("#dual-ok").addEventListener("click", hideDualWarning);
   $("#aa-lock").addEventListener("submit", aaUnlock);
-  $("#aa-relock").addEventListener("click", aaRelock);
+  $("#aa-relock").addEventListener("click", function () { aaRelock(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden" && adminUnlocked) aaRelock("🔒 Locked because you left the page.");
+  });
   $("#aa-erase").addEventListener("click", aaErase);
   $("#aa-add-coins").addEventListener("click", aaAddCoins);
   $("#aa-add-luck").addEventListener("click", aaAddLuck);
@@ -4283,7 +4322,8 @@
 
   /* Console hooks. */
   window.AuraRealms = {
-    state: function () { return S; },
+    /* Without admin unlocked these hand out copies, so the browser console can't change the game. */
+    state: function () { return adminUnlocked ? S : JSON.parse(JSON.stringify(S)); },
     preview: function (name, shiny) { var a = findAura(name); if (a) playCutscene(a, true, !!shiny); },
     reveals: REVEALS,
     revealTimeline: function (name, shiny) { var a = findAura(name); return a ? revealTimeline(a, !!shiny) : null; },
@@ -4294,6 +4334,6 @@
     bfx: BFX,
     ufx: UFX,
     pvp: function () { return { status: PvP.status, role: PvP.role, code: PvP.code }; },
-    battle: function () { return battle; }
+    battle: function () { return adminUnlocked || !battle ? battle : JSON.parse(JSON.stringify(battle)); }
   };
 })();
