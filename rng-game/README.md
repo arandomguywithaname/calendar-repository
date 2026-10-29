@@ -16,7 +16,8 @@ loadout, and fight bots or a friend.
   One**: 1 in 1,000,000,000,000,000 (a quadrillion), 50,000 power, its own named moves
   (Chosen Strike, Prophecy Storm, Fated Aegis, Second Coming, Final Judgement and 🌟
   **Destiny Unbound**, exactly 1,000,000 damage that nothing can block, shield, reflect
-  or boost, 4 turn cooldown), a gold orb, banner and title, and a constellation-and-god-
+  or boost, 4 turn cooldown) plus a 7th, its own 🫰 **Snap** for exactly 1,000,000
+  damage with a 7 turn cooldown, a gold orb, banner and title, and a constellation-and-god-
   rays reveal, the longest in the game. Administrative auras have a cyan orb style.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
@@ -67,7 +68,8 @@ loadout, and fight bots or a friend.
   abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova
   Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Absolute
   Authority gets a 7th: 🫰 **Snap**, exactly 100,000 damage that nothing can block,
-  shield, reflect or boost, with a 7 turn cooldown. Choose 4 per
+  shield, reflect or boost, with a 7 turn cooldown; The Chosen One's Snap deals exactly
+  1,000,000. Choose 4 per
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have

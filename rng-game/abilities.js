@@ -48,9 +48,9 @@
     shield:    { icon: "🔰", mult: 0,    cd: 3, effect: "shield", shieldPct: 0.25, names: ["{T} Barrier", "{T} Veil", "Shield of {T}", "{T} Sanctuary", "{T} Bastion"],
                  desc: "Raises a barrier of {T} that absorbs damage equal to 25% of your max HP." },
     snap:      { icon: "🫰", mult: 0,    cd: 7, flat: 100000, names: ["Snap"],
-                 desc: "Snaps reality for exactly 100,000 damage. Nothing can block, shield, reflect or boost it." },
+                 desc: "Snaps reality for exactly {F} damage. Nothing can block, shield, reflect or boost it." },
     destiny:   { icon: "🌟", mult: 0,    cd: 4, flat: 1000000, names: ["Destiny Unbound"],
-                 desc: "Unleashes destiny for exactly 1,000,000 damage. Nothing can block, shield, reflect or boost it." }
+                 desc: "Unleashes destiny for exactly {F} damage. Nothing can block, shield, reflect or boost it." }
   };
 
   /* Which mechanics each tier can roll. Later tiers unlock the nastier ones. */
@@ -70,7 +70,8 @@
   var FINISHERS = ["burst", "execute", "barrage"];
   /* Extra signature moves some auras get on top of their usual six. */
   var EXTRA_MOVES = {
-    "Absolute Authority": [["snap", "Snap"]]
+    "Absolute Authority": [["snap", "Snap"]],
+    "The Chosen One": [["snap", "Snap", { flat: 1000000 }]]
   };
 
   /* Hand-written kits for the headline auras. [archetype, name, optional mult override] */
@@ -115,15 +116,17 @@
   }
 
   function fillTemplate(text, theme, arch) {
-    return text.replace(/\{T\}/g, theme).replace(/\{P\}/g, String(Math.round((arch.mult || 0) * 100)));
+    return text.replace(/\{T\}/g, theme).replace(/\{P\}/g, String(Math.round((arch.mult || 0) * 100))).replace(/\{F\}/g, (arch.flat || 0).toLocaleString("en-US"));
   }
 
-  function makeAbility(id, archKey, name, theme, multOverride) {
+  /* `overrides` replaces fields of the mechanic for this one move, for example a stronger Snap's `flat`. */
+  function makeAbility(id, archKey, name, theme, multOverride, overrides) {
     var arch = ARCH[archKey];
     var ab = { id: id, arch: archKey, name: name, icon: arch.icon, mult: multOverride !== undefined ? multOverride : arch.mult, cd: arch.cd };
     ["effect", "pct", "alwaysCrit", "lifesteal", "poison", "weaken", "stunChance", "hits", "executeBelow", "shieldPct", "flat"].forEach(function (k) {
       if (arch[k] !== undefined) ab[k] = arch[k];
     });
+    if (overrides) Object.keys(overrides).forEach(function (k) { ab[k] = overrides[k]; });
     ab.desc = fillTemplate(arch.desc, theme, ab);
     return ab;
   }
@@ -168,7 +171,7 @@
       });
     }
     (EXTRA_MOVES[aura.name] || []).forEach(function (s, i) {
-      kit.push(makeAbility("k" + aura.id + "-x" + i, s[0], s[1], themes[0], s[2]));
+      kit.push(makeAbility("k" + aura.id + "-x" + i, s[0], s[1], themes[0], undefined, s[2]));
     });
     /* Frozen so the browser console can't power up an ability in the shared cache. */
     kit.forEach(Object.freeze);
