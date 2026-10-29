@@ -71,6 +71,8 @@
     phoenix:   { name: "Phoenix Feather",   icon: "🪶", cost: 6000,    group: "battle", kind: "revive", pct: 1,   desc: "Survive a killing blow once in your next bot fight and come back at full HP" }
   };
   var POTION_ORDER = Object.keys(POTIONS);
+  /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
+  var BUY_AMOUNTS = [1, 2, 5, 10, 100, 1000, "max"];
   var POTION_GROUPS = [["luck", "Luck potions"], ["special", "Magnets and shiny potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
 
   /* Daily gift ladder: day 1..7 of a streak. Coins scale up with every completed week. */
@@ -169,7 +171,7 @@
       botWins: {},
       history: [],
       stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0 },
-      settings: { sound: true, skipCutscenes: false }
+      settings: { sound: true, skipCutscenes: false, buyAmount: 1 }
     };
   }
 
@@ -198,6 +200,7 @@
       var merged = Object.assign(base, saved);
       merged.stats = Object.assign(defaultState().stats, saved.stats || {});
       merged.settings = Object.assign(defaultState().settings, saved.settings || {});
+      if (BUY_AMOUNTS.indexOf(merged.settings.buyAmount) < 0) merged.settings.buyAmount = 1;
       if (!merged.loadouts || typeof merged.loadouts !== "object") merged.loadouts = {};
       merged.daily = Object.assign(defaultState().daily, saved.daily || {});
       if (!Array.isArray(merged.goldEffects)) merged.goldEffects = [];
@@ -1097,17 +1100,25 @@
     return pool[0];
   }
 
+  /* How many of a potion one Buy click gets: the chosen Buy amount, or for Max as many as the coins cover. */
+  function buyCount(p) {
+    var amt = S.settings.buyAmount;
+    if (amt === "max") return p.cost > 0 ? Math.floor(S.coins / p.cost) : 1;
+    return BUY_AMOUNTS.indexOf(amt) >= 0 ? amt : 1;
+  }
+
   function buyPotion(key) {
     var p = POTIONS[key];
     if (!p) return;
     if (p.collector && !collectionDone()) return;
-    if (S.coins < p.cost) { errorToast(ERR.POTION_BUY, "Not enough coins for " + p.name + " (" + fmt(p.cost) + " needed)."); return; }
+    var n = buyCount(p), total = n * p.cost;
+    if (n < 1 || S.coins < total) { errorToast(ERR.POTION_BUY, "Not enough coins for " + (n > 1 ? fmt(n) + " x " : "") + p.name + " (" + fmt(n > 1 ? total : p.cost) + " needed)."); return; }
     var wasDone = collectionDone();
-    S.coins -= p.cost;
-    S.potions[key] = (S.potions[key] || 0) + 1;
-    S.bought[key] = (S.bought[key] || 0) + 1;
+    S.coins -= total;
+    S.potions[key] = (S.potions[key] || 0) + n;
+    S.bought[key] = (S.bought[key] || 0) + n;
     Sound.buy();
-    toast("Bought " + p.name);
+    toast("Bought " + (n > 1 ? fmt(n) + " x " + p.name + " for " + fmt(total) + " coins" : p.name));
     if (!wasDone && collectionDone()) {
       var ev = POTIONS.everything;
       toast(ev.icon + " You bought every potion! A new one appeared in the shop: " + ev.name, "gold", 7000);
@@ -1118,6 +1129,7 @@
   }
 
   function renderShop() {
+    document.querySelectorAll("#buy-amount [data-qty]").forEach(function (b) { b.classList.toggle("active", b.dataset.qty === String(S.settings.buyAmount)); });
     var shop = $("#shop-grid");
     shop.innerHTML = "";
     POTION_GROUPS.forEach(function (gr) {
@@ -1153,12 +1165,19 @@
       }
       card.innerHTML =
         "<div class=\"row\"><div class=\"big-icon\">" + p.icon + "</div><div><div class=\"card-title\">" + p.name + "</div><div class=\"card-sub\">" + p.desc + "</div></div></div>" +
-        "<div class=\"row\"><span class=\"price\">" + fmt(p.cost) + " coins</span><span class=\"card-sub\">owned: " + (S.potions[key] || 0) + "</span></div>";
+        "<div class=\"row\"><span class=\"price\">" + fmt(p.cost) + " coins</span><span class=\"card-sub\">owned: " + fmt(S.potions[key] || 0) + "</span></div>";
+      var n = buyCount(p);
+      if (S.settings.buyAmount !== 1) {
+        var total = document.createElement("div");
+        total.className = "card-sub buy-total";
+        total.textContent = n > 0 ? "x" + fmt(n) + " = " + fmt(n * p.cost) + " coins" : "Not enough coins for one yet";
+        card.appendChild(total);
+      }
       var actions = document.createElement("div");
       actions.className = "actions";
       var buy = document.createElement("button");
-      buy.className = "btn small primary" + (S.coins < p.cost ? " cant-afford" : "");
-      buy.textContent = "Buy";
+      buy.className = "btn small primary" + (n < 1 || S.coins < n * p.cost ? " cant-afford" : "");
+      buy.textContent = S.settings.buyAmount === 1 ? "Buy" : S.settings.buyAmount === "max" && n < 1 ? "Buy max" : "Buy x" + fmt(n);
       buy.addEventListener("click", function () { buyPotion(key); });
       actions.appendChild(buy);
       if (S.potions[key]) {
@@ -4445,6 +4464,13 @@
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
+  $("#buy-amount").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-qty]");
+    if (!b) return;
+    S.settings.buyAmount = b.dataset.qty === "max" ? "max" : Number(b.dataset.qty);
+    save();
+    renderShop();
+  });
   $("#btn-reset").addEventListener("click", function () {
     if (!confirm("Reset all progress? This cannot be undone.")) return;
     resetSave();

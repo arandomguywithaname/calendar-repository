@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -104,6 +104,16 @@
       <div class="panel-head">
         <h2>Potion Shop</h2>
         <p class="muted">Spend coins on potions and upgrades. Luck, shiny, magnet and coin potions do not stack: the strongest active one of each kind applies while each counts down.</p>
+      </div>
+      <div class="buy-amount" id="buy-amount" role="group" aria-label="How many potions each Buy button buys">
+        <span class="buy-amount-label">Buy amount</span>
+        <button class="btn small" data-qty="1">x1</button>
+        <button class="btn small" data-qty="2">x2</button>
+        <button class="btn small" data-qty="5">x5</button>
+        <button class="btn small" data-qty="10">x10</button>
+        <button class="btn small" data-qty="100">x100</button>
+        <button class="btn small" data-qty="1000">x1000</button>
+        <button class="btn small" data-qty="max">Max</button>
       </div>
       <div id="shop-grid"></div>
       <h3 class="section-title">Upgrades</h3>
@@ -273,7 +283,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 35</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 36</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -345,9 +355,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=35"></script>
-  <script src="abilities.js?v=35"></script>
-  <script src="reveals.js?v=35"></script>
-  <script src="game.js?v=35"></script>
+  <script src="auras.js?v=36"></script>
+  <script src="abilities.js?v=36"></script>
+  <script src="reveals.js?v=36"></script>
+  <script src="game.js?v=36"></script>
 </body>
 </html>

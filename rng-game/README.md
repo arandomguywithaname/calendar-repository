@@ -107,6 +107,10 @@ loadout, and fight bots or a friend.
   or full HP). Potions of the same kind don't stack: the strongest one counts, and a
   stronger shield or revive replaces a weaker one that is waiting. Battle potions are
   used up the moment the fight starts.
+- **Buy amount.** A row at the top of the Potion Shop picks how many potions each Buy
+  button buys: x1, x2, x5, x10, x100, x1000 or **Max** (as many as your coins cover).
+  The cards show the total price, the choice is remembered, and if you can't afford
+  the whole amount nothing is bought (Error 435).
 - **Collector's potion.** A locked 🔒 "? ? ?" card in the Luck potions shows how many
   of the 37 shop potions you have bought (and the icons of the ones still to buy).
   Buy each of them at least once (Celestial Nectar, Potion of Destiny and the Elixir

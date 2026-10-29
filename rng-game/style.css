@@ -475,6 +475,11 @@ body.shake-3 { animation: shake3 .9s; }
 .cloud-status.cs-synced { color: #bbf7d0; border-color: rgba(74,222,128,.4); }
 .cloud-status.cs-offline { color: #fff; background: rgba(127,29,29,.9); border-color: #ef4444; }
 .btn.cant-afford { opacity: .5; }
+.buy-amount { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
+.buy-amount-label { font-weight: 700; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+.buy-amount .btn { text-transform: none; min-width: 52px; }
+.buy-amount .btn.active { background: linear-gradient(135deg, #7c3aed, #db2777); border-color: transparent; color: #fff; }
+.card-sub.buy-total { margin-top: 4px; color: var(--gold); }
 @keyframes toastin { from { opacity: 0; transform: translateY(12px); } }
 @keyframes toastout { to { opacity: 0; transform: translateY(8px); } }
 
