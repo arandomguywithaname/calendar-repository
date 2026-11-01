@@ -124,6 +124,16 @@ loadout, and fight bots or a friend.
   5,000,000 coins: x50,000 luck, always shiny, Epic or better and x100 coins for 3
   rolls, Time Warp speed, and a Godslayer Tonic, Steel Wall and Phoenix Feather for
   the next bot fight. Mystery potions never turn into it.
+- **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
+  friend's 7-digit ID and how many to send. The game looks the friend up and asks
+  "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's
+  gift box on the account server and show up in their game within about 20 seconds
+  while they play (even while auto-rolling), or the next time they log in, with a
+  message saying who sent them. Both players need an online account; a gift can't
+  be sent to yourself or taken back, and a gift box holds up to 100 gifts until it
+  is collected. Gifting an equipped aura unequips it. If the server refuses or can't
+  be reached, the aura stays with you. Each gift is added exactly once, even if the
+  friend plays on two devices. Stats count auras sent and received.
 - **Login on any device**: a new player enters a name (2 to 50 characters) and gets a
   random 7-digit ID, shown at the top of the page (click it to copy). Entering that ID
   on another phone or computer loads the same progress. Saves upload a few seconds
@@ -193,7 +203,7 @@ No build step and no npm install.
   the game. Functions are meant to be deployed from Git or the CLI, so if the account
   function isn't running, IDs only work on the device that made them and logged-in
   players see a one-time Error 404 note saying online accounts aren't set up.
-  Everything else plays normally.
+  Gifting auras needs the account function too. Everything else plays normally.
 - **Check which version is live.** The bottom of every page shows "Version N". Each
   update raises N, together with the `?v=N` on the script and style links in
   `index.html`, so browsers fetch the new files instead of reusing old ones. If the

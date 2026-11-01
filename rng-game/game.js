@@ -167,6 +167,7 @@
       lastShiny: false,
       potions: {},
       bought: {},
+      giftsOpened: [],
       luckEffects: [],
       goldEffects: [],
       floorEffects: [],
@@ -184,7 +185,7 @@
       playerName: "",
       botWins: {},
       history: [],
-      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0 },
+      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0 },
       settings: { sound: true, skipCutscenes: false, buyAmount: 1 }
     };
   }
@@ -226,6 +227,7 @@
       if (saved.strengthReady) merged.strengthMult = Math.max(merged.strengthMult || 1, 1.5);
       if (!merged.shinyInventory || typeof merged.shinyInventory !== "object") merged.shinyInventory = {};
       if (!merged.bought || typeof merged.bought !== "object") merged.bought = {};
+      if (!Array.isArray(merged.giftsOpened)) merged.giftsOpened = [];
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
       delete merged.goldRolls;
@@ -1339,6 +1341,11 @@
       btn.disabled = isEq;
       btn.addEventListener("click", function () { equip(en.id, sh); });
       actions.appendChild(btn);
+      var gb = document.createElement("button");
+      gb.className = "btn small";
+      gb.textContent = "🎁 Gift";
+      gb.addEventListener("click", function () { openGift(en.id, sh); });
+      actions.appendChild(gb);
       card.appendChild(actions);
       grid.appendChild(card);
     });
@@ -3069,6 +3076,7 @@
       ["Win streak", fmt(S.stats.streak) + " (best " + fmt(S.stats.bestStreak) + ")"],
       ["Reveals played", fmt(S.stats.cutscenes)],
       ["Training level", fmt(S.training)],
+      ["Gifts", fmt(S.stats.giftsSent || 0) + " auras sent · " + fmt(S.stats.giftsReceived || 0) + " received"],
       ["Daily gifts", fmt(S.daily.claims || 0) + " claimed · streak " + fmt(S.daily.streak)],
       ["Equipped kit", equippedAura() ? loadoutFor(equippedAura()).map(function (i) { return K.kitFor(equippedAura())[i].name; }).join(", ") : "—"]
     ];
@@ -4048,6 +4056,7 @@
       var meta = accountMeta(id);
       if (r.data.rev !== meta.rev) adoptCloudSave(r.data, CONFLICT_MSG);
       else if (meta.dirty) pushSave();
+      setTimeout(checkGifts, 1500);
     }, noteNetwork);
   }
 
@@ -4102,6 +4111,207 @@
       });
     }, noteNetwork);
   }
+
+  /* ---------- Gifting auras: they travel from one player ID to another through the account server ---------- */
+
+  var giftView = null; /* the open gift popup: { id, shiny, step: "who" | "confirm", to, toName, count } */
+
+  /* Gifts need an online account on both sides. Says why not (as a red toast) and returns false. */
+  function giftReady() {
+    var m = accountMeta(currentUser);
+    if (!currentUser || !m) { errorToast(ERR.ACCOUNT, "Log in first (Login, top right) to send gifts. Gifts go from one player ID to another."); return false; }
+    if (Cloud.state === "missing") { errorToast(ERR.NETWORK, "Gifting needs online accounts, and they aren't set up on this site."); return false; }
+    if (!m.cloud) { errorToast(ERR.ACCOUNT, "Your account isn't online yet. Wait a moment and try again."); return false; }
+    if (battle && !battle.over) { toast("Finish the fight first", "bad"); return false; }
+    return true;
+  }
+
+  function giftBag(shiny) { return shiny ? S.shinyInventory : S.inventory; }
+
+  function openGift(id, shiny) {
+    if (!giftReady()) return;
+    var a = A.byId(id), sh = isShiny(a, shiny), have = giftBag(sh)[id] || 0;
+    if (!have) return;
+    giftView = { id: id, shiny: sh, step: "who", to: "", toName: "", count: 1 };
+    var box = $("#gift-aura");
+    box.innerHTML = "";
+    box.appendChild(makeOrb(a, "", sh));
+    var info = document.createElement("div");
+    var name = document.createElement("div"); name.className = "card-title"; name.textContent = auraLabel(a, sh);
+    var sub = document.createElement("div"); sub.className = "card-sub"; sub.textContent = (sh ? "Shiny " : "") + tierName(a) + " · you have " + fmt(have);
+    info.appendChild(name); info.appendChild(sub);
+    box.appendChild(info);
+    $("#gift-to").value = "";
+    $("#gift-count").value = "1";
+    $("#gift-count").max = String(have);
+    $("#gift-count-row").classList.toggle("hidden", have < 2);
+    setGiftStep("who");
+    $("#gift-modal").classList.remove("hidden");
+    $("#gift-to").focus();
+  }
+  function closeGift() { giftView = null; $("#gift-modal").classList.add("hidden"); }
+
+  function setGiftStep(step, error) {
+    if (!giftView) return;
+    giftView.step = step;
+    $("#gift-error").textContent = error || "";
+    var conf = $("#gift-confirm");
+    conf.classList.toggle("hidden", step !== "confirm");
+    if (step === "confirm") {
+      var a = A.byId(giftView.id);
+      conf.textContent = "Send " + (giftView.count > 1 ? fmt(giftView.count) + " x " : "") + auraLabel(a, giftView.shiny) + " to " + giftView.toName + " (ID " + giftView.to + ")? It leaves your inventory and can't be taken back.";
+    }
+    $("#gift-submit").disabled = false;
+    $("#gift-submit").textContent = step === "confirm" ? "🎁 Send gift" : "Next";
+  }
+
+  /* Step 1 looks the friend up so the player sees their name; step 2 sends. */
+  function giftSubmit() {
+    if (!giftView || !giftReady()) return;
+    if (giftView.step === "confirm") { sendGift(); return; }
+    var to = $("#gift-to").value.trim(), have = giftBag(giftView.shiny)[giftView.id] || 0;
+    var count = Math.floor(Number($("#gift-count").value));
+    if (!/^\d{7}$/.test(to)) { setGiftStep("who", "A player ID is 7 digits."); return; }
+    if (to === currentUser) { setGiftStep("who", "That's your own ID. Enter your friend's ID."); return; }
+    if (!(count >= 1)) { setGiftStep("who", "Send at least 1."); return; }
+    if (count > have) { setGiftStep("who", "You only have " + fmt(have) + "."); return; }
+    $("#gift-submit").disabled = true;
+    $("#gift-error").textContent = "";
+    var view = giftView;
+    cloudCall("peek", { id: to }).then(function (r) {
+      if (giftView !== view) return;
+      if (r.status !== 200) { setGiftStep("who", r.data.error || "No player with ID " + to + "."); return; }
+      view.to = to; view.toName = r.data.name || "Player " + to; view.count = count;
+      setGiftStep("confirm");
+    }, function (e) {
+      if (giftView !== view) return;
+      setGiftStep("who", e && e.missing ? "Gifting needs online accounts, and they aren't set up on this site." : "Error 404: can't reach the account server. Try again.");
+    });
+  }
+
+  /* Take the auras out of this save and store it online together with the gift, so the friend's gift box and
+     this account change together. If the server refuses, the auras come straight back. */
+  function sendGift() {
+    var g = giftView, bag = giftBag(g.shiny), id = currentUser, m = accountMeta(id);
+    if ((bag[g.id] || 0) < g.count) { setGiftStep("who", "You don't have that many any more."); return; }
+    if (Cloud.pushing || Cloud.claiming) { $("#gift-error").textContent = "Saving… try again in a moment."; return; }
+    var before = { n: bag[g.id], equipped: S.equipped, equippedShiny: S.equippedShiny };
+    bag[g.id] -= g.count;
+    if (!bag[g.id]) delete bag[g.id];
+    if (S.equipped === g.id && !!S.equippedShiny === g.shiny && !owns(g.id, g.shiny)) { S.equipped = null; S.equippedShiny = false; }
+    S.stats.giftsSent = (S.stats.giftsSent || 0) + g.count;
+    saveLocal();
+    var undo = function () {
+      bag[g.id] = before.n;
+      S.equipped = before.equipped;
+      S.equippedShiny = before.equippedShiny;
+      S.stats.giftsSent -= g.count;
+      save();
+      renderAll();
+    };
+    var stamp = Cloud.changes;
+    Cloud.pushing = true;
+    setCloudState("saving");
+    $("#gift-submit").disabled = true;
+    $("#gift-submit").textContent = "Sending…";
+    cloudCall("gift", { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, aura: g.id, shiny: g.shiny, count: g.count }).then(function (r) {
+      if (id !== currentUser) return;
+      var label = (g.count > 1 ? fmt(g.count) + " x " : "") + auraLabel(A.byId(g.id), g.shiny);
+      if (r.status === 200) {
+        var still = stamp !== Cloud.changes;
+        updateMeta(id, { rev: r.data.rev, dirty: still });
+        setCloudState("synced");
+        if (still && !Cloud.pushTimer) Cloud.pushTimer = setTimeout(pushSave, 3000);
+        if (giftView === g) closeGift();
+        Sound.buy();
+        toast("🎁 Sent " + label + " to " + (r.data.toName || g.toName) + "!", "gold", 5000);
+        renderAll();
+        return;
+      }
+      setCloudState("synced");
+      if (r.data.code === ERR.ACCOUNT && r.data.save !== undefined) {
+        /* Another device played on this account meanwhile: its newer save is loaded and nothing was sent. */
+        adoptCloudSave(r.data, CONFLICT_MSG);
+        if (giftView === g) setGiftStep("who", "Your account changed on another device, so the gift wasn't sent. Check your auras and try again.");
+        return;
+      }
+      undo();
+      if (r.data.code === ERR.DUAL) { if (giftView === g) setGiftStep("who", "Error 145: this account is rolling on another device. Stop rolling there, then send the gift."); return; }
+      if (r.status === 404 && r.data.missing !== "to") { updateMeta(id, { cloud: false }); goOnline(); }
+      if (giftView === g) setGiftStep("who", r.data.error || "The gift couldn't be sent.");
+    }, function (e) {
+      undo();
+      noteNetwork(e);
+      if (giftView === g) setGiftStep("who", "Error 404: can't reach the account server, so the gift wasn't sent. Your aura is safe.");
+    }).then(function () { Cloud.pushing = false; });
+  }
+
+  /* Collect what is waiting in this account's gift box. Each gift is added to the save once (its id is kept in
+     giftsOpened), and the server only takes gifts out of the box once a save holding them is stored. */
+  function checkGifts() {
+    if (!cloudOn() || Cloud.pushing || Cloud.claiming || Cloud.openingGifts) return;
+    var id = currentUser;
+    Cloud.openingGifts = true;
+    cloudCall("gifts", { id: id }).then(function (r) {
+      if (id !== currentUser || r.status !== 200 || !Array.isArray(r.data.gifts) || !r.data.gifts.length) return;
+      if (Cloud.pushing || Cloud.claiming) return; /* busy saving: the next check picks them up */
+      var all = r.data.gifts, fresh = [];
+      all.forEach(function (g) {
+        if (!g || S.giftsOpened.indexOf(g.id) >= 0) return;
+        S.giftsOpened.push(g.id);
+        var a = A.byId(g.aura), n = Math.max(1, Math.floor(Number(g.count) || 1));
+        if (!a) return; /* an aura this version of the game doesn't know: dropped from the box */
+        var sh = isShiny(a, g.shiny);
+        giftBag(sh)[a.id] = (giftBag(sh)[a.id] || 0) + n;
+        S.stats.giftsReceived = (S.stats.giftsReceived || 0) + n;
+        fresh.push({ id: g.id, a: a, sh: sh, n: n, from: g.fromName || "A player", fromId: g.from });
+      });
+      if (S.giftsOpened.length > 300) S.giftsOpened = S.giftsOpened.slice(-300);
+      saveLocal();
+      var announce = function () {
+        if (!fresh.length) return;
+        fresh.slice(0, 3).forEach(function (f) {
+          toast("🎁 " + f.from + " (ID " + f.fromId + ") sent you " + (f.n > 1 ? fmt(f.n) + " x " : "") + auraLabel(f.a, f.sh) + "!", "gold", 8000);
+        });
+        if (fresh.length > 3) toast("🎁 …and " + (fresh.length - 3) + " more gifts! Check your inventory.", "gold", 8000);
+        Sound.rare(1);
+        renderAll();
+      };
+      var m = accountMeta(id), stamp = Cloud.changes;
+      Cloud.pushing = true;
+      setCloudState("saving");
+      return cloudCall("openGifts", { id: id, device: deviceId, rev: m.rev || 0, save: S, ids: all.map(function (g) { return g && g.id; }) }).then(function (o) {
+        if (id !== currentUser) return;
+        setCloudState("synced");
+        if (o.status === 200) {
+          var still = stamp !== Cloud.changes;
+          updateMeta(id, { rev: o.data.rev, dirty: still });
+          if (still && !Cloud.pushTimer) Cloud.pushTimer = setTimeout(pushSave, 3000);
+          announce();
+        } else if (o.data.code === ERR.ACCOUNT && o.data.save !== undefined) {
+          /* Another device saved first: take its save. The gifts are still in the box and get added to it next time. */
+          adoptCloudSave(o.data, CONFLICT_MSG, true);
+        } else {
+          /* Another device is rolling on this account (145): put the gifts back; that device collects them. */
+          fresh.forEach(function (f) {
+            var bag = giftBag(f.sh);
+            bag[f.a.id] -= f.n;
+            if (!(bag[f.a.id] > 0)) delete bag[f.a.id];
+            S.stats.giftsReceived -= f.n;
+            S.giftsOpened = S.giftsOpened.filter(function (x) { return x !== f.id; });
+          });
+          saveLocal();
+        }
+      }, function (e) {
+        /* The reply never came: keep the gifts here (giftsOpened stops them being added twice); the box
+           is emptied on a later check once a save holding them is stored. */
+        updateMeta(id, { dirty: true });
+        announce();
+        throw e;
+      }).then(function () { Cloud.pushing = false; }, function (e) { Cloud.pushing = false; throw e; });
+    }).catch(function (e) { if (e && e.net) noteNetwork(e); }).then(function () { Cloud.openingGifts = false; });
+  }
+  setInterval(function () { if (document.visibilityState === "visible") checkGifts(); }, 20000);
 
   /* The red error 145 banner. `rolling` is true on the device that holds the lease and heard that another tried. */
   function showDualWarning(rolling, waitMs) {
@@ -4502,7 +4712,13 @@
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
-  $("#buy-amount").addEventListener("click", function (e) {
+  $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });
+  $("#gift-close").addEventListener("click", closeGift);
+  $("#gift-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeGift(); });
+  ["#gift-to", "#gift-count"].forEach(function (sel) {
+    $(sel).addEventListener("input", function () { if (giftView && giftView.step === "confirm") setGiftStep("who"); });
+  });
+    $("#buy-amount").addEventListener("click", function (e) {
     var b = e.target.closest("[data-qty]");
     if (!b) return;
     S.settings.buyAmount = b.dataset.qty === "max" ? "max" : Number(b.dataset.qty);

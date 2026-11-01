@@ -9,24 +9,35 @@
      claim   { id, device, rev }            take or renew the roll lease; returns the newest save if `rev` is old
      save    { id, device, rev, save }      store a new save; refused while another device holds the lease
      release { id, device }                 give the lease back (tab closed, logged out)
+     gift    { id, device, rev, save, to, aura, shiny, count }
+                                            send auras to player `to`: they go into that player's gift box, and
+                                            `save` (the sender's save with them already taken out) is stored
+     gifts   { id }                         the gifts waiting in this account's gift box
+     openGifts { id, device, rev, save, ids }
+                                            store `save` (with those gifts already added), then take the gifts
+                                            with these ids out of the gift box
      admin   { key, op, ... }               owner tools, locked by the admin password (see ADMIN_HASH):
                list                             every account with its aura count, coins and luck
                erase    { id, aura }            remove one aura (both forms) or, without `aura`, every aura
+                                                (gifts of it waiting in the account's gift box go too)
                coins    { id, amount }          add coins (a negative amount takes them away)
                luck     { id, mult, rolls }     add a luck boost for a number of rolls
-               eraseAll { except: [ids] }       remove every aura on every account except the ones listed
+               eraseAll { except: [ids] }       remove every aura (and waiting gift) on every account except the ones listed
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
+                                                with an empty gift box
                resetLuck                        clear every account's active luck boosts
 
    Error codes in replies match the game's: 145 two devices rolling at once, 98 account problem,
    404 server or network problem. */
-import { createHash, randomInt, scrypt, timingSafeEqual } from "node:crypto";
+import { createHash, randomInt, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
 import { getStore } from "../vendor/netlify-blobs.mjs";
 
 const STORE_NAME = "aura-realms";
 const LEASE_MS = 20000;   /* a device keeps rolling rights this long after its last roll or renewal */
 const CONTEST_MS = 30000; /* how long the rolling device keeps hearing that another device tried */
 const MAX_SAVE_CHARS = 1000000;
+const MAX_GIFTS = 100;    /* gifts a gift box holds before its owner has to open the game and collect them */
+const MAX_GIFT_COUNT = 1000000;
 const ID_RE = /^\d{7}$/;
 const DEVICE_RE = /^[a-z0-9]{8,40}$/;
 const NAME_RE = /^[\p{L}\p{N} _'.-]+$/u;
@@ -41,6 +52,7 @@ const ADMIN_HASH = "9746b9f763102389b6b66dd6966db0ddd399da13fa85b6e8f8e245fbb89d
 
 const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
+const giftKey = (id) => "gifts/" + id;
 
 /** JSON reply that is never cached. */
 function reply(status, body) {
@@ -126,6 +138,49 @@ function hasLuck(save) {
   return !!save && (active(save.luckEffects) || active(save.floorEffects) || active(save.shinyEffects) || Number(save.floorRolls) > 0);
 }
 
+/** Store a device's new save for an account. Refused while another device holds the roll lease (145) or
+    when another device saved since this one last synced (98, with that newer save). Returns { rev } or
+    { refusal } (a reply to send back). */
+async function storeSave(store, body, save, now) {
+  const lease = await store.get(leaseKey(body.id), { type: "json" });
+  if (lease && lease.device !== body.device && lease.until > now) return { refusal: reply(409, { ok: false, code: 145, error: DUAL_MSG, waitMs: lease.until - now }) };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const cur = await store.getWithMetadata(accountKey(body.id), { type: "json" });
+    if (!cur) return { refusal: reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." }) };
+    const acct = cur.data;
+    /* Someone else saved since this device last synced: send theirs back instead of overwriting it.
+       A matching device means our own earlier save landed but its reply was lost, so it is safe. */
+    if (acct.rev !== body.rev && acct.device !== body.device) {
+      return { refusal: reply(409, { ok: false, code: 98, error: "This account was changed on another device.", rev: acct.rev, save: acct.save, name: acct.name, ...adminInfo(acct) }) };
+    }
+    const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: body.device };
+    const res = await store.setJSON(accountKey(body.id), next, { onlyIfMatch: cur.etag });
+    if (res.modified) return { rev: next.rev };
+  }
+  return { refusal: reply(409, { ok: false, code: 98, error: "The account is busy. Try again." }) };
+}
+
+/** Change an account's gift box: `change` gets the list of gifts and returns the new list, or null to leave
+    it as it is. Retried when someone else changed the box at the same moment. Returns the new list or null. */
+async function editGifts(store, id, change) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const cur = await store.getWithMetadata(giftKey(id), { type: "json" });
+    const list = cur && Array.isArray(cur.data.gifts) ? cur.data.gifts : [];
+    const next = change(list.slice());
+    if (!next) return null;
+    const res = cur ? await store.setJSON(giftKey(id), { gifts: next }, { onlyIfMatch: cur.etag }) : await store.setJSON(giftKey(id), { gifts: next }, { onlyIfNew: true });
+    if (res.modified) return next;
+  }
+  throw new Error("Gift box " + id + " kept changing.");
+}
+
+/** Take gifts out of an account's gift box: the ones whose aura is `auraId`, or all of them when it is null. */
+async function dropGifts(store, id, auraId) {
+  const cur = await store.get(giftKey(id), { type: "json" });
+  if (!cur || !Array.isArray(cur.gifts) || !cur.gifts.length) return;
+  await editGifts(store, id, (list) => list.filter((g) => auraId !== null && g.aura !== auraId));
+}
+
 /** Every account ID in the store. */
 async function allIds(store) {
   const { blobs } = await store.list({ prefix: "account/" });
@@ -199,22 +254,49 @@ const ACTIONS = {
   async save(body, store, now) {
     const save = checkSave(body.save);
     if (!save) return reply(400, { ok: false, code: 98, error: "That save is not valid." });
-    const lease = await store.get(leaseKey(body.id), { type: "json" });
-    if (lease && lease.device !== body.device && lease.until > now) return reply(409, { ok: false, code: 145, error: DUAL_MSG, waitMs: lease.until - now });
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const cur = await store.getWithMetadata(accountKey(body.id), { type: "json" });
-      if (!cur) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
-      const acct = cur.data;
-      /* Someone else saved since this device last synced: send theirs back instead of overwriting it.
-         A matching device means our own earlier save landed but its reply was lost, so it is safe. */
-      if (acct.rev !== body.rev && acct.device !== body.device) {
-        return reply(409, { ok: false, code: 98, error: "This account was changed on another device.", rev: acct.rev, save: acct.save, name: acct.name, ...adminInfo(acct) });
-      }
-      const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: body.device };
-      const res = await store.setJSON(accountKey(body.id), next, { onlyIfMatch: cur.etag });
-      if (res.modified) return reply(200, { ok: true, rev: next.rev });
+    const stored = await storeSave(store, body, save, now);
+    return stored.refusal || reply(200, { ok: true, rev: stored.rev });
+  },
+
+  async gift(body, store, now) {
+    const to = String(body.to), aura = Number(body.aura), count = Number(body.count == null ? 1 : body.count);
+    if (!ID_RE.test(to)) return reply(400, { ok: false, code: 98, error: "A player ID is 7 digits." });
+    if (to === String(body.id)) return reply(400, { ok: false, code: 98, error: "You can't send a gift to yourself." });
+    if (!Number.isInteger(aura) || aura < 0 || aura > 1e6) return reply(400, { ok: false, code: 98, error: "That aura doesn't exist." });
+    if (!Number.isInteger(count) || count < 1 || count > MAX_GIFT_COUNT) return reply(400, { ok: false, code: 98, error: "You can send 1 to 1,000,000 at a time." });
+    const save = checkSave(body.save);
+    if (!save) return reply(400, { ok: false, code: 98, error: "That save is not valid." });
+    const [sender, target] = await Promise.all([store.get(accountKey(body.id), { type: "json" }), store.get(accountKey(to), { type: "json" })]);
+    if (!sender) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
+    if (!target) return reply(404, { ok: false, code: 98, missing: "to", error: "No player with ID " + to + "." });
+    /* The gift goes into the box first and the sender's save second, and the gift is taken back out if the
+       save is refused. If something fails in between, the friend gets the aura and the sender keeps it too,
+       which is better than an aura vanishing. */
+    const gift = { id: randomUUID(), from: String(body.id), fromName: sender.name, aura, shiny: !!body.shiny, count, at: now };
+    const box = await editGifts(store, to, (list) => (list.length >= MAX_GIFTS ? null : list.concat([gift])));
+    if (!box) return reply(409, { ok: false, code: 98, error: target.name + "'s gift box is full. They need to open the game to collect their gifts first." });
+    const stored = await storeSave(store, body, save, now);
+    if (stored.refusal) {
+      await editGifts(store, to, (list) => list.filter((g) => g.id !== gift.id));
+      return stored.refusal;
     }
-    return reply(409, { ok: false, code: 98, error: "The account is busy. Try again." });
+    return reply(200, { ok: true, rev: stored.rev, toName: target.name, gift: gift.id });
+  },
+
+  async gifts(body, store) {
+    const box = await store.get(giftKey(body.id), { type: "json" });
+    return reply(200, { ok: true, gifts: box && Array.isArray(box.gifts) ? box.gifts : [] });
+  },
+
+  async openGifts(body, store, now) {
+    const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, MAX_GIFTS) : [];
+    const save = checkSave(body.save);
+    if (!save) return reply(400, { ok: false, code: 98, error: "That save is not valid." });
+    /* Only once the save holding the gifts is stored do they leave the box, so a refused save loses nothing. */
+    const stored = await storeSave(store, body, save, now);
+    if (stored.refusal) return stored.refusal;
+    if (ids.length) await editGifts(store, body.id, (list) => list.filter((g) => ids.indexOf(g.id) < 0));
+    return reply(200, { ok: true, rev: stored.rev });
   },
 
   async admin(body, store, now, env) {
@@ -234,6 +316,7 @@ const ACTIONS = {
          from the player's device, while a reset save replaces the progress on every device. */
       const reset = (save) => { for (const k of Object.keys(save)) delete save[k]; Object.assign(save, { rolls: 0, coins: 100 }); return 1; };
       const done = await mapLimit(ids, 10, (id) => adminEdit(store, id, now, reset, "reset"));
+      await mapLimit(ids, 10, (id) => dropGifts(store, id, null));
       return reply(200, { ok: true, accounts: done.filter(Boolean).length, kept: [...keep] });
     }
     if (body.op === "resetLuck") {
@@ -249,6 +332,7 @@ const ACTIONS = {
       if (!keep.size) return reply(400, { ok: false, code: 98, error: "Give at least one account ID to keep." });
       const ids = (await allIds(store)).filter((id) => !keep.has(id));
       const done = await mapLimit(ids, 10, (id) => adminEdit(store, id, now, (save) => eraseAuras(save, null)));
+      await mapLimit(ids, 10, (id) => dropGifts(store, id, null));
       const hit = done.filter(Boolean);
       return reply(200, { ok: true, accounts: hit.length, removed: hit.reduce((n, d) => n + d.result, 0), kept: [...keep] });
     }
@@ -271,6 +355,7 @@ const ACTIONS = {
     }
     const done = await adminEdit(store, String(body.id), now, change);
     if (!done) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
+    if (body.op === "erase") await dropGifts(store, String(body.id), body.aura == null ? null : Number(body.aura));
     return reply(200, { ok: true, account: summary(done.acct), result: done.result });
   },
 
@@ -292,7 +377,7 @@ export async function handle(req, store, now = Date.now(), env = process.env) {
   const action = Object.prototype.hasOwnProperty.call(ACTIONS, body.action) ? ACTIONS[body.action] : null;
   if (!action) return reply(400, { ok: false, code: 98, error: "Unknown action." });
   if (!["ping", "create", "admin"].includes(body.action) && !ID_RE.test(String(body.id))) return reply(400, { ok: false, code: 98, error: "An ID is 7 digits." });
-  if (["create", "claim", "save", "release"].includes(body.action) && !DEVICE_RE.test(String(body.device))) return reply(400, { ok: false, code: 98, error: "Missing device." });
+  if (["create", "claim", "save", "release", "gift", "openGifts"].includes(body.action) && !DEVICE_RE.test(String(body.device))) return reply(400, { ok: false, code: 98, error: "Missing device." });
   try {
     return await action(body, store, now, env);
   } catch (e) {

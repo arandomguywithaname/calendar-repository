@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -283,7 +283,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 37</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 38</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -294,6 +294,29 @@
       <div id="cs-title" class="cs-title"></div>
       <div id="cs-odds" class="cs-odds"></div>
       <div id="cs-hint" class="cs-hint">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- Gift an aura to another player -->
+  <div id="gift-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🎁 Gift an aura</h2>
+      <div id="gift-aura" class="gift-aura"></div>
+      <form id="gift-form" class="login-form" autocomplete="off" novalidate>
+        <label class="muted small-text" for="gift-to">Your friend's 7-digit ID</label>
+        <input id="gift-to" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Friend's 7-digit ID" maxlength="7" autocomplete="off">
+        <div id="gift-count-row" class="gift-count-row">
+          <label class="muted small-text" for="gift-count">How many</label>
+          <input id="gift-count" type="number" min="1" step="1" value="1" inputmode="numeric">
+        </div>
+        <div id="gift-confirm" class="gift-confirm hidden"></div>
+        <div id="gift-error" class="form-error"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn small primary" id="gift-submit">Next</button>
+          <button type="button" class="btn small" id="gift-close">Cancel</button>
+        </div>
+      </form>
+      <p class="muted small-text">Your friend needs to be logged in with an ID. The gift shows up in their game within about 20 seconds while they play, or the next time they log in.</p>
     </div>
   </div>
 
@@ -355,9 +378,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=37"></script>
-  <script src="abilities.js?v=37"></script>
-  <script src="reveals.js?v=37"></script>
-  <script src="game.js?v=37"></script>
+  <script src="auras.js?v=38"></script>
+  <script src="abilities.js?v=38"></script>
+  <script src="reveals.js?v=38"></script>
+  <script src="game.js?v=38"></script>
 </body>
 </html>

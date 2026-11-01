@@ -274,7 +274,7 @@ body.shake-3 { animation: shake3 .9s; }
 }
 .card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.18); }
 .card.equipped { border-color: var(--accent); box-shadow: 0 0 24px rgba(167,139,250,.3); }
-.card .card-title { font-family: var(--font-head); font-weight: 700; font-size: 1.05rem; line-height: 1.2; }
+.card .card-title, .gift-aura .card-title { font-family: var(--font-head); font-weight: 700; font-size: 1.05rem; line-height: 1.2; }
 .card .card-sub { color: var(--muted); font-size: .9rem; }
 .card .row { display: flex; align-items: center; gap: 10px; }
 .card .big-icon { font-size: 2.2rem; line-height: 1; }
@@ -443,6 +443,11 @@ body.shake-3 { animation: shake3 .9s; }
 .login-form input, .save-code { background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 12px; font: 500 1rem var(--font-body); width: 100%; }
 .save-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; margin-top: 10px; resize: vertical; }
 .form-error { color: #fecaca; font-size: .9rem; min-height: 1.2em; }
+.gift-aura { display: flex; align-items: center; gap: 14px; margin: 12px 0 4px; }
+.gift-aura .orb { flex: none; width: 64px; height: 64px; margin: 8px; }
+.gift-aura .orb::before { inset: -20% !important; }
+.gift-count-row { display: flex; flex-direction: column; gap: 6px; }
+.gift-confirm { padding: 12px; border-radius: 10px; border: 1px solid rgba(251,191,36,.45); background: rgba(251,191,36,.08); color: var(--text); line-height: 1.4; }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 
 /* Full-screen ability layer */
