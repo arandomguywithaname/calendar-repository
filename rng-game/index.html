@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=39">
+  <link rel="stylesheet" href="style.css?v=40">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -36,6 +36,7 @@
       <button class="tab" data-tab="battle">Battle</button>
       <button class="tab" data-tab="index">Index</button>
       <button class="tab" data-tab="stats">Stats</button>
+      <button class="tab" data-tab="chat">💬 Chat <span id="chat-badge" class="chat-badge hidden"></span></button>
     </nav>
   </header>
 
@@ -204,6 +205,20 @@
       <div id="index-list" class="index-list"></div>
     </section>
 
+    <!-- CHAT -->
+    <section id="tab-chat" class="panel">
+      <div class="panel-head">
+        <h2>Global Chat</h2>
+        <p class="muted">Talk with everyone who is playing. Be kind, and never share your player ID (it logs into your account), your real name, where you live or any passwords.</p>
+      </div>
+      <div id="chat-status" class="chat-status hidden"></div>
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form" class="chat-form" autocomplete="off" novalidate>
+        <input id="chat-input" type="text" maxlength="200" placeholder="Say something…" autocomplete="off" aria-label="Chat message">
+        <button type="submit" class="btn small primary" id="chat-send">Send</button>
+      </form>
+    </section>
+
     <!-- STATS -->
     <section id="tab-stats" class="panel">
       <div class="panel-head">
@@ -274,6 +289,19 @@
                 <button type="button" class="btn small danger" id="aa-erase-all">Delete auras on every account except this player</button>
               </div>
             </div>
+            <div class="aa-group">
+              <div class="aa-label">💬 Chat</div>
+              <div class="muted small-text">Mute the player picked above, or use the 🔇 and 🗑️ buttons next to messages in the Chat tab.</div>
+              <div class="aa-row">
+                <input id="aa-mute-min" type="number" min="0" step="1" value="10" placeholder="Minutes (0 = until unmuted)">
+                <button type="button" class="btn small danger" id="aa-mute">🔇 Mute</button>
+                <button type="button" class="btn small" id="aa-unmute">Unmute</button>
+              </div>
+              <div class="aa-row">
+                <button type="button" class="btn small" id="aa-muted">Who's muted?</button>
+                <button type="button" class="btn small danger" id="aa-chat-clear">Clear the whole chat</button>
+              </div>
+            </div>
             <div class="aa-group aa-danger">
               <div class="aa-label">💥 Detonate</div>
               <div class="muted small-text">Erases ALL progress on every other player's account: auras, coins, potions, everything. Only the account you're logged into is kept.</div>
@@ -288,7 +316,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 39</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 40</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -383,9 +411,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=39"></script>
-  <script src="abilities.js?v=39"></script>
-  <script src="reveals.js?v=39"></script>
-  <script src="game.js?v=39"></script>
+  <script src="auras.js?v=40"></script>
+  <script src="abilities.js?v=40"></script>
+  <script src="reveals.js?v=40"></script>
+  <script src="game.js?v=40"></script>
 </body>
 </html>

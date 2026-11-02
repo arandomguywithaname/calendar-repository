@@ -16,6 +16,9 @@
      openGifts { id, device, rev, save, ids }
                                             store `save` (with those gifts already added), then take the gifts
                                             with these ids out of the gift box
+     chat    { since, id? }                 global chat messages after number `since` (no player IDs in them,
+                                            since an ID is also a login); with `id`, whether that player is muted
+     chatSend { id, text, aura, shiny }     post a message as that account (108 when an admin muted it)
      admin   { key, op, ... }               owner tools, locked by the admin password (see ADMIN_HASH):
                list                             every account with its aura count, coins and luck
                erase    { id, aura }            remove one aura (both forms) or, without `aura`, every aura
@@ -26,6 +29,11 @@
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
                                                 with an empty gift box
                resetLuck                        clear every account's active luck boosts
+               chatMute   { seq | id, minutes } mute the writer of chat message `seq` (or player `id`); 0 minutes = until unmuted
+               chatUnmute { seq | id }          let them chat again
+               chatDelete { seq }               remove one chat message
+               chatClear                        remove every chat message
+               chatMuted                        the players muted right now
 
    Error codes in replies match the game's: 145 two devices rolling at once, 98 account problem,
    404 server or network problem. */
@@ -53,6 +61,15 @@ const ADMIN_HASH = "9746b9f763102389b6b66dd6966db0ddd399da13fa85b6e8f8e245fbb89d
 const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
 const giftKey = (id) => "gifts/" + id;
+const CHAT_KEY = "chat/log";
+const chatUserKey = (id) => "chatuser/" + id;
+const CHAT_KEEP = 100;      /* messages the chat keeps */
+const CHAT_MAX_CHARS = 200;
+const CHAT_GAP_MS = 1500;   /* a player can send one message every 1.5 seconds */
+const MUTED_FOREVER = 8.64e15;
+/* Words the chat hides behind asterisks (and longer words starting with them). Kids play this game. */
+const BAD_WORDS = ["fuck", "shit", "bitch", "cunt", "asshole", "bastard", "slut", "whore", "nigg", "fag", "retard", "pussy", "dick", "cock", "twat", "wank", "piss"];
+const BAD_RE = new RegExp("\\b(" + BAD_WORDS.join("|") + ")[a-z]*", "gi");
 
 /** JSON reply that is never cached. */
 function reply(status, body) {
@@ -181,6 +198,41 @@ async function dropGifts(store, id, auraId) {
   await editGifts(store, id, (list) => list.filter((g) => auraId !== null && g.aura !== auraId));
 }
 
+/** A chat message cleaned up: no control characters, single spaces, at most CHAT_MAX_CHARS, bad words starred. */
+function cleanChat(raw) {
+  const text = String(raw == null ? "" : raw).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e]/g, " ").replace(/\s+/g, " ").trim().slice(0, CHAT_MAX_CHARS);
+  return text.replace(BAD_RE, (w) => "*".repeat(w.length));
+}
+
+/** A chat message as players see it. The writer's ID stays on the server: an ID also logs into the account. */
+function publicMsg(m, viewer) {
+  return { seq: m.seq, at: m.at, name: m.name, text: m.text, aura: m.aura, shiny: m.shiny, mine: !!viewer && m.from === viewer };
+}
+
+/** Change the chat log: `change` gets { seq, messages, removed, cleared } and edits it, returning false to leave it. */
+async function editChat(store, change) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const cur = await store.getWithMetadata(CHAT_KEY, { type: "json" });
+    const log = cur ? cur.data : { seq: 0, messages: [], removed: [], cleared: 0 };
+    const result = change(log);
+    if (result === false) return null;
+    const res = cur ? await store.setJSON(CHAT_KEY, log, { onlyIfMatch: cur.etag }) : await store.setJSON(CHAT_KEY, log, { onlyIfNew: true });
+    if (res.modified) return { log, result };
+  }
+  throw new Error("The chat kept changing.");
+}
+
+/** When a player's chat mute ends (0 when they aren't muted). */
+async function mutedUntil(store, id, now) {
+  const u = await store.get(chatUserKey(id), { type: "json" });
+  return u && u.mutedUntil > now ? u.mutedUntil : 0;
+}
+
+/** "for 9 more minutes" or "until an admin unmutes you". */
+function muteText(until, now) {
+  return until >= MUTED_FOREVER ? "until an admin unmutes you" : "for " + Math.max(1, Math.ceil((until - now) / 60000)) + " more minute" + (until - now > 60000 ? "s" : "");
+}
+
 /** Every account ID in the store. */
 async function allIds(store) {
   const { blobs } = await store.list({ prefix: "account/" });
@@ -283,6 +335,37 @@ const ACTIONS = {
     return reply(200, { ok: true, rev: stored.rev, toName: target.name, gift: gift.id });
   },
 
+  async chat(body, store, now) {
+    const since = Math.max(0, Math.floor(Number(body.since) || 0));
+    const viewer = ID_RE.test(String(body.id)) ? String(body.id) : null;
+    const [log, muted] = await Promise.all([store.get(CHAT_KEY, { type: "json" }), viewer ? mutedUntil(store, viewer, now) : 0]);
+    const l = log || { seq: 0, messages: [], removed: [], cleared: 0 };
+    return reply(200, {
+      ok: true, seq: l.seq, cleared: l.cleared || 0, removed: l.removed || [],
+      messages: l.messages.filter((m) => m.seq > since).map((m) => publicMsg(m, viewer)),
+      muted: muted ? { until: muted >= MUTED_FOREVER ? 0 : muted, text: muteText(muted, now) } : null
+    });
+  },
+
+  async chatSend(body, store, now) {
+    const text = cleanChat(body.text);
+    if (!text) return reply(400, { ok: false, code: 98, error: "Type a message first." });
+    const acct = await store.get(accountKey(body.id), { type: "json" });
+    if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + ". Log in again to chat." });
+    const u = (await store.get(chatUserKey(body.id), { type: "json" })) || {};
+    if (u.mutedUntil > now) return reply(403, { ok: false, code: 108, error: "An admin muted you, so you can't chat " + muteText(u.mutedUntil, now) + ".", until: u.mutedUntil >= MUTED_FOREVER ? 0 : u.mutedUntil });
+    if (u.lastAt && now - u.lastAt < CHAT_GAP_MS) return reply(429, { ok: false, code: 98, slow: true, error: "Slow down! Wait a second before sending another message." });
+    await store.setJSON(chatUserKey(body.id), { ...u, lastAt: now });
+    const aura = Number.isInteger(body.aura) && body.aura >= 0 && body.aura <= 1e6 ? body.aura : null;
+    const done = await editChat(store, (log) => {
+      log.seq += 1;
+      const msg = { seq: log.seq, at: now, from: String(body.id), name: acct.name, text, aura, shiny: aura !== null && !!body.shiny };
+      log.messages = log.messages.concat([msg]).slice(-CHAT_KEEP);
+      return msg;
+    });
+    return reply(200, { ok: true, message: publicMsg(done.result, String(body.id)) });
+  },
+
   async gifts(body, store) {
     const box = await store.get(giftKey(body.id), { type: "json" });
     return reply(200, { ok: true, gifts: box && Array.isArray(box.gifts) ? box.gifts : [] });
@@ -336,6 +419,50 @@ const ACTIONS = {
       const hit = done.filter(Boolean);
       return reply(200, { ok: true, accounts: hit.length, removed: hit.reduce((n, d) => n + d.result, 0), kept: [...keep] });
     }
+    if (body.op === "chatClear") {
+      await editChat(store, (log) => { log.cleared = log.seq; log.messages = []; log.removed = []; });
+      return reply(200, { ok: true });
+    }
+    if (body.op === "chatDelete") {
+      const seq = Number(body.seq);
+      const done = await editChat(store, (log) => {
+        const m = log.messages.find((x) => x.seq === seq);
+        if (!m) return false;
+        log.messages = log.messages.filter((x) => x.seq !== seq);
+        log.removed = (log.removed || []).concat([seq]).slice(-CHAT_KEEP);
+        return m;
+      });
+      if (!done) return reply(404, { ok: false, code: 98, error: "That message is already gone." });
+      return reply(200, { ok: true, name: done.result.name, id: done.result.from });
+    }
+    if (body.op === "chatMuted") {
+      const { blobs } = await store.list({ prefix: "chatuser/" });
+      const ids = blobs.map((b) => b.key.slice("chatuser/".length)).filter((id) => ID_RE.test(id));
+      const rows = await mapLimit(ids, 10, async (id) => {
+        const until = await mutedUntil(store, id, now);
+        if (!until) return null;
+        const acct = await store.get(accountKey(id), { type: "json" });
+        return { id, name: acct ? acct.name : "?", until: until >= MUTED_FOREVER ? 0 : until, text: muteText(until, now) };
+      });
+      return reply(200, { ok: true, muted: rows.filter(Boolean) });
+    }
+    if (body.op === "chatMute" || body.op === "chatUnmute") {
+      let target = ID_RE.test(String(body.id)) ? String(body.id) : null;
+      if (!target && body.seq != null) {
+        const log = await store.get(CHAT_KEY, { type: "json" });
+        const m = log && log.messages.find((x) => x.seq === Number(body.seq));
+        if (m) target = m.from;
+      }
+      if (!target) return reply(404, { ok: false, code: 98, error: "Pick a chat message or type a player ID." });
+      const acct = await store.get(accountKey(target), { type: "json" });
+      if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      const minutes = Number(body.minutes) || 0;
+      if (body.op === "chatMute" && !(minutes >= 0 && minutes <= 525600)) return reply(400, { ok: false, code: 98, error: "Mute for 0 (until unmuted) to 525,600 minutes." });
+      const until = body.op === "chatUnmute" ? 0 : minutes ? now + minutes * 60000 : MUTED_FOREVER;
+      const u = (await store.get(chatUserKey(target), { type: "json" })) || {};
+      await store.setJSON(chatUserKey(target), { ...u, mutedUntil: until });
+      return reply(200, { ok: true, id: target, name: acct.name, until: until >= MUTED_FOREVER ? 0 : until, text: until ? muteText(until, now) : "" });
+    }
     if (!ID_RE.test(String(body.id))) return reply(400, { ok: false, code: 98, error: "An ID is 7 digits." });
     let change;
     if (body.op === "erase") {
@@ -376,7 +503,7 @@ export async function handle(req, store, now = Date.now(), env = process.env) {
   if (!body || typeof body !== "object") return reply(400, { ok: false, code: 98, error: "That request was not valid JSON." });
   const action = Object.prototype.hasOwnProperty.call(ACTIONS, body.action) ? ACTIONS[body.action] : null;
   if (!action) return reply(400, { ok: false, code: 98, error: "Unknown action." });
-  if (!["ping", "create", "admin"].includes(body.action) && !ID_RE.test(String(body.id))) return reply(400, { ok: false, code: 98, error: "An ID is 7 digits." });
+  if (!["ping", "create", "admin", "chat"].includes(body.action) && !ID_RE.test(String(body.id))) return reply(400, { ok: false, code: 98, error: "An ID is 7 digits." });
   if (["create", "claim", "save", "release", "gift", "openGifts"].includes(body.action) && !DEVICE_RE.test(String(body.device))) return reply(400, { ok: false, code: 98, error: "Missing device." });
   try {
     return await action(body, store, now, env);

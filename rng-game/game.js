@@ -12,7 +12,7 @@
   var TAB_KEY = "aura-realms-tab";
   var CLOUD_URL = "/.netlify/functions/account";
   /* Error codes shown to players. */
-  var ERR = { DUAL: 145, NETWORK: 404, POTION_BUY: 435, POTION_USE: 102, ACCOUNT: 98 };
+  var ERR = { DUAL: 145, NETWORK: 404, POTION_BUY: 435, POTION_USE: 102, ACCOUNT: 98, CHAT_WIFI: 981, CHAT_CODE: 523, CHAT_MUTED: 108 };
   var currentUser = null; /* the 7-digit ID of the logged-in player, or null for guest */
   function saveKey() { return currentUser ? SAVE_BASE + ":" + currentUser : SAVE_BASE; }
   var ROLL_COOLDOWN = 1000;
@@ -464,6 +464,8 @@
     win: function () { var s = this; [523, 659, 784, 1047].forEach(function (f, i) { s.tone(f, i * 0.09, 0.35, "triangle", 0.07); }); },
     lose: function () { var s = this; [300, 250, 200].forEach(function (f, i) { s.tone(f, i * 0.15, 0.4, "sawtooth", 0.05); }); },
     hit: function (crit) { this.tone(crit ? 220 : 150, 0, 0.1, "square", 0.04); },
+    /* A soft falling hiss while a snapped fighter turns to dust. */
+    dust: function (seconds) { for (var i = 0; i < 8; i++) this.tone(1100 - i * 110, i * seconds / 8, 0.3, "triangle", 0.02); },
     heal: function () { this.tone(660, 0, 0.2, "sine", 0.05); this.tone(990, 0.12, 0.25, "sine", 0.05); },
     ability: function (arch) {
       var s = this;
@@ -1556,7 +1558,7 @@
       if (ab.flat) {
         /* Snap, Destiny Unbound: a fixed amount of damage that guards, shields, reflects, crits and boosts don't touch. */
         them.hp -= ab.flat;
-        ev.push({ type: "damage", who: who, target: other, amount: ab.flat, absorbed: 0, crit: false, blocked: false, executed: false, flat: true, flatName: ab.name, flatIcon: ab.icon, hpA: b.a.hp, hpB: b.b.hp });
+        ev.push({ type: "damage", who: who, target: other, amount: ab.flat, absorbed: 0, crit: false, blocked: false, executed: false, flat: true, flatName: ab.name, flatIcon: ab.icon, flatArch: ab.arch, hpA: b.a.hp, hpB: b.b.hp });
       }
 
       if (ab.mult > 0) {
@@ -1627,6 +1629,22 @@
 
   /* ---------- Battle ability animations (canvas over the arena) ---------- */
 
+  var EMOJI_FONT = "'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
+  /* The snapping hand. 🫰 is newer than some phones; those draw it as an empty box, so they get 👌 instead. */
+  var snapHandGlyph = null;
+  function snapHand() {
+    if (snapHandGlyph) return snapHandGlyph;
+    snapHandGlyph = "🫰";
+    try {
+      var c = document.createElement("canvas"); c.width = c.height = 32;
+      var x = c.getContext("2d"); x.font = "28px " + EMOJI_FONT; x.textBaseline = "top"; x.fillText("🫰", 0, 0);
+      var d = x.getImageData(0, 0, 32, 32).data, colour = false;
+      for (var i = 0; i < d.length; i += 4) if (d[i + 3] > 0 && (Math.abs(d[i] - d[i + 1]) > 20 || Math.abs(d[i + 1] - d[i + 2]) > 20)) { colour = true; break; }
+      if (!colour) snapHandGlyph = "👌";
+    } catch (e) { /* keep 🫰 */ }
+    return snapHandGlyph;
+  }
+
   var BFX = (function () {
     var canvas = $("#arena-fx");
     var ctx = canvas.getContext("2d");
@@ -1665,6 +1683,31 @@
       ctx.globalAlpha = 1;
     }
     function makeParts(n, fn) { var out = []; for (var i = 0; i < n; i++) out.push(fn(i)); return out; }
+    /* A snapped fighter crumbling: specks leave it from the side facing the snapper first, ride a breeze away
+       from them and fade, in the snapper's aura colours mixed with ash. */
+    function dustFx(n, dur) {
+      return { dur: dur, parts: function (e) {
+          var t = e.to, dx = t.x - e.from.x, dy = t.y - e.from.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+          return makeParts(n, function () {
+            var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * t.r * 1.05;
+            var ox = Math.cos(a) * d, oy = Math.sin(a) * d;
+            var order = ((ox * ux + oy * uy) / t.r + 1) / 2; /* 0 on the side facing the snapper */
+            return { x: t.x + ox, y: t.y + oy, start: Math.max(0, Math.min(1, order)) * 0.6 + Math.random() * 0.08,
+              vx: ux * rnd(60, 200) + rnd(-30, 30), vy: uy * rnd(60, 200) - rnd(40, 110), r: rnd(1.4, 4.2), ph: Math.random() * TAU, c: Math.floor(Math.random() * 4) };
+          });
+        },
+        draw: function (p, e, ps) {
+          var cols = [e.c1, e.c2, "#d8c9b3", "#8c8276"];
+          ps.forEach(function (s) {
+            var q = (p - s.start) / (1 - s.start);
+            if (q <= 0) return;
+            q = Math.min(1, q);
+            var x = s.x + s.vx * q * 1.8 + Math.sin(s.ph + q * 7) * 12 * q, y = s.y + s.vy * q * 1.8 - 30 * q * q;
+            spark(x, y, s.r * (1 - q * 0.5), cols[s.c], (1 - q) * 0.95);
+          });
+        } };
+    }
+
     /* A fixed-damage hit (Snap, Destiny Unbound): white flash, a ring and cracks bursting from the target. */
     function flatHitFx(ringCol, sparkCol, crackCol) {
       return { dur: 900, parts: function () { return makeParts(40, function () { return { a: rnd(0, Math.PI * 2), s: rnd(40, 200), r: rnd(2, 4) }; }); },
@@ -1862,7 +1905,23 @@
         ctx.fillStyle = "#fff"; ctx.fillRect(x - 4, gy - 6, w + 8, 12);
         ctx.globalAlpha = 1;
       } },
-      snap: flatHitFx("#22d3ee", "#a5f3fc", "#ecfeff"),
+      snap: { dur: 1100, draw: function (p, e) {
+        /* A hand over the snapper; at the snap a flash and a ring burst from its fingers. */
+        var f = e.from, size = f.r * 1.4, y = f.y - f.r * 1.2 - 20 * ease(Math.min(1, p * 3));
+        ctx.globalAlpha = Math.min(1, p * 4) * (1 - Math.max(0, p - 0.8) / 0.2);
+        ctx.font = size + "px " + EMOJI_FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.shadowColor = e.c1; ctx.shadowBlur = 24;
+        ctx.fillText(snapHand(), f.x + (p < 0.45 ? (Math.random() - 0.5) * 3 : 0), y);
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+        if (p > 0.45) {
+          var q = (p - 0.45) / 0.55;
+          if (q < 0.15) { ctx.fillStyle = "#fff"; ctx.globalAlpha = (0.15 - q) * 5; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.globalAlpha = 1; }
+          ringAt(f.x - size * 0.12, y - size * 0.25, 10 + q * f.r * 3, e.c1, 4 * (1 - q) + 1, 1 - q);
+          makeParts(10, function (i) { var a = i / 10 * TAU, d = q * f.r * 1.6; spark(f.x - size * 0.12 + Math.cos(a) * d, y - size * 0.25 + Math.sin(a) * d, 2.5, "#fff", 1 - q); });
+        }
+      } },
+      dust: dustFx(260, 2400),
+      dustMax: dustFx(480, 3000),
       destiny: flatHitFx("#f59e0b", "#fde68a", "#fffbeb"),
       burst: { dur: 950, parts: function () { return makeParts(70, function () { return { a: rnd(0, TAU), s: rnd(60, 260), r: rnd(2, 5) }; }); },
         draw: function (p, e, parts) {
@@ -2009,6 +2068,90 @@
             if (q2 < 0.5) for (var g = 0; g < 8; g++) { ctx.fillStyle = g % 2 ? "rgba(" + glitchRgb + ",.35)" : "rgba(255,255,255,.25)"; ctx.fillRect(0, Math.random() * e.h, e.w, 2 + Math.random() * 10); }
             for (var c = 0; c < 7; c++) { var ca = c / 7 * TAU + 0.4, L = R * Math.min(1, q2 * 2); glowLine(e.cx, e.cy, e.cx + Math.cos(ca) * L, e.cy + Math.sin(ca) * L, "rgba(" + crackRgb + "," + (1 - q2) + ")", 2, 10); }
           }
+        } };
+    }
+
+    /* Snap: the screen goes dark, a hand rises, trembles and snaps; a flash, shockwaves, cracks and SNAP! follow.
+       `max` (auras rarer than 1 in 3,000,000) adds cinema bars, six stones lighting up around the hand and pouring
+       energy into its fingers, a rainbow shockwave, glitching and a heavier screen. `snapAt` is when the fingers
+       snap, so the sound and the shake can land on it. The target crumbling to dust comes with the hit (snapHit). */
+    function snapFx(max) {
+      var STONES = ["#a855f7", "#3b82f6", "#ef4444", "#f97316", "#22c55e", "#facc15"];
+      var AT = max ? 0.56 : 0.46;
+      return { dur: max ? 3200 : 2200, snapAt: AT,
+        parts: function () {
+          return {
+            burst: parts(max ? 240 : 120, function () { return { a: Math.random() * TAU, s: rnd(0.12, 1.3), r: rnd(1.2, 4.5), c: Math.floor(Math.random() * 6) }; }),
+            motes: parts(max ? 90 : 40, function () { return { x: Math.random(), y: Math.random(), r: rnd(0.5, 1.8), v: rnd(0.05, 0.25) }; }),
+            cracks: parts(max ? 12 : 7, function (i) {
+              var a = (i + Math.random() * 0.6) / (max ? 12 : 7) * TAU, pts = [], d = 0;
+              while (d < 1.6) { d += rnd(0.08, 0.2); pts.push({ d: d, j: rnd(-0.12, 0.12) }); }
+              return { a: a, pts: pts };
+            })
+          };
+        },
+        draw: function (p, e, ps) {
+          var s = Math.min(e.w, e.h), size = s * (max ? 0.36 : 0.3), R = Math.hypot(e.w, e.h) / 2;
+          var fade = 1 - seg(p, 0.88, 1), pre = seg(p, AT * 0.68, AT), post = seg(p, AT, 1);
+          ctx.fillStyle = "rgba(3,2,10," + (0.93 * Math.min(1, p / 0.1) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
+          ps.motes.forEach(function (m) { var y = ((m.y - p * m.v) % 1 + 1) % 1; spark(m.x * e.w, y * e.h, m.r, "#fff", 0.4 * fade); });
+          if (max) { var bar = e.h * 0.12 * ease(Math.min(1, p / 0.1)) * fade; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, e.w, bar); ctx.fillRect(0, e.h - bar, e.w, bar); }
+          var rise = ease(seg(p, 0.03, AT * 0.62));
+          var hx = e.cx, hy = lerp(e.h + size, e.cy + size * 0.1, rise);
+          var tipX = hx - size * 0.13, tipY = hy - size * 0.26;
+          /* the glow gathering behind the hand */
+          var gl = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, size * (1.1 + pre * 0.8));
+          gl.addColorStop(0, e.c1); gl.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = (0.25 + 0.45 * pre) * rise * (1 - post) ; ctx.fillStyle = gl; ctx.fillRect(0, 0, e.w, e.h); ctx.globalAlpha = 1;
+          if (max) STONES.forEach(function (c, i) {
+            var lit = seg(p, 0.12 + i * 0.05, 0.17 + i * 0.05); if (lit <= 0) return;
+            var ang = Math.PI * (1.08 + i * 0.168), Rr = size * (0.95 + 0.5 * post);
+            var sx = tipX + Math.cos(ang) * Rr, sy = tipY + Math.sin(ang) * Rr * 0.8;
+            ctx.shadowColor = c; ctx.shadowBlur = 30;
+            spark(sx, sy, size * (0.045 + 0.01 * Math.sin(p * 50 + i)), c, lit * fade * (1 - post * 0.8));
+            ctx.shadowBlur = 0;
+            if (p < AT) {
+              var k = seg(p, 0.17 + i * 0.05, AT);
+              for (var dsh = 0; dsh < 4; dsh++) {
+                var q0 = ((k * 3 + dsh / 4) % 1), q1 = Math.min(1, q0 + 0.12);
+                glowLine(lerp(sx, tipX, q0), lerp(sy, tipY, q0), lerp(sx, tipX, q1), lerp(sy, tipY, q1), c, 2.5, 14);
+              }
+            }
+          });
+          /* the hand: rises, trembles as the snap builds, kicks back when it snaps */
+          var tremble = p < AT ? pre * size * 0.025 : 0;
+          var scale = p < AT ? 1 + 0.08 * pre : 1 + 0.2 * Math.exp(-post * 9);
+          ctx.save();
+          ctx.translate(hx + (Math.random() - 0.5) * tremble, hy + (Math.random() - 0.5) * tremble);
+          ctx.rotate(p < AT ? -0.08 * pre : 0.1 * Math.exp(-post * 7));
+          ctx.scale(scale, scale);
+          ctx.font = size + "px " + EMOJI_FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.shadowColor = e.c1; ctx.shadowBlur = 30 + 60 * pre;
+          ctx.globalAlpha = Math.min(1, rise * 1.4) * fade;
+          ctx.fillText(snapHand(), 0, 0);
+          ctx.restore();
+          if (p < AT) return;
+          /* the snap */
+          flash((0.14 - post) * 8, "#ffffff");
+          for (var r = 0; r < 12; r++) { var ra = r / 12 * TAU + 0.2, rl = size * (0.2 + 0.9 * ease(Math.min(1, post * 4))); ctx.globalAlpha = Math.max(0, 1 - post * 3); glowLine(tipX, tipY, tipX + Math.cos(ra) * rl, tipY + Math.sin(ra) * rl, "#ffffff", 3, 18); ctx.globalAlpha = 1; }
+          var waves = max ? STONES : [e.c1, "#ffffff", e.c2];
+          waves.forEach(function (c, i) { var w = seg(post, i * 0.04, 1); ring(tipX, tipY, R * 1.2 * ease(w), c, (max ? 7 : 9) * (1 - w) + 1, (1 - w) * fade); });
+          ps.burst.forEach(function (b) { var d = R * b.s * ease(post); spark(tipX + Math.cos(b.a) * d, tipY + Math.sin(b.a) * d, b.r, max ? STONES[b.c] : (b.c % 2 ? "#fff" : e.c1), (1 - post) * fade); });
+          ps.cracks.forEach(function (c) {
+            var reach = Math.min(1, post * 3), ca = Math.cos(c.a), sa = Math.sin(c.a);
+            ctx.globalAlpha = (1 - post) * 0.9; ctx.strokeStyle = "#ffffff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 14; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(tipX, tipY);
+            c.pts.forEach(function (pt) { if (pt.d > reach * 1.6) return; var d = pt.d * R * 0.62; ctx.lineTo(tipX + ca * d - sa * pt.j * d, tipY + sa * d + ca * pt.j * d); });
+            ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+          });
+          if (max && post < 0.4) for (var g = 0; g < 10; g++) { ctx.fillStyle = ["rgba(239,68,68,.3)", "rgba(34,211,238,.3)", "rgba(255,255,255,.22)"][g % 3]; ctx.fillRect((Math.random() - 0.5) * 40, Math.random() * e.h, e.w, 2 + Math.random() * 12); }
+          /* SNAP! */
+          var tp = seg(post, 0.02, 0.9), big = s * (max ? 0.15 : 0.12) * (1 + 0.5 * Math.exp(-tp * 10));
+          ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "900 " + big + "px 'Cinzel', serif";
+          var ty = Math.max(big * 0.7 + (max ? e.h * 0.12 : 0), tipY - size * 0.85), ta = Math.min(1, tp * 6) * (1 - seg(post, 0.7, 1)) * fade;
+          if (max) { ctx.globalAlpha = ta * 0.7; ctx.fillStyle = "#ef4444"; ctx.fillText("SNAP!", e.cx - 5, ty); ctx.fillStyle = "#22d3ee"; ctx.fillText("SNAP!", e.cx + 5, ty); }
+          ctx.globalAlpha = ta; ctx.fillStyle = "#ffffff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 30; ctx.fillText("SNAP!", e.cx, ty);
+          ctx.restore();
         } };
     }
 
@@ -2166,7 +2309,8 @@
         }
         if (p > 0.3 && p < 0.4) flash((0.4 - p) * 4, "#e0f2fe");
       } },
-      snap: flatUltFx("#22d3ee", "#a5f3fc", "236,254,255", "34,211,238"),
+      snap: snapFx(false),
+      snapMax: snapFx(true),
       destiny: flatUltFx("#f59e0b", "#fde68a", "255,251,235", "251,191,36"),
       burst: { dur: 1500, parts: function (e) { return parts(160, function () { return { a: Math.random() * TAU, s: rnd(0.2, 1), r: rnd(3, 8) }; }); },
         draw: function (p, e, ps) {
@@ -2294,13 +2438,20 @@
     var aura = f.auraId !== null && f.auraId !== undefined ? A.byId(f.auraId) : null;
     var c1 = aura ? aura.c1 : "#f87171", c2 = aura ? aura.c2 : "#7f1d1d";
     var self = SELF_ARCHS[ab.arch];
-    var pose = self ? "cast" : (ab.arch === "heavy" || ab.arch === "execute" ? "slam" : (who === "a" ? "lunge-right" : "lunge-left"));
+    var pose = self || ab.arch === "snap" ? "cast" : (ab.arch === "heavy" || ab.arch === "execute" ? "slam" : (who === "a" ? "lunge-right" : "lunge-left"));
     fighterPose(who, pose);
     $("#fighter-" + who).style.setProperty("--c1", c1);
     $("#fighter-" + who).classList.remove("flare"); void $("#fighter-" + who).offsetWidth; $("#fighter-" + who).classList.add("flare");
     abilityLabel(who, ab, c1);
-    Sound.ability(ab.arch);
     var ultimate = aura && tierIndex(aura) >= 4;
+    if (ab.arch === "snap" && ultimate) {
+      /* The full-screen snap; the crack, the shake and the boom land when the fingers snap. */
+      var sfx = snapIsMax(f) ? "snapMax" : "snap";
+      var sdur = UFX.play(sfx, $("#visual-" + who), $("#visual-" + target), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
+      setTimeout(function () { Sound.ability("snap"); shake(sfx === "snapMax" ? 3 : 2); if (sfx === "snapMax") Sound.boom(3); }, sdur * UFX.LIB[sfx].snapAt);
+      return sdur + 120;
+    }
+    Sound.ability(ab.arch);
     if (ultimate) {
       var udur = UFX.play(ab.arch, $("#visual-" + who), $("#visual-" + (self ? who : target)), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
       var udef = UFX.LIB[ab.arch];
@@ -2398,6 +2549,8 @@
   function openArena() {
     BFX.clear();
     UFX.clear();
+    unsnap("a", false);
+    unsnap("b", false);
     var arena = $("#arena");
     arena.classList.remove("hidden");
     $("#battle-result").classList.add("hidden");
@@ -2438,8 +2591,11 @@
       var f = battle[side];
       fighterVisual(f, $("#visual-" + side));
       $("#name-" + side).textContent = f.name + " (" + fmt(f.power) + ")";
-      $("#hp-" + side).style.width = Math.max(0, f.hp / f.maxHp * 100) + "%";
-      $("#hptext-" + side).textContent = fmt(Math.max(0, f.hp)) + " / " + fmt(f.maxHp);
+      /* While a turn is being played out, the HP bars move with each hit (setHP), not ahead of them. */
+      if (!view.animating) {
+        $("#hp-" + side).style.width = Math.max(0, f.hp / f.maxHp * 100) + "%";
+        $("#hptext-" + side).textContent = fmt(Math.max(0, f.hp)) + " / " + fmt(f.maxHp);
+      }
       var row = $("#status-" + side);
       row.innerHTML = "";
       statusChips(f).forEach(function (c) {
@@ -2450,8 +2606,10 @@
       });
       $("#fighter-" + side).classList.toggle("active-turn", battle.turn === side && !battle.over);
     });
-    $("#hp-a").className = "hpfill " + (view.me === "a" ? "player" : "bot");
-    $("#hp-b").className = "hpfill " + (view.me === "b" ? "player" : "bot");
+    ["a", "b"].forEach(function (side) {
+      $("#hp-" + side).classList.toggle("player", view.me === side);
+      $("#hp-" + side).classList.toggle("bot", view.me !== side);
+    });
     $("#arena-round").textContent = "Round " + battle.round;
 
     var myTurn = battle.turn === view.me && !battle.over && !view.animating;
@@ -2535,6 +2693,7 @@
           delay = abilityVisual(e.who, kitAbility(battle[e.who], e.ability));
           break;
         case "damage":
+          if (e.flat && e.flatArch === "snap") { delay = snapHit(e); break; }
           flash(e.target, "hit");
           var flatTag = e.flat ? String(e.flatIcon || "").slice(0, 4) : "";
           floatText(e.target, "-" + fmt(e.amount) + (e.flat ? " " + flatTag : e.crit ? "!" : ""), e.flat ? "t-chosen" : e.crit ? "t-divine" : "t-forbidden");
@@ -2575,6 +2734,7 @@
           logLine("⚡ " + (isMe(e.who) ? "You are stunned and skip a turn" : sideName(e.who) + " is stunned and skips a turn"), isMe(e.who) ? "them" : "you");
           break;
         case "revive":
+          unsnap(e.who, true);
           flash(e.who, "healed");
           var rf = battle[e.who];
           floatText(e.who, (rf.reviveName || "Second Wind").toUpperCase(), "heal");
@@ -2590,6 +2750,60 @@
       setTimeout(step, delay);
     }
     step();
+  }
+
+  /* Snaps by auras rarer than 1 in 3,000,000 get the biggest version of the animation. */
+  function snapIsMax(f) {
+    var aura = f && f.auraId !== null && f.auraId !== undefined ? A.byId(f.auraId) : null;
+    return !!aura && effRarity(aura, f.shiny) > 3e6;
+  }
+
+  /* The Snap lands: the target crumbles into dust from the side facing the snapper while its HP drains slowly
+     and the number counts down. If it survives, it pulls itself back together. Returns how long to wait. */
+  function snapHit(e) {
+    var side = e.target, max = snapIsMax(battle[e.who]), ms = max ? 3000 : 2400;
+    var vis = $("#visual-" + side), bar = $("#hp-" + side), txt = $("#hptext-" + side);
+    var a = vis.getBoundingClientRect(), b = $("#visual-" + e.who).getBoundingClientRect();
+    var dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
+    var dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? "from-left" : "from-right") : (dy < 0 ? "from-top" : "from-bottom");
+    unsnap(side, false);
+    void vis.offsetWidth;
+    vis.style.setProperty("--snap-ms", ms + "ms");
+    vis.classList.add("snapped", dir);
+    var aura = battle[e.who].auraId !== null && battle[e.who].auraId !== undefined ? A.byId(battle[e.who].auraId) : null;
+    BFX.play(max ? "dustMax" : "dust", e.who, side, aura ? aura.c1 : "#e2e8f0", aura ? aura.c2 : "#94a3b8");
+    floatText(side, "-" + fmt(e.amount) + " 🫰", "t-chosen");
+    Sound.dust(ms / 1000);
+    logLine("🫰 SNAP! " + (isMe(e.who) ? "You snap " + sideName(side) : sideName(e.who) + " snaps " + (isMe(side) ? "you" : sideName(side))) + " for " + fmt(e.amount), "crit");
+    /* the HP bar slides down slowly while the number counts down */
+    var from = parseInt(txt.textContent.replace(/,/g, ""), 10), to = Math.max(0, side === "a" ? e.hpA : e.hpB), max0 = battle[side].maxHp;
+    bar.style.setProperty("--snap-ms", ms + "ms");
+    bar.classList.add("drain-slow");
+    setHP(e);
+    if (isFinite(from) && from > to) {
+      var t0 = performance.now();
+      var tick = function (now) {
+        var q = Math.max(0, Math.min(1, (now - t0) / ms)), v = Math.round(from + (to - from) * (1 - Math.pow(1 - q, 2)));
+        txt.textContent = fmt(v) + " / " + fmt(max0);
+        if (q < 1 && battle) requestAnimationFrame(tick);
+      };
+      txt.textContent = fmt(from) + " / " + fmt(max0);
+      requestAnimationFrame(tick);
+    }
+    var survives = battle[side].hp > 0;
+    setTimeout(function () {
+      bar.classList.remove("drain-slow");
+      if (battle && battle[side].hp > 0) unsnap(side, true);
+    }, ms + 150);
+    return survives ? ms + 1150 : ms + 250;
+  }
+
+  /* Undo the dust: straight away, or with the fighter pulling itself back together (`reform`). */
+  function unsnap(side, reform) {
+    var vis = $("#visual-" + side);
+    if (!vis.classList.contains("snapped")) { if (!reform) vis.classList.remove("reform"); return; }
+    vis.classList.remove("snapped", "from-left", "from-right", "from-top", "from-bottom", "reform");
+    if (reform) { void vis.offsetWidth; vis.classList.add("reform"); }
   }
 
   function setHP(e) {
@@ -3831,6 +4045,7 @@
     renderAccount();
     renderAll();
     syncAccount();
+    chatReset();
   }
 
   /* ---------- Online accounts: the save lives on the server, so an ID works on every device ----------
@@ -4278,14 +4493,14 @@
         var sh = isShiny(a, g.shiny);
         giftBag(sh)[a.id] = (giftBag(sh)[a.id] || 0) + n;
         S.stats.giftsReceived = (S.stats.giftsReceived || 0) + n;
-        fresh.push({ id: g.id, a: a, sh: sh, n: n, from: g.fromName || "A player", fromId: g.from });
+        fresh.push({ id: g.id, a: a, sh: sh, n: n, from: g.fromName || "A player" });
       });
       if (S.giftsOpened.length > 300) S.giftsOpened = S.giftsOpened.slice(-300);
       saveLocal();
       var announce = function () {
         if (!fresh.length) return;
         fresh.slice(0, 3).forEach(function (f) {
-          toast("🎁 " + f.from + " (ID " + f.fromId + ") sent you " + (f.n > 1 ? fmt(f.n) + " x " : "") + auraLabel(f.a, f.sh) + "!", "gold", 8000);
+          toast("🎁 " + f.from + " sent you " + (f.n > 1 ? fmt(f.n) + " x " : "") + auraLabel(f.a, f.sh) + "!", "gold", 8000);
         });
         if (fresh.length > 3) toast("🎁 …and " + (fresh.length - 3) + " more gifts! Check your inventory.", "gold", 8000);
         Sound.rare(1);
@@ -4326,6 +4541,210 @@
     }).catch(function (e) { if (e && e.net) noteNetwork(e); }).then(function () { Cloud.openingGifts = false; });
   }
   setInterval(function () { if (document.visibilityState === "visible") checkGifts(); }, 20000);
+
+  /* ---------- Global chat: messages live on the account server; this tab asks for new ones every few seconds ---------- */
+
+  var Chat = { seq: 0, messages: [], nodes: {}, timer: null, loading: false, unread: 0, muted: null, error: null, sending: false };
+  var CHAT_KEEP = 100;
+
+  function chatOpen() { return $("#tab-chat").classList.contains("active"); }
+
+  /* POST to the chat server. Rejects { chat: 981 } when the internet is down, { chat: 523 } for a code or server error. */
+  function chatFetch(action, payload) {
+    if (navigator.onLine === false) return Promise.reject({ chat: ERR.CHAT_WIFI });
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+    return fetch(CLOUD_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.assign({ action: action }, payload)), signal: ctrl ? ctrl.signal : undefined })
+      .then(function (res) {
+        if (timer) clearTimeout(timer);
+        if ((res.headers.get("content-type") || "").indexOf("application/json") === -1) {
+          throw { chat: ERR.CHAT_CODE, missing: res.status === 404 || res.status === 405 || res.status === 501 };
+        }
+        return res.json().then(function (data) {
+          if (res.status >= 500) throw { chat: ERR.CHAT_CODE };
+          return { status: res.status, data: data };
+        }, function () { throw { chat: ERR.CHAT_CODE }; });
+      }, function () { if (timer) clearTimeout(timer); throw { chat: ERR.CHAT_WIFI }; });
+  }
+
+  /* The red chat message for a failure. Anything that isn't a WiFi problem (including a bug in this code) is 523. */
+  function chatErrorText(e) {
+    if (e && e.chat === ERR.CHAT_WIFI) return "⚠️ Error 981: You can't chat right now because of a WiFi error. Check your internet connection; the chat reconnects by itself.";
+    if (e && e.missing) return "⚠️ Error 523: Code error: the chat server isn't set up on this site.";
+    return "⚠️ Error 523: Code error: something went wrong in the chat's code. Try again in a moment.";
+  }
+
+  function chatSchedule(ms) { clearTimeout(Chat.timer); Chat.timer = setTimeout(chatPoll, ms); }
+
+  /* Fetch messages newer than the last one seen: every 3 seconds with the chat open, every 20 otherwise (for the badge). */
+  function chatPoll() {
+    if (document.visibilityState !== "visible" || Chat.loading) { chatSchedule(chatOpen() ? 3000 : 20000); return; }
+    Chat.loading = true;
+    var viewer = currentUser;
+    chatFetch("chat", { since: Chat.seq, id: viewer || undefined }).then(function (r) {
+      if (viewer !== currentUser) return;
+      if (r.status !== 200) throw { chat: ERR.CHAT_CODE };
+      chatApply(r.data);
+      Chat.error = null;
+      Chat.muted = r.data.muted || null;
+      renderChat();
+    }).catch(function (e) {
+      Chat.error = e;
+      renderChat();
+    }).then(function () {
+      Chat.loading = false;
+      chatSchedule(Chat.error && Chat.error.missing ? 60000 : chatOpen() ? 3000 : 20000);
+    });
+  }
+
+  /* Merge a chat reply: drop cleared and deleted messages, add new ones, count the unread ones. */
+  function chatApply(d) {
+    var removed = Array.isArray(d.removed) ? d.removed : [];
+    Chat.messages = Chat.messages.filter(function (m) { return m.seq > (d.cleared || 0) && removed.indexOf(m.seq) < 0; });
+    var have = {};
+    Chat.messages.forEach(function (m) { have[m.seq] = true; });
+    var fresh = (d.messages || []).filter(function (m) { return !have[m.seq]; });
+    Chat.messages = Chat.messages.concat(fresh).sort(function (a, b) { return a.seq - b.seq; }).slice(-CHAT_KEEP);
+    if (Chat.seq && !chatOpen()) Chat.unread += fresh.filter(function (m) { return !m.mine; }).length;
+    Chat.seq = Math.max(Chat.seq, d.seq || 0);
+  }
+
+  /* One message bubble. Everything players typed goes in as text, never as HTML. */
+  function chatNode(m) {
+    var el = document.createElement("div");
+    el.className = "chat-msg" + (m.mine ? " mine" : "");
+    var meta = document.createElement("div");
+    meta.className = "chat-meta";
+    var name = document.createElement("span");
+    name.className = "chat-name";
+    name.textContent = m.name;
+    meta.appendChild(name);
+    var a = m.aura !== null && m.aura !== undefined ? A.byId(m.aura) : null;
+    if (a) {
+      var tag = document.createElement("span");
+      tag.className = "chat-aura t-" + a.tier;
+      tag.textContent = auraLabel(a, m.shiny);
+      meta.appendChild(tag);
+    }
+    var time = document.createElement("span");
+    time.textContent = new Date(m.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    meta.appendChild(time);
+    var tools = document.createElement("span");
+    tools.className = "chat-admin";
+    [["🔇 10m", "Mute this player for 10 minutes", function () { chatAdmin("chatMute", { seq: m.seq, minutes: 10 }); }],
+     ["🗑️", "Delete this message", function () { chatAdmin("chatDelete", { seq: m.seq }); }]].forEach(function (t) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = t[0];
+      b.title = t[1];
+      b.addEventListener("click", t[2]);
+      tools.appendChild(b);
+    });
+    meta.appendChild(tools);
+    var text = document.createElement("div");
+    text.className = "chat-text";
+    text.textContent = m.text;
+    el.appendChild(meta);
+    el.appendChild(text);
+    return el;
+  }
+
+  /* Update the chat: add and remove bubbles (existing ones are kept, so clicks on them never get lost), the
+     status line, the badge and the message box. */
+  function renderChat() {
+    var log = $("#chat-log");
+    var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    var keep = {};
+    Chat.messages.forEach(function (m) { keep[m.seq] = true; });
+    Object.keys(Chat.nodes).forEach(function (seq) { if (!keep[seq]) { Chat.nodes[seq].remove(); delete Chat.nodes[seq]; } });
+    var empty = log.querySelector(".empty-note");
+    if (empty) empty.remove();
+    Chat.messages.forEach(function (m) {
+      if (!Chat.nodes[m.seq]) { Chat.nodes[m.seq] = chatNode(m); log.appendChild(Chat.nodes[m.seq]); }
+    });
+    if (!Chat.messages.length) {
+      var note = document.createElement("div");
+      note.className = "empty-note";
+      note.textContent = Chat.error ? "No messages yet." : "No messages yet. Say hi!";
+      log.appendChild(note);
+    }
+    log.classList.toggle("admin", adminUnlocked);
+    if (atBottom) log.scrollTop = log.scrollHeight;
+
+    var st = $("#chat-status"), input = $("#chat-input");
+    var status = Chat.error ? chatErrorText(Chat.error)
+      : Chat.muted ? "⚠️ Error 108: An admin muted you, so you can't chat " + Chat.muted.text + "."
+      : !currentUser ? "Log in (Login, top right) to chat. You can still read along." : "";
+    st.textContent = status;
+    st.className = "chat-status" + (status ? "" : " hidden") + (Chat.error || Chat.muted ? " err" : "");
+    var canSend = !!currentUser && !Chat.muted;
+    input.disabled = !canSend;
+    $("#chat-send").disabled = !canSend || Chat.sending;
+    input.placeholder = !currentUser ? "Log in to chat" : Chat.muted ? "You're muted (Error 108)" : "Say something…";
+
+    if (chatOpen()) Chat.unread = 0;
+    var badge = $("#chat-badge");
+    badge.textContent = Chat.unread > 99 ? "99+" : String(Chat.unread);
+    badge.classList.toggle("hidden", !Chat.unread);
+  }
+
+  function chatSend() {
+    var input = $("#chat-input"), text = input.value.trim(), id = currentUser;
+    if (!text || Chat.sending) return;
+    if (!id) { renderChat(); return; }
+    if (Chat.muted) { errorToast(ERR.CHAT_MUTED, "An admin muted you, so you can't chat " + Chat.muted.text + "."); return; }
+    var eq = equippedAura();
+    Chat.sending = true;
+    renderChat();
+    chatFetch("chatSend", { id: id, text: text, aura: eq ? eq.id : null, shiny: equippedShiny() }).then(function (r) {
+      if (r.status === 200) {
+        input.value = "";
+        Chat.error = null;
+        chatApply({ seq: Chat.seq, messages: [r.data.message] });
+        $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
+        renderChat();
+        $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
+        chatSchedule(400);
+        return;
+      }
+      if (r.data.code === ERR.CHAT_MUTED) {
+        Chat.muted = { until: r.data.until, text: (r.data.error || "").replace(/^An admin muted you, so you can't chat /, "").replace(/\.$/, "") };
+        errorToast(ERR.CHAT_MUTED, r.data.error || "An admin muted you, so you can't chat.");
+      } else if (r.data.slow) {
+        toast("⏳ " + r.data.error, "bad");
+      } else {
+        errorToast(r.data.code || ERR.ACCOUNT, r.data.error || "Your message couldn't be sent.");
+      }
+    }).catch(function (e) {
+      errorToast(e && e.chat === ERR.CHAT_WIFI ? ERR.CHAT_WIFI : ERR.CHAT_CODE, chatErrorText(e).replace(/^⚠️ Error \d+: /, ""));
+    }).then(function () {
+      Chat.sending = false;
+      renderChat();
+    });
+  }
+
+  /* Admin buttons next to messages: mute the writer or delete the message. */
+  function chatAdmin(op, fields) {
+    accountAdmin(op, fields).then(function (d) {
+      if (!d) { toast("That didn't work: see the admin panel in Stats", "bad"); return; }
+      if (op === "chatMute") toast("🔇 Muted " + d.name + " " + d.text, "gold");
+      if (op === "chatDelete") toast("🗑️ Deleted " + d.name + "'s message", "gold");
+      aaPrint(op === "chatMute" ? "🔇 Muted " + d.name + " (" + d.id + ") " + d.text + "." : "🗑️ Deleted a message by " + d.name + " (" + d.id + ").");
+      chatSchedule(100);
+    });
+  }
+
+  /* After switching accounts the "mine" marks change, so start the chat over. */
+  function chatReset() {
+    Object.keys(Chat.nodes).forEach(function (seq) { Chat.nodes[seq].remove(); });
+    Chat.nodes = {};
+    Chat.messages = [];
+    Chat.seq = 0;
+    Chat.unread = 0;
+    Chat.muted = null;
+    renderChat();
+    chatSchedule(300);
+  }
 
   /* The red error 145 banner. `rolling` is true on the device that holds the lease and heard that another tried. */
   function showDualWarning(rolling, waitMs) {
@@ -4548,6 +4967,7 @@
       $("#aa-lock").classList.add("hidden");
       $("#aa-lock-msg").textContent = "";
       $("#admin-area").classList.remove("hidden");
+      renderChat();
       aaList(true).then(function (listed) {
         $("#aa-panel").classList.toggle("hidden", !listed);
         if (listed) aaPrint(aaAccounts.length + " player account" + (aaAccounts.length === 1 ? "" : "s") + ". Click one to pick them.");
@@ -4582,6 +5002,7 @@
     $("#admin-area").classList.add("hidden");
     $("#aa-lock").classList.remove("hidden");
     $("#aa-lock-msg").textContent = msg || "🔒 Locked.";
+    renderChat();
   }
 
   function aaList(quiet) {
@@ -4653,6 +5074,33 @@
     });
   }
 
+  function aaMute(unmute) {
+    var id = aaTargetId();
+    if (!id) return;
+    var minutes = Math.max(0, Math.floor(Number($("#aa-mute-min").value) || 0));
+    accountAdmin(unmute ? "chatUnmute" : "chatMute", { id: id, minutes: minutes }).then(function (d) {
+      if (!d) return;
+      aaPrint(unmute ? "💬 " + d.name + " (" + id + ") can chat again." : "🔇 Muted " + d.name + " (" + id + ") " + d.text + ". They see Error 108 if they try to chat.");
+    });
+  }
+
+  function aaMuted() {
+    accountAdmin("chatMuted").then(function (d) {
+      if (!d) return;
+      if (!d.muted.length) { aaPrint("💬 Nobody is muted."); return; }
+      d.muted.forEach(function (m) { aaPrint("🔇 " + m.name + " (" + m.id + ") is muted " + m.text + "."); });
+    });
+  }
+
+  function aaChatClear() {
+    if (!confirm("Delete every message in the global chat? This can't be undone.")) return;
+    accountAdmin("chatClear").then(function (d) {
+      if (!d) return;
+      aaPrint("💬 The chat is empty now.");
+      chatSchedule(100);
+    });
+  }
+
   function aaEraseAll() {
     var id = aaTargetId();
     if (!id) return;
@@ -4709,6 +5157,7 @@
     document.querySelectorAll(".panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     if (name === "roll") FX.resize();
     if (name === "inventory") renderInventory();
+    if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }
   }
 
   $("#tabs").addEventListener("click", function (e) {
@@ -4775,6 +5224,16 @@
   $("#aa-add-coins").addEventListener("click", aaAddCoins);
   $("#aa-add-luck").addEventListener("click", aaAddLuck);
   $("#aa-erase-all").addEventListener("click", aaEraseAll);
+  $("#aa-mute").addEventListener("click", function () { aaMute(false); });
+  $("#aa-unmute").addEventListener("click", function () { aaMute(true); });
+  $("#aa-muted").addEventListener("click", aaMuted);
+  $("#aa-chat-clear").addEventListener("click", aaChatClear);
+  $("#chat-form").addEventListener("submit", function (e) { e.preventDefault(); chatSend(); });
+  window.addEventListener("online", function () { chatSchedule(100); });
+  window.addEventListener("offline", function () { Chat.error = { chat: ERR.CHAT_WIFI }; renderChat(); });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") chatSchedule(200); });
+  renderChat();
+  chatSchedule(1500);
   $("#aa-detonate").addEventListener("click", aaDetonate);
   $("#aa-reset-luck").addEventListener("click", aaResetLuck);
   $("#aa-id").addEventListener("input", aaShowWho);

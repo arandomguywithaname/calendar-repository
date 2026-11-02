@@ -69,7 +69,15 @@ loadout, and fight bots or a friend.
   Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Absolute
   Authority gets a 7th: 🫰 **Snap**, exactly 100,000 damage that nothing can block,
   shield, reflect or boost, with a 7 turn cooldown; The Chosen One's Snap deals exactly
-  1,000,000. Choose 4 per
+  1,000,000. **The Snap animation:** the screen goes dark, a glowing hand rises,
+  trembles and snaps with a crack, a white flash, shockwaves, cracks across the screen
+  and a giant SNAP!; then the target crumbles into dust from the side facing the
+  snapper while its HP bar slides down and the number counts down slowly. If it
+  survives it pulls itself back together; if not, it stays gone. Auras rarer than
+  1 in 3,000,000 (every aura with Snap today) get the biggest version: cinema bars,
+  six stones lighting up around the hand and pouring energy into its fingers, a
+  rainbow shockwave, glitching and a heavier screen shake. HP bars now drop when a
+  hit lands instead of when a move starts. Choose 4 per
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
@@ -133,11 +141,23 @@ loadout, and fight bots or a friend.
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's
   gift box on the account server and show up in their game within about 20 seconds
   while they play (even while auto-rolling), or the next time they log in, with a
-  message saying who sent them. Both players need an online account; a gift can't
+  message saying who sent them (by name; the sender's ID stays private). Both players need an online account; a gift can't
   be sent to yourself or taken back, and a gift box holds up to 100 gifts until it
   is collected. Gifting an equipped aura unequips it. If the server refuses or can't
   be reached, the aura stays with you. Each gift is added exactly once, even if the
   friend plays on two devices. Stats count auras sent and received.
+- **💬 Global chat.** The Chat tab talks with everyone playing; it checks for new
+  messages every 3 seconds while open (a red badge on the tab counts unread ones
+  otherwise). Log in to write; guests can read. Messages show the player's name and
+  equipped aura but never their ID (an ID logs into the account), are up to 200
+  characters, one every 1.5 seconds, with swear words starred out; the chat keeps the
+  newest 100. Its own red errors: **981** you can't chat because of a WiFi
+  (internet) error, **523** a code error (the chat server failed or isn't set up on
+  the site, or something broke in the chat code), **108** an admin muted you (it
+  says for how long). Admins get 🔇 (mute 10 minutes) and 🗑️ (delete) buttons
+  next to every message, and a Chat section in the admin panel to mute a player for
+  any number of minutes (0 = until unmuted), unmute, see who is muted and clear the
+  whole chat.
 - **Login on any device**: a new player enters a name (2 to 50 characters) and gets a
   random 7-digit ID, shown at the top of the page (click it to copy). Entering that ID
   on another phone or computer loads the same progress. Saves upload a few seconds
@@ -161,7 +181,8 @@ loadout, and fight bots or a friend.
   or account-server problem, **435** buying a potion, training or Auto Roll (not enough coins), **102** using
   a potion (none left, a stronger one already active, healing outside a fight, not your
   turn), **98** account problems (bad name or ID, no player with that ID, a bad save
-  code, or progress replaced by a newer save from another device).
+  code, or progress replaced by a newer save from another device), and in the chat
+  **981** WiFi error, **523** code error, **108** muted by an admin.
 - **Admin** (bottom of the Stats tab, or press `` ` `` (backtick) anywhere on a keyboard):
   locked with the admin password. Unlock opens the console and the player panel below;
   Lock closes both, and admin also locks itself when you leave the page or after 5
@@ -207,7 +228,8 @@ No build step and no npm install.
   the game. Functions are meant to be deployed from Git or the CLI, so if the account
   function isn't running, IDs only work on the device that made them and logged-in
   players see a one-time Error 404 note saying online accounts aren't set up.
-  Gifting auras needs the account function too. Everything else plays normally.
+  Gifting auras and the chat need the account function too (the chat shows Error 523
+  without it). Everything else plays normally.
 - **Check which version is live.** The bottom of every page shows "Version N". Each
   update raises N, together with the `?v=N` on the script and style links in
   `index.html`, so browsers fetch the new files instead of reusing old ones. If the
