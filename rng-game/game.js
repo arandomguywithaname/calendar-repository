@@ -1294,7 +1294,14 @@
     return Object.keys(ids).map(Number).filter(function (id) { return !!A.byId(id); });
   }
 
+  /* A collection can hold well over a thousand auras, each with an animated orb, and building them all on
+     every redraw froze phones. So the inventory is only built while its tab is open, rarest first, one page
+     at a time, with a search box to find the rest. */
+  var INVENTORY_PAGE = 48;
+  var inventoryShown = INVENTORY_PAGE;
+
   function renderInventory() {
+    if (!$("#tab-inventory").classList.contains("active")) return;
     var grid = $("#inventory-grid");
     grid.innerHTML = "";
     var entries = [];
@@ -1302,13 +1309,20 @@
       if (owns(id, false)) entries.push({ id: id, shiny: false, n: S.inventory[id] });
       if (owns(id, true)) entries.push({ id: id, shiny: true, n: S.shinyInventory[id] });
     });
+    var total = entries.length, query = $("#inv-search").value.trim().toLowerCase();
+    if (query) entries = entries.filter(function (en) { return auraLabel(A.byId(en.id), en.shiny).toLowerCase().indexOf(query) >= 0; });
+    $("#inv-count").textContent = !total ? "" : query ? fmt(entries.length) + " of " + fmt(total) + " match" : fmt(total) + " aura" + (total === 1 ? "" : "s");
+    var more = $("#inv-more");
+    more.classList.toggle("hidden", entries.length <= inventoryShown);
+    more.textContent = "Show more (" + fmt(Math.max(0, entries.length - inventoryShown)) + " left)";
     if (!entries.length) {
-      grid.innerHTML = "<div class=\"empty-note\">Nothing yet. Roll to discover auras.</div>";
+      grid.innerHTML = "<div class=\"empty-note\"></div>";
+      grid.firstChild.textContent = total ? "No auras match \"" + query + "\"." : "Nothing yet. Roll to discover auras.";
       return;
     }
     entries.sort(function (x, y) { return effRarity(A.byId(y.id), y.shiny) - effRarity(A.byId(x.id), x.shiny); });
     var eq = equippedAura(), eqShiny = equippedShiny();
-    entries.forEach(function (en) {
+    entries.slice(0, inventoryShown).forEach(function (en) {
       var a = A.byId(en.id), sh = isShiny(a, en.shiny);
       var isEq = !!(eq && eq.id === en.id && eqShiny === sh);
       var card = document.createElement("div");
@@ -4694,6 +4708,7 @@
     document.querySelectorAll(".tab").forEach(function (b) { b.classList.toggle("active", b.dataset.tab === name); });
     document.querySelectorAll(".panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     if (name === "roll") FX.resize();
+    if (name === "inventory") renderInventory();
   }
 
   $("#tabs").addEventListener("click", function (e) {
@@ -4712,6 +4727,8 @@
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
+  $("#inv-search").addEventListener("input", function () { inventoryShown = INVENTORY_PAGE; renderInventory(); });
+  $("#inv-more").addEventListener("click", function () { inventoryShown += INVENTORY_PAGE; renderInventory(); });
   $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });
   $("#gift-close").addEventListener("click", closeGift);
   $("#gift-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeGift(); });

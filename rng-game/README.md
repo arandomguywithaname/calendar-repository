@@ -124,6 +124,10 @@ loadout, and fight bots or a friend.
   5,000,000 coins: x50,000 luck, always shiny, Epic or better and x100 coins for 3
   rolls, Time Warp speed, and a Godslayer Tonic, Steel Wall and Phoenix Feather for
   the next bot fight. Mystery potions never turn into it.
+- **Inventory** lists your auras rarest first, 48 at a time with a **Show more**
+  button, and a search box that finds any aura (or its shiny) by name. It is only
+  built while its tab is open, so even a collection of every aura and every shiny
+  (over 1,500 cards) opens in a blink and doesn't slow auto roll down.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's

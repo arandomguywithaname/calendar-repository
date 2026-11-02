@@ -293,6 +293,9 @@ body.shake-3 { animation: shake3 .9s; }
 .collect-missing span { cursor: help; }
 .card.boss { border-color: rgba(239,68,68,.35); }
 .empty-note { color: var(--muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
+.inv-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.inv-tools input { flex: 1 1 220px; max-width: 360px; min-width: 0; background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--card-border); border-radius: 10px; padding: 9px 12px; font: 500 1rem var(--font-body); }
+.inv-more { display: flex; justify-content: center; margin-top: 14px; }
 
 /* Arena */
 .arena { position: relative; overflow: hidden; scroll-margin-top: 140px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; padding: 20px; margin-bottom: 20px; border-radius: var(--radius); background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02)); border: 1px solid var(--card-border); }
