@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=44">
+  <link rel="stylesheet" href="style.css?v=45">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -86,6 +86,7 @@
       <div class="inv-tools">
         <input id="inv-search" type="search" placeholder="Search your auras…" autocomplete="off" aria-label="Search your auras">
         <span id="inv-count" class="muted small-text"></span>
+        <button type="button" class="btn small" id="btn-gift-coins">🎁 Gift coins</button>
       </div>
       <div id="inventory-grid" class="card-grid"></div>
       <div class="inv-more"><button type="button" id="inv-more" class="btn small hidden">Show more</button></div>
@@ -316,7 +317,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 44</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 45</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -333,13 +334,13 @@
   <!-- Gift an aura to another player -->
   <div id="gift-modal" class="modal hidden">
     <div class="modal-box">
-      <h2>🎁 Gift an aura</h2>
+      <h2 id="gift-title">🎁 Gift an aura</h2>
       <div id="gift-aura" class="gift-aura"></div>
       <form id="gift-form" class="login-form" autocomplete="off" novalidate>
         <label class="muted small-text" for="gift-to">Your friend's 7-digit ID</label>
         <input id="gift-to" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Friend's 7-digit ID" maxlength="7" autocomplete="off">
         <div id="gift-count-row" class="gift-count-row">
-          <label class="muted small-text" for="gift-count">How many</label>
+          <label class="muted small-text" for="gift-count" id="gift-count-label">How many</label>
           <input id="gift-count" type="number" min="1" step="1" value="1" inputmode="numeric">
         </div>
         <div id="gift-confirm" class="gift-confirm hidden"></div>
@@ -415,9 +416,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=44"></script>
-  <script src="abilities.js?v=44"></script>
-  <script src="reveals.js?v=44"></script>
-  <script src="game.js?v=44"></script>
+  <script src="auras.js?v=45"></script>
+  <script src="abilities.js?v=45"></script>
+  <script src="reveals.js?v=45"></script>
+  <script src="game.js?v=45"></script>
 </body>
 </html>

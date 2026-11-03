@@ -9,8 +9,8 @@
      claim   { id, device, rev }            take or renew the roll lease; returns the newest save if `rev` is old
      save    { id, device, rev, save }      store a new save; refused while another device holds the lease
      release { id, device }                 give the lease back (tab closed, logged out)
-     gift    { id, device, rev, save, to, aura, shiny, count }
-                                            send auras to player `to`: they go into that player's gift box, and
+     gift    { id, device, rev, save, to, aura, shiny, count | coins }
+                                            send auras (or coins) to player `to`: they go into that player's gift box, and
                                             `save` (the sender's save with them already taken out) is stored
      gifts   { id }                         the gifts waiting in this account's gift box
      openGifts { id, device, rev, save, ids }
@@ -48,6 +48,7 @@ const CONTEST_MS = 30000; /* how long the rolling device keeps hearing that anot
 const MAX_SAVE_CHARS = 1000000;
 const MAX_GIFTS = 100;    /* gifts a gift box holds before its owner has to open the game and collect them */
 const MAX_GIFT_COUNT = 1000000;
+const MAX_GIFT_COINS = 1e15;  /* coins one gift can carry (a quadrillion) */
 const ID_RE = /^\d{7}$/;
 const DEVICE_RE = /^[a-z0-9]{8,40}$/;
 const NAME_RE = /^[\p{L}\p{N} _'.-]+$/u;
@@ -331,20 +332,30 @@ const ACTIONS = {
   },
 
   async gift(body, store, now) {
-    const to = String(body.to), aura = Number(body.aura), count = Number(body.count == null ? 1 : body.count);
+    const to = String(body.to);
+    const isCoins = body.coins != null;
     if (!ID_RE.test(to)) return reply(400, { ok: false, code: 98, error: "A player ID is 7 digits." });
     if (to === String(body.id)) return reply(400, { ok: false, code: 98, error: "You can't send a gift to yourself." });
-    if (!Number.isInteger(aura) || aura < 0 || aura > 1e6) return reply(400, { ok: false, code: 98, error: "That aura doesn't exist." });
-    if (!Number.isInteger(count) || count < 1 || count > MAX_GIFT_COUNT) return reply(400, { ok: false, code: 98, error: "You can send 1 to 1,000,000 at a time." });
+    let gift;
+    if (isCoins) {
+      const coins = Number(body.coins);
+      if (!Number.isInteger(coins) || coins < 1 || coins > MAX_GIFT_COINS) return reply(400, { ok: false, code: 98, error: "You can send 1 to 1,000,000,000,000,000 coins at a time." });
+      gift = { id: randomUUID(), from: String(body.id), fromName: null, coins, at: now };
+    } else {
+      const aura = Number(body.aura), count = Number(body.count == null ? 1 : body.count);
+      if (!Number.isInteger(aura) || aura < 0 || aura > 1e6) return reply(400, { ok: false, code: 98, error: "That aura doesn't exist." });
+      if (!Number.isInteger(count) || count < 1 || count > MAX_GIFT_COUNT) return reply(400, { ok: false, code: 98, error: "You can send 1 to 1,000,000 at a time." });
+      gift = { id: randomUUID(), from: String(body.id), fromName: null, aura, shiny: !!body.shiny, count, at: now };
+    }
     const save = checkSave(body.save);
     if (!save) return reply(400, { ok: false, code: 98, error: "That save is not valid." });
     const [sender, target] = await Promise.all([store.get(accountKey(body.id), { type: "json" }), store.get(accountKey(to), { type: "json" })]);
     if (!sender) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
     if (!target) return reply(404, { ok: false, code: 98, missing: "to", error: "No player with ID " + to + "." });
+    gift.fromName = sender.name;
     /* The gift goes into the box first and the sender's save second, and the gift is taken back out if the
-       save is refused. If something fails in between, the friend gets the aura and the sender keeps it too,
-       which is better than an aura vanishing. */
-    const gift = { id: randomUUID(), from: String(body.id), fromName: sender.name, aura, shiny: !!body.shiny, count, at: now };
+       save is refused. If something fails in between, the friend gets the gift and the sender keeps it too,
+       which is better than it vanishing. */
     const box = await editGifts(store, to, (list) => (list.length >= MAX_GIFTS ? null : list.concat([gift])));
     if (!box) return reply(409, { ok: false, code: 98, error: target.name + "'s gift box is full. They need to open the game to collect their gifts first." });
     const stored = await storeSave(store, body, save, now);

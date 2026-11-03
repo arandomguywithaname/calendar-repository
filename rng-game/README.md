@@ -163,6 +163,10 @@ loadout, and fight bots or a friend.
   is collected. Gifting an equipped aura unequips it. If the server refuses or can't
   be reached, the aura stays with you. Each gift is added exactly once, even if the
   friend plays on two devices. Stats count auras sent and received.
+- **🎁 Gift coins.** A **Gift coins** button at the top of the Inventory sends coins
+  to a friend the same way (1 to 1,000,000,000,000,000 per gift). The coins leave
+  your account, land in the friend's gift box, and arrive with a message saying who
+  sent them. If the server refuses or can't be reached, the coins stay with you.
 - **💬 Global chat.** The Chat tab talks with everyone playing on the same website
   (it names the site; a different site has its own chat). It checks for new
   messages every 3 seconds while open (a red badge on the tab counts unread ones

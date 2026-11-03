@@ -3931,6 +3931,7 @@
       ["Reveals played", fmt(S.stats.cutscenes)],
       ["Training level", fmt(S.training)],
       ["Gifts", fmt(S.stats.giftsSent || 0) + " auras sent · " + fmt(S.stats.giftsReceived || 0) + " received"],
+      ["Coins gifted", fmt(S.stats.coinsGifted || 0) + " sent · " + fmt(S.stats.coinsReceived || 0) + " received"],
       ["Daily gifts", fmt(S.daily.claims || 0) + " claimed · streak " + fmt(S.daily.streak)],
       ["Equipped kit", equippedAura() ? loadoutFor(equippedAura()).map(function (i) { return K.kitFor(equippedAura())[i].name; }).join(", ") : "—"]
     ];
@@ -4988,7 +4989,9 @@
     if (!giftReady()) return;
     var a = A.byId(id), sh = isShiny(a, shiny), have = giftBag(sh)[id] || 0;
     if (!have) return;
-    giftView = { id: id, shiny: sh, step: "who", to: "", toName: "", count: 1 };
+    giftView = { kind: "aura", id: id, shiny: sh, step: "who", to: "", toName: "", count: 1 };
+    $("#gift-title").textContent = "🎁 Gift an aura";
+    $("#gift-count-label").textContent = "How many";
     var box = $("#gift-aura");
     box.innerHTML = "";
     box.appendChild(makeOrb(a, "", sh));
@@ -5005,6 +5008,30 @@
     $("#gift-modal").classList.remove("hidden");
     $("#gift-to").focus();
   }
+
+  /* Open the gift popup in coins mode. */
+  function openGiftCoins() {
+    if (!giftReady()) return;
+    if (!(S.coins >= 1)) { errorToast(ERR.ACCOUNT, "You have no coins to gift yet."); return; }
+    giftView = { kind: "coins", step: "who", to: "", toName: "", coins: 0 };
+    $("#gift-title").textContent = "🎁 Gift coins";
+    $("#gift-count-label").textContent = "How many coins";
+    var box = $("#gift-aura");
+    box.innerHTML = "";
+    var icon = document.createElement("div"); icon.className = "gift-coin-icon"; icon.textContent = "🪙";
+    var info = document.createElement("div");
+    var name = document.createElement("div"); name.className = "card-title"; name.textContent = "Coins";
+    var sub = document.createElement("div"); sub.className = "card-sub"; sub.textContent = "You have " + fmt(S.coins) + " coins";
+    info.appendChild(name); info.appendChild(sub);
+    box.appendChild(icon); box.appendChild(info);
+    $("#gift-to").value = "";
+    $("#gift-count").value = String(Math.min(100, S.coins));
+    $("#gift-count").max = String(Math.floor(S.coins));
+    $("#gift-count-row").classList.remove("hidden");
+    setGiftStep("who");
+    $("#gift-modal").classList.remove("hidden");
+    $("#gift-to").focus();
+  }
   function closeGift() { giftView = null; $("#gift-modal").classList.add("hidden"); }
 
   function setGiftStep(step, error) {
@@ -5014,8 +5041,12 @@
     var conf = $("#gift-confirm");
     conf.classList.toggle("hidden", step !== "confirm");
     if (step === "confirm") {
-      var a = A.byId(giftView.id);
-      conf.textContent = "Send " + (giftView.count > 1 ? fmt(giftView.count) + " x " : "") + auraLabel(a, giftView.shiny) + " to " + giftView.toName + " (ID " + giftView.to + ")? It leaves your inventory and can't be taken back.";
+      if (giftView.kind === "coins") {
+        conf.textContent = "Send " + fmt(giftView.coins) + " coins to " + giftView.toName + " (ID " + giftView.to + ")? They leave your account and can't be taken back.";
+      } else {
+        var a = A.byId(giftView.id);
+        conf.textContent = "Send " + (giftView.count > 1 ? fmt(giftView.count) + " x " : "") + auraLabel(a, giftView.shiny) + " to " + giftView.toName + " (ID " + giftView.to + ")? It leaves your inventory and can't be taken back.";
+      }
     }
     $("#gift-submit").disabled = false;
     $("#gift-submit").textContent = step === "confirm" ? "🎁 Send gift" : "Next";
@@ -5025,19 +5056,26 @@
   function giftSubmit() {
     if (!giftView || !giftReady()) return;
     if (giftView.step === "confirm") { sendGift(); return; }
-    var to = $("#gift-to").value.trim(), have = giftBag(giftView.shiny)[giftView.id] || 0;
-    var count = Math.floor(Number($("#gift-count").value));
+    var to = $("#gift-to").value.trim(), amount = Math.floor(Number($("#gift-count").value));
     if (!/^\d{7}$/.test(to)) { setGiftStep("who", "A player ID is 7 digits."); return; }
     if (to === currentUser) { setGiftStep("who", "That's your own ID. Enter your friend's ID."); return; }
-    if (!(count >= 1)) { setGiftStep("who", "Send at least 1."); return; }
-    if (count > have) { setGiftStep("who", "You only have " + fmt(have) + "."); return; }
+    if (giftView.kind === "coins") {
+      if (!(amount >= 1)) { setGiftStep("who", "Send at least 1 coin."); return; }
+      if (amount > S.coins) { setGiftStep("who", "You only have " + fmt(S.coins) + " coins."); return; }
+      giftView.coins = amount;
+    } else {
+      var have = giftBag(giftView.shiny)[giftView.id] || 0;
+      if (!(amount >= 1)) { setGiftStep("who", "Send at least 1."); return; }
+      if (amount > have) { setGiftStep("who", "You only have " + fmt(have) + "."); return; }
+      giftView.count = amount;
+    }
     $("#gift-submit").disabled = true;
     $("#gift-error").textContent = "";
     var view = giftView;
     cloudCall("peek", { id: to }).then(function (r) {
       if (giftView !== view) return;
       if (r.status !== 200) { setGiftStep("who", r.data.error || "No player with ID " + to + "."); return; }
-      view.to = to; view.toName = r.data.name || "Player " + to; view.count = count;
+      view.to = to; view.toName = r.data.name || "Player " + to;
       setGiftStep("confirm");
     }, function (e) {
       if (giftView !== view) return;
@@ -5048,20 +5086,29 @@
   /* Take the auras out of this save and store it online together with the gift, so the friend's gift box and
      this account change together. If the server refuses, the auras come straight back. */
   function sendGift() {
-    var g = giftView, bag = giftBag(g.shiny), id = currentUser, m = accountMeta(id);
-    if ((bag[g.id] || 0) < g.count) { setGiftStep("who", "You don't have that many any more."); return; }
+    var g = giftView, id = currentUser, m = accountMeta(id), coins = g.kind === "coins";
+    var bag = coins ? null : giftBag(g.shiny);
+    if (coins ? S.coins < g.coins : (bag[g.id] || 0) < g.count) { setGiftStep("who", coins ? "You don't have that many coins any more." : "You don't have that many any more."); return; }
     if (Cloud.pushing || Cloud.claiming) { $("#gift-error").textContent = "Saving… try again in a moment."; return; }
-    var before = { n: bag[g.id], equipped: S.equipped, equippedShiny: S.equippedShiny };
-    bag[g.id] -= g.count;
-    if (!bag[g.id]) delete bag[g.id];
-    if (S.equipped === g.id && !!S.equippedShiny === g.shiny && !owns(g.id, g.shiny)) { S.equipped = null; S.equippedShiny = false; }
-    S.stats.giftsSent = (S.stats.giftsSent || 0) + g.count;
+    var before = coins ? { coins: S.coins } : { n: bag[g.id], equipped: S.equipped, equippedShiny: S.equippedShiny };
+    if (coins) {
+      S.coins -= g.coins;
+      S.stats.coinsGifted = (S.stats.coinsGifted || 0) + g.coins;
+    } else {
+      bag[g.id] -= g.count;
+      if (!bag[g.id]) delete bag[g.id];
+      if (S.equipped === g.id && !!S.equippedShiny === g.shiny && !owns(g.id, g.shiny)) { S.equipped = null; S.equippedShiny = false; }
+      S.stats.giftsSent = (S.stats.giftsSent || 0) + g.count;
+    }
     saveLocal();
     var undo = function () {
-      bag[g.id] = before.n;
-      S.equipped = before.equipped;
-      S.equippedShiny = before.equippedShiny;
-      S.stats.giftsSent -= g.count;
+      if (coins) { S.coins = before.coins; S.stats.coinsGifted -= g.coins; }
+      else {
+        bag[g.id] = before.n;
+        S.equipped = before.equipped;
+        S.equippedShiny = before.equippedShiny;
+        S.stats.giftsSent -= g.count;
+      }
       save();
       renderAll();
     };
@@ -5070,9 +5117,11 @@
     setCloudState("saving");
     $("#gift-submit").disabled = true;
     $("#gift-submit").textContent = "Sending…";
-    cloudCall("gift", { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, aura: g.id, shiny: g.shiny, count: g.count }).then(function (r) {
+    var payload = coins ? { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, coins: g.coins }
+                        : { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, aura: g.id, shiny: g.shiny, count: g.count };
+    cloudCall("gift", payload).then(function (r) {
       if (id !== currentUser) return;
-      var label = (g.count > 1 ? fmt(g.count) + " x " : "") + auraLabel(A.byId(g.id), g.shiny);
+      var label = coins ? fmt(g.coins) + " coins" : (g.count > 1 ? fmt(g.count) + " x " : "") + auraLabel(A.byId(g.id), g.shiny);
       if (r.status === 200) {
         var still = stamp !== Cloud.changes;
         updateMeta(id, { rev: r.data.rev, dirty: still });
@@ -5098,7 +5147,7 @@
     }, function (e) {
       undo();
       noteNetwork(e);
-      if (giftView === g) setGiftStep("who", "Error 404: can't reach the account server, so the gift wasn't sent. Your aura is safe.");
+      if (giftView === g) setGiftStep("who", "Error 404: can't reach the account server, so the gift wasn't sent. Your " + (g.kind === "coins" ? "coins are" : "aura is") + " safe.");
     }).then(function () { Cloud.pushing = false; });
   }
 
@@ -5115,19 +5164,30 @@
       all.forEach(function (g) {
         if (!g || S.giftsOpened.indexOf(g.id) >= 0) return;
         S.giftsOpened.push(g.id);
+        var from = g.fromName || "A player";
+        if (g.coins != null) {
+          var coins = Math.max(0, Math.floor(Number(g.coins) || 0));
+          if (!coins) return;
+          S.coins += coins;
+          S.stats.earned = (S.stats.earned || 0) + coins;
+          S.stats.coinsReceived = (S.stats.coinsReceived || 0) + coins;
+          fresh.push({ id: g.id, coins: coins, from: from });
+          return;
+        }
         var a = A.byId(g.aura), n = Math.max(1, Math.floor(Number(g.count) || 1));
         if (!a) return; /* an aura this version of the game doesn't know: dropped from the box */
         var sh = isShiny(a, g.shiny);
         giftBag(sh)[a.id] = (giftBag(sh)[a.id] || 0) + n;
         S.stats.giftsReceived = (S.stats.giftsReceived || 0) + n;
-        fresh.push({ id: g.id, a: a, sh: sh, n: n, from: g.fromName || "A player" });
+        fresh.push({ id: g.id, a: a, sh: sh, n: n, from: from });
       });
       if (S.giftsOpened.length > 300) S.giftsOpened = S.giftsOpened.slice(-300);
       saveLocal();
       var announce = function () {
         if (!fresh.length) return;
         fresh.slice(0, 3).forEach(function (f) {
-          toast("🎁 " + f.from + " sent you " + (f.n > 1 ? fmt(f.n) + " x " : "") + auraLabel(f.a, f.sh) + "!", "gold", 8000);
+          var what = f.coins != null ? fmt(f.coins) + " coins" : (f.n > 1 ? fmt(f.n) + " x " : "") + auraLabel(f.a, f.sh);
+          toast("🎁 " + f.from + " sent you " + what + "!", "gold", 8000);
         });
         if (fresh.length > 3) toast("🎁 …and " + (fresh.length - 3) + " more gifts! Check your inventory.", "gold", 8000);
         Sound.rare(1);
@@ -5150,10 +5210,16 @@
         } else {
           /* Another device is rolling on this account (145): put the gifts back; that device collects them. */
           fresh.forEach(function (f) {
-            var bag = giftBag(f.sh);
-            bag[f.a.id] -= f.n;
-            if (!(bag[f.a.id] > 0)) delete bag[f.a.id];
-            S.stats.giftsReceived -= f.n;
+            if (f.coins != null) {
+              S.coins -= f.coins;
+              S.stats.earned = Math.max(0, (S.stats.earned || 0) - f.coins);
+              S.stats.coinsReceived = Math.max(0, (S.stats.coinsReceived || 0) - f.coins);
+            } else {
+              var bag = giftBag(f.sh);
+              bag[f.a.id] -= f.n;
+              if (!(bag[f.a.id] > 0)) delete bag[f.a.id];
+              S.stats.giftsReceived -= f.n;
+            }
             S.giftsOpened = S.giftsOpened.filter(function (x) { return x !== f.id; });
           });
           saveLocal();
@@ -5902,6 +5968,7 @@
   $("#inv-search").addEventListener("input", function () { inventoryShown = INVENTORY_PAGE; renderInventory(); });
   $("#inv-more").addEventListener("click", function () { inventoryShown += INVENTORY_PAGE; renderInventory(); });
   $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });
+  $("#btn-gift-coins").addEventListener("click", openGiftCoins);
   $("#gift-close").addEventListener("click", closeGift);
   $("#gift-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeGift(); });
   ["#gift-to", "#gift-count"].forEach(function (sel) {
