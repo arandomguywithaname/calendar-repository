@@ -98,7 +98,13 @@ loadout, and fight bots or a friend.
   sigil (weaken), a storm drops a forked lightning bolt (stun), a mirror spins in and
   throws back beams (mirror), an energy sphere fires a huge beam (burst), meteors rain
   down (barrage), a reaper's scythe sweeps (execute) and a hex dome builds itself
-  (shield). The target reacts in the arena when the hit lands: it is cut in two and
+  (shield). **Every aura has its own signature** behind its moves, built from its id:
+  a unique magic circle (a 3- to 9-sided polygon or star, 1 to 3 rings, its own glyph
+  alphabet, core emblem), its own drifting particles (embers, petals, snow, sparks,
+  bubbles, shards, ash) and backdrop (rays, nebula, starfield, aurora, rain, void
+  rings or a grid), all in the aura's colours. An aura's moves share its signature,
+  so two auras with the same move look clearly different while the action (sword,
+  hammer...) still reads the same. The target reacts in the arena when the hit lands: it is cut in two and
   slides back together, squashed flat, zapped, knocked back, poisoned green, chained,
   drained grey and so on (bots' hits do this too).
 - **Cinematic moves for auras rarer than 1 in 3,000,000.** Every move of those auras

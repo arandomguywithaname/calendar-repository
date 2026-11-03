@@ -2086,7 +2086,7 @@
   var UFX = (function () {
     var el = $("#ult"), canvas = $("#ult-canvas"), ctx = canvas.getContext("2d");
     var callout = $("#ult-callout"), nameEl = $("#ult-name"), userEl = $("#ult-user");
-    var anim = null, raf = 0;
+    var anim = null, raf = 0, drawingEnv = null;
     var TAU = Math.PI * 2;
     function ease(p) { return 1 - Math.pow(1 - p, 3); }
     function lerp(a, b, p) { return a + (b - a) * p; }
@@ -2291,28 +2291,8 @@
           var fade = 1 - seg(p, 0.92, 1), intro = ease(seg(p, 0, IN)), q = seg(p, IN, OUT), R = Math.hypot(e.w, e.h) / 2, s = Math.min(e.w, e.h);
           var hit = Math.sin(seg(q, BI - 0.05, BI + 0.1) * Math.PI), after = seg(q, BI + 0.03, 1);
           ctx.fillStyle = "rgba(2,1,8," + (0.9 * Math.min(1, p / 0.06) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
-          /* rays of light */
-          ctx.save(); ctx.translate(e.cx, e.cy); ctx.rotate(p * 0.7);
-          for (var i = 0; i < 14; i++) {
-            ctx.rotate(TAU / 14);
-            var g = ctx.createLinearGradient(0, 0, R, 0); g.addColorStop(0, i % 2 ? e.c1 : e.c2); g.addColorStop(1, "rgba(0,0,0,0)");
-            ctx.globalAlpha = (0.12 + 0.18 * hit) * intro * fade; ctx.fillStyle = g;
-            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(R, -R * 0.06); ctx.lineTo(R, R * 0.06); ctx.closePath(); ctx.fill();
-          }
-          ctx.restore(); ctx.globalAlpha = 1;
-          /* the rune circle */
-          var rr = s * 0.36 * (0.55 + 0.45 * intro) * (1 + 0.18 * hit);
-          ctx.save(); ctx.translate(e.cx, e.cy); ctx.globalAlpha = 0.9 * intro * fade * (1 - after * 0.7);
-          ctx.shadowColor = e.c1; ctx.shadowBlur = 22; ctx.strokeStyle = e.c1; ctx.fillStyle = e.c1; ctx.lineWidth = 3;
-          ctx.save(); ctx.rotate(p * 2.4);
-          ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, rr * 0.8, 0, TAU); ctx.stroke();
-          ctx.font = Math.round(rr * 0.11) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          for (var k = 0; k < 24; k++) { var a = k / 24 * TAU; ctx.save(); ctx.rotate(a); ctx.fillText(RUNES[k % RUNES.length], 0, -rr * 0.9); ctx.fillRect(-1, -rr, 2, rr * 0.05); ctx.restore(); }
-          ctx.restore();
-          ctx.save(); ctx.rotate(-p * 3.6); ctx.strokeStyle = e.c2; ctx.shadowColor = e.c2; ctx.lineWidth = 2.5;
-          for (var tri = 0; tri < 2; tri++) { ctx.beginPath(); for (var v = 0; v < 3; v++) { var va = tri * Math.PI / 3 + v * TAU / 3 - Math.PI / 2; ctx.lineTo(Math.cos(va) * rr * 0.76, Math.sin(va) * rr * 0.76); } ctx.closePath(); ctx.stroke(); }
-          ctx.beginPath(); ctx.arc(0, 0, rr * 0.38, 0, TAU); ctx.stroke();
-          ctx.restore(); ctx.restore(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+          /* the aura's own signature, big and bold */
+          if (e.sig) drawSig(e, p, true, fade);
           /* speed lines rushing in during the intro, out at the impact */
           ps.lines.forEach(function (l) {
             var inward = p < IN, k = inward ? ((intro * 1.6 + l.o) % 1) : after;
@@ -2324,7 +2304,7 @@
           /* the move itself, a little bigger */
           if (p >= IN) {
             ctx.save(); var z = 1.06 + 0.08 * hit; ctx.translate(e.cx, e.cy); ctx.scale(z, z); ctx.translate(-e.cx, -e.cy);
-            base.draw(q, e, ps.base); ctx.restore();
+            e.skipSig = true; base.draw(q, e, ps.base); e.skipSig = false; ctx.restore();
           }
           /* impact frame */
           if (q > BI - 0.01 && q < BI + 0.04) {
@@ -2570,11 +2550,141 @@
        (a sword swings, a hammer slams down, a scope locks on...), builds up, pays off with an impact, and fades.
        `impact` is when it lands: the shake, the boom and the target's reaction in the arena happen then. ---------- */
     function cineDark(p) {
-      var fade = 1 - seg(p, 0.86, 1);
+      var e = drawingEnv, fade = 1 - seg(p, 0.86, 1);
+      if (e && e.skipSig) return fade; /* a wrapper (epic) already painted the backdrop and sigil */
       ctx.fillStyle = "rgba(3,2,10," + (0.9 * Math.min(1, p / 0.08) * fade) + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (e && e.sig) drawSig(e, p, false, fade);
       return fade;
     }
     function moteParts(n) { return parts(n, function () { return { x: Math.random(), y: Math.random(), r: rnd(0.5, 1.8), v: rnd(0.05, 0.25) }; }); }
+
+    /* ---------- Per-aura signature: every aura gets its own magic circle, glyphs, particles and backdrop,
+       derived from its id, so its abilities look unlike any other aura's (the archetype action still plays on
+       top so you can tell a strike from a smash). ---------- */
+    function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+    var GLYPHSETS = [
+      "\u16A0\u16A2\u16A6\u16A8\u16B1\u16B2\u16B7\u16B9\u16BA\u16BE\u16C1\u16C3\u16C7\u16C8\u16C9\u16CA\u16CF\u16D2\u16D6\u16D7\u16DA\u16DC\u16DE\u16DF",
+      "\u03B1\u03B2\u03B3\u03B4\u03B5\u03B6\u03B7\u03B8\u03BB\u03BC\u03BE\u03C0\u03C1\u03C3\u03C6\u03C8\u03C9",
+      "\u2600\u263D\u263F\u2640\u2642\u2643\u2644\u2605\u2606\u2735\u2726\u2727\u269B\u2638",
+      "\u25C7\u25C6\u25CB\u25CF\u25A1\u25A0\u25B3\u25BD\u25C8\u2756\u273B\u273D\u2742",
+      "\u2648\u2649\u264A\u264B\u264C\u264D\u264E\u264F\u2650\u2651\u2652\u2653",
+      "\u16C6\u16B7\u25A0\u2726\u25B2\u16D7\u2605\u25C6\u2742\u16BE\u25CF\u273F"
+    ];
+    var SIG_PARTICLES = ["embers", "petals", "snow", "sparks", "bubbles", "motes", "shards", "ash"];
+    var SIG_BACKDROPS = ["rays", "nebula", "starfield", "aurora", "rain", "voidrings", "grid"];
+    var SIG_CORES = ["dot", "poly", "ring", "eye", "cross", "sun", "diamond"];
+
+    /* A deterministic bundle of look settings for one aura. */
+    function auraSig(aura) {
+      var id = aura && aura.id != null ? aura.id : 0, rng = mulberry32((id + 1) * 2654435761 >>> 0);
+      var sig = {
+        sides: 3 + Math.floor(rng() * 7),           /* 3..9 */
+        star: rng() < 0.5,                          /* pointed star vs flat polygon */
+        rings: 1 + Math.floor(rng() * 3),           /* 1..3 concentric rings */
+        spin: rng() < 0.5 ? 1 : -1,
+        spd: 1 + rng() * 2.4,
+        glyph: Math.floor(rng() * GLYPHSETS.length),
+        glyphN: 10 + Math.floor(rng() * 16),
+        ticks: rng() < 0.6,
+        inner: rng() < 0.6,
+        innerStar: rng() < 0.5,
+        innerSides: 3 + Math.floor(rng() * 5),
+        particle: Math.floor(rng() * SIG_PARTICLES.length),
+        backdrop: Math.floor(rng() * SIG_BACKDROPS.length),
+        core: Math.floor(rng() * SIG_CORES.length),
+        wob: rng() * TAU
+      };
+      /* stable particle seeds so nothing jitters frame to frame */
+      sig.pp = parts(70, function () { return { x: rng(), y: rng(), a: rng() * TAU, d: rng(), v: 0.2 + rng() * 1.1, r: 0.6 + rng() * 2.8, ph: rng() * TAU, o: rng() }; });
+      /* stable backdrop seeds */
+      sig.bb = parts(60, function () { return { x: rng(), y: rng(), r: 0.05 + rng() * 0.2, a: rng() * TAU, l: rng(), o: rng(), tw: rng() * TAU }; });
+      return sig;
+    }
+
+    function sigPoly(n, r, star, inner) {
+      ctx.beginPath();
+      var pts = star ? n * 2 : n;
+      for (var i = 0; i < pts; i++) { var a = i / pts * TAU - Math.PI / 2, rr = star && i % 2 ? r * (inner || 0.5) : r; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+      ctx.closePath();
+    }
+
+    /* Draw an aura's signature: backdrop, then a rotating magic circle with glyphs, then drifting particles.
+       `big` makes it the bold centrepiece (for the rarest auras); otherwise it sits softly behind the move. */
+    function drawSig(e, p, big, fade) {
+      var sig = e.sig, s = Math.min(e.w, e.h), R = Math.hypot(e.w, e.h) / 2, cx = e.cx, cy = e.cy;
+      fade = fade == null ? 1 : fade;
+      var intro = ease(seg(p, 0, big ? 0.22 : 0.3)), base = (big ? 0.95 : 0.5) * intro * fade;
+      var col = e.colors && e.colors.length ? e.colors : [e.c1, e.c2];
+      var pick = function (i) { return col[i % col.length]; };
+
+      /* ---- backdrop ---- */
+      var bd = SIG_BACKDROPS[sig.backdrop];
+      if (bd === "rays") {
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(p * 0.6 * sig.spin);
+        for (var i = 0; i < 16; i++) { ctx.rotate(TAU / 16); var g = ctx.createLinearGradient(0, 0, R, 0); g.addColorStop(0, pick(i)); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.globalAlpha = 0.12 * base; ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(R, -R * 0.05); ctx.lineTo(R, R * 0.05); ctx.fill(); }
+        ctx.restore();
+      } else if (bd === "nebula") {
+        sig.bb.slice(0, 8).forEach(function (b, i) { var x = b.x * e.w, y = b.y * e.h, rr = s * (0.15 + b.r); var g = ctx.createRadialGradient(x, y, 0, x, y, rr); g.addColorStop(0, pick(i)); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.globalAlpha = 0.18 * base; ctx.fillStyle = g; ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2); });
+      } else if (bd === "starfield") {
+        sig.bb.forEach(function (b) { ctx.globalAlpha = (0.3 + 0.5 * Math.abs(Math.sin(b.tw + p * 6))) * base; spark(b.x * e.w, b.y * e.h, b.o * 1.8 + 0.4, "#fff", ctx.globalAlpha); });
+      } else if (bd === "aurora") {
+        for (var k = 0; k < 4; k++) { ctx.globalAlpha = 0.1 * base; ctx.strokeStyle = pick(k); ctx.lineWidth = s * 0.08; ctx.beginPath(); for (var x = 0; x <= e.w; x += 30) ctx.lineTo(x, e.h * (0.2 + k * 0.2) + Math.sin(x * 0.01 + p * 3 + k) * s * 0.06); ctx.stroke(); }
+      } else if (bd === "rain") {
+        ctx.globalAlpha = 0.25 * base; ctx.strokeStyle = pick(0); ctx.lineWidth = 1.5;
+        sig.bb.forEach(function (b) { var y = ((b.y + p * b.l * 2) % 1) * e.h; ctx.beginPath(); ctx.moveTo(b.x * e.w, y); ctx.lineTo(b.x * e.w + s * 0.03, y + s * 0.07); ctx.stroke(); });
+      } else if (bd === "voidrings") {
+        for (var vr = 0; vr < 5; vr++) { var q = ((p * 0.6 + vr / 5) % 1); ctx.globalAlpha = (1 - q) * 0.2 * base; ring(cx, cy, R * q, pick(vr), 2, ctx.globalAlpha); }
+      } else { /* grid */
+        ctx.globalAlpha = 0.1 * base; ctx.strokeStyle = pick(0); ctx.lineWidth = 1; var gs = s * 0.08, off = (p * gs) % gs;
+        for (var gx = -off; gx < e.w; gx += gs) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, e.h); ctx.stroke(); }
+        for (var gy = -off; gy < e.h; gy += gs) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(e.w, gy); ctx.stroke(); }
+      }
+      ctx.globalAlpha = 1;
+
+      /* ---- the magic circle ---- */
+      var rr = s * (big ? 0.38 : 0.3) * (0.6 + 0.4 * intro);
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.globalAlpha = (big ? 0.9 : 0.5) * intro * fade;
+      ctx.shadowColor = e.c1; ctx.shadowBlur = big ? 22 : 12; ctx.lineWidth = big ? 3 : 2;
+      ctx.save(); ctx.rotate(p * sig.spd * sig.spin);
+      for (var ri = 0; ri < sig.rings; ri++) { ctx.strokeStyle = pick(ri); ctx.beginPath(); ctx.arc(0, 0, rr * (1 - ri * 0.14), 0, TAU); ctx.stroke(); }
+      ctx.strokeStyle = e.c1; sigPoly(sig.sides, rr * 0.86, sig.star, 0.52); ctx.stroke();
+      if (sig.ticks) { for (var t2 = 0; t2 < sig.glyphN; t2++) { var ta = t2 / sig.glyphN * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(ta) * rr, Math.sin(ta) * rr); ctx.lineTo(Math.cos(ta) * rr * 1.06, Math.sin(ta) * rr * 1.06); ctx.stroke(); } }
+      ctx.restore();
+      /* glyph ring, counter-spin */
+      ctx.save(); ctx.rotate(-p * sig.spd * 0.7 * sig.spin);
+      ctx.fillStyle = e.c1; ctx.font = Math.round(rr * 0.12) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      var gl = GLYPHSETS[sig.glyph];
+      for (var gi = 0; gi < sig.glyphN; gi++) { var ga = gi / sig.glyphN * TAU; ctx.save(); ctx.rotate(ga); ctx.fillText(gl.charAt(gi % gl.length), 0, -rr * 0.93); ctx.restore(); }
+      ctx.restore();
+      /* inner shape */
+      if (sig.inner) { ctx.save(); ctx.rotate(p * sig.spd * 1.5 * sig.spin + sig.wob); ctx.strokeStyle = e.c2; ctx.shadowColor = e.c2; sigPoly(sig.innerSides, rr * 0.6, sig.innerStar, 0.5); ctx.stroke(); ctx.restore(); }
+      /* core emblem */
+      ctx.rotate(-p * sig.spd * sig.spin); ctx.fillStyle = e.c1; ctx.strokeStyle = e.c1; ctx.shadowColor = e.c1; ctx.shadowBlur = big ? 26 : 14;
+      var cr = rr * 0.22, core = SIG_CORES[sig.core];
+      if (core === "dot") { spark(0, 0, cr * 0.5, e.c1, ctx.globalAlpha); }
+      else if (core === "poly") { sigPoly(sig.sides, cr, false, 0); ctx.fill(); }
+      else if (core === "ring") { ctx.lineWidth = big ? 4 : 2; ctx.beginPath(); ctx.arc(0, 0, cr * 0.7, 0, TAU); ctx.stroke(); }
+      else if (core === "eye") { ctx.save(); ctx.scale(1, 0.6); ctx.beginPath(); ctx.arc(0, 0, cr, 0, TAU); ctx.fill(); ctx.restore(); ctx.fillStyle = "#0b0a12"; spark(0, 0, cr * 0.4, "#0b0a12", ctx.globalAlpha); }
+      else if (core === "cross") { ctx.fillRect(-cr * 0.18, -cr, cr * 0.36, cr * 2); ctx.fillRect(-cr, -cr * 0.18, cr * 2, cr * 0.36); }
+      else if (core === "sun") { for (var sp = 0; sp < 12; sp++) { var sa = sp / 12 * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(sa) * cr * 0.5, Math.sin(sa) * cr * 0.5); ctx.lineTo(Math.cos(sa) * cr * 1.1, Math.sin(sa) * cr * 1.1); ctx.lineWidth = 2; ctx.stroke(); } spark(0, 0, cr * 0.5, e.c1, ctx.globalAlpha); }
+      else { ctx.save(); ctx.rotate(Math.PI / 4); ctx.fillRect(-cr * 0.5, -cr * 0.5, cr, cr); ctx.restore(); }
+      ctx.restore(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+
+      /* ---- particles ---- */
+      var kind = SIG_PARTICLES[sig.particle], pa = base * (big ? 1 : 0.8);
+      sig.pp.forEach(function (q, i) {
+        var c = i % 3 === 0 ? "#fff" : pick(i), x, y, a2 = pa;
+        if (kind === "embers" || kind === "bubbles" || kind === "ash") { var t = ((q.y + p * q.v * (kind === "ash" ? 0.4 : 0.7)) % 1); x = q.x * e.w + Math.sin(q.ph + p * 4) * 16; y = (1 - t) * e.h; a2 *= t; if (kind === "ash") c = i % 2 ? "#8c8276" : pick(i); }
+        else if (kind === "petals" || kind === "snow") { var t2 = ((q.y + p * q.v * 0.6) % 1); x = q.x * e.w + Math.sin(q.ph + p * (kind === "petals" ? 5 : 2)) * (kind === "petals" ? 34 : 14); y = t2 * e.h; a2 *= 0.9; if (kind === "snow") c = "#eef"; }
+        else if (kind === "sparks" || kind === "shards") { var t3 = (p * q.v * 1.6 + q.o) % 1; var d = R * (0.1 + t3 * 0.9); x = cx + Math.cos(q.a) * d; y = cy + Math.sin(q.a) * d; a2 *= (1 - t3); }
+        else { var t4 = ((q.y + p * q.v * 0.25) % 1); x = q.x * e.w; y = t4 * e.h; a2 *= 0.6; }
+        if (kind === "shards") { ctx.save(); ctx.translate(x, y); ctx.rotate(q.a + p * 6); ctx.globalAlpha = a2; ctx.fillStyle = c; ctx.fillRect(-q.r, -q.r * 0.4, q.r * 2, q.r * 0.8); ctx.restore(); }
+        else if (kind === "petals") { ctx.save(); ctx.translate(x, y); ctx.rotate(q.ph + p * 5); ctx.globalAlpha = a2; ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, q.r * 1.6, q.r * 0.7, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+        else spark(x, y, q.r * (big ? 1 : 0.8), c, a2);
+      });
+      ctx.globalAlpha = 1;
+    }
     function motes(e, ms, p, fade, col) { ms.forEach(function (m) { spark(m.x * e.w, ((m.y - p * m.v) % 1 + 1) % 1 * e.h, m.r, col || "#fff", 0.35 * fade); }); }
     function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); }
     function bolt(x1, y1, x2, y2, jag, col, width, depth) {
@@ -2974,7 +3084,7 @@
       var fr = fromEl.getBoundingClientRect(), tr = toEl.getBoundingClientRect();
       var env = { w: canvas.width, h: canvas.height, cx: canvas.width / 2, cy: canvas.height / 2,
         from: { x: fr.left + fr.width / 2, y: fr.top + fr.height / 2 }, to: { x: tr.left + tr.width / 2, y: tr.top + tr.height / 2 },
-        c1: aura.c1, c2: aura.c2, colors: aura.colors };
+        c1: aura.c1, c2: aura.c2, colors: aura.colors, sig: auraSig(aura) };
       anim = { def: def, env: env, start: performance.now(), parts: def.parts ? def.parts(env) : null };
       el.style.setProperty("--c1", aura.c1); el.style.setProperty("--c2", aura.c2);
       nameEl.textContent = abilityName; userEl.textContent = userName;
@@ -2987,6 +3097,7 @@
       if (!anim) return;
       var p = Math.min(1, (now - anim.start) / anim.def.dur);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawingEnv = anim.env; anim.env.skipSig = false;
       ctx.save(); try { anim.def.draw(p, anim.env, anim.parts); } catch (e) { p = 1; } ctx.restore();
       if (p >= 1) { anim = null; el.classList.add("hidden"); ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
       raf = requestAnimationFrame(frame);
