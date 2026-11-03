@@ -89,8 +89,18 @@ loadout, and fight bots or a friend.
   falling hammer, lightning, a nova, a hex shield, a life-drain stream, and so on),
   with the attacker lunging or casting, a floating ability name, and a matching
   sound. When the attacker's aura is Legendary or rarer, the ability takes over the
-  whole screen: a cinematic full-screen version of the effect plus a callout with
-  the ability's name.
+  whole screen as its own little scene, like the snap: a giant sword forms and
+  swings in one arc that cuts the screen in two (strike), a colossal hammer slams the
+  ground and cracks it (heavy blow), a shield drops and unfolds into a hex wall
+  (guard), wings of light unfurl (heal), a sniper scope locks on and cracks the glass
+  (precision), crimson tendrils drag life back (drain), a giant eye opens (focus), a
+  venom flask shatters into a skull cloud (poison), chains wrap the target over a curse
+  sigil (weaken), a storm drops a forked lightning bolt (stun), a mirror spins in and
+  throws back beams (mirror), an energy sphere fires a huge beam (burst), meteors rain
+  down (barrage), a reaper's scythe sweeps (execute) and a hex dome builds itself
+  (shield). The target reacts in the arena when the hit lands: it is cut in two and
+  slides back together, squashed flat, zapped, knocked back, poisoned green, chained,
+  drained grey and so on (bots' hits do this too).
 - **Cinematic moves for auras rarer than 1 in 3,000,000.** Every move of those auras
   plays as a cinematic: cinema bars, the screen dropping to black, rays of light and
   a giant spinning rune circle in the aura's colours, speed lines rushing in, the
@@ -115,7 +125,8 @@ loadout, and fight bots or a friend.
   Blitz and Time Warp (roll cooldown cut to 1/8), a Mystery Potion that turns into a
   random potion (up to the Infinity Serum) and a Mega Mystery Potion that only turns
   into potions worth 1,000 coins or more (up to Celestial Nectar). Battle: healing,
-  Greater Healing and Full Restore; Strength, Titan's Brew, Rage Potion and Godslayer
+  Greater Healing and Full Restore (you can carry 3 healing potions in total; older
+  saves with more keep the 3 strongest and get the rest back as coins); Strength, Titan's Brew, Rage Potion and Godslayer
   Tonic (+50% up to +400% damage); Iron Skin and Steel Wall (start with a 30% or 60%
   shield); Second Wind and Phoenix Feather (survive a killing blow once, back at 40%
   or full HP). Potions of the same kind don't stack: the strongest one counts, and a

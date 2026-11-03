@@ -75,6 +75,8 @@
   var POTION_ORDER = Object.keys(POTIONS);
   /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
   var BUY_AMOUNTS = [1, 2, 5, 10, 100, 1000, "max"];
+  /* Healing potions (Healing, Greater Healing and Full Restore together) a player can carry. */
+  var MAX_HEALS = 3;
   var POTION_GROUPS = [["luck", "Luck potions"], ["special", "Magnets and shiny potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
 
   /* Daily gift ladder: day 1..7 of a streak. Coins scale up with every completed week. */
@@ -228,6 +230,7 @@
       if (!merged.shinyInventory || typeof merged.shinyInventory !== "object") merged.shinyInventory = {};
       if (!merged.bought || typeof merged.bought !== "object") merged.bought = {};
       if (!Array.isArray(merged.giftsOpened)) merged.giftsOpened = [];
+      trimHeals(merged);
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
       delete merged.goldRolls;
@@ -237,6 +240,33 @@
     } catch (e) {
       return base;
     }
+  }
+
+  /* Saves from before the healing potion limit can carry more than MAX_HEALS: keep the strongest ones and
+     turn the rest back into the coins they cost. */
+  function trimHeals(st) {
+    if (!st.potions || typeof st.potions !== "object") return;
+    var keys = POTION_ORDER.filter(function (k) { return POTIONS[k].kind === "heal"; }).sort(function (a, b) { return POTIONS[b].pct - POTIONS[a].pct; });
+    var left = MAX_HEALS, refund = 0, removed = 0;
+    keys.forEach(function (k) {
+      var n = Math.max(0, Math.floor(Number(st.potions[k]) || 0)), keep = Math.min(n, left);
+      left -= keep;
+      if (n > keep) { refund += (n - keep) * POTIONS[k].cost; removed += n - keep; }
+      if (st.potions[k] !== undefined) st.potions[k] = keep;
+    });
+    if (!removed) return;
+    st.coins = (Number(st.coins) || 0) + refund;
+    setTimeout(function () { toast("❤️ You can carry " + MAX_HEALS + " healing potions now, so " + fmt(removed) + " extra were turned back into " + fmt(refund) + " coins.", "gold", 8000); }, 1200);
+  }
+
+  function healsOwned() { return healKeys().reduce(function (n, k) { return n + (S.potions[k] || 0); }, 0); }
+  /* Room for more of a potion: healing potions are capped at MAX_HEALS together, everything else is unlimited. */
+  function potionRoom(key) { return POTIONS[key].kind === "heal" ? Math.max(0, MAX_HEALS - healsOwned()) : Infinity; }
+  /* Add up to `n` of a potion, as many as there is room for. Returns how many were added. */
+  function addPotion(key, n) {
+    var k = Math.min(n, potionRoom(key));
+    if (k > 0) S.potions[key] = (S.potions[key] || 0) + k;
+    return Math.max(0, k);
   }
 
   function save() {
@@ -1048,8 +1078,9 @@
     addCoins(r.coins);
     var lines = ["+" + fmt(r.coins) + " coins"];
     Object.keys(r.potions).forEach(function (k) {
-      S.potions[k] = (S.potions[k] || 0) + r.potions[k];
-      lines.push(POTIONS[k].icon + " " + POTIONS[k].name + (r.potions[k] > 1 ? " x" + r.potions[k] : ""));
+      var got = addPotion(k, r.potions[k]);
+      if (got) lines.push(POTIONS[k].icon + " " + POTIONS[k].name + (got > 1 ? " x" + got : ""));
+      else lines.push(POTIONS[k].icon + " no " + POTIONS[k].name + " (you already carry " + MAX_HEALS + " healing potions)");
     });
     Sound.win();
     toast("🎁 Daily gift day " + r.day + ": " + lines.join(" · "), "gold");
@@ -1109,7 +1140,7 @@
     } else if (p.kind === "mystery") {
       var won = rollMysteryPotion(p);
       S.potions[key]--;
-      S.potions[won] = (S.potions[won] || 0) + 1;
+      addPotion(won, 1);
       Sound.buy();
       toast(p.icon + " The " + p.name + " became " + POTIONS[won].icon + " " + POTIONS[won].name + "!", "gold");
       save();
@@ -1126,7 +1157,8 @@
   /* Mystery potion odds: mostly cheap potions, with a small shot at the great ones. The mystery potion's
      `minCost` and `maxCost` bound which potions it can become. */
   function rollMysteryPotion(m) {
-    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity); });
+    /* never a healing potion when there's no room to carry it */
+    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity) && potionRoom(k) > 0; });
     var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var r = Math.random() * total;
@@ -1135,24 +1167,27 @@
   }
 
   /* How many of a potion one Buy click gets: the chosen Buy amount, or for Max as many as the coins cover. */
-  function buyCount(p) {
-    var amt = S.settings.buyAmount;
-    if (amt === "max") return p.cost > 0 ? Math.floor(S.coins / p.cost) : 1;
-    return BUY_AMOUNTS.indexOf(amt) >= 0 ? amt : 1;
+  function buyCount(p, key) {
+    var amt = S.settings.buyAmount, n;
+    if (amt === "max") n = p.cost > 0 ? Math.floor(S.coins / p.cost) : 1;
+    else n = BUY_AMOUNTS.indexOf(amt) >= 0 ? amt : 1;
+    return Math.min(n, potionRoom(key));
   }
 
   function buyPotion(key) {
     var p = POTIONS[key];
     if (!p) return;
     if (p.collector && !collectionDone()) return;
-    var n = buyCount(p), total = n * p.cost;
+    if (potionRoom(key) < 1) { errorToast(ERR.POTION_BUY, "You can only carry " + MAX_HEALS + " healing potions. Use one in a bot fight first."); return; }
+    var n = buyCount(p, key), total = n * p.cost;
     if (n < 1 || S.coins < total) { errorToast(ERR.POTION_BUY, "Not enough coins for " + (n > 1 ? fmt(n) + " x " : "") + p.name + " (" + fmt(n > 1 ? total : p.cost) + " needed)."); return; }
     var wasDone = collectionDone();
     S.coins -= total;
-    S.potions[key] = (S.potions[key] || 0) + n;
+    addPotion(key, n);
     S.bought[key] = (S.bought[key] || 0) + n;
     Sound.buy();
-    toast("Bought " + (n > 1 ? fmt(n) + " x " + p.name + " for " + fmt(total) + " coins" : p.name));
+    var capped = p.kind === "heal" && typeof S.settings.buyAmount === "number" && S.settings.buyAmount > n;
+    toast("Bought " + (n > 1 ? fmt(n) + " x " + p.name + " for " + fmt(total) + " coins" : p.name) + (capped ? " (you can carry " + MAX_HEALS + " healing potions)" : ""));
     if (!wasDone && collectionDone()) {
       var ev = POTIONS.everything;
       toast(ev.icon + " You bought every potion! A new one appeared in the shop: " + ev.name, "gold", 7000);
@@ -1200,8 +1235,14 @@
       card.innerHTML =
         "<div class=\"row\"><div class=\"big-icon\">" + p.icon + "</div><div><div class=\"card-title\">" + p.name + "</div><div class=\"card-sub\">" + p.desc + "</div></div></div>" +
         "<div class=\"row\"><span class=\"price\">" + fmt(p.cost) + " coins</span><span class=\"card-sub\">owned: " + fmt(S.potions[key] || 0) + "</span></div>";
-      var n = buyCount(p);
-      if (S.settings.buyAmount !== 1) {
+      var n = buyCount(p, key), full = p.kind === "heal" && potionRoom(key) < 1;
+      if (p.kind === "heal") {
+        var carry = document.createElement("div");
+        carry.className = "card-sub";
+        carry.textContent = "Carrying " + healsOwned() + " / " + MAX_HEALS + " healing potions";
+        card.appendChild(carry);
+      }
+      if (S.settings.buyAmount !== 1 && !full) {
         var total = document.createElement("div");
         total.className = "card-sub buy-total";
         total.textContent = n > 0 ? "x" + fmt(n) + " = " + fmt(n * p.cost) + " coins" : "Not enough coins for one yet";
@@ -1210,8 +1251,8 @@
       var actions = document.createElement("div");
       actions.className = "actions";
       var buy = document.createElement("button");
-      buy.className = "btn small primary" + (n < 1 || S.coins < n * p.cost ? " cant-afford" : "");
-      buy.textContent = S.settings.buyAmount === 1 ? "Buy" : S.settings.buyAmount === "max" && n < 1 ? "Buy max" : "Buy x" + fmt(n);
+      buy.className = "btn small primary" + (full || n < 1 || S.coins < n * p.cost ? " cant-afford" : "");
+      buy.textContent = full ? "Full" : S.settings.buyAmount === 1 ? "Buy" : S.settings.buyAmount === "max" && n < 1 ? "Buy max" : "Buy x" + fmt(n);
       buy.addEventListener("click", function () { buyPotion(key); });
       actions.appendChild(buy);
       if (S.potions[key]) {
@@ -2239,8 +2280,8 @@
        drifting up afterwards. `impact` is when the hit lands, for the shake and the boom. */
     var RUNES = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
     function epicFx(base) {
-      var IN = 0.24, OUT = 0.95;
-      return { dur: Math.round(base.dur / (OUT - IN)), impact: IN + 0.45 * (OUT - IN),
+      var IN = 0.24, OUT = 0.95, BI = base.impact || 0.45;
+      return { dur: Math.round(base.dur / (OUT - IN)), impact: IN + BI * (OUT - IN),
         parts: function (e) {
           return { base: base.parts ? base.parts(e) : null,
             embers: parts(80, function () { return { x: Math.random(), y: rnd(0.7, 1.2), v: rnd(0.2, 0.6), r: rnd(1, 3), w: Math.random() * TAU }; }),
@@ -2248,7 +2289,7 @@
         },
         draw: function (p, e, ps) {
           var fade = 1 - seg(p, 0.92, 1), intro = ease(seg(p, 0, IN)), q = seg(p, IN, OUT), R = Math.hypot(e.w, e.h) / 2, s = Math.min(e.w, e.h);
-          var hit = Math.sin(seg(q, 0.4, 0.55) * Math.PI), after = seg(q, 0.48, 1);
+          var hit = Math.sin(seg(q, BI - 0.05, BI + 0.1) * Math.PI), after = seg(q, BI + 0.03, 1);
           ctx.fillStyle = "rgba(2,1,8," + (0.9 * Math.min(1, p / 0.06) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
           /* rays of light */
           ctx.save(); ctx.translate(e.cx, e.cy); ctx.rotate(p * 0.7);
@@ -2286,13 +2327,13 @@
             base.draw(q, e, ps.base); ctx.restore();
           }
           /* impact frame */
-          if (q > 0.44 && q < 0.49) {
+          if (q > BI - 0.01 && q < BI + 0.04) {
             ctx.save(); ctx.globalCompositeOperation = "difference"; ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, e.w, e.h); ctx.restore();
             ctx.strokeStyle = "#000"; ctx.lineWidth = 3;
             for (var b = 0; b < 40; b++) { var ba = b / 40 * TAU + Math.random() * 0.1; ctx.beginPath(); ctx.moveTo(e.cx + Math.cos(ba) * s * 0.12, e.cy + Math.sin(ba) * s * 0.12); ctx.lineTo(e.cx + Math.cos(ba) * R, e.cy + Math.sin(ba) * R); ctx.stroke(); }
           }
           /* embers */
-          if (q > 0.45) ps.embers.forEach(function (m) {
+          if (q > BI) ps.embers.forEach(function (m) {
             var y = (m.y - after * m.v) * e.h, x = m.x * e.w + Math.sin(m.w + p * 6) * 14;
             spark(x, y, m.r, Math.random() < 0.5 ? e.c1 : "#fde68a", Math.min(1, after * 3) * (1 - after) * fade);
           });
@@ -2525,6 +2566,406 @@
       } }
     };
 
+    /* ---------- Cinematics: every move is a little scene, like the snap. Something is drawn doing an action
+       (a sword swings, a hammer slams down, a scope locks on...), builds up, pays off with an impact, and fades.
+       `impact` is when it lands: the shake, the boom and the target's reaction in the arena happen then. ---------- */
+    function cineDark(p) {
+      var fade = 1 - seg(p, 0.86, 1);
+      ctx.fillStyle = "rgba(3,2,10," + (0.9 * Math.min(1, p / 0.08) * fade) + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return fade;
+    }
+    function moteParts(n) { return parts(n, function () { return { x: Math.random(), y: Math.random(), r: rnd(0.5, 1.8), v: rnd(0.05, 0.25) }; }); }
+    function motes(e, ms, p, fade, col) { ms.forEach(function (m) { spark(m.x * e.w, ((m.y - p * m.v) % 1 + 1) % 1 * e.h, m.r, col || "#fff", 0.35 * fade); }); }
+    function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); }
+    function bolt(x1, y1, x2, y2, jag, col, width, depth) {
+      var pts = [[x1, y1]], n = 12;
+      for (var i = 1; i < n; i++) { var t = i / n; pts.push([lerp(x1, x2, t) + rnd(-jag, jag), lerp(y1, y2, t) + rnd(-jag * 0.3, jag * 0.3)]); }
+      pts.push([x2, y2]);
+      [[width * 3, col, 30], [width, "#ffffff", 10]].forEach(function (L) {
+        ctx.strokeStyle = L[1]; ctx.lineWidth = L[0]; ctx.shadowColor = col; ctx.shadowBlur = L[2]; ctx.lineJoin = "round";
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); pts.forEach(function (q) { ctx.lineTo(q[0], q[1]); }); ctx.stroke();
+      });
+      ctx.shadowBlur = 0;
+      if (depth > 0) for (var b = 0; b < 3; b++) { var k = 3 + Math.floor(Math.random() * 7), q = pts[k]; bolt(q[0], q[1], q[0] + rnd(-1, 1) * jag * 4, q[1] + rnd(0.3, 1) * jag * 4, jag * 0.5, col, width * 0.45, depth - 1); }
+    }
+    /* A sword along +x from its grip (0,0), length L. */
+    function drawBlade(L, col, glow) {
+      var w = L * 0.065;
+      ctx.shadowColor = col; ctx.shadowBlur = glow;
+      var g = ctx.createLinearGradient(0, -w, 0, w); g.addColorStop(0, "#ffffff"); g.addColorStop(0.45, "#cbd5e1"); g.addColorStop(0.55, "#64748b"); g.addColorStop(1, "#e2e8f0");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(L * 0.2, -w * 0.5); ctx.lineTo(L * 0.9, -w * 0.42); ctx.lineTo(L, 0); ctx.lineTo(L * 0.9, w * 0.42); ctx.lineTo(L * 0.2, w * 0.5); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = w * 0.2; ctx.beginPath(); ctx.moveTo(L * 0.24, 0); ctx.lineTo(L * 0.84, 0); ctx.stroke();
+      ctx.shadowBlur = glow * 0.5; ctx.fillStyle = "#facc15"; rrect(L * 0.16, -w * 1.7, L * 0.04, w * 3.4, w * 0.3); ctx.fill();
+      ctx.fillStyle = "#3f2a14"; ctx.fillRect(L * 0.03, -w * 0.32, L * 0.13, w * 0.64);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(L * 0.025, 0, w * 0.55, 0, TAU); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    /* A war hammer along -y from its handle end (0,0), size S. */
+    function drawHammer(S, col, glow) {
+      ctx.shadowColor = col; ctx.shadowBlur = glow;
+      ctx.fillStyle = "#4a2f17"; rrect(-S * 0.035, -S * 0.75, S * 0.07, S * 0.75, S * 0.02); ctx.fill();
+      var g = ctx.createLinearGradient(0, -S * 1.02, 0, -S * 0.72); g.addColorStop(0, "#e2e8f0"); g.addColorStop(0.5, "#94a3b8"); g.addColorStop(1, "#475569");
+      ctx.fillStyle = g; rrect(-S * 0.3, -S * 1.02, S * 0.6, S * 0.3, S * 0.05); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = S * 0.018; rrect(-S * 0.26, -S * 0.98, S * 0.52, S * 0.22, S * 0.04); ctx.stroke();
+      ctx.fillStyle = col; ctx.font = Math.round(S * 0.14) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("ᚦ", 0, -S * 0.87);
+      ctx.shadowBlur = 0;
+    }
+    function drawShieldShape(S) { ctx.beginPath(); ctx.moveTo(0, -S * 0.55); ctx.quadraticCurveTo(S * 0.45, -S * 0.5, S * 0.42, -S * 0.1); ctx.quadraticCurveTo(S * 0.36, S * 0.35, 0, S * 0.6); ctx.quadraticCurveTo(-S * 0.36, S * 0.35, -S * 0.42, -S * 0.1); ctx.quadraticCurveTo(-S * 0.45, -S * 0.5, 0, -S * 0.55); ctx.closePath(); }
+    function drawEye(x, y, S, open, iris, pupil, rot) {
+      ctx.save(); ctx.translate(x, y);
+      ctx.beginPath(); ctx.moveTo(-S, 0); ctx.quadraticCurveTo(0, -S * 0.75 * open, S, 0); ctx.quadraticCurveTo(0, S * 0.75 * open, -S, 0); ctx.closePath();
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = "#f1f5f9"; ctx.fillRect(-S, -S, S * 2, S * 2);
+      var g = ctx.createRadialGradient(0, 0, S * 0.05, 0, 0, S * 0.42); g.addColorStop(0, "#fff"); g.addColorStop(0.35, iris); g.addColorStop(1, "#000");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, S * 0.42, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2; ctx.rotate(rot);
+      for (var i = 0; i < 18; i++) { ctx.rotate(TAU / 18); ctx.beginPath(); ctx.moveTo(S * 0.12, 0); ctx.lineTo(S * 0.38, S * 0.05); ctx.stroke(); }
+      ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(0, 0, S * 0.07 * pupil, S * 0.2 * pupil, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-S * 0.12, -S * 0.12, S * 0.05, 0, TAU); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = iris; ctx.shadowColor = iris; ctx.shadowBlur = 25; ctx.lineWidth = S * 0.04;
+      ctx.beginPath(); ctx.moveTo(-S, 0); ctx.quadraticCurveTo(0, -S * 0.75 * open, S, 0); ctx.quadraticCurveTo(0, S * 0.75 * open, -S, 0); ctx.stroke();
+      ctx.shadowBlur = 0; ctx.restore();
+    }
+    function drawSkull(x, y, S, col, a) {
+      ctx.save(); ctx.translate(x, y); ctx.globalAlpha = a; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 30;
+      ctx.beginPath(); ctx.arc(0, -S * 0.1, S * 0.5, Math.PI * 0.85, Math.PI * 2.15); ctx.lineTo(S * 0.3, S * 0.45); ctx.lineTo(-S * 0.3, S * 0.45); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0; ctx.globalCompositeOperation = "destination-out";
+      [[-0.2, -0.05], [0.2, -0.05]].forEach(function (o) { ctx.beginPath(); ctx.ellipse(o[0] * S, o[1] * S, S * 0.13, S * 0.16, 0, 0, TAU); ctx.fill(); });
+      ctx.beginPath(); ctx.moveTo(0, S * 0.12); ctx.lineTo(-S * 0.06, S * 0.24); ctx.lineTo(S * 0.06, S * 0.24); ctx.fill();
+      for (var t = -2; t <= 2; t++) ctx.fillRect(t * S * 0.09 - S * 0.025, S * 0.32, S * 0.05, S * 0.12);
+      ctx.restore();
+    }
+    function chainLinks(x1, y1, x2, y2, reach, col, size) {
+      var L = Math.hypot(x2 - x1, y2 - y1), n = Math.floor(L * reach / (size * 1.5)), a = Math.atan2(y2 - y1, x2 - x1);
+      for (var i = 0; i < n; i++) {
+        var t = i * size * 1.5 / L, x = lerp(x1, x2, t), y = lerp(y1, y2, t);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.strokeStyle = i % 2 ? "#cbd5e1" : col; ctx.shadowColor = col; ctx.shadowBlur = 10; ctx.lineWidth = size * 0.28;
+        ctx.beginPath(); if (i % 2) ctx.ellipse(0, 0, size, size * 0.45, 0, 0, TAU); else ctx.ellipse(0, 0, size, size * 0.12, 0, 0, TAU); ctx.stroke(); ctx.restore();
+      }
+      ctx.shadowBlur = 0;
+    }
+    function hexAt(x, y, r) { ctx.beginPath(); for (var i = 0; i < 6; i++) { var a = i / 6 * TAU + Math.PI / 6; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.closePath(); }
+
+    var CINE = {
+      /* A giant sword forms out of light, winds back, and swings in one huge arc; the screen is cut in two. */
+      strike: { dur: 1900, impact: 0.53, parts: function () { return { m: moteParts(50), sp: parts(60, function () { return { t: rnd(-1, 1), v: rnd(40, 220), a: rnd(-0.4, 0.4), r: rnd(1, 3) }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), R = Math.hypot(e.w, e.h), L = s * 0.9;
+          motes(e, ps.m, p, fade);
+          var form = ease(seg(p, 0.04, 0.3)), wind = seg(p, 0.3, 0.46), swing = seg(p, 0.46, 0.56), after = seg(p, 0.56, 1);
+          var px = e.cx - s * 0.1, py = e.cy + s * 0.42, a0 = -2.75, a1 = 0.55;
+          var ang = swing > 0 ? lerp(a0, a1, ease(swing)) : lerp(-2.25, a0, ease(wind));
+          var trem = wind > 0.6 && swing === 0 ? rnd(-3, 3) : 0;
+          if (swing > 0 && after < 0.3) {
+            ctx.save(); ctx.globalAlpha = (1 - after / 0.3) * 0.85 * fade; ctx.strokeStyle = e.c1; ctx.shadowColor = e.c1; ctx.shadowBlur = 35; ctx.lineCap = "round";
+            ctx.lineWidth = s * 0.05; ctx.beginPath(); ctx.arc(px, py, L * 0.88, a0, ang); ctx.stroke();
+            ctx.strokeStyle = "#fff"; ctx.lineWidth = s * 0.015; ctx.beginPath(); ctx.arc(px, py, L * 0.88, a0, ang); ctx.stroke(); ctx.restore();
+            for (var k = 1; k <= 5; k++) { ctx.save(); ctx.translate(px, py); ctx.rotate(lerp(a0, a1, ease(Math.max(0, swing - k * 0.06)))); ctx.globalAlpha = 0.2 * (1 - k / 6) * fade; drawBlade(L, e.c1, 0); ctx.restore(); }
+          }
+          if (after < 1) {
+            ctx.save(); ctx.translate(px + trem, py); ctx.rotate(ang); ctx.globalAlpha = form * (1 - after) * fade;
+            drawBlade(L * (0.5 + 0.5 * form), e.c1, 20 + 40 * wind); ctx.restore();
+          }
+          if (form < 1) for (var f = 0; f < 30; f++) { var q = f / 30, fx = px + Math.cos(-2.25) * L * q, fy = py + Math.sin(-2.25) * L * q; spark(fx + rnd(-40, 40) * (1 - form), fy + rnd(-40, 40) * (1 - form), 2, e.c1, (1 - form) * fade); }
+          if (p >= 0.53) {
+            var c = seg(p, 0.53, 0.95);
+            flash((0.06 - (p - 0.53)) * 12, "#ffffff");
+            ctx.save(); ctx.translate(e.cx, e.cy); ctx.rotate(-0.45);
+            ctx.globalAlpha = (1 - c) * fade; ctx.fillStyle = "#fff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 40;
+            var gw = s * 0.03 * Math.sin(Math.min(1, c * 3) * Math.PI / 2) * (1 - c) + 2; ctx.fillRect(-R, -gw / 2, 2 * R, gw);
+            ps.sp.forEach(function (sp) { spark(sp.t * R * 0.6, Math.sin(sp.a) * sp.v * c, sp.r, sp.t > 0 ? "#fff" : e.c1, (1 - c)); });
+            ctx.restore(); ctx.shadowBlur = 0;
+          }
+        } },
+      /* A colossal hammer is hauled up high, trembling, then slams down; the ground cracks and rocks fly. */
+      heavy: { dur: 2000, impact: 0.5, parts: function () { return { m: moteParts(40), rocks: parts(40, function () { return { a: rnd(-Math.PI * 0.95, -Math.PI * 0.05), v: rnd(0.3, 1), r: rnd(3, 9), spin: rnd(-6, 6) }; }), cracks: parts(9, function (i) { var pts = [], d = 0; while (d < 1) { d += rnd(0.08, 0.2); pts.push({ d: d, j: rnd(-0.15, 0.15) }); } return { a: Math.PI * (0.05 + 0.9 * i / 8) + rnd(-0.1, 0.1), pts: pts }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), S;
+          motes(e, ps.m, p, fade);
+          var lift = ease(seg(p, 0.03, 0.36)), hold = seg(p, 0.36, 0.44), drop = seg(p, 0.44, 0.5), after = seg(p, 0.5, 1);
+          var gx = e.cx, gy = e.h * 0.8; S = s * 0.58;
+          /* head-down overhead slam: it rises into view tilted back, trembles, then drives straight down */
+          var up = -S * 0.2, down = gy - S * 1.02;
+          var gripY = drop > 0 ? lerp(up, down, drop * drop) : lerp(-S * 1.4, up, lift);
+          var tilt = drop > 0 ? lerp(0.35, 0, drop) : 0.35 * lift;
+          var trem = hold > 0 && drop === 0 ? rnd(-3, 3) * hold : 0;
+          if (after < 0.8) {
+            if (drop > 0 && drop < 1) for (var k = 1; k <= 4; k++) { ctx.save(); ctx.translate(gx, lerp(up, down, Math.pow(Math.max(0, drop - k * 0.15), 2))); ctx.rotate(Math.PI + tilt); ctx.globalAlpha = 0.16 * fade; drawHammer(S, e.c1, 0); ctx.restore(); }
+            ctx.save(); ctx.translate(gx + trem, gripY + (after > 0 ? -after * S * 0.15 : 0)); ctx.rotate(Math.PI + tilt); ctx.globalAlpha = Math.min(1, lift * 2) * (1 - after / 0.8) * fade;
+            drawHammer(S, e.c1, 20 + 50 * hold); ctx.restore();
+          }
+          if (p >= 0.5) {
+            var c = ease(Math.min(1, after * 1.4));
+            flash((0.05 - (p - 0.5)) * 14, "#ffffff");
+            ctx.save(); ctx.globalAlpha = (1 - after) * fade; ctx.strokeStyle = e.c1; ctx.shadowColor = e.c1; ctx.shadowBlur = 20; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.ellipse(gx, gy, s * 0.9 * c, s * 0.12 * c, 0, 0, TAU); ctx.stroke(); ctx.restore();
+            ps.cracks.forEach(function (cr) {
+              ctx.save(); ctx.globalAlpha = (1 - seg(after, 0.5, 1)) * fade; ctx.strokeStyle = "#fff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 14; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(gx, gy);
+              cr.pts.forEach(function (pt) { if (pt.d > Math.min(1, after * 4)) return; var d = pt.d * s * 0.8; ctx.lineTo(gx + Math.cos(cr.a) * d - Math.sin(cr.a) * pt.j * d, gy + Math.sin(cr.a) * d * 0.35); });
+              ctx.stroke(); ctx.restore();
+            });
+            ps.rocks.forEach(function (r) {
+              var t = after * 1.6, x = gx + Math.cos(r.a) * r.v * s * 0.7 * t, y = gy + Math.sin(r.a) * r.v * s * 1.1 * t + s * 0.9 * t * t;
+              ctx.save(); ctx.translate(x, y); ctx.rotate(r.spin * t); ctx.globalAlpha = (1 - after) * fade; ctx.fillStyle = "#57534e"; ctx.strokeStyle = e.c1; ctx.lineWidth = 1.5; ctx.fillRect(-r.r, -r.r, r.r * 2, r.r * 2); ctx.strokeRect(-r.r, -r.r, r.r * 2, r.r * 2); ctx.restore();
+            });
+            for (var d = 0; d < 5; d++) { var dx = gx + (d - 2) * s * 0.18 * c, g = ctx.createRadialGradient(dx, gy, 0, dx, gy, s * 0.2 * c + 1); g.addColorStop(0, "rgba(214,211,209," + 0.35 * (1 - after) * fade + ")"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, e.w, e.h); }
+          }
+        } },
+      /* A great shield drops and plants itself, its rune ring lights up, a gleam runs across it and it unfolds
+         into a wall of hexagons. */
+      guard: { dur: 1800, impact: 0.42, parts: function () { return { m: moteParts(40) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), S = s * 0.6;
+          motes(e, ps.m, p, fade);
+          var fall = seg(p, 0.05, 0.4), after = seg(p, 0.42, 1);
+          var y = lerp(-S, e.cy, fall * fall);
+          ctx.save(); ctx.translate(e.cx, y); ctx.globalAlpha = fade * (1 - seg(after, 0.6, 1));
+          ctx.shadowColor = e.c1; ctx.shadowBlur = 40;
+          drawShieldShape(S); var g = ctx.createLinearGradient(-S * 0.4, 0, S * 0.4, 0); g.addColorStop(0, "#334155"); g.addColorStop(0.5, "#94a3b8"); g.addColorStop(1, "#1e293b"); ctx.fillStyle = g; ctx.fill();
+          ctx.lineWidth = S * 0.04; ctx.strokeStyle = "#facc15"; ctx.stroke();
+          ctx.shadowBlur = 0; ctx.save(); ctx.scale(0.72, 0.72); drawShieldShape(S); ctx.strokeStyle = e.c1; ctx.lineWidth = S * 0.025; ctx.stroke(); ctx.restore();
+          ctx.fillStyle = e.c1; ctx.shadowColor = e.c1; ctx.shadowBlur = 30 * (0.5 + after); ctx.beginPath(); ctx.arc(0, -S * 0.05, S * 0.1, 0, TAU); ctx.fill();
+          if (after > 0) { ctx.save(); drawShieldShape(S); ctx.clip(); var gx = lerp(-S, S, seg(after, 0, 0.4)); var gg = ctx.createLinearGradient(gx - S * 0.2, 0, gx + S * 0.2, 0); gg.addColorStop(0, "rgba(255,255,255,0)"); gg.addColorStop(0.5, "rgba(255,255,255,.8)"); gg.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = gg; ctx.fillRect(-S, -S, S * 2, S * 2); ctx.restore(); }
+          ctx.restore(); ctx.shadowBlur = 0;
+          if (p >= 0.42) {
+            flash((0.04 - (p - 0.42)) * 12, e.c1);
+            var hr = s * 0.07;
+            for (var row = -4; row <= 4; row++) for (var col = -7; col <= 7; col++) {
+              var hx = e.cx + col * hr * 1.75 + (row % 2 ? hr * 0.87 : 0), hy = e.cy + row * hr * 1.5, d = Math.hypot(hx - e.cx, hy - e.cy) / (s * 0.9);
+              var on = seg(after, d * 0.5, d * 0.5 + 0.15) * (1 - seg(after, 0.6 + d * 0.3, 0.9 + d * 0.1));
+              if (on <= 0) continue; ctx.globalAlpha = on * 0.8 * fade; ctx.strokeStyle = e.c1; ctx.shadowColor = e.c1; ctx.shadowBlur = 12; ctx.lineWidth = 2; hexAt(hx, hy, hr * 0.92); ctx.stroke();
+              ctx.globalAlpha = on * 0.12 * fade; ctx.fillStyle = e.c1; ctx.fill();
+            }
+            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+          }
+        } },
+      /* Wings of light unfurl, feathers drift down and a spiral of healing light rises with a glowing cross. */
+      heal: { dur: 2000, impact: 0.5, parts: function () { return { m: moteParts(40), fe: parts(26, function () { return { x: rnd(-0.5, 0.5), y: rnd(-0.6, 0), v: rnd(0.2, 0.6), sp: rnd(-3, 3), s: rnd(0.6, 1.2) }; }), sp: parts(60, function () { return { a: Math.random() * TAU, r: rnd(0.1, 0.5), v: rnd(0.3, 1) }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), open = ease(seg(p, 0.08, 0.5)), after = seg(p, 0.5, 1);
+          var g = ctx.createLinearGradient(0, 0, 0, e.h); g.addColorStop(0, "rgba(253,230,138," + 0.35 * open * fade + ")"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, e.w, e.h);
+          motes(e, ps.m, p, fade, "#bbf7d0");
+          [-1, 1].forEach(function (side) {
+            for (var f = 0; f < 9; f++) {
+              var a = (-0.35 - f * 0.13) * open - 0.2, L = s * (0.55 - f * 0.03);
+              ctx.save(); ctx.translate(e.cx + side * s * 0.04, e.cy - s * 0.05); ctx.scale(side, 1); ctx.rotate(a);
+              ctx.globalAlpha = (0.85 - f * 0.05) * fade * (1 - seg(after, 0.6, 1)); ctx.fillStyle = f % 2 ? "#ffffff" : "#fef9c3"; ctx.shadowColor = "#fde68a"; ctx.shadowBlur = 20;
+              ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(L * 0.5, -s * 0.06, L, 0); ctx.quadraticCurveTo(L * 0.5, s * 0.03, 0, 0); ctx.fill(); ctx.restore();
+            }
+          });
+          ctx.shadowBlur = 0;
+          ps.fe.forEach(function (f) { var y = e.cy + (f.y + p * f.v) * s, x = e.cx + f.x * s + Math.sin(p * 6 + f.sp) * 20; ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(p * 5 + f.sp) * 0.8); ctx.globalAlpha = open * 0.8 * fade; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(0, 0, 10 * f.s, 3 * f.s, 0, 0, TAU); ctx.fill(); ctx.restore(); });
+          ps.sp.forEach(function (sp) { var t = (p * sp.v * 1.5) % 1, a = sp.a + t * 8, r = s * sp.r * (1 - t * 0.5); spark(e.cx + Math.cos(a) * r, e.cy + s * 0.4 - t * s * 0.9, 2.5, "#4ade80", open * (1 - t) * fade); });
+          if (p >= 0.5) {
+            var pulse = Math.sin(Math.min(1, after * 2) * Math.PI), cs = s * 0.16 * (1 + 0.3 * pulse);
+            flash((0.05 - (p - 0.5)) * 8, "#dcfce7");
+            ctx.save(); ctx.translate(e.cx, e.cy); ctx.globalAlpha = (1 - after) * fade; ctx.fillStyle = "#4ade80"; ctx.shadowColor = "#22c55e"; ctx.shadowBlur = 40;
+            ctx.fillRect(-cs * 0.2, -cs, cs * 0.4, cs * 2); ctx.fillRect(-cs, -cs * 0.2, cs * 2, cs * 0.4); ctx.restore();
+            ring(e.cx, e.cy, s * 0.1 + after * s * 0.6, "#86efac", 4 * (1 - after), (1 - after) * fade);
+          }
+        } },
+      /* Sniper scope: the world goes into a scope, the crosshair hunts, locks on, and one shot cracks the glass. */
+      precision: { dur: 2000, impact: 0.62, parts: function () { return { m: moteParts(20), cracks: parts(11, function (i) { var pts = [], d = 0; while (d < 1) { d += rnd(0.1, 0.25); pts.push({ d: d, j: rnd(-0.2, 0.2) }); } return { a: i / 11 * TAU + rnd(-0.2, 0.2), pts: pts }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = 1 - seg(p, 0.86, 1), s = Math.min(e.w, e.h), R = s * 0.42, appear = ease(seg(p, 0, 0.12)), lock = seg(p, 0.3, 0.55), after = seg(p, 0.62, 1);
+          var wob = (1 - lock) * s * 0.12, cx = e.cx + Math.sin(p * 13) * wob + Math.cos(p * 7) * wob * 0.6, cy = e.cy + Math.cos(p * 11) * wob * 0.7;
+          ctx.save(); ctx.globalAlpha = fade; ctx.fillStyle = "rgba(0,0,0,.96)"; ctx.beginPath(); ctx.rect(0, 0, e.w, e.h); ctx.arc(cx, cy, R * appear, 0, TAU, true); ctx.fill();
+          var vg = ctx.createRadialGradient(cx, cy, R * 0.6 * appear, cx, cy, R * appear + 1); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.8)"); ctx.fillStyle = vg; ctx.beginPath(); ctx.arc(cx, cy, R * appear, 0, TAU); ctx.fill();
+          ctx.strokeStyle = lock >= 1 ? "#ef4444" : "#e2e8f0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx - R * 0.1, cy); ctx.moveTo(cx + R * 0.1, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy - R * 0.1); ctx.moveTo(cx, cy + R * 0.1); ctx.lineTo(cx, cy + R); ctx.stroke();
+          for (var t = 1; t < 5; t++) { ctx.beginPath(); ctx.moveTo(cx - 6, cy + t * R * 0.18); ctx.lineTo(cx + 6, cy + t * R * 0.18); ctx.moveTo(cx + t * R * 0.18, cy - 6); ctx.lineTo(cx + t * R * 0.18, cy + 6); ctx.stroke(); }
+          ring(cx, cy, R * (0.35 - 0.15 * lock), lock >= 1 ? "#ef4444" : e.c1, 2, appear * fade);
+          ring(cx, cy, R * appear, "#475569", 6, fade);
+          if (lock >= 1 && p < 0.62) { ctx.fillStyle = "#ef4444"; ctx.font = "700 " + Math.round(s * 0.03) + "px sans-serif"; ctx.textAlign = "center"; ctx.globalAlpha = (Math.sin(p * 80) > 0 ? 1 : 0.4) * fade; ctx.fillText("LOCKED", cx, cy + R * 0.6); }
+          ctx.restore();
+          if (p >= 0.62) {
+            flash((0.05 - (p - 0.62)) * 14, "#ffffff");
+            ctx.save(); ctx.globalAlpha = (1 - after) * fade; glowLine(0, e.h * 0.85, cx, cy, e.c1, 6 * (1 - after) + 1, 30); ctx.restore();
+            ps.cracks.forEach(function (cr) { ctx.save(); ctx.globalAlpha = 0.9 * (1 - seg(after, 0.4, 1)) * fade; ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); cr.pts.forEach(function (pt) { if (pt.d > Math.min(1, after * 5)) return; var d = pt.d * R; ctx.lineTo(cx + Math.cos(cr.a + pt.j) * d, cy + Math.sin(cr.a + pt.j) * d); }); ctx.stroke(); ctx.restore(); });
+            for (var r = 0; r < 3; r++) ring(cx, cy, R * (0.15 + r * 0.12) * Math.min(1, after * 4), "#e2e8f0", 1.2, (1 - after) * 0.8 * fade);
+            ctx.save(); ctx.font = "900 " + Math.round(s * 0.07) + "px 'Cinzel', serif"; ctx.textAlign = "center"; ctx.fillStyle = "#facc15"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 25; ctx.globalAlpha = Math.min(1, after * 8) * (1 - seg(after, 0.6, 1)) * fade; ctx.fillText("CRITICAL", cx, cy - R * 0.55); ctx.restore();
+          }
+        } },
+      /* Crimson tendrils claw out of the dark at the target and drag its life back as glowing orbs. */
+      drain: { dur: 2000, impact: 0.45, parts: function () { return { m: moteParts(30), tn: parts(7, function (i) { return { x: (i + 0.5) / 7, ph: Math.random() * TAU, w: rnd(0.7, 1.2) }; }), orbs: parts(26, function () { return { d: Math.random(), o: rnd(-1, 1), r: rnd(3, 8) }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), reach = ease(seg(p, 0.06, 0.45)), pull = seg(p, 0.45, 0.95);
+          var vg = ctx.createRadialGradient(e.cx, e.cy, s * 0.3, e.cx, e.cy, Math.hypot(e.w, e.h) / 2); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(127,29,29," + (0.5 + 0.3 * Math.sin(p * 30)) * fade + ")"); ctx.fillStyle = vg; ctx.fillRect(0, 0, e.w, e.h);
+          motes(e, ps.m, p, fade, "#fca5a5");
+          var tx = e.to.x, ty = e.to.y;
+          ps.tn.forEach(function (t) {
+            var bx = t.x * e.w, by = e.h + 20, ex = lerp(bx, tx + (t.x - 0.5) * s * 0.3, reach * (1 - pull * 0.6)), ey = lerp(by, ty + s * 0.05, reach * (1 - pull * 0.6));
+            ctx.save(); ctx.globalAlpha = fade * (1 - seg(pull, 0.6, 1)); ctx.strokeStyle = "#7f1d1d"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 18; ctx.lineCap = "round";
+            for (var layer = 0; layer < 2; layer++) {
+              ctx.lineWidth = (layer ? 3 : 14) * t.w; if (layer) ctx.strokeStyle = "#fca5a5";
+              ctx.beginPath(); ctx.moveTo(bx, by);
+              for (var k = 1; k <= 20; k++) { var q = k / 20; ctx.lineTo(lerp(bx, ex, q) + Math.sin(q * 9 + p * 12 + t.ph) * 30 * (1 - q * 0.5), lerp(by, ey, q)); }
+              ctx.stroke();
+            }
+            ctx.fillStyle = "#fecaca"; for (var c = -1; c <= 1; c++) { ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex + c * 14 + 4, ey - 26); ctx.lineTo(ex + c * 14 - 4, ey - 22); ctx.fill(); }
+            ctx.restore();
+          });
+          if (pull > 0) ps.orbs.forEach(function (o) {
+            var q = seg(pull, o.d * 0.5, o.d * 0.5 + 0.5), x = lerp(tx, e.from.x, ease(q)) + Math.sin(q * Math.PI) * o.o * s * 0.2, y = lerp(ty, e.from.y, ease(q)) - Math.sin(q * Math.PI) * s * 0.15;
+            if (q > 0 && q < 1) { ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; spark(x, y, o.r, "#f87171", fade); ctx.shadowBlur = 0; }
+          });
+          if (p > 0.45 && p < 0.5) flash((0.5 - p) * 8, "#7f1d1d");
+        } },
+      /* A giant eye opens in the dark, its iris swirls, rings rush in and the pupil snaps tight. */
+      focus: { dur: 1900, impact: 0.5, parts: function () { return { m: moteParts(50) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), open = ease(seg(p, 0.08, 0.4)) * (1 - seg(p, 0.82, 0.95)), snap = seg(p, 0.48, 0.55);
+          motes(e, ps.m, p, fade, e.c1);
+          for (var r = 0; r < 6; r++) { var q = ((p * 1.4 + r / 6) % 1); ring(e.cx, e.cy, s * (0.9 - q * 0.8), e.c1, 2, q * 0.5 * fade); }
+          drawEye(e.cx, e.cy, s * 0.42, Math.max(0.02, open), e.c1, 1.4 - snap * 0.9, p * 4);
+          if (p >= 0.5) { flash((0.04 - (p - 0.5)) * 10, e.c1); for (var k = 0; k < 24; k++) { var a = k / 24 * TAU, a2 = seg(p, 0.5, 0.8); ctx.globalAlpha = (1 - a2) * fade; glowLine(e.cx + Math.cos(a) * s * 0.45, e.cy + Math.sin(a) * s * 0.45, e.cx + Math.cos(a) * s * (0.45 + a2 * 0.5), e.cy + Math.sin(a) * s * (0.45 + a2 * 0.5), e.c1, 2, 12); ctx.globalAlpha = 1; } }
+        } },
+      /* A flask of venom tumbles down and shatters; a toxic cloud billows into a skull, bubbling and dripping. */
+      poison: { dur: 2000, impact: 0.42, parts: function () { return { shards: parts(22, function () { return { a: rnd(-Math.PI, 0), v: rnd(0.3, 1), r: rnd(4, 10), spin: rnd(-8, 8) }; }), puffs: parts(40, function () { return { a: Math.random() * TAU, d: rnd(0.2, 1), r: rnd(0.1, 0.25) }; }), bub: parts(40, function () { return { x: rnd(-0.5, 0.5), v: rnd(0.3, 1), r: rnd(3, 9), o: Math.random() }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), fall = seg(p, 0.05, 0.42), after = seg(p, 0.42, 1);
+          var y = lerp(-s * 0.2, e.cy, fall * fall), G = "#4ade80";
+          if (p < 0.42) {
+            ctx.save(); ctx.translate(e.cx, y); ctx.rotate(fall * 7); ctx.shadowColor = G; ctx.shadowBlur = 25;
+            ctx.fillStyle = "rgba(34,197,94,.85)"; ctx.beginPath(); ctx.arc(0, s * 0.03, s * 0.08, 0, TAU); ctx.fill();
+            ctx.fillStyle = "rgba(226,232,240,.5)"; ctx.fillRect(-s * 0.025, -s * 0.11, s * 0.05, s * 0.07);
+            ctx.fillStyle = "#78350f"; ctx.fillRect(-s * 0.03, -s * 0.13, s * 0.06, s * 0.03);
+            ctx.restore(); ctx.shadowBlur = 0;
+          } else {
+            flash((0.04 - (p - 0.42)) * 10, "#bbf7d0");
+            ps.puffs.forEach(function (pf) { var d = s * 0.45 * pf.d * ease(Math.min(1, after * 2)), x = e.cx + Math.cos(pf.a) * d, y2 = e.cy + Math.sin(pf.a) * d * 0.7 - after * s * 0.1; var g = ctx.createRadialGradient(x, y2, 0, x, y2, s * pf.r); g.addColorStop(0, "rgba(74,222,128," + 0.35 * (1 - after) * fade + ")"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.fillRect(x - s * pf.r, y2 - s * pf.r, s * pf.r * 2, s * pf.r * 2); });
+            drawSkull(e.cx, e.cy - s * 0.05, s * 0.32 * (0.8 + 0.2 * ease(Math.min(1, after * 3))), "#86efac", Math.sin(Math.min(1, after * 1.4) * Math.PI) * 0.85 * fade);
+            ps.shards.forEach(function (sh) { var t = after * 1.3, x = e.cx + Math.cos(sh.a) * sh.v * s * 0.6 * t, y2 = e.cy + Math.sin(sh.a) * sh.v * s * 0.7 * t + s * 0.7 * t * t; ctx.save(); ctx.translate(x, y2); ctx.rotate(sh.spin * t); ctx.globalAlpha = (1 - after) * fade; ctx.fillStyle = "rgba(226,232,240,.8)"; ctx.beginPath(); ctx.moveTo(0, -sh.r); ctx.lineTo(sh.r * 0.6, sh.r); ctx.lineTo(-sh.r * 0.6, sh.r * 0.4); ctx.fill(); ctx.restore(); });
+            ps.bub.forEach(function (b) { var t = (after * b.v * 2 + b.o) % 1; ctx.globalAlpha = (1 - t) * (1 - after) * fade; ctx.strokeStyle = G; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.cx + b.x * s, e.cy + s * 0.3 - t * s * 0.6, b.r, 0, TAU); ctx.stroke(); });
+            ctx.globalAlpha = 1;
+          }
+        } },
+      /* Chains whip out of the corners, wrap the target and a curse sigil burns under it as they pull tight. */
+      weaken: { dur: 2000, impact: 0.55, parts: function () { return { m: moteParts(30) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), shoot = ease(seg(p, 0.06, 0.4)), tight = seg(p, 0.5, 0.58), after = seg(p, 0.58, 1), P = "#a855f7";
+          motes(e, ps.m, p, fade, "#d8b4fe");
+          var sig = ease(seg(p, 0.2, 0.5));
+          ctx.save(); ctx.translate(e.cx, e.cy + s * 0.05); ctx.scale(1, 0.45); ctx.rotate(p * 1.5); ctx.globalAlpha = sig * fade * (1 - seg(after, 0.5, 1)); ctx.strokeStyle = P; ctx.shadowColor = P; ctx.shadowBlur = 25; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(0, 0, s * 0.42, 0, TAU); ctx.stroke(); ctx.beginPath(); for (var v = 0; v <= 5; v++) { var a = v * 4 * Math.PI / 5 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s * 0.4, Math.sin(a) * s * 0.4); } ctx.stroke(); ctx.restore(); ctx.shadowBlur = 0;
+          var corners = [[0, 0], [e.w, 0], [0, e.h], [e.w, e.h], [e.w / 2, -20], [e.w / 2, e.h + 20]];
+          corners.forEach(function (c) { var tx = e.cx + (c[0] - e.cx) * 0.08 * (1 - tight), ty = e.cy + (c[1] - e.cy) * 0.08 * (1 - tight); ctx.globalAlpha = fade * (1 - seg(after, 0.6, 1)); chainLinks(c[0], c[1], tx, ty, shoot, P, s * 0.025 * (1 + tight * 0.3)); });
+          ctx.globalAlpha = 1;
+          if (p >= 0.55) { flash((0.04 - (p - 0.55)) * 10, "#581c87"); ring(e.cx, e.cy, s * 0.3 * (1 - after * 0.6), P, 6 * (1 - after), (1 - after) * fade); }
+        } },
+      /* Storm clouds roll in and flicker, then a forked bolt of lightning splits the sky onto the target. */
+      stun: { dur: 1900, impact: 0.5, parts: function () { return { clouds: parts(14, function (i) { return { x: i / 13, r: rnd(0.12, 0.22), y: rnd(0, 0.12) }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), roll = ease(seg(p, 0, 0.3)), after = seg(p, 0.5, 1), Y = "#facc15";
+          ps.clouds.forEach(function (c) { var x = lerp(-0.3, c.x, roll) * e.w, y = c.y * e.h; var g = ctx.createRadialGradient(x, y, 0, x, y, s * c.r * 1.6); g.addColorStop(0, "rgba(71,85,105," + 0.9 * fade + ")"); g.addColorStop(1, "rgba(15,23,42,0)"); ctx.fillStyle = g; ctx.fillRect(x - s * c.r * 2, y - s * c.r * 2, s * c.r * 4, s * c.r * 4); });
+          if (p > 0.2 && p < 0.5 && Math.random() < 0.25) { ctx.globalAlpha = 0.3 * fade; ctx.fillStyle = "#e0f2fe"; ctx.fillRect(0, 0, e.w, e.h * 0.3); ctx.globalAlpha = 1; }
+          if (p > 0.3 && p < 0.5 && Math.random() < 0.3) bolt(rnd(0, e.w), 0, rnd(0, e.w), e.h * 0.25, 18, "#93c5fd", 1.5, 0);
+          if (p >= 0.5) {
+            var flick = after < 0.25 ? (Math.floor(after * 40) % 2) : 0;
+            flash(flick ? 0.6 * (1 - after * 3) : (0.04 - (p - 0.5)) * 12, "#e0f2fe");
+            if (after < 0.45) { ctx.globalAlpha = (1 - after / 0.45) * fade; bolt(e.cx + rnd(-30, 30), 0, e.cx, e.cy + s * 0.1, s * 0.05, Y, s * 0.012, 2); ctx.globalAlpha = 1; }
+            ring(e.cx, e.cy + s * 0.1, s * 0.05 + after * s * 0.5, Y, 4 * (1 - after), (1 - after) * fade);
+            for (var a = 0; a < 6; a++) { var aa = a / 6 * TAU + p * 6; ctx.globalAlpha = (1 - after) * fade; bolt(e.cx, e.cy + s * 0.1, e.cx + Math.cos(aa) * s * 0.25, e.cy + s * 0.1 + Math.sin(aa) * s * 0.12, 10, "#93c5fd", 1.2, 0); }
+            ctx.globalAlpha = 1;
+          }
+        } },
+      /* A tall mirror spins in, catches the light in a gleam and throws back a fan of reflected beams. */
+      reflect: { dur: 1800, impact: 0.5, parts: function () { return { m: moteParts(40), beams: parts(9, function (i) { return { a: -0.6 + i * 0.15 }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), spin = seg(p, 0.05, 0.45), after = seg(p, 0.5, 1), W = s * 0.32, H = s * 0.7;
+          motes(e, ps.m, p, fade, "#e0f2fe");
+          var sx = Math.cos((1 - ease(spin)) * Math.PI * 4);
+          ctx.save(); ctx.translate(e.cx, e.cy); ctx.scale(Math.max(0.03, Math.abs(sx)), 1); ctx.globalAlpha = fade * (1 - seg(after, 0.6, 1));
+          ctx.shadowColor = e.c1; ctx.shadowBlur = 30; ctx.fillStyle = "#facc15"; rrect(-W / 2 - 10, -H / 2 - 10, W + 20, H + 20, 14); ctx.fill();
+          var g = ctx.createLinearGradient(-W / 2, -H / 2, W / 2, H / 2); g.addColorStop(0, "#e0f2fe"); g.addColorStop(0.5, "#93c5fd"); g.addColorStop(1, "#1e3a8a"); ctx.fillStyle = g; rrect(-W / 2, -H / 2, W, H, 10); ctx.fill();
+          ctx.shadowBlur = 0; ctx.save(); rrect(-W / 2, -H / 2, W, H, 10); ctx.clip(); var gx = lerp(-W, W, seg(p, 0.42, 0.62)); var gg = ctx.createLinearGradient(gx - W * 0.3, -H / 2, gx + W * 0.3, H / 2); gg.addColorStop(0, "rgba(255,255,255,0)"); gg.addColorStop(0.5, "rgba(255,255,255,.95)"); gg.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = gg; ctx.fillRect(-W, -H, W * 2, H * 2); ctx.restore();
+          ctx.restore();
+          if (p < 0.5 && spin > 0.3) for (var k = 0; k < 4; k++) { var q = (p * 3 + k / 4) % 1; ctx.globalAlpha = 0.7 * fade; glowLine(e.w * (1 - q * 0.5), e.cy - s * 0.3 + k * s * 0.18, e.w * (1 - q * 0.5) + 60, e.cy - s * 0.3 + k * s * 0.18, e.c2, 3, 14); ctx.globalAlpha = 1; }
+          if (p >= 0.5) { flash((0.04 - (p - 0.5)) * 10, "#ffffff"); ps.beams.forEach(function (b) { ctx.globalAlpha = (1 - after) * fade; var L = e.w * ease(Math.min(1, after * 2)); glowLine(e.cx, e.cy, e.cx + Math.cos(Math.PI + b.a) * L, e.cy + Math.sin(Math.PI + b.a) * L, e.c1, 4, 20); ctx.globalAlpha = 1; }); }
+        } },
+      /* Energy spirals into a sphere that grows and crackles, then fires one enormous beam at the target. */
+      burst: { dur: 2100, impact: 0.5, parts: function () { return { m: moteParts(30), in: parts(80, function () { return { a: Math.random() * TAU, d: rnd(0.4, 1.2), v: rnd(0.6, 1.4) }; }), deb: parts(50, function () { return { a: Math.random() * TAU, v: rnd(0.2, 1), r: rnd(2, 5) }; }) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), charge = seg(p, 0.05, 0.48), fire = seg(p, 0.48, 0.8), after = seg(p, 0.5, 1);
+          var ox = Math.min(e.from.x, e.w * 0.25) + s * 0.05, oy = e.cy, tx = e.w + 40;
+          motes(e, ps.m, p, fade);
+          var R0 = s * 0.03 + s * 0.15 * ease(charge) * (1 - fire * 0.6);
+          if (p < 0.5) ps.in.forEach(function (q) { var t = (charge * q.v * 2) % 1, d = s * q.d * (1 - t); spark(ox + Math.cos(q.a + t * 3) * d, oy + Math.sin(q.a + t * 3) * d, 2, q.v > 1 ? "#fff" : e.c1, t * fade); });
+          var g = ctx.createRadialGradient(ox, oy, 0, ox, oy, R0 * 1.8); g.addColorStop(0, "#ffffff"); g.addColorStop(0.4, e.c1); g.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = fade * (1 - seg(p, 0.8, 0.95)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ox + (p < 0.48 ? rnd(-2, 2) * charge : 0), oy, R0 * 1.8, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+          if (charge > 0.4 && p < 0.5) for (var c = 0; c < 3; c++) { var a = Math.random() * TAU; ctx.globalAlpha = fade; glowLine(ox, oy, ox + Math.cos(a) * R0 * 2, oy + Math.sin(a) * R0 * 2, e.c1, 1.5, 10); ctx.globalAlpha = 1; }
+          if (p >= 0.48 && fire < 1) {
+            var bw = s * 0.16 * Math.sin(Math.min(1, fire * 1.3) * Math.PI) + 2, len = (tx - ox) * Math.min(1, fire * 6);
+            var bg = ctx.createLinearGradient(0, oy - bw, 0, oy + bw); bg.addColorStop(0, "rgba(0,0,0,0)"); bg.addColorStop(0.3, e.c1); bg.addColorStop(0.5, "#ffffff"); bg.addColorStop(0.7, e.c1); bg.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.globalAlpha = fade; ctx.shadowColor = e.c1; ctx.shadowBlur = 40; ctx.fillStyle = bg; ctx.fillRect(ox, oy - bw, len, bw * 2); ctx.shadowBlur = 0;
+            for (var w = 0; w < 6; w++) { var wx = ox + ((fire * 3 + w / 6) % 1) * len; ring(wx, oy, bw * 0.9, "#ffffff", 2, 0.4 * fade); }
+            ctx.globalAlpha = 1;
+          }
+          if (p >= 0.5) { flash((0.04 - (p - 0.5)) * 10, "#ffffff"); ps.deb.forEach(function (d) { var t = after; spark(e.to.x + Math.cos(d.a) * d.v * s * 0.5 * t, e.to.y + Math.sin(d.a) * d.v * s * 0.5 * t, d.r, d.v > 0.6 ? e.c1 : "#fff", (1 - t) * fade); }); }
+        } },
+      /* The sky fills with blazing meteors that rain down on the target in waves, ending with a giant one. */
+      barrage: { dur: 2200, impact: 0.5, parts: function () { return { met: parts(26, function (i) { return { t: 0.1 + i / 26 * 0.55, ox: rnd(-0.35, 0.35), oy: rnd(-0.15, 0.15), r: rnd(0.012, 0.03) }; }), m: moteParts(30) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), O = "#f97316";
+          var sky = ctx.createLinearGradient(0, 0, 0, e.h); sky.addColorStop(0, "rgba(124,45,18," + 0.4 * Math.min(1, p * 5) * fade + ")"); sky.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = sky; ctx.fillRect(0, 0, e.w, e.h);
+          motes(e, ps.m, p, fade, "#fed7aa");
+          var drawMet = function (q, tx, ty, r) {
+            var sx = tx + s * 0.9, sy = ty - s * 1.1, x = lerp(sx, tx, q), y = lerp(sy, ty, q);
+            var g = ctx.createLinearGradient(x, y, x + s * 0.35, y - s * 0.42); g.addColorStop(0, "rgba(253,186,116,.95)"); g.addColorStop(1, "rgba(249,115,22,0)");
+            ctx.strokeStyle = g; ctx.lineWidth = r * 1.6; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + s * 0.35, y - s * 0.42); ctx.stroke();
+            ctx.fillStyle = "#fff7ed"; ctx.shadowColor = O; ctx.shadowBlur = 25; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
+          };
+          ps.met.forEach(function (m) {
+            var q = seg(p, m.t - 0.1, m.t), tx = e.cx + m.ox * s, ty = e.cy + s * 0.15 + m.oy * s;
+            if (q > 0 && q < 1) { ctx.globalAlpha = fade; drawMet(q, tx, ty, s * m.r); ctx.globalAlpha = 1; }
+            var b = seg(p, m.t, m.t + 0.12); if (b > 0 && b < 1) { ring(tx, ty, s * 0.02 + b * s * 0.09, O, 3 * (1 - b), (1 - b) * fade); spark(tx, ty, s * 0.03 * (1 - b), "#fff7ed", (1 - b) * fade); }
+          });
+          var big = seg(p, 0.62, 0.74);
+          if (big > 0 && big < 1) { ctx.globalAlpha = fade; drawMet(big, e.cx, e.cy + s * 0.15, s * 0.08); ctx.globalAlpha = 1; }
+          if (p >= 0.74) { var a = seg(p, 0.74, 1); flash((0.04 - (p - 0.74)) * 12, "#fff7ed"); ring(e.cx, e.cy + s * 0.15, s * 0.05 + a * s * 0.7, O, 8 * (1 - a), (1 - a) * fade); ring(e.cx, e.cy + s * 0.15, s * 0.03 + a * s * 0.45, "#fff", 3 * (1 - a), (1 - a) * fade); }
+        } },
+      /* The screen bleeds red, a reaper's scythe rises behind the target and sweeps once: EXECUTE. */
+      execute: { dur: 2100, impact: 0.55, parts: function () { return { m: moteParts(30) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), rise = ease(seg(p, 0.05, 0.42)), sweep = seg(p, 0.46, 0.56), after = seg(p, 0.56, 1), RED = "#dc2626";
+          var vg = ctx.createRadialGradient(e.cx, e.cy, s * 0.2, e.cx, e.cy, Math.hypot(e.w, e.h) / 2); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(127,29,29," + 0.7 * rise * fade + ")"); ctx.fillStyle = vg; ctx.fillRect(0, 0, e.w, e.h);
+          motes(e, ps.m, p, fade, "#fca5a5");
+          var px = e.cx + s * 0.25, py = e.cy + s * 0.4, ang = sweep > 0 ? lerp(-2.3, -0.2, ease(sweep)) : lerp(-1.6, -2.3, rise);
+          var drawScythe = function (a, alpha) {
+            ctx.save(); ctx.translate(px, py); ctx.rotate(a); ctx.globalAlpha = alpha;
+            ctx.strokeStyle = "#292524"; ctx.lineWidth = s * 0.022; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(s * 0.8, 0); ctx.stroke();
+            ctx.shadowColor = RED; ctx.shadowBlur = 30; var g = ctx.createLinearGradient(s * 0.8, 0, s * 0.8, s * 0.5); g.addColorStop(0, "#f1f5f9"); g.addColorStop(1, "#64748b"); ctx.fillStyle = g;
+            ctx.beginPath(); ctx.moveTo(s * 0.78, -s * 0.02); ctx.quadraticCurveTo(s * 0.62, s * 0.3, s * 0.2, s * 0.42); ctx.quadraticCurveTo(s * 0.56, s * 0.2, s * 0.82, s * 0.03); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = RED; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); ctx.shadowBlur = 0;
+          };
+          if (sweep > 0 && sweep < 1) for (var k = 1; k <= 4; k++) drawScythe(lerp(-2.3, -0.2, ease(Math.max(0, sweep - k * 0.08))), 0.15 * fade);
+          if (after < 0.7) drawScythe(ang, Math.min(1, rise * 1.5) * (1 - after / 0.7) * fade);
+          if (p >= 0.55) {
+            var c = seg(p, 0.55, 0.95);
+            flash((0.05 - (p - 0.55)) * 12, RED);
+            ctx.save(); ctx.translate(e.cx, e.cy); ctx.rotate(0.35); ctx.globalAlpha = (1 - c) * fade; ctx.fillStyle = "#fecaca"; ctx.shadowColor = RED; ctx.shadowBlur = 40; var gw = s * 0.025 * (1 - c) + 2; ctx.fillRect(-e.w, -gw / 2, e.w * 2, gw); ctx.restore();
+            ctx.save(); ctx.font = "900 " + Math.round(s * 0.11) + "px 'Cinzel', serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.globalAlpha = Math.min(1, c * 8) * (1 - seg(c, 0.6, 1)) * fade;
+            ctx.fillStyle = "#7f1d1d"; ctx.fillText("EXECUTE", e.cx + 4, e.cy - s * 0.28 + 4); ctx.fillStyle = "#fecaca"; ctx.shadowColor = RED; ctx.shadowBlur = 30; ctx.fillText("EXECUTE", e.cx, e.cy - s * 0.28); ctx.restore();
+          }
+        } },
+      /* A dome of hexagons builds up cell by cell around the caster, then flares as it seals. */
+      shield: { dur: 1900, impact: 0.55, parts: function () { var cells = []; for (var row = 0; row < 7; row++) for (var col = -6; col <= 6; col++) cells.push({ row: row, col: col, o: Math.random() }); return { cells: cells, m: moteParts(40) }; },
+        draw: function (p, e, ps) {
+          var fade = cineDark(p), s = Math.min(e.w, e.h), build = seg(p, 0.08, 0.55), after = seg(p, 0.55, 1), R = s * 0.45, hr = s * 0.045, cx = e.cx, cy = e.cy + R * 0.55;
+          motes(e, ps.m, p, fade, e.c1);
+          ps.cells.forEach(function (c) {
+            var el = c.row * 0.21, x = cx + Math.sin(c.col * 0.2) * R * Math.cos(el), y = cy - Math.sin(el) * R * 1.1;
+            var on = seg(build, c.row / 7 * 0.7 + c.o * 0.2, c.row / 7 * 0.7 + c.o * 0.2 + 0.2);
+            if (on <= 0 || Math.abs(Math.sin(c.col * 0.2)) * Math.cos(el) > 0.98) return;
+            ctx.globalAlpha = on * fade * (1 - seg(after, 0.6, 1)) * (0.6 + 0.4 * Math.sin(p * 20 + c.o * 6)); ctx.strokeStyle = e.c1; ctx.shadowColor = e.c1; ctx.shadowBlur = 14; ctx.lineWidth = 2;
+            hexAt(x, y, hr * Math.cos(el) * 0.95 + hr * 0.3); ctx.stroke(); ctx.globalAlpha *= 0.25; ctx.fillStyle = e.c1; ctx.fill();
+          });
+          ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+          if (p >= 0.55) { flash((0.04 - (p - 0.55)) * 10, e.c1); ctx.save(); ctx.globalAlpha = (1 - after) * 0.6 * fade; ctx.strokeStyle = "#ffffff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 30; ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(cx, cy - R * 0.5, R * 1.05 * (1 + after * 0.2), R * 1.05 * (1 + after * 0.2), 0, Math.PI, TAU); ctx.stroke(); ctx.restore(); }
+        } }
+    };
+    Object.keys(CINE).forEach(function (k) { LIB[k] = CINE[k]; });
+
     Object.keys(LIB).forEach(function (k) { if (k !== "snap" && k !== "snapMax") LIB[k + "Epic"] = epicFx(LIB[k]); });
 
     function play(arch, fromEl, toEl, aura, abilityName, userName) {
@@ -2603,22 +3044,22 @@
       /* Rarer than 1 in 3,000,000: the cinematic version, with the shake and boom on the impact. */
       var edef = UFX.LIB[ab.arch + "Epic"];
       var edur = UFX.play(ab.arch + "Epic", $("#visual-" + who), $("#visual-" + (self ? who : target)), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
-      setTimeout(function () { shake(self ? 1 : 3); Sound.boom(self ? 1 : 3); }, edur * edef.impact);
+      setTimeout(function () { shake(self ? 1 : 3); Sound.boom(self ? 1 : 3); react(self ? who : target, ab.arch); }, edur * edef.impact);
       setTimeout(function () { BFX.play(ab.arch, who, self ? who : target, c1, c2); }, edur * (edef.impact + 0.05));
       return edur + 120;
     }
     if (ultimate) {
       var udur = UFX.play(ab.arch, $("#visual-" + who), $("#visual-" + (self ? who : target)), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
-      var udef = UFX.LIB[ab.arch];
+      var udef = UFX.LIB[ab.arch], hitAt = udef && udef.impact ? udef.impact : 0.45;
       var ushake = ab.arch === "burst" || ab.arch === "execute" ? 3 : (ab.arch === "heavy" || ab.arch === "stun" || ab.arch === "barrage" ? 2 : 1);
-      setTimeout(function () { shake(ushake); }, udur * 0.4);
-      if (ab.arch === "burst" || ab.arch === "execute" || ab.arch === "heavy") setTimeout(function () { Sound.boom(2); }, udur * 0.35);
-      setTimeout(function () { BFX.play(ab.arch, who, self ? who : target, c1, c2); }, udur * 0.55);
+      setTimeout(function () { shake(ushake); react(self ? who : target, ab.arch); if (ab.arch === "burst" || ab.arch === "execute" || ab.arch === "heavy") Sound.boom(2); }, udur * hitAt);
+      setTimeout(function () { BFX.play(ab.arch, who, self ? who : target, c1, c2); }, udur * Math.min(0.9, hitAt + 0.05));
       return udur + 120;
     }
     var dur = BFX.play(ab.arch, who, self ? who : target, c1, c2);
     var def = BFX.LIB[ab.arch];
     if (def && def.shake) setTimeout(function () { shake(def.shake); }, dur * 0.45);
+    setTimeout(function () { react(self ? who : target, ab.arch); }, dur * 0.45);
     return dur + 80;
   }
 
@@ -2905,6 +3346,35 @@
       setTimeout(step, delay);
     }
     step();
+  }
+
+  /* How a fighter reacts in the arena when a move lands on them (or, for moves on yourself, on the caster). */
+  var REACT = { strike: "slashed", heavy: "smashed", precision: "pierced", drain: "drained", poison: "poisoned", weaken: "weakened", stun: "zapped", burst: "blasted", barrage: "pelted", execute: "executed", guard: "warded", heal: "blessed", focus: "focused", reflect: "mirrored", shield: "warded" };
+  var REACT_CLASSES = Object.keys(REACT).map(function (k) { return "re-" + REACT[k]; });
+  function react(side, arch) {
+    var kind = REACT[arch], host = $("#fighter-" + side);
+    if (!kind || !battle || host.classList.contains("snapped")) return;
+    if (kind === "slashed") { sliceFighter(side); return; }
+    REACT_CLASSES.forEach(function (c) { host.classList.remove(c); });
+    void host.offsetWidth;
+    host.classList.add("re-" + kind);
+    host.style.setProperty("--away", side === "a" ? "-1" : "1");
+    setTimeout(function () { host.classList.remove("re-" + kind); }, 1300);
+  }
+  /* Cut in two: two copies of the fighter's picture, each showing one half, slide apart along a diagonal and
+     come back together. */
+  function sliceFighter(side) {
+    var vis = $("#visual-" + side), host = $("#fighter-" + side), r = vis.getBoundingClientRect(), hr = host.getBoundingClientRect();
+    ["hi", "lo"].forEach(function (half) {
+      var c = vis.cloneNode(true);
+      c.removeAttribute("id");
+      c.classList.add("slice", "slice-" + half);
+      c.style.left = (r.left - hr.left) + "px"; c.style.top = (r.top - hr.top) + "px"; c.style.width = r.width + "px"; c.style.height = r.height + "px";
+      host.appendChild(c);
+      setTimeout(function () { c.remove(); }, 950);
+    });
+    vis.classList.add("sliced");
+    setTimeout(function () { vis.classList.remove("sliced"); }, 950);
   }
 
   /* Fighters whose aura is rarer than 1 in 3,000,000 get the cinematic versions of their moves. */
@@ -3564,8 +4034,8 @@
         var key = (parts[0] || "").toLowerCase();
         var cnt = parts[1] !== undefined ? Math.floor(Number(parts[1])) : 1;
         if (!POTIONS[key] || !(cnt > 0)) { adminPrint("Usage: potion <" + POTION_ORDER.join("|") + "> [count]"); break; }
-        S.potions[key] = (S.potions[key] || 0) + cnt;
-        adminPrint("Added " + cnt + " x " + POTIONS[key].name + ".");
+        var added = addPotion(key, cnt);
+        adminPrint("Added " + added + " x " + POTIONS[key].name + "." + (added < cnt ? " (Healing potions are capped at " + MAX_HEALS + " in total.)" : ""));
         break;
       }
       case "training": {
