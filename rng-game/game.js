@@ -5864,6 +5864,41 @@
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
+  /* ---------- Updates: a tab left open for days keeps running the old game (no chat, old moves...). Every few
+     minutes, and whenever the player comes back to the tab, the game asks the site for its newest page; if
+     that has a higher Version number it offers to update, and updates by itself when the player returns. ---------- */
+  var RUNNING_VERSION = (function () { var m = /Version (\d+)/.exec($("#game-version").textContent); return m ? Number(m[1]) : 0; })();
+  var newerVersion = 0;
+  function checkForUpdate() {
+    if (!RUNNING_VERSION || !window.fetch || location.protocol === "file:") return Promise.resolve(0);
+    return fetch(location.pathname + "?version-check=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .then(function (html) {
+        var m = /id="game-version">Version (\d+)</.exec(html), v = m ? Number(m[1]) : 0;
+        if (v > RUNNING_VERSION) {
+          newerVersion = v;
+          $("#update-text").textContent = "🔄 Version " + v + " of the game is out! You have Version " + RUNNING_VERSION + ".";
+          $("#update-banner").classList.remove("hidden");
+        }
+        return v > RUNNING_VERSION ? v : 0;
+      }, function () { return 0; });
+  }
+  /* Safe to reload by itself: nothing is being played out right now. */
+  function idleForUpdate() { return !busy && !CS.running && !(battle && !battle.over) && PvP.status === "idle"; }
+  function applyUpdate() {
+    save();
+    pushSave(true);
+    releaseLease();
+    setTimeout(function () { location.reload(); }, 150);
+  }
+  $("#update-now").addEventListener("click", applyUpdate);
+  setTimeout(checkForUpdate, 8000);
+  setInterval(function () { if (document.visibilityState === "visible") checkForUpdate(); }, 180000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible") return;
+    checkForUpdate().then(function (v) { if (v && idleForUpdate()) applyUpdate(); });
+  });
+
   $("#inv-search").addEventListener("input", function () { inventoryShown = INVENTORY_PAGE; renderInventory(); });
   $("#inv-more").addEventListener("click", function () { inventoryShown += INVENTORY_PAGE; renderInventory(); });
   $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });

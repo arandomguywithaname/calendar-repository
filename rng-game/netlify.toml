@@ -8,3 +8,14 @@
   for = "/*"
   [headers.values]
     X-Content-Type-Options = "nosniff"
+
+# The page itself is always checked for a newer copy, so players get updates on their next load.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"

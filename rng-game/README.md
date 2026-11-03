@@ -251,6 +251,13 @@ No build step and no npm install.
   players see a one-time Error 404 note saying online accounts aren't set up.
   Gifting auras and the chat need the account function too (the chat shows Error 523
   without it). Everything else plays normally.
+- **Players get updates by themselves.** A tab left open for days keeps running the
+  old game. Every few minutes, and whenever a player comes back to the tab, the game
+  asks the site for its newest page; when that has a higher Version number it shows a
+  "Version N is out" banner with Update now, and updates by itself (keeping all
+  progress) when the player returns to the tab while nothing is going on. The page
+  itself is served with `Cache-Control: no-cache` (see `netlify.toml`). Players on a
+  version from before this one need to reload once to get it.
 - **Check which version is live.** The bottom of every page shows "Version N". Each
   update raises N, together with the `?v=N` on the script and style links in
   `index.html`, so browsers fetch the new files instead of reusing old ones. If the
