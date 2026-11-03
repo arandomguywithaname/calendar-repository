@@ -1689,9 +1689,17 @@
       return { dur: dur, parts: function (e) {
           var t = e.to, dx = t.x - e.from.x, dy = t.y - e.from.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
           return makeParts(n, function () {
-            var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * t.r * 1.05;
-            var ox = Math.cos(a) * d, oy = Math.sin(a) * d;
-            var order = ((ox * ux + oy * uy) / t.r + 1) / 2; /* 0 on the side facing the snapper */
+            var ox, oy;
+            if (t.w) {
+              /* the whole fighter: specks everywhere in its box, thicker where the picture is */
+              ox = (Math.random() - 0.5) * t.w * 0.9;
+              oy = Math.random() < 0.55 ? -t.h * 0.18 + (Math.random() - 0.5) * t.h * 0.5 : (Math.random() - 0.5) * t.h;
+            } else {
+              var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * t.r * 1.05;
+              ox = Math.cos(a) * d; oy = Math.sin(a) * d;
+            }
+            var reach = t.w ? Math.abs(ux) * t.w / 2 + Math.abs(uy) * t.h / 2 : t.r;
+            var order = ((ox * ux + oy * uy) / reach + 1) / 2; /* 0 on the side facing the snapper */
             return { x: t.x + ox, y: t.y + oy, start: Math.max(0, Math.min(1, order)) * 0.6 + Math.random() * 0.08,
               vx: ux * rnd(60, 200) + rnd(-30, 30), vy: uy * rnd(60, 200) - rnd(40, 110), r: rnd(1.4, 4.2), ph: Math.random() * TAU, c: Math.floor(Math.random() * 4) };
           });
@@ -1920,8 +1928,8 @@
           makeParts(10, function (i) { var a = i / 10 * TAU, d = q * f.r * 1.6; spark(f.x - size * 0.12 + Math.cos(a) * d, y - size * 0.25 + Math.sin(a) * d, 2.5, "#fff", 1 - q); });
         }
       } },
-      dust: dustFx(260, 2400),
-      dustMax: dustFx(480, 3000),
+      dust: dustFx(420, 3000),
+      dustMax: dustFx(700, 3600),
       destiny: flatHitFx("#f59e0b", "#fde68a", "#fffbeb"),
       burst: { dur: 950, parts: function () { return makeParts(70, function () { return { a: rnd(0, TAU), s: rnd(60, 260), r: rnd(2, 5) }; }); },
         draw: function (p, e, parts) {
@@ -2002,10 +2010,15 @@
       } }
     };
 
-    function play(arch, fromSide, toSide, c1, c2) {
+    /* The whole fighter's box (picture, name and health bar), for effects that cover all of it. */
+    function boxOf(side) {
+      var a = arena.getBoundingClientRect(), v = $("#fighter-" + side).getBoundingClientRect();
+      return { x: v.left - a.left + v.width / 2, y: v.top - a.top + v.height / 2, r: Math.max(v.width, v.height) / 2, left: v.left - a.left, top: v.top - a.top, w: v.width, h: v.height };
+    }
+    function play(arch, fromSide, toSide, c1, c2, wide) {
       var def = LIB[arch] || LIB.strike;
       resize();
-      var env = { from: rectOf(fromSide), to: rectOf(toSide), c1: c1 || "#f8fafc", c2: c2 || "#a78bfa" };
+      var env = { from: rectOf(fromSide), to: wide ? boxOf(toSide) : rectOf(toSide), c1: c1 || "#f8fafc", c2: c2 || "#a78bfa" };
       var anim = { def: def, env: env, start: performance.now(), parts: def.parts ? def.parts(env) : null };
       anims.push(anim);
       if (!running) { running = true; raf = requestAnimationFrame(frame); }
@@ -2071,87 +2084,219 @@
         } };
     }
 
-    /* Snap: the screen goes dark, a hand rises, trembles and snaps; a flash, shockwaves, cracks and SNAP! follow.
-       `max` (auras rarer than 1 in 3,000,000) adds cinema bars, six stones lighting up around the hand and pouring
-       energy into its fingers, a rainbow shockwave, glitching and a heavier screen. `snapAt` is when the fingers
-       snap, so the sound and the shake can land on it. The target crumbling to dust comes with the hit (snapHit). */
+    /* A drawn hand doing a real finger snap. Origin = wrist, S = hand height, `t` 0 = middle finger pressed on
+       the thumb, 1 = snapped (the finger has slid off the thumb and slapped into the palm), `press` bends it
+       harder just before. `gold` draws the golden gauntlet with six stones. Returns where the fingers met. */
+    var HAND_A = { thumb: [[-0.17, -0.30], [-0.27, -0.47], [-0.31, -0.64]], middle: [[-0.03, -0.62], [-0.15, -0.80], [-0.29, -0.70]],
+      index: [[-0.14, -0.60], [-0.23, -0.82], [-0.28, -0.99]], ring: [[0.07, -0.60], [0.14, -0.73], [0.10, -0.60]], pinky: [[0.17, -0.53], [0.23, -0.63], [0.19, -0.52]] };
+    var HAND_B = { thumb: [[-0.17, -0.30], [-0.30, -0.45], [-0.40, -0.58]], middle: [[-0.03, -0.62], [-0.11, -0.50], [-0.02, -0.39]],
+      index: [[-0.14, -0.60], [-0.24, -0.81], [-0.30, -0.97]], ring: [[0.07, -0.60], [0.14, -0.73], [0.10, -0.60]], pinky: [[0.17, -0.53], [0.23, -0.63], [0.19, -0.52]] };
+    var STONES = ["#a855f7", "#3b82f6", "#ef4444", "#f97316", "#22c55e", "#facc15"];
+    function drawHand(x, y, S, t, press, gold, glow, stonesLit) {
+      var skin = gold ? ["#d4a017", "#ffe58a", "#5c3d00"] : ["#f2c094", "#ffe3c7", "#7a4a26"];
+      var W = { thumb: 0.12, index: 0.1, middle: 0.105, ring: 0.095, pinky: 0.085 };
+      var pt = function (name, i) {
+        var a = HAND_A[name][i], b = HAND_B[name][i], k = name === "middle" && i > 0 && t <= 0 ? press * 0.03 : 0;
+        return [x + (a[0] + (b[0] - a[0]) * t - k) * S, y + (a[1] + (b[1] - a[1]) * t + k) * S];
+      };
+      var limb = function (pts, w) {
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        [[w + 0.035, skin[2]], [w, skin[0]]].forEach(function (L) {
+          ctx.strokeStyle = L[1]; ctx.lineWidth = L[0] * S; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+          for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.stroke();
+        });
+        ctx.strokeStyle = skin[1]; ctx.globalAlpha *= 0.8; ctx.lineWidth = w * 0.3 * S; ctx.beginPath();
+        ctx.moveTo(pts[0][0] - 0.015 * S, pts[0][1]); for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0] - 0.015 * S, pts[j][1]); ctx.stroke();
+        ctx.globalAlpha /= 0.8;
+      };
+      ctx.save();
+      ctx.shadowColor = glow; ctx.shadowBlur = 40;
+      /* forearm and palm */
+      ctx.fillStyle = skin[2]; ctx.beginPath(); ctx.moveTo(x - 0.19 * S, y + 0.6 * S); ctx.lineTo(x - 0.17 * S, y - 0.2 * S); ctx.lineTo(x + 0.19 * S, y - 0.2 * S); ctx.lineTo(x + 0.21 * S, y + 0.6 * S); ctx.fill();
+      ctx.fillStyle = skin[0]; ctx.beginPath(); ctx.moveTo(x - 0.16 * S, y + 0.6 * S); ctx.lineTo(x - 0.145 * S, y - 0.2 * S); ctx.lineTo(x + 0.165 * S, y - 0.2 * S); ctx.lineTo(x + 0.18 * S, y + 0.6 * S); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = skin[2]; ctx.beginPath(); ctx.ellipse(x, y - 0.41 * S, 0.245 * S, 0.27 * S, 0.08, 0, TAU); ctx.fill();
+      ctx.fillStyle = skin[0]; ctx.beginPath(); ctx.ellipse(x, y - 0.41 * S, 0.225 * S, 0.25 * S, 0.08, 0, TAU); ctx.fill();
+      if (gold) { ctx.strokeStyle = skin[1]; ctx.lineWidth = 0.012 * S; ctx.beginPath(); ctx.ellipse(x, y - 0.41 * S, 0.17 * S, 0.19 * S, 0.08, 0, TAU); ctx.stroke(); }
+      ["ring", "pinky"].forEach(function (n) { limb([pt(n, 0), pt(n, 1), pt(n, 2)], W[n]); });
+      limb([pt("index", 0), pt("index", 1), pt("index", 2)], W.index);
+      limb([pt("thumb", 0), pt("thumb", 1), pt("thumb", 2)], W.thumb);
+      limb([pt("middle", 0), pt("middle", 1), pt("middle", 2)], W.middle);
+      if (gold) {
+        /* the six stones: one big one on the back of the hand, one on each finger */
+        var spots = [[0, -0.41, 0.075], ["thumb", 0.045], ["index", 0.038], ["middle", 0.04], ["ring", 0.036], ["pinky", 0.032]];
+        spots.forEach(function (sp, i) {
+          var lit = stonesLit[i] || 0, px, py, r;
+          if (typeof sp[0] === "number") { px = x + sp[0] * S; py = y + sp[1] * S; r = sp[2] * S; }
+          else { var a = pt(sp[0], 0), b = pt(sp[0], 1); px = (a[0] + b[0]) / 2; py = (a[1] + b[1]) / 2; r = sp[1] * S; }
+          ctx.fillStyle = "#2a1d00"; ctx.beginPath(); ctx.arc(px, py, r * 1.25, 0, TAU); ctx.fill();
+          ctx.shadowColor = STONES[i]; ctx.shadowBlur = 10 + 40 * lit;
+          ctx.globalAlpha = 0.35 + 0.65 * lit; ctx.fillStyle = STONES[i]; ctx.beginPath(); ctx.arc(px, py, r, 0, TAU); ctx.fill();
+          ctx.globalAlpha = 0.9 * lit; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(px - r * 0.3, py - r * 0.3, r * 0.3, 0, TAU); ctx.fill();
+          ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        });
+      }
+      ctx.restore();
+      var c = HAND_A.thumb[2];
+      return [x + c[0] * S, y + c[1] * S];
+    }
+
+    /* Snap: the screen goes dark and a hand rises and presses its middle finger on its thumb, trembling as it
+       builds up; then the finger slides off and slaps the palm with a crack and a spark where they met. `max`
+       (auras rarer than 1 in 3,000,000) makes it a golden gauntlet: cinema bars, its six stones lighting up one
+       by one with energy crackling around it, and a heavier snap. The target turning to dust comes with the
+       hit (snapHit). `snapAt` is when the fingers snap, so the sound and shake land on it. */
     function snapFx(max) {
-      var STONES = ["#a855f7", "#3b82f6", "#ef4444", "#f97316", "#22c55e", "#facc15"];
-      var AT = max ? 0.56 : 0.46;
-      return { dur: max ? 3200 : 2200, snapAt: AT,
+      var AT = max ? 0.62 : 0.5;
+      return { dur: max ? 3400 : 2400, snapAt: AT,
         parts: function () {
           return {
-            burst: parts(max ? 240 : 120, function () { return { a: Math.random() * TAU, s: rnd(0.12, 1.3), r: rnd(1.2, 4.5), c: Math.floor(Math.random() * 6) }; }),
             motes: parts(max ? 90 : 40, function () { return { x: Math.random(), y: Math.random(), r: rnd(0.5, 1.8), v: rnd(0.05, 0.25) }; }),
-            cracks: parts(max ? 12 : 7, function (i) {
-              var a = (i + Math.random() * 0.6) / (max ? 12 : 7) * TAU, pts = [], d = 0;
-              while (d < 1.6) { d += rnd(0.08, 0.2); pts.push({ d: d, j: rnd(-0.12, 0.12) }); }
-              return { a: a, pts: pts };
-            })
+            sparks: parts(max ? 70 : 40, function () { return { a: rnd(-Math.PI, Math.PI), s: rnd(0.2, 1), r: rnd(1, 3) }; }),
+            arcs: parts(10, function () { return { a: Math.random() * TAU, l: rnd(0.3, 0.6), ph: Math.random() * TAU }; })
           };
         },
         draw: function (p, e, ps) {
-          var s = Math.min(e.w, e.h), size = s * (max ? 0.36 : 0.3), R = Math.hypot(e.w, e.h) / 2;
-          var fade = 1 - seg(p, 0.88, 1), pre = seg(p, AT * 0.68, AT), post = seg(p, AT, 1);
-          ctx.fillStyle = "rgba(3,2,10," + (0.93 * Math.min(1, p / 0.1) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
-          ps.motes.forEach(function (m) { var y = ((m.y - p * m.v) % 1 + 1) % 1; spark(m.x * e.w, y * e.h, m.r, "#fff", 0.4 * fade); });
+          var s = Math.min(e.w, e.h), S = s * (max ? 0.62 : 0.55);
+          var fade = 1 - seg(p, 0.86, 1), build = seg(p, AT - (max ? 0.2 : 0.15), AT), post = seg(p, AT, 1);
+          ctx.fillStyle = "rgba(3,2,10," + (0.94 * Math.min(1, p / 0.08) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
+          ps.motes.forEach(function (m) { var y = ((m.y - p * m.v) % 1 + 1) % 1; spark(m.x * e.w, y * e.h, m.r, "#fff", 0.35 * fade); });
           if (max) { var bar = e.h * 0.12 * ease(Math.min(1, p / 0.1)) * fade; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, e.w, bar); ctx.fillRect(0, e.h - bar, e.w, bar); }
-          var rise = ease(seg(p, 0.03, AT * 0.62));
-          var hx = e.cx, hy = lerp(e.h + size, e.cy + size * 0.1, rise);
-          var tipX = hx - size * 0.13, tipY = hy - size * 0.26;
-          /* the glow gathering behind the hand */
-          var gl = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, size * (1.1 + pre * 0.8));
-          gl.addColorStop(0, e.c1); gl.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.globalAlpha = (0.25 + 0.45 * pre) * rise * (1 - post) ; ctx.fillStyle = gl; ctx.fillRect(0, 0, e.w, e.h); ctx.globalAlpha = 1;
-          if (max) STONES.forEach(function (c, i) {
-            var lit = seg(p, 0.12 + i * 0.05, 0.17 + i * 0.05); if (lit <= 0) return;
-            var ang = Math.PI * (1.08 + i * 0.168), Rr = size * (0.95 + 0.5 * post);
-            var sx = tipX + Math.cos(ang) * Rr, sy = tipY + Math.sin(ang) * Rr * 0.8;
-            ctx.shadowColor = c; ctx.shadowBlur = 30;
-            spark(sx, sy, size * (0.045 + 0.01 * Math.sin(p * 50 + i)), c, lit * fade * (1 - post * 0.8));
-            ctx.shadowBlur = 0;
-            if (p < AT) {
-              var k = seg(p, 0.17 + i * 0.05, AT);
-              for (var dsh = 0; dsh < 4; dsh++) {
-                var q0 = ((k * 3 + dsh / 4) % 1), q1 = Math.min(1, q0 + 0.12);
-                glowLine(lerp(sx, tipX, q0), lerp(sy, tipY, q0), lerp(sx, tipX, q1), lerp(sy, tipY, q1), c, 2.5, 14);
-              }
-            }
-          });
-          /* the hand: rises, trembles as the snap builds, kicks back when it snaps */
-          var tremble = p < AT ? pre * size * 0.025 : 0;
-          var scale = p < AT ? 1 + 0.08 * pre : 1 + 0.2 * Math.exp(-post * 9);
+          var rise = ease(seg(p, 0.03, max ? 0.34 : 0.3)), sink = seg(p, 0.8, 1);
+          var hx = e.cx + S * 0.08, hy = lerp(e.h + S * 1.1, e.cy + S * 0.55, rise) + ease(sink) * S * 0.6;
+          var zoom = 1 + 0.12 * build - 0.05 * Math.min(1, post * 4);
+          var trem = p < AT ? build * build * S * 0.012 : 0;
+          var t = p < AT ? 0 : Math.min(1.12, seg(p, AT, AT + 0.03) * 1.12) - Math.max(0, seg(p, AT + 0.03, AT + 0.07)) * 0.12;
+          var lit = STONES.map(function (c, i) { return max ? seg(p, 0.12 + i * 0.05, 0.16 + i * 0.05) * (1 - 0.5 * post) : 0; });
+          /* light behind the hand, stronger as the snap builds */
+          var gl = ctx.createRadialGradient(hx - S * 0.2, hy - S * 0.65, 0, hx - S * 0.2, hy - S * 0.65, S * (0.6 + build * 0.6));
+          gl.addColorStop(0, max ? "#ffe58a" : e.c1); gl.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = (0.2 + 0.5 * build) * rise * (1 - post) * fade; ctx.fillStyle = gl; ctx.fillRect(0, 0, e.w, e.h); ctx.globalAlpha = 1;
           ctx.save();
-          ctx.translate(hx + (Math.random() - 0.5) * tremble, hy + (Math.random() - 0.5) * tremble);
-          ctx.rotate(p < AT ? -0.08 * pre : 0.1 * Math.exp(-post * 7));
-          ctx.scale(scale, scale);
-          ctx.font = size + "px " + EMOJI_FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.shadowColor = e.c1; ctx.shadowBlur = 30 + 60 * pre;
-          ctx.globalAlpha = Math.min(1, rise * 1.4) * fade;
-          ctx.fillText(snapHand(), 0, 0);
+          ctx.translate(hx, hy); ctx.scale(zoom, zoom); ctx.translate(-hx, -hy);
+          ctx.globalAlpha = Math.min(1, rise * 1.4) * (1 - ease(sink));
+          var tip = drawHand(hx + (Math.random() - 0.5) * trem, hy + (Math.random() - 0.5) * trem, S, t, build, max, max ? "#facc15" : e.c1, lit);
+          ctx.globalAlpha = 1;
+          /* energy crackling around the gauntlet as it builds */
+          if (max && p < AT && build > 0) ps.arcs.forEach(function (a, i) {
+            if (Math.random() > 0.35 + build * 0.6) return;
+            var r0 = S * 0.3, r1 = S * (0.3 + a.l * build), x0 = tip[0] + Math.cos(a.a + p * 9) * r0 * 0.5, y0 = tip[1] + Math.sin(a.a + p * 9) * r0 * 0.5;
+            ctx.strokeStyle = STONES[i % 6]; ctx.shadowColor = STONES[i % 6]; ctx.shadowBlur = 12; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y0);
+            for (var k = 1; k <= 5; k++) { var d = r0 * 0.5 + (r1 - r0 * 0.5) * k / 5; ctx.lineTo(tip[0] + Math.cos(a.a + p * 9) * d + rnd(-8, 8), tip[1] + Math.sin(a.a + p * 9) * d + rnd(-8, 8)); }
+            ctx.stroke(); ctx.shadowBlur = 0;
+          });
+          /* motion streaks of the middle finger flying down */
+          if (p >= AT && post < 0.12) for (var m = 0; m < 5; m++) {
+            ctx.globalAlpha = (1 - post / 0.12) * (0.6 - m * 0.1); ctx.strokeStyle = "#fff"; ctx.lineWidth = 0.02 * S;
+            ctx.beginPath(); ctx.arc(hx - 0.03 * S, hy - 0.62 * S, (0.15 + m * 0.03) * S, Math.PI * 1.05, Math.PI * 1.55); ctx.stroke(); ctx.globalAlpha = 1;
+          }
           ctx.restore();
           if (p < AT) return;
-          /* the snap */
-          flash((0.14 - post) * 8, "#ffffff");
-          for (var r = 0; r < 12; r++) { var ra = r / 12 * TAU + 0.2, rl = size * (0.2 + 0.9 * ease(Math.min(1, post * 4))); ctx.globalAlpha = Math.max(0, 1 - post * 3); glowLine(tipX, tipY, tipX + Math.cos(ra) * rl, tipY + Math.sin(ra) * rl, "#ffffff", 3, 18); ctx.globalAlpha = 1; }
-          var waves = max ? STONES : [e.c1, "#ffffff", e.c2];
-          waves.forEach(function (c, i) { var w = seg(post, i * 0.04, 1); ring(tipX, tipY, R * 1.2 * ease(w), c, (max ? 7 : 9) * (1 - w) + 1, (1 - w) * fade); });
-          ps.burst.forEach(function (b) { var d = R * b.s * ease(post); spark(tipX + Math.cos(b.a) * d, tipY + Math.sin(b.a) * d, b.r, max ? STONES[b.c] : (b.c % 2 ? "#fff" : e.c1), (1 - post) * fade); });
-          ps.cracks.forEach(function (c) {
-            var reach = Math.min(1, post * 3), ca = Math.cos(c.a), sa = Math.sin(c.a);
-            ctx.globalAlpha = (1 - post) * 0.9; ctx.strokeStyle = "#ffffff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 14; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(tipX, tipY);
-            c.pts.forEach(function (pt) { if (pt.d > reach * 1.6) return; var d = pt.d * R * 0.62; ctx.lineTo(tipX + ca * d - sa * pt.j * d, tipY + sa * d + ca * pt.j * d); });
-            ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-          });
-          if (max && post < 0.4) for (var g = 0; g < 10; g++) { ctx.fillStyle = ["rgba(239,68,68,.3)", "rgba(34,211,238,.3)", "rgba(255,255,255,.22)"][g % 3]; ctx.fillRect((Math.random() - 0.5) * 40, Math.random() * e.h, e.w, 2 + Math.random() * 12); }
-          /* SNAP! */
-          var tp = seg(post, 0.02, 0.9), big = s * (max ? 0.15 : 0.12) * (1 + 0.5 * Math.exp(-tp * 10));
-          ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "900 " + big + "px 'Cinzel', serif";
-          var ty = Math.max(big * 0.7 + (max ? e.h * 0.12 : 0), tipY - size * 0.85), ta = Math.min(1, tp * 6) * (1 - seg(post, 0.7, 1)) * fade;
-          if (max) { ctx.globalAlpha = ta * 0.7; ctx.fillStyle = "#ef4444"; ctx.fillText("SNAP!", e.cx - 5, ty); ctx.fillStyle = "#22d3ee"; ctx.fillText("SNAP!", e.cx + 5, ty); }
-          ctx.globalAlpha = ta; ctx.fillStyle = "#ffffff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 30; ctx.fillText("SNAP!", e.cx, ty);
+          /* the crack: a sharp star of light where the fingers met, a flash and a puff of sparks */
+          var c = Math.max(0, 1 - post * 5);
+          flash((0.06 - post) * 12, "#ffffff");
+          ctx.save(); ctx.translate(tip[0], tip[1]); ctx.rotate(0.3);
+          for (var r = 0; r < 8; r++) { ctx.rotate(TAU / 8); ctx.globalAlpha = c; ctx.fillStyle = "#fff"; ctx.shadowColor = max ? "#facc15" : e.c1; ctx.shadowBlur = 25; ctx.beginPath(); ctx.moveTo(0, -S * (r % 2 ? 0.12 : 0.28)); ctx.lineTo(S * 0.018, 0); ctx.lineTo(0, S * 0.018); ctx.lineTo(-S * 0.018, 0); ctx.fill(); }
+          ctx.restore(); ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+          ps.sparks.forEach(function (sp, i) { var d = S * 0.5 * sp.s * ease(Math.min(1, post * 3)); spark(tip[0] + Math.cos(sp.a) * d, tip[1] + Math.sin(sp.a) * d - post * S * 0.1, sp.r, max ? STONES[i % 6] : (i % 2 ? "#fff" : e.c1), (1 - post) * fade); });
+          ring(tip[0], tip[1], S * 0.05 + post * S * 0.6, "#ffffff", 2, (1 - post) * 0.35 * fade);
+          /* SNAP */
+          var ta = Math.min(1, post * 10) * (1 - seg(post, 0.55, 0.85)) * fade, fs = s * 0.075 * (1 + 0.4 * Math.exp(-post * 12));
+          ctx.save(); ctx.font = "900 " + fs + "px 'Cinzel', serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.globalAlpha = ta; ctx.fillStyle = "#fff"; ctx.shadowColor = max ? "#facc15" : e.c1; ctx.shadowBlur = 24;
+          ctx.fillText("SNAP", tip[0] - S * 0.35, tip[1] - S * 0.22); ctx.restore();
+        } };
+    }
+
+    /* Destiny Unbound: the sky opens over the target and a pillar of golden light slams down, then floods the
+       screen with sunlight and rising embers. */
+    function destinyFx() {
+      return { dur: 2000, parts: function () { return parts(90, function () { return { x: rnd(-1, 1), v: rnd(0.3, 1), r: rnd(1, 3.5), d: Math.random() }; }); },
+        draw: function (p, e, ps) {
+          dim(Math.min(1, p * 1.2), 0.85);
+          var x = e.to.x, w = Math.min(e.w, e.h) * 0.18, land = seg(p, 0.25, 0.42), after = seg(p, 0.42, 1);
+          var top = -20, bottom = lerp(top, e.h, ease(land));
+          if (p < 0.25) { var q = p / 0.25; ctx.globalAlpha = q; ctx.fillStyle = "#fde68a"; ctx.beginPath(); ctx.ellipse(x, 0, w * 1.5 * q, w * 0.25 * q, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+          if (p >= 0.25) {
+            var pw = w * (0.4 + 0.6 * ease(land)) * (1 + 0.4 * Math.sin(Math.min(1, after * 2) * Math.PI)) * (1 - seg(p, 0.85, 1));
+            var g = ctx.createLinearGradient(x - pw, 0, x + pw, 0);
+            g.addColorStop(0, "rgba(251,191,36,0)"); g.addColorStop(0.3, "rgba(251,191,36,.7)"); g.addColorStop(0.5, "#fffbeb"); g.addColorStop(0.7, "rgba(251,191,36,.7)"); g.addColorStop(1, "rgba(251,191,36,0)");
+            ctx.fillStyle = g; ctx.shadowColor = "#f59e0b"; ctx.shadowBlur = 40; ctx.fillRect(x - pw, top, pw * 2, bottom - top); ctx.shadowBlur = 0;
+          }
+          if (land >= 1) {
+            flash((0.12 - after) * 7, "#fffbeb");
+            ctx.save(); ctx.translate(x, e.to.y); ctx.rotate(p);
+            for (var i = 0; i < 16; i++) { ctx.rotate(TAU / 16); ctx.globalAlpha = 0.25 * (1 - after); ctx.fillStyle = "#fde68a"; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(e.w, -20); ctx.lineTo(e.w, 20); ctx.fill(); }
+            ctx.restore(); ctx.globalAlpha = 1;
+            ps.forEach(function (m) { var y = e.to.y - after * m.v * e.h * 0.8; spark(x + m.x * w * 2.2, y, m.r, m.d > 0.5 ? "#fde68a" : "#fff", (1 - after) * 0.9); });
+          }
+        } };
+    }
+
+    /* Auras rarer than 1 in 3,000,000 turn every move into a cinematic: cinema bars, the screen dropping to
+       black, rays of light and a giant spinning rune circle in the aura's colours, anime speed lines rushing in,
+       the move itself bigger, an impact frame (one beat of inverted colours with black speed lines), and embers
+       drifting up afterwards. `impact` is when the hit lands, for the shake and the boom. */
+    var RUNES = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
+    function epicFx(base) {
+      var IN = 0.24, OUT = 0.95;
+      return { dur: Math.round(base.dur / (OUT - IN)), impact: IN + 0.45 * (OUT - IN),
+        parts: function (e) {
+          return { base: base.parts ? base.parts(e) : null,
+            embers: parts(80, function () { return { x: Math.random(), y: rnd(0.7, 1.2), v: rnd(0.2, 0.6), r: rnd(1, 3), w: Math.random() * TAU }; }),
+            lines: parts(80, function () { return { a: Math.random() * TAU, l: rnd(0.3, 0.7), o: Math.random() }; }) };
+        },
+        draw: function (p, e, ps) {
+          var fade = 1 - seg(p, 0.92, 1), intro = ease(seg(p, 0, IN)), q = seg(p, IN, OUT), R = Math.hypot(e.w, e.h) / 2, s = Math.min(e.w, e.h);
+          var hit = Math.sin(seg(q, 0.4, 0.55) * Math.PI), after = seg(q, 0.48, 1);
+          ctx.fillStyle = "rgba(2,1,8," + (0.9 * Math.min(1, p / 0.06) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
+          /* rays of light */
+          ctx.save(); ctx.translate(e.cx, e.cy); ctx.rotate(p * 0.7);
+          for (var i = 0; i < 14; i++) {
+            ctx.rotate(TAU / 14);
+            var g = ctx.createLinearGradient(0, 0, R, 0); g.addColorStop(0, i % 2 ? e.c1 : e.c2); g.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.globalAlpha = (0.12 + 0.18 * hit) * intro * fade; ctx.fillStyle = g;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(R, -R * 0.06); ctx.lineTo(R, R * 0.06); ctx.closePath(); ctx.fill();
+          }
+          ctx.restore(); ctx.globalAlpha = 1;
+          /* the rune circle */
+          var rr = s * 0.36 * (0.55 + 0.45 * intro) * (1 + 0.18 * hit);
+          ctx.save(); ctx.translate(e.cx, e.cy); ctx.globalAlpha = 0.9 * intro * fade * (1 - after * 0.7);
+          ctx.shadowColor = e.c1; ctx.shadowBlur = 22; ctx.strokeStyle = e.c1; ctx.fillStyle = e.c1; ctx.lineWidth = 3;
+          ctx.save(); ctx.rotate(p * 2.4);
+          ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, rr * 0.8, 0, TAU); ctx.stroke();
+          ctx.font = Math.round(rr * 0.11) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          for (var k = 0; k < 24; k++) { var a = k / 24 * TAU; ctx.save(); ctx.rotate(a); ctx.fillText(RUNES[k % RUNES.length], 0, -rr * 0.9); ctx.fillRect(-1, -rr, 2, rr * 0.05); ctx.restore(); }
           ctx.restore();
+          ctx.save(); ctx.rotate(-p * 3.6); ctx.strokeStyle = e.c2; ctx.shadowColor = e.c2; ctx.lineWidth = 2.5;
+          for (var tri = 0; tri < 2; tri++) { ctx.beginPath(); for (var v = 0; v < 3; v++) { var va = tri * Math.PI / 3 + v * TAU / 3 - Math.PI / 2; ctx.lineTo(Math.cos(va) * rr * 0.76, Math.sin(va) * rr * 0.76); } ctx.closePath(); ctx.stroke(); }
+          ctx.beginPath(); ctx.arc(0, 0, rr * 0.38, 0, TAU); ctx.stroke();
+          ctx.restore(); ctx.restore(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+          /* speed lines rushing in during the intro, out at the impact */
+          ps.lines.forEach(function (l) {
+            var inward = p < IN, k = inward ? ((intro * 1.6 + l.o) % 1) : after;
+            var r0 = inward ? R * (1.1 - k * 0.6) : R * (0.25 + k * 0.9), r1 = r0 + R * l.l * 0.3;
+            ctx.globalAlpha = (inward ? 0.35 * intro : 0.5 * (1 - after)) * fade; ctx.strokeStyle = inward ? "#ffffff" : e.c1; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(e.cx + Math.cos(l.a) * r0, e.cy + Math.sin(l.a) * r0); ctx.lineTo(e.cx + Math.cos(l.a) * r1, e.cy + Math.sin(l.a) * r1); ctx.stroke();
+          });
+          ctx.globalAlpha = 1;
+          /* the move itself, a little bigger */
+          if (p >= IN) {
+            ctx.save(); var z = 1.06 + 0.08 * hit; ctx.translate(e.cx, e.cy); ctx.scale(z, z); ctx.translate(-e.cx, -e.cy);
+            base.draw(q, e, ps.base); ctx.restore();
+          }
+          /* impact frame */
+          if (q > 0.44 && q < 0.49) {
+            ctx.save(); ctx.globalCompositeOperation = "difference"; ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, e.w, e.h); ctx.restore();
+            ctx.strokeStyle = "#000"; ctx.lineWidth = 3;
+            for (var b = 0; b < 40; b++) { var ba = b / 40 * TAU + Math.random() * 0.1; ctx.beginPath(); ctx.moveTo(e.cx + Math.cos(ba) * s * 0.12, e.cy + Math.sin(ba) * s * 0.12); ctx.lineTo(e.cx + Math.cos(ba) * R, e.cy + Math.sin(ba) * R); ctx.stroke(); }
+          }
+          /* embers */
+          if (q > 0.45) ps.embers.forEach(function (m) {
+            var y = (m.y - after * m.v) * e.h, x = m.x * e.w + Math.sin(m.w + p * 6) * 14;
+            spark(x, y, m.r, Math.random() < 0.5 ? e.c1 : "#fde68a", Math.min(1, after * 3) * (1 - after) * fade);
+          });
+          var bar = e.h * 0.11 * ease(Math.min(1, p / 0.07)) * fade; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, e.w, bar); ctx.fillRect(0, e.h - bar, e.w, bar);
         } };
     }
 
@@ -2311,7 +2456,7 @@
       } },
       snap: snapFx(false),
       snapMax: snapFx(true),
-      destiny: flatUltFx("#f59e0b", "#fde68a", "255,251,235", "251,191,36"),
+      destiny: destinyFx(),
       burst: { dur: 1500, parts: function (e) { return parts(160, function () { return { a: Math.random() * TAU, s: rnd(0.2, 1), r: rnd(3, 8) }; }); },
         draw: function (p, e, ps) {
           dim(p, 0.8);
@@ -2380,6 +2525,8 @@
       } }
     };
 
+    Object.keys(LIB).forEach(function (k) { if (k !== "snap" && k !== "snapMax") LIB[k + "Epic"] = epicFx(LIB[k]); });
+
     function play(arch, fromEl, toEl, aura, abilityName, userName) {
       var def = LIB[arch] || LIB.strike;
       canvas.width = window.innerWidth; canvas.height = window.innerHeight;
@@ -2446,12 +2593,20 @@
     var ultimate = aura && tierIndex(aura) >= 4;
     if (ab.arch === "snap" && ultimate) {
       /* The full-screen snap; the crack, the shake and the boom land when the fingers snap. */
-      var sfx = snapIsMax(f) ? "snapMax" : "snap";
+      var sfx = isEpicAura(f) ? "snapMax" : "snap";
       var sdur = UFX.play(sfx, $("#visual-" + who), $("#visual-" + target), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
       setTimeout(function () { Sound.ability("snap"); shake(sfx === "snapMax" ? 3 : 2); if (sfx === "snapMax") Sound.boom(3); }, sdur * UFX.LIB[sfx].snapAt);
       return sdur + 120;
     }
     Sound.ability(ab.arch);
+    if (ultimate && isEpicAura(f) && UFX.LIB[ab.arch + "Epic"]) {
+      /* Rarer than 1 in 3,000,000: the cinematic version, with the shake and boom on the impact. */
+      var edef = UFX.LIB[ab.arch + "Epic"];
+      var edur = UFX.play(ab.arch + "Epic", $("#visual-" + who), $("#visual-" + (self ? who : target)), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
+      setTimeout(function () { shake(self ? 1 : 3); Sound.boom(self ? 1 : 3); }, edur * edef.impact);
+      setTimeout(function () { BFX.play(ab.arch, who, self ? who : target, c1, c2); }, edur * (edef.impact + 0.05));
+      return edur + 120;
+    }
     if (ultimate) {
       var udur = UFX.play(ab.arch, $("#visual-" + who), $("#visual-" + (self ? who : target)), aura, ab.name, f.name === "You" ? "You unleash" : f.name + " unleashes");
       var udef = UFX.LIB[ab.arch];
@@ -2752,8 +2907,8 @@
     step();
   }
 
-  /* Snaps by auras rarer than 1 in 3,000,000 get the biggest version of the animation. */
-  function snapIsMax(f) {
+  /* Fighters whose aura is rarer than 1 in 3,000,000 get the cinematic versions of their moves. */
+  function isEpicAura(f) {
     var aura = f && f.auraId !== null && f.auraId !== undefined ? A.byId(f.auraId) : null;
     return !!aura && effRarity(aura, f.shiny) > 3e6;
   }
@@ -2761,8 +2916,8 @@
   /* The Snap lands: the target crumbles into dust from the side facing the snapper while its HP drains slowly
      and the number counts down. If it survives, it pulls itself back together. Returns how long to wait. */
   function snapHit(e) {
-    var side = e.target, max = snapIsMax(battle[e.who]), ms = max ? 3000 : 2400;
-    var vis = $("#visual-" + side), bar = $("#hp-" + side), txt = $("#hptext-" + side);
+    var side = e.target, max = isEpicAura(battle[e.who]), ms = max ? 3600 : 3000;
+    var vis = $("#fighter-" + side), bar = $("#hp-" + side), txt = $("#hptext-" + side);
     var a = vis.getBoundingClientRect(), b = $("#visual-" + e.who).getBoundingClientRect();
     var dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
     var dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? "from-left" : "from-right") : (dy < 0 ? "from-top" : "from-bottom");
@@ -2771,19 +2926,20 @@
     vis.style.setProperty("--snap-ms", ms + "ms");
     vis.classList.add("snapped", dir);
     var aura = battle[e.who].auraId !== null && battle[e.who].auraId !== undefined ? A.byId(battle[e.who].auraId) : null;
-    BFX.play(max ? "dustMax" : "dust", e.who, side, aura ? aura.c1 : "#e2e8f0", aura ? aura.c2 : "#94a3b8");
+    BFX.play(max ? "dustMax" : "dust", e.who, side, aura ? aura.c1 : "#e2e8f0", aura ? aura.c2 : "#94a3b8", true);
     floatText(side, "-" + fmt(e.amount) + " 🫰", "t-chosen");
     Sound.dust(ms / 1000);
     logLine("🫰 SNAP! " + (isMe(e.who) ? "You snap " + sideName(side) : sideName(e.who) + " snaps " + (isMe(side) ? "you" : sideName(side))) + " for " + fmt(e.amount), "crit");
     /* the HP bar slides down slowly while the number counts down */
     var from = parseInt(txt.textContent.replace(/,/g, ""), 10), to = Math.max(0, side === "a" ? e.hpA : e.hpB), max0 = battle[side].maxHp;
-    bar.style.setProperty("--snap-ms", ms + "ms");
+    /* the bar empties a little before the fighter is fully gone */
+    bar.style.setProperty("--snap-ms", Math.round(ms * 0.7) + "ms");
     bar.classList.add("drain-slow");
     setHP(e);
     if (isFinite(from) && from > to) {
       var t0 = performance.now();
       var tick = function (now) {
-        var q = Math.max(0, Math.min(1, (now - t0) / ms)), v = Math.round(from + (to - from) * (1 - Math.pow(1 - q, 2)));
+        var q = Math.max(0, Math.min(1, (now - t0) / (ms * 0.7))), v = Math.round(from + (to - from) * (1 - Math.pow(1 - q, 2)));
         txt.textContent = fmt(v) + " / " + fmt(max0);
         if (q < 1 && battle) requestAnimationFrame(tick);
       };
@@ -2800,7 +2956,7 @@
 
   /* Undo the dust: straight away, or with the fighter pulling itself back together (`reform`). */
   function unsnap(side, reform) {
-    var vis = $("#visual-" + side);
+    var vis = $("#fighter-" + side);
     if (!vis.classList.contains("snapped")) { if (!reform) vis.classList.remove("reform"); return; }
     vis.classList.remove("snapped", "from-left", "from-right", "from-top", "from-bottom", "reform");
     if (reform) { void vis.offsetWidth; vis.classList.add("reform"); }

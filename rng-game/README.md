@@ -69,14 +69,15 @@ loadout, and fight bots or a friend.
   Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Absolute
   Authority gets a 7th: 🫰 **Snap**, exactly 100,000 damage that nothing can block,
   shield, reflect or boost, with a 7 turn cooldown; The Chosen One's Snap deals exactly
-  1,000,000. **The Snap animation:** the screen goes dark, a glowing hand rises,
-  trembles and snaps with a crack, a white flash, shockwaves, cracks across the screen
-  and a giant SNAP!; then the target crumbles into dust from the side facing the
-  snapper while its HP bar slides down and the number counts down slowly. If it
-  survives it pulls itself back together; if not, it stays gone. Auras rarer than
-  1 in 3,000,000 (every aura with Snap today) get the biggest version: cinema bars,
-  six stones lighting up around the hand and pouring energy into its fingers, a
-  rainbow shockwave, glitching and a heavier screen shake. HP bars now drop when a
+  1,000,000. **The Snap animation:** the screen goes dark and a drawn hand rises with
+  its middle finger pressed on its thumb, trembling as the snap builds; then the finger
+  slides off and slaps the palm with a crack and a star of light where they met. Then
+  the whole target (picture, name and health bar) crumbles into dust from the side
+  facing the snapper and blows away while its HP bar drains and the number counts
+  down. If it survives it pulls itself back together; if not, it stays gone. Auras
+  rarer than 1 in 3,000,000 snap with a golden gauntlet: cinema bars and six stones
+  that light up one by one with energy crackling around it.
+HP bars now drop when a
   hit lands instead of when a move starts. Choose 4 per
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
@@ -91,6 +92,12 @@ loadout, and fight bots or a friend.
   sound. When the attacker's aura is Legendary or rarer, the ability takes over the
   whole screen: a cinematic full-screen version of the effect plus a callout with
   the ability's name.
+- **Cinematic moves for auras rarer than 1 in 3,000,000.** Every move of those auras
+  plays as a cinematic: cinema bars, the screen dropping to black, rays of light and
+  a giant spinning rune circle in the aura's colours, speed lines rushing in, the
+  move itself bigger, an impact frame (one beat of inverted colours and black speed
+  lines), a big shake and boom, and embers drifting up. Destiny Unbound brings down
+  a pillar of golden light on the target.
 - **PvP with 4-digit room codes**: one player creates a room and shares the code,
   the other joins. Peer-to-peer over WebRTC via the bundled PeerJS library (uses the
   free public PeerJS signalling server). The host runs the battle; both players
