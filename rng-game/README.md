@@ -76,8 +76,7 @@ loadout, and fight bots or a friend.
   facing the snapper and blows away while its HP bar drains and the number counts
   down. If it survives it pulls itself back together; if not, it stays gone. Auras
   rarer than 1 in 3,000,000 snap with a golden gauntlet: cinema bars and six stones
-  that light up one by one with energy crackling around it.
-HP bars now drop when a
+  that light up one by one with energy crackling around it. HP bars now drop when a
   hit lands instead of when a move starts. Choose 4 per
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
