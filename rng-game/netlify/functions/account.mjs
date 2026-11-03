@@ -16,8 +16,10 @@
      openGifts { id, device, rev, save, ids }
                                             store `save` (with those gifts already added), then take the gifts
                                             with these ids out of the gift box
-     chat    { since, id? }                 global chat messages after number `since` (no player IDs in them,
-                                            since an ID is also a login); with `id`, whether that player is muted
+     chat    { since, id?, here? }          global chat messages after number `since` (no player IDs in them,
+                                            since an ID is also a login); with `id`, whether that player is muted;
+                                            with `here`, that player counts as in the chat for a minute. Replies
+                                            with the names of everyone in the chat right now
      chatSend { id, text, aura, shiny }     post a message as that account (108 when an admin muted it)
      admin   { key, op, ... }               owner tools, locked by the admin password (see ADMIN_HASH):
                list                             every account with its aura count, coins and luck
@@ -62,6 +64,9 @@ const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
 const giftKey = (id) => "gifts/" + id;
 const CHAT_KEY = "chat/log";
+const CHAT_HERE_KEY = "chat/here";
+const HERE_MS = 60000;       /* a player counts as in the chat for a minute after their last check */
+const HERE_WRITE_MS = 25000; /* ...and their presence is written at most this often */
 const chatUserKey = (id) => "chatuser/" + id;
 const CHAT_KEEP = 100;      /* messages the chat keeps */
 const CHAT_MAX_CHARS = 200;
@@ -222,6 +227,21 @@ async function editChat(store, change) {
   throw new Error("The chat kept changing.");
 }
 
+/** Note that a player is in the chat (at most every HERE_WRITE_MS) and return who is in it: { id: { at, name } }.
+    Best effort: if the presence list is busy, it is simply not updated this time. */
+async function chatHere(store, viewer, now) {
+  const cur = await store.getWithMetadata(CHAT_HERE_KEY, { type: "json" });
+  const here = cur && cur.data && typeof cur.data === "object" ? cur.data : {};
+  if (!viewer || (here[viewer] && now - here[viewer].at < HERE_WRITE_MS)) return here;
+  const acct = await store.get(accountKey(viewer), { type: "json" });
+  if (!acct) return here;
+  const next = {};
+  for (const [id, h] of Object.entries(here)) if (h && now - h.at < HERE_MS * 2) next[id] = h;
+  next[viewer] = { at: now, name: acct.name };
+  const res = cur ? await store.setJSON(CHAT_HERE_KEY, next, { onlyIfMatch: cur.etag }) : await store.setJSON(CHAT_HERE_KEY, next, { onlyIfNew: true });
+  return res.modified ? next : here;
+}
+
 /** When a player's chat mute ends (0 when they aren't muted). */
 async function mutedUntil(store, id, now) {
   const u = await store.get(chatUserKey(id), { type: "json" });
@@ -338,10 +358,11 @@ const ACTIONS = {
   async chat(body, store, now) {
     const since = Math.max(0, Math.floor(Number(body.since) || 0));
     const viewer = ID_RE.test(String(body.id)) ? String(body.id) : null;
-    const [log, muted] = await Promise.all([store.get(CHAT_KEY, { type: "json" }), viewer ? mutedUntil(store, viewer, now) : 0]);
+    const [log, muted, here] = await Promise.all([store.get(CHAT_KEY, { type: "json" }), viewer ? mutedUntil(store, viewer, now) : 0, chatHere(store, body.here ? viewer : null, now)]);
     const l = log || { seq: 0, messages: [], removed: [], cleared: 0 };
+    const names = [...new Set(Object.values(here).filter((h) => h && now - h.at < HERE_MS).map((h) => h.name))].slice(0, 30);
     return reply(200, {
-      ok: true, seq: l.seq, cleared: l.cleared || 0, removed: l.removed || [],
+      ok: true, seq: l.seq, cleared: l.cleared || 0, removed: l.removed || [], here: names,
       messages: l.messages.filter((m) => m.seq > since).map((m) => publicMsg(m, viewer)),
       muted: muted ? { until: muted >= MUTED_FOREVER ? 0 : muted, text: muteText(muted, now) } : null
     });

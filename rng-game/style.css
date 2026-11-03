@@ -620,6 +620,12 @@ body.shake-3 { animation: shake3 .9s; }
 .chat-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 4px; border-radius: 999px; background: #ef4444; color: #fff; font-size: .72rem; line-height: 16px; text-align: center; vertical-align: middle; }
 .chat-badge.hidden { display: none; }
 .chat-status { margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--card-border); background: var(--card); color: var(--muted); }
+.chat-status.ok { border-color: rgba(74,222,128,.4); color: #bbf7d0; }
+.chat-msg.pending { opacity: .65; }
+.chat-msg.failed { border-color: rgba(239,68,68,.7); background: rgba(127,29,29,.35); }
+.chat-note { margin-top: 4px; font-size: .78rem; color: var(--muted); }
+.chat-msg.failed .chat-note { color: #fecaca; font-weight: 600; }
+.chat-note button { margin-left: 6px; padding: 1px 8px; font-size: .75rem; border-radius: 8px; border: 1px solid rgba(254,202,202,.5); background: rgba(0,0,0,.35); color: #fff; cursor: pointer; }
 .chat-status.err { border-color: rgba(239,68,68,.55); background: rgba(127,29,29,.35); color: #fecaca; font-weight: 600; }
 .chat-log { height: min(60vh, 520px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--radius); border: 1px solid var(--card-border); background: rgba(0,0,0,.25); overscroll-behavior: contain; }
 .chat-log > :first-child { margin-top: auto; }

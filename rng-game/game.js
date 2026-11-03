@@ -4304,6 +4304,7 @@
       updateMeta(r.data.id, { cloud: true, rev: r.data.rev, dirty: stamp !== Cloud.changes, name: r.data.name });
       setCloudState("synced");
       renderAccount();
+      renderChat();
       if (r.data.id === id) toast("☁️ Your account is online: log in with ID " + id + " on any device", "gold");
       else toast("☁️ Your account is online with a new ID, " + r.data.id + " (someone already had " + id + "). Write it down!", "gold", 8000);
       if (stamp !== Cloud.changes) pushSave();
@@ -4544,7 +4545,7 @@
 
   /* ---------- Global chat: messages live on the account server; this tab asks for new ones every few seconds ---------- */
 
-  var Chat = { seq: 0, messages: [], nodes: {}, timer: null, loading: false, unread: 0, muted: null, error: null, sending: false };
+  var Chat = { seq: 0, messages: [], nodes: {}, pending: [], timer: null, loading: false, unread: 0, muted: null, error: null, here: null, sending: false, pendingNo: 0 };
   var CHAT_KEEP = 100;
 
   function chatOpen() { return $("#tab-chat").classList.contains("active"); }
@@ -4581,12 +4582,13 @@
     if (document.visibilityState !== "visible" || Chat.loading) { chatSchedule(chatOpen() ? 3000 : 20000); return; }
     Chat.loading = true;
     var viewer = currentUser;
-    chatFetch("chat", { since: Chat.seq, id: viewer || undefined }).then(function (r) {
+    chatFetch("chat", { since: Chat.seq, id: viewer || undefined, here: !!viewer && chatOpen() }).then(function (r) {
       if (viewer !== currentUser) return;
       if (r.status !== 200) throw { chat: ERR.CHAT_CODE };
       chatApply(r.data);
       Chat.error = null;
       Chat.muted = r.data.muted || null;
+      Chat.here = Array.isArray(r.data.here) ? r.data.here : null;
       renderChat();
     }).catch(function (e) {
       Chat.error = e;
@@ -4659,10 +4661,16 @@
     Object.keys(Chat.nodes).forEach(function (seq) { if (!keep[seq]) { Chat.nodes[seq].remove(); delete Chat.nodes[seq]; } });
     var empty = log.querySelector(".empty-note");
     if (empty) empty.remove();
-    Chat.messages.forEach(function (m) {
-      if (!Chat.nodes[m.seq]) { Chat.nodes[m.seq] = chatNode(m); log.appendChild(Chat.nodes[m.seq]); }
-    });
-    if (!Chat.messages.length) {
+    /* New bubbles go in seq order (a reply can arrive before an older message); messages still being sent
+       stay at the bottom. Existing bubbles are never rebuilt. */
+    var anchor = Chat.pending.length ? Chat.pending[0].node : null;
+    for (var i = Chat.messages.length - 1; i >= 0; i--) {
+      var m = Chat.messages[i], node = Chat.nodes[m.seq];
+      if (!node) { node = Chat.nodes[m.seq] = chatNode(m); log.insertBefore(node, anchor && anchor.parentNode === log ? anchor : null); }
+      anchor = node;
+    }
+    Chat.pending.forEach(function (pm) { if (pm.node.parentNode !== log || pm.node.nextSibling) log.appendChild(pm.node); });
+    if (!Chat.messages.length && !Chat.pending.length) {
       var note = document.createElement("div");
       note.className = "empty-note";
       note.textContent = Chat.error ? "No messages yet." : "No messages yet. Say hi!";
@@ -4672,15 +4680,21 @@
     if (atBottom) log.scrollTop = log.scrollHeight;
 
     var st = $("#chat-status"), input = $("#chat-input");
-    var status = Chat.error ? chatErrorText(Chat.error)
+    var meta = accountMeta(currentUser), offlineAcct = !!currentUser && (!meta || !meta.cloud);
+    var who = Chat.here ? (Chat.here.length ? "In the chat now: " + Chat.here.join(", ") : "Nobody else is in the chat right now.") : "";
+    var bad = Chat.error ? chatErrorText(Chat.error)
       : Chat.muted ? "⚠️ Error 108: An admin muted you, so you can't chat " + Chat.muted.text + "."
-      : !currentUser ? "Log in (Login, top right) to chat. You can still read along." : "";
+      : offlineAcct ? "⚠️ Error 98: Your account isn't online yet, so you can't chat. Keep the game open for a moment; it goes online by itself." : "";
+    var status = bad || (Chat.loading && !Chat.seq && !Chat.here ? "Connecting to the chat…"
+      : !currentUser ? "🟢 Connected. Log in (Login, top right) to chat; you can still read along. " + who
+      : "🟢 Connected. " + who);
     st.textContent = status;
-    st.className = "chat-status" + (status ? "" : " hidden") + (Chat.error || Chat.muted ? " err" : "");
-    var canSend = !!currentUser && !Chat.muted;
+    st.className = "chat-status" + (bad ? " err" : status.indexOf("🟢") === 0 ? " ok" : "");
+    $("#chat-site").textContent = location.host || "this device";
+    var canSend = !!currentUser && !Chat.muted && !offlineAcct;
     input.disabled = !canSend;
     $("#chat-send").disabled = !canSend || Chat.sending;
-    input.placeholder = !currentUser ? "Log in to chat" : Chat.muted ? "You're muted (Error 108)" : "Say something…";
+    input.placeholder = !currentUser ? "Log in to chat" : Chat.muted ? "You're muted (Error 108)" : offlineAcct ? "Your account isn't online yet" : "Say something…";
 
     if (chatOpen()) Chat.unread = 0;
     var badge = $("#chat-badge");
@@ -4688,20 +4702,61 @@
     badge.classList.toggle("hidden", !Chat.unread);
   }
 
-  function chatSend() {
-    var input = $("#chat-input"), text = input.value.trim(), id = currentUser;
+  /* A message on its way: shown straight away as "sending…", then replaced by the real one, or kept with the
+     reason it failed and a Try again button, so a message never just vanishes. */
+  function chatPendingNode(pm) {
+    var el = chatNode({ seq: "p" + pm.no, at: Date.now(), name: accountName(currentUser) || "You", text: pm.text, mine: true, aura: pm.aura, shiny: pm.shiny });
+    el.classList.add("pending");
+    var tools = el.querySelector(".chat-admin");
+    if (tools) tools.remove();
+    var note = document.createElement("div");
+    note.className = "chat-note";
+    note.textContent = "sending…";
+    el.appendChild(note);
+    return el;
+  }
+  function chatPendingFailed(pm, msg) {
+    pm.node.classList.remove("pending");
+    pm.node.classList.add("failed");
+    var note = pm.node.querySelector(".chat-note");
+    note.textContent = "Not sent: " + msg + " ";
+    var retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Try again";
+    retry.addEventListener("click", function () { chatDropPending(pm); chatSend(pm.text); });
+    note.appendChild(retry);
+    var drop = document.createElement("button");
+    drop.type = "button";
+    drop.textContent = "✕";
+    drop.title = "Remove";
+    drop.addEventListener("click", function () { chatDropPending(pm); });
+    note.appendChild(drop);
+  }
+  function chatDropPending(pm) {
+    Chat.pending = Chat.pending.filter(function (x) { return x !== pm; });
+    pm.node.remove();
+    renderChat();
+  }
+
+  function chatSend(again) {
+    var input = $("#chat-input"), text = (typeof again === "string" ? again : input.value).trim(), id = currentUser;
     if (!text || Chat.sending) return;
     if (!id) { renderChat(); return; }
     if (Chat.muted) { errorToast(ERR.CHAT_MUTED, "An admin muted you, so you can't chat " + Chat.muted.text + "."); return; }
     var eq = equippedAura();
+    var pm = { no: ++Chat.pendingNo, text: text, aura: eq ? eq.id : null, shiny: equippedShiny() };
+    pm.node = chatPendingNode(pm);
+    Chat.pending.push(pm);
+    if (typeof again !== "string") input.value = "";
     Chat.sending = true;
     renderChat();
-    chatFetch("chatSend", { id: id, text: text, aura: eq ? eq.id : null, shiny: equippedShiny() }).then(function (r) {
+    $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
+    chatFetch("chatSend", { id: id, text: text, aura: pm.aura, shiny: pm.shiny }).then(function (r) {
       if (r.status === 200) {
-        input.value = "";
         Chat.error = null;
+        Chat.pending = Chat.pending.filter(function (x) { return x !== pm; });
+        pm.node.remove();
         chatApply({ seq: Chat.seq, messages: [r.data.message] });
-        $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
         renderChat();
         $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
         chatSchedule(400);
@@ -4709,14 +4764,18 @@
       }
       if (r.data.code === ERR.CHAT_MUTED) {
         Chat.muted = { until: r.data.until, text: (r.data.error || "").replace(/^An admin muted you, so you can't chat /, "").replace(/\.$/, "") };
+        chatPendingFailed(pm, "Error 108: " + (r.data.error || "An admin muted you."));
         errorToast(ERR.CHAT_MUTED, r.data.error || "An admin muted you, so you can't chat.");
       } else if (r.data.slow) {
-        toast("⏳ " + r.data.error, "bad");
+        chatPendingFailed(pm, r.data.error);
       } else {
+        chatPendingFailed(pm, "Error " + (r.data.code || ERR.ACCOUNT) + ": " + (r.data.error || "Your message couldn't be sent."));
         errorToast(r.data.code || ERR.ACCOUNT, r.data.error || "Your message couldn't be sent.");
       }
     }).catch(function (e) {
-      errorToast(e && e.chat === ERR.CHAT_WIFI ? ERR.CHAT_WIFI : ERR.CHAT_CODE, chatErrorText(e).replace(/^⚠️ Error \d+: /, ""));
+      var code = e && e.chat === ERR.CHAT_WIFI ? ERR.CHAT_WIFI : ERR.CHAT_CODE;
+      chatPendingFailed(pm, chatErrorText(e).replace(/^⚠️ /, ""));
+      errorToast(code, chatErrorText(e).replace(/^⚠️ Error \d+: /, ""));
     }).then(function () {
       Chat.sending = false;
       renderChat();
@@ -4737,6 +4796,9 @@
   /* After switching accounts the "mine" marks change, so start the chat over. */
   function chatReset() {
     Object.keys(Chat.nodes).forEach(function (seq) { Chat.nodes[seq].remove(); });
+    Chat.pending.forEach(function (pm) { pm.node.remove(); });
+    Chat.pending = [];
+    Chat.here = null;
     Chat.nodes = {};
     Chat.messages = [];
     Chat.seq = 0;

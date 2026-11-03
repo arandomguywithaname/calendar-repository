@@ -146,9 +146,13 @@ loadout, and fight bots or a friend.
   is collected. Gifting an equipped aura unequips it. If the server refuses or can't
   be reached, the aura stays with you. Each gift is added exactly once, even if the
   friend plays on two devices. Stats count auras sent and received.
-- **💬 Global chat.** The Chat tab talks with everyone playing; it checks for new
+- **💬 Global chat.** The Chat tab talks with everyone playing on the same website
+  (it names the site; a different site has its own chat). It checks for new
   messages every 3 seconds while open (a red badge on the tab counts unread ones
-  otherwise). Log in to write; guests can read. Messages show the player's name and
+  otherwise). A green line says it is connected and names everyone in the chat right
+  now. Log in to write; guests can read. A message shows up straight away as
+  "sending…", then as sent, or stays with the reason it failed and a Try again
+  button. Messages show the player's name and
   equipped aura but never their ID (an ID logs into the account), are up to 200
   characters, one every 1.5 seconds, with swear words starred out; the chat keeps the
   newest 100. Its own red errors: **981** you can't chat because of a WiFi
