@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=53">
+  <link rel="stylesheet" href="style.css?v=54">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -38,6 +38,7 @@
       <div class="hud-item"><span class="hud-label">Luck</span><span class="hud-value" id="hud-luck">x1</span></div>
       <div class="hud-item"><span class="hud-label">Rolls</span><span class="hud-value" id="hud-rolls">0</span></div>
       <div class="hud-item"><span class="hud-label">Power</span><span class="hud-value" id="hud-power">0</span></div>
+      <div class="hud-item"><span class="hud-label">Doubloons</span><span class="hud-value" id="hud-doubloons">0</span></div>
     </div>
     <div class="account">
       <span class="account-name" id="account-name">Guest</span>
@@ -52,6 +53,7 @@
       <button class="tab" data-tab="abilities">Abilities</button>
       <button class="tab" data-tab="shop">Shop</button>
       <button class="tab" data-tab="battle">Battle</button>
+      <button class="tab" data-tab="tower">🗼 Tower</button>
       <button class="tab" data-tab="index">Index</button>
       <button class="tab" data-tab="stats">Stats</button>
       <button class="tab" data-tab="chat">💬 Chat <span id="chat-badge" class="chat-badge hidden"></span></button>
@@ -237,6 +239,16 @@
       <div id="index-list" class="index-list"></div>
     </section>
 
+    <!-- TOWER -->
+    <section id="tab-tower" class="panel">
+      <div class="panel-head">
+        <h2>🗼 The Tower</h2>
+        <p class="muted">Climb 120 floors with your equipped aura. The <b>first</b> time you beat a floor each cycle pays big doubloons; beating it again pays a little. The whole tower resets every 3 days, so the big first-clear rewards come back.</p>
+      </div>
+      <div id="tower-status" class="tower-status"></div>
+      <div id="tower-floors" class="tower-floors"></div>
+    </section>
+
     <!-- CHAT -->
     <section id="tab-chat" class="panel">
       <div class="panel-head">
@@ -349,7 +361,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 53</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 54</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -360,6 +372,16 @@
       <div id="cs-title" class="cs-title"></div>
       <div id="cs-odds" class="cs-odds"></div>
       <div id="cs-hint" class="cs-hint">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- Doubloon shop (spend tower doubloons) -->
+  <div id="doubloon-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🪙 Doubloon Shop</h2>
+      <p class="muted small-text">Spend the doubloons you win in the Tower. You have <b id="doubloon-balance">0</b> 🪙.</p>
+      <div id="doubloon-grid" class="card-grid"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="doubloon-close">Close</button></div>
     </div>
   </div>
 
@@ -449,9 +471,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=53"></script>
-  <script src="abilities.js?v=53"></script>
-  <script src="reveals.js?v=53"></script>
-  <script src="game.js?v=53"></script>
+  <script src="auras.js?v=54"></script>
+  <script src="abilities.js?v=54"></script>
+  <script src="reveals.js?v=54"></script>
+  <script src="game.js?v=54"></script>
 </body>
 </html>

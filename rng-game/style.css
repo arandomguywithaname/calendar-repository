@@ -726,3 +726,23 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .skip-anim-btn:hover { background: rgba(255,255,255,.1); }
 .skip-anim-btn.on { background: linear-gradient(135deg, #7c3aed, #db2777); border-color: transparent; color: #fff; }
 @media (max-width: 560px) { .skip-anim-btn { padding: 8px 11px; font-size: .78rem; } }
+
+/* The Tower */
+.tower-status { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--card-border); background: var(--card); }
+.tower-top { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+.tower-stat { display: flex; flex-direction: column; }
+.tower-stat .hud-label { font-size: .7rem; }
+.tower-doub { color: var(--gold); font-weight: 800; font-size: 1.15rem; }
+.tower-top2 { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.tower-floors { display: flex; flex-direction: column; gap: 6px; max-height: min(66vh, 620px); overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; }
+.tower-row { display: grid; grid-template-columns: 34px 1fr auto auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(255,255,255,.02); }
+.tower-row.next { border-color: rgba(167,139,250,.55); background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(219,39,119,.08)); }
+.tower-row.locked { opacity: .5; }
+.tower-ic { font-size: 1.4rem; text-align: center; }
+.tower-name { display: flex; flex-direction: column; min-width: 0; }
+.tower-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tower-reward { color: var(--gold); font-weight: 700; font-size: .9rem; white-space: nowrap; }
+.tower-reward .first { font-size: .68rem; background: rgba(251,191,36,.2); color: #fde68a; padding: 1px 6px; border-radius: 999px; margin-left: 2px; }
+.tower-row .btn { min-width: 68px; }
+@media (max-width: 560px) { .tower-row { grid-template-columns: 28px 1fr auto; } .tower-reward { grid-column: 2 / 4; } }
+#doubloon-grid .price { color: var(--gold); }

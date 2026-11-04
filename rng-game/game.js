@@ -130,6 +130,41 @@
     { id: "creator",   name: "Creator Bot",    icon: "✨", power: 120000, reward: 10000000, boss: true }
   ];
 
+  /* ---------- The Tower: 120 floors of bots fought with your equipped aura, paying doubloons. First clear of a
+     floor each 3-day cycle pays big; later clears pay 1/100 as much. ---------- */
+  var TOWER_FLOORS = 120;
+  var TOWER_CYCLE_MS = 3 * 24 * 60 * 60 * 1000;
+  var TOWER_BAND_NAMES = ["Initiate", "Sentry", "Warrior", "Knight", "Champion", "Warlord", "Overlord", "Archon", "Celestial", "Void", "Cosmic", "Eternal"];
+  var TOWER_ICONS = ["🗿", "🤺", "🛡️", "⚔️", "🏹", "🪓", "👹", "👺", "🐲", "👾", "🌑", "🌌", "☄️", "⚡", "🔥", "❄️", "🦾", "💀", "🧿", "⭐"];
+  function towerBand(floor) { return Math.min(12, Math.max(1, Math.ceil(floor / 10))); }
+  /* Repeat reward grows by band: 12, 23, 34, … 133. First clear pays 100× that: 1,200, 2,300, … 13,300. */
+  function towerRepeat(floor) { return 11 * towerBand(floor) + 1; }
+  function towerFirst(floor) { return 100 * towerRepeat(floor); }
+  function towerPower(floor) { return Math.round(24 * Math.pow(1.076, floor)); }
+  var TOWER = (function () {
+    var kits = BOTS.map(function (b) { return b.id; }), out = [];
+    for (var f = 1; f <= TOWER_FLOORS; f++) {
+      out.push({ floor: f, name: "Floor " + f + " · " + TOWER_BAND_NAMES[towerBand(f) - 1], icon: TOWER_ICONS[(f - 1) % TOWER_ICONS.length], power: towerPower(f), kitId: kits[(f - 1) % kits.length] });
+    }
+    return out;
+  })();
+
+  /* Start a new 3-day cycle if the last one has run out (keeps `best` so you don't re-climb from 1). Returns
+     true if a reset just happened. */
+  function towerCheckReset() {
+    var now = Date.now();
+    if (!S.tower.cycleStart) { S.tower.cycleStart = now; return false; }
+    if (now - S.tower.cycleStart >= TOWER_CYCLE_MS) {
+      S.tower.cycleStart += Math.floor((now - S.tower.cycleStart) / TOWER_CYCLE_MS) * TOWER_CYCLE_MS;
+      S.tower.cleared = {};
+      return true;
+    }
+    return false;
+  }
+  function towerResetIn() { return Math.max(0, (S.tower.cycleStart || Date.now()) + TOWER_CYCLE_MS - Date.now()); }
+  /* The highest floor you may enter: the next uncleared one, or 120. */
+  function towerReachable() { return Math.min(TOWER_FLOORS, (S.tower.best || 0) + 1); }
+
   var AUTO_UNLOCK_COST = 1000;
   var PVP_WIN_REWARD = 500;
   var PVP_LOSS_REWARD = 100;
@@ -188,8 +223,10 @@
       loadouts: {},
       playerName: "",
       botWins: {},
+      doubloons: 0,
+      tower: { best: 0, cleared: {}, cycleStart: 0 },
       history: [],
-      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0 },
+      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0, towerWins: 0 },
       settings: { sound: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
     };
   }
@@ -233,6 +270,11 @@
       if (!merged.shinyInventory || typeof merged.shinyInventory !== "object") merged.shinyInventory = {};
       if (!merged.bought || typeof merged.bought !== "object") merged.bought = {};
       if (!Array.isArray(merged.giftsOpened)) merged.giftsOpened = [];
+      if (typeof merged.doubloons !== "number" || !(merged.doubloons >= 0)) merged.doubloons = Math.max(0, Math.floor(Number(merged.doubloons) || 0));
+      if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
+      if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
+      merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
+      merged.tower.cycleStart = Math.floor(Number(merged.tower.cycleStart) || 0);
       trimHeals(merged);
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
@@ -533,6 +575,7 @@
     $("#hud-luck").textContent = "x" + fmt(currentLuck());
     $("#hud-rolls").textContent = fmt(S.rolls);
     $("#hud-power").textContent = fmt(playerPower());
+    $("#hud-doubloons").textContent = fmt(S.doubloons || 0);
   }
 
   function renderEffects() {
@@ -3301,6 +3344,132 @@
   var view = { me: "a", pvp: false, animating: false, bot: null };
   var botTimer = null;
 
+  /* ---------- Doubloon shop: potions bought with tower doubloons ---------- */
+  var DOUBLOON_SHOP = [
+    ["fortune", 250], ["heavenly", 1200], ["starlight", 2500], ["godly", 6000], ["voidess", 12000],
+    ["rush", 1500], ["treasure", 4000], ["hoard", 9000],
+    ["magnet", 400], ["epicmagnet", 2000], ["lure", 8000], ["prism", 5000],
+    ["titan", 300], ["rage", 1200], ["godslayer", 5000], ["steelwall", 1200], ["phoenix", 4000],
+    ["fullheal", 800], ["megamystery", 3500]
+  ];
+  function openDoubloonShop() { $("#doubloon-modal").classList.remove("hidden"); renderDoubloonShop(); }
+  function closeDoubloonShop() { $("#doubloon-modal").classList.add("hidden"); }
+  function renderDoubloonShop() {
+    $("#doubloon-balance").textContent = fmt(S.doubloons || 0);
+    var grid = $("#doubloon-grid");
+    grid.innerHTML = "";
+    DOUBLOON_SHOP.forEach(function (row) {
+      var key = row[0], cost = row[1], pot = POTIONS[key];
+      if (!pot) return;
+      var full = pot.kind === "heal" && potionRoom(key) < 1;
+      var card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        "<div class=\"row\"><div class=\"big-icon\">" + pot.icon + "</div><div><div class=\"card-title\">" + pot.name + "</div><div class=\"card-sub\">" + pot.desc + "</div></div></div>" +
+        "<div class=\"row\"><span class=\"price\">🪙 " + fmt(cost) + "</span><span class=\"card-sub\">owned: " + fmt(S.potions[key] || 0) + "</span></div>";
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      var buy = document.createElement("button");
+      buy.className = "btn small primary" + (full || (S.doubloons || 0) < cost ? " cant-afford" : "");
+      buy.textContent = full ? "Full" : "Buy";
+      buy.addEventListener("click", function () { buyDoubloonPotion(key, cost); });
+      actions.appendChild(buy);
+      card.appendChild(actions);
+      grid.appendChild(card);
+    });
+  }
+  function buyDoubloonPotion(key, cost) {
+    var pot = POTIONS[key];
+    if (!pot) return;
+    if (potionRoom(key) < 1) { errorToast(ERR.POTION_BUY, "You can only carry " + MAX_HEALS + " healing potions. Use one in a bot fight first."); return; }
+    if ((S.doubloons || 0) < cost) { errorToast(ERR.POTION_BUY, "Not enough doubloons for " + pot.name + " (" + fmt(cost) + " needed). Win floors in the Tower."); return; }
+    S.doubloons -= cost;
+    addPotion(key, 1);
+    Sound.buy();
+    toast("🪙 Bought " + pot.name + " for " + fmt(cost) + " doubloons", "gold");
+    save();
+    renderAll();
+    renderDoubloonShop();
+  }
+
+  /* Pretty "2d 4h" style countdown. */
+  function fmtDuration(ms) {
+    var s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    if (d > 0) return d + "d " + h + "h";
+    if (h > 0) return h + "h " + m + "m";
+    return m + "m";
+  }
+
+  function renderTower() {
+    if (!$("#tab-tower").classList.contains("active")) return;
+    towerCheckReset();
+    renderHUD();
+    var reach = towerReachable(), eq = equippedAura(), pp = playerPower();
+    var st = $("#tower-status");
+    st.innerHTML =
+      "<div class=\"tower-top\">" +
+        "<div class=\"tower-stat\"><span class=\"hud-label\">Doubloons</span><span class=\"tower-doub\">🪙 " + fmt(S.doubloons || 0) + "</span></div>" +
+        "<div class=\"tower-stat\"><span class=\"hud-label\">Highest floor</span><span>" + fmt(S.tower.best || 0) + " / " + TOWER_FLOORS + "</span></div>" +
+        "<div class=\"tower-stat\"><span class=\"hud-label\">Resets in</span><span>" + fmtDuration(towerResetIn()) + "</span></div>" +
+      "</div>" +
+      "<div class=\"tower-top2\">" +
+        "<span class=\"card-sub\">Fighting with: " + (eq ? auraLabel(eq, equippedShiny()) + " · Power " + fmt(pp) : "<b>no aura equipped — equip one in your Inventory</b>") + "</span>" +
+        "<button type=\"button\" class=\"btn small primary\" id=\"tower-shop-open\">🪙 Doubloon shop</button>" +
+      "</div>";
+    $("#tower-shop-open").addEventListener("click", openDoubloonShop);
+
+    var box = $("#tower-floors");
+    box.innerHTML = "";
+    var canFight = !(battle && !battle.over) && PvP.status !== "connected" && !!eq;
+    TOWER.forEach(function (fb) {
+      var floor = fb.floor, unlocked = floor <= reach, done = !!S.tower.cleared[floor];
+      var reward = done ? towerRepeat(floor) : towerFirst(floor);
+      var ratio = pp / fb.power, verdict = ratio >= 1.3 ? "Easy" : ratio >= 1 ? "Fair" : ratio >= 0.75 ? "Hard" : "Deadly";
+      var vcls = ratio >= 1 ? "t-uncommon" : ratio >= 0.75 ? "t-legendary" : "t-forbidden";
+      var row = document.createElement("div");
+      row.className = "tower-row" + (unlocked ? "" : " locked") + (floor === reach ? " next" : "");
+      row.innerHTML =
+        "<span class=\"tower-ic\">" + (unlocked ? fb.icon : "🔒") + "</span>" +
+        "<span class=\"tower-name\"><b>" + fb.name + "</b><span class=\"card-sub\">Power " + fmt(fb.power) + " · <span class=\"" + vcls + "\">" + verdict + "</span></span></span>" +
+        "<span class=\"tower-reward\">🪙 " + fmt(reward) + (done ? "" : " <span class=\"first\">first</span>") + "</span>";
+      var btn = document.createElement("button");
+      btn.className = "btn small" + (floor === reach ? " primary" : "");
+      btn.textContent = unlocked ? "Fight" : "Locked";
+      btn.disabled = !unlocked || !canFight;
+      btn.addEventListener("click", function () { startTowerFight(floor); });
+      row.appendChild(btn);
+      box.appendChild(row);
+    });
+  }
+
+  /* Fight a tower floor with the equipped aura (same engine as a bot fight; the win pays doubloons). */
+  function startTowerFight(floor) {
+    if (battle && !battle.over) return;
+    if (PvP.status === "connected") { toast("Leave the PvP room first", "bad"); return; }
+    if (floor > towerReachable()) { toast("Beat the floor below first", "bad"); return; }
+    var aura = equippedAura();
+    if (!aura) { toast("Equip an aura first", "bad"); return; }
+    var fb = TOWER[floor - 1];
+    var spec = myFighterSpec();
+    spec.dmgMult = S.strengthMult > 1 ? S.strengthMult : 1;
+    var me = fighterFromSpec(spec);
+    if (S.shieldReady > 0) me.shield = Math.round(me.maxHp * S.shieldReady);
+    if (S.reviveReady > 0) { var rp = potionMatching("revive", "pct", S.reviveReady); me.revive = S.reviveReady; if (rp) { me.reviveName = rp.name; me.reviveIcon = rp.icon; } }
+    var bkit = K.botKit(fb.kitId);
+    var them = Engine.makeFighter({ name: fb.name, power: fb.power, kit: bkit, abilities: bkit.map(function (ab) { return ab.id; }), icon: fb.icon, isBot: true });
+    battle = Engine.create(me, them, "a");
+    view = { me: "a", pvp: false, animating: false, bot: { id: "tower-" + floor, name: fb.name, icon: fb.icon, power: fb.power }, tower: { floor: floor } };
+    openArena();
+    $("#arena-banner").textContent = "🗼 Tower · Floor " + floor;
+    if (S.strengthMult > 1) { logLine("💪 +" + Math.round((S.strengthMult - 1) * 100) + "% damage this fight", "you"); S.strengthMult = 1; }
+    if (S.shieldReady > 0) { logLine(readyLabel("shield", S.shieldReady, "🛡️ Iron Skin") + ": you start with a " + fmt(me.shield) + " shield", "you"); S.shieldReady = 0; }
+    if (S.reviveReady > 0) { logLine(readyLabel("revive", S.reviveReady, "🕊️ Second Wind") + " is ready to save you once", "you"); S.reviveReady = 0; }
+    logLine("🗼 Floor " + floor + " — " + fb.name + " (Power " + fmt(fb.power) + ") challenges you!", "");
+    save();
+    renderArena();
+    renderAll();
+  }
+
   function renderBots() {
     var grid = $("#bot-grid");
     grid.innerHTML = "";
@@ -3783,6 +3952,32 @@
     var res = $("#battle-result");
     res.classList.remove("hidden", "win", "lose");
     var oppName = battle[Engine.other(view.me)].name;
+    if (view.tower) {
+      var tfloor = view.tower.floor;
+      if (won) {
+        var first = !S.tower.cleared[tfloor], reward = first ? towerFirst(tfloor) : towerRepeat(tfloor);
+        S.doubloons = (S.doubloons || 0) + reward;
+        S.tower.cleared[tfloor] = true;
+        if (tfloor > (S.tower.best || 0)) S.tower.best = tfloor;
+        S.stats.towerWins = (S.stats.towerWins || 0) + 1;
+        S.stats.streak = (S.stats.streak || 0) + 1;
+        if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
+        res.classList.add("win");
+        res.textContent = "🗼 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons" + (first ? " (first clear!)" : "") + (tfloor === TOWER_FLOORS && first ? " — you conquered the Tower!" : "");
+        Sound.win();
+        logLine("🏆 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons", "crit");
+      } else {
+        S.stats.streak = 0;
+        res.classList.add("lose");
+        res.textContent = fled ? "You left Floor " + tfloor + "." : "Floor " + tfloor + " defeated you — no doubloons.";
+        if (!fled) { Sound.lose(); logLine("💀 You were defeated on Floor " + tfloor + ".", "them"); }
+      }
+      renderArena();
+      save();
+      var finishedT = battle;
+      setTimeout(function () { if (battle === finishedT) battle = null; renderAll(); renderTower(); }, 500);
+      return;
+    }
     if (view.pvp) {
       if (won) {
         addCoins(PVP_WIN_REWARD);
@@ -6206,6 +6401,7 @@
     document.querySelectorAll(".panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     if (name === "roll") FX.resize();
     if (name === "inventory") renderInventory();
+    if (name === "tower") renderTower();
     if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }
   }
 
@@ -6328,6 +6524,8 @@
   $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });
   $("#btn-gift-coins").addEventListener("click", openGiftCoins);
   $("#gift-close").addEventListener("click", closeGift);
+  $("#doubloon-close").addEventListener("click", closeDoubloonShop);
+  $("#doubloon-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeDoubloonShop(); });
   $("#gift-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeGift(); });
   ["#gift-to", "#gift-count"].forEach(function (sel) {
     $(sel).addEventListener("input", function () { if (giftView && giftView.step === "confirm") setGiftStep("who"); });

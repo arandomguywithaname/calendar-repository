@@ -173,6 +173,22 @@ loadout, and fight bots or a friend.
   sells for about 1,000 and a 1-in-a-quadrillion for about 31 million, and a shiny is
   worth more. Selling something valuable, or your only equipped copy, asks first; a
   sold-out equipped aura is unequipped. Stats count auras sold.
+- **🗼 The Tower.** A 120-floor climb on the **Tower** tab, fought with the aura you
+  equip from your Inventory (its power decides how each floor goes: Easy, Fair, Hard
+  or Deadly). Each floor is one bot fight using the same battle engine as the Arena.
+  Beating a floor pays **doubloons** (🪙, a separate currency from coins). The
+  **first** clear of a floor pays the big prize — floors 1–10 pay 1,200, floors
+  11–20 pay 2,300, and so on up the bands (every ten floors adds 1,100). After the
+  first clear, re-fighting that floor pays the small repeat prize (12, 23, … — one
+  hundredth of the first). You can only fight the next floor after beating the one
+  below, and your highest floor is saved. **The Tower resets every 3 days:** the
+  cleared floors wipe (so every floor pays its big first-clear prize again) while
+  your highest-floor record is kept, and the status card counts down to the next
+  reset. Losing a floor costs nothing but the fight.
+- **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
+  potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
+  at their own doubloon prices. The 3-healing-potion cap still applies, and a
+  purchase you can't afford shows **Error 435: not enough doubloons**.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's
