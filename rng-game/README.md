@@ -113,6 +113,10 @@ loadout, and fight bots or a friend.
   move itself bigger, an impact frame (one beat of inverted colours and black speed
   lines), a big shake and boom, and embers drifting up. Destiny Unbound brings down
   a pillar of golden light on the target.
+- **Kill scene.** Winning a fight with an aura 1 in 1,000,000,000 or rarer plays a
+  full-screen finisher: the loser is blasted into shards and a huge word slams in over
+  the aura's signature — ELIMINATED (1 in a billion+), ANNIHILATED (1 in 100 billion+)
+  or ERASED (the Chosen rank). Snap kills keep their own dust finisher instead.
 - **PvP with 4-digit room codes**: one player creates a room and shares the code,
   the other joins. Peer-to-peer over WebRTC via the bundled PeerJS library (uses the
   free public PeerJS signalling server). The host runs the battle; both players

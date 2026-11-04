@@ -715,3 +715,8 @@ body.shake-3 { animation: shake3 .9s; }
 .captcha-form input.wrong { animation: captchaShake .4s; border-color: rgba(239,68,68,.7); }
 @keyframes captchaShake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
 .captcha-form .btn.primary { padding: 12px; font-size: 1.05rem; }
+
+/* Kill finisher: the losing fighter is blasted apart and stays gone */
+#arena .fighter.killed .fighter-visual { animation: killShatter 1.1s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes killShatter { 0% { transform: none; filter: brightness(1); opacity: 1; } 12% { transform: scale(1.25); filter: brightness(3.5) saturate(0); opacity: 1; } 30% { transform: scale(.9) rotate(8deg); filter: brightness(1.6) blur(1px); } 100% { transform: scale(.2) rotate(40deg); filter: blur(6px) brightness(.4); opacity: 0; } }
+#arena .fighter.killed .fighter-name, #arena .fighter.killed .hpbar, #arena .fighter.killed .hptext { transition: opacity .5s; opacity: .25; }

@@ -3129,7 +3129,64 @@
       raf = requestAnimationFrame(frame);
     }
     function clear() { anim = null; cancelAnimationFrame(raf); el.classList.add("hidden"); }
-    return { play: play, clear: clear, LIB: LIB };
+
+    /* Finisher cinematic for a kill with a very rare aura (1 in a billion or rarer): the screen caves in, the
+       foe is shattered, and a huge word slams in over the aura's own signature. */
+    var KILL = {
+      dur: 2900,
+      parts: function (e) { return {
+        m: moteParts(50),
+        rays: parts(70, function () { return { a: Math.random() * TAU, o: Math.random(), l: rnd(0.2, 0.6) }; }),
+        shards: parts(90, function () { return { a: Math.random() * TAU, v: rnd(0.3, 1.3), r: rnd(3, 11), spin: rnd(-8, 8), tri: Math.random() < 0.5 }; }),
+        deb: parts(70, function () { return { x: Math.random(), y: rnd(0.6, 1.1), v: rnd(0.2, 0.7), r: rnd(1, 3), w: Math.random() * TAU }; })
+      }; },
+      draw: function (p, e, ps) {
+        var s = Math.min(e.w, e.h), R = Math.hypot(e.w, e.h) / 2, cx = e.cx, cy = e.cy, fade = 1 - seg(p, 0.9, 1);
+        var HIT = 0.36, charge = seg(p, 0.04, HIT), after = seg(p, HIT, 1), slam = seg(p, HIT, HIT + 0.12);
+        ctx.fillStyle = "rgba(2,1,8," + (0.96 * Math.min(1, p / 0.05) * fade) + ")"; ctx.fillRect(0, 0, e.w, e.h);
+        if (e.sig) drawSig(e, p, true, fade * (1 - after * 0.5));
+        motes(e, ps.m, p, fade);
+        /* speed lines rushing inward as it builds */
+        if (p < HIT) ps.rays.forEach(function (l) { var k = (charge * 1.4 + l.o) % 1, r0 = R * (1.15 - k * 0.8), r1 = r0 - R * l.l * 0.3; ctx.globalAlpha = 0.45 * charge * fade; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx + Math.cos(l.a) * r0, cy + Math.sin(l.a) * r0); ctx.lineTo(cx + Math.cos(l.a) * r1, cy + Math.sin(l.a) * r1); ctx.stroke(); });
+        var cr = s * 0.04 + s * 0.1 * ease(charge);
+        if (p < HIT + 0.1) { var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr * 2.4); g.addColorStop(0, "#fff"); g.addColorStop(0.4, e.c1); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.globalAlpha = (0.6 + 0.4 * charge) * fade; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, cr * 2.4, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+        ctx.globalAlpha = 1;
+        if (p >= HIT) {
+          flash((0.09 - (p - HIT)) * 11, "#ffffff");
+          [e.c1, "#ffffff", e.c2].forEach(function (c, i) { var w = seg(after, i * 0.05, 1); ring(cx, cy, R * 1.25 * ease(w), c, (e.big ? 9 : 7) * (1 - w) + 1, (1 - w) * fade); });
+          /* the foe blown to shards */
+          ps.shards.forEach(function (sh) { var t = after, d = R * sh.v * ease(t), x = cx + Math.cos(sh.a) * d, y = cy + Math.sin(sh.a) * d; ctx.save(); ctx.translate(x, y); ctx.rotate(sh.a + t * sh.spin); ctx.globalAlpha = (1 - t) * fade; ctx.fillStyle = sh.a % 2 ? e.c1 : "#e2e8f0"; ctx.shadowColor = e.c1; ctx.shadowBlur = 8; if (sh.tri) { ctx.beginPath(); ctx.moveTo(0, -sh.r); ctx.lineTo(sh.r * 0.7, sh.r); ctx.lineTo(-sh.r * 0.7, sh.r); ctx.fill(); } else ctx.fillRect(-sh.r, -sh.r * 0.5, sh.r * 2, sh.r); ctx.restore(); });
+          ctx.shadowBlur = 0;
+          if (e.big && slam < 0.5) for (var gl = 0; gl < 12; gl++) { ctx.fillStyle = ["rgba(239,68,68,.3)", "rgba(34,211,238,.3)", "rgba(255,255,255,.22)"][gl % 3]; ctx.fillRect(0, Math.random() * e.h, e.w, 2 + Math.random() * 12); }
+          /* the word slams in with a chromatic edge */
+          var tp = seg(after, 0.04, 0.6), fs = s * (e.big ? 0.15 : 0.12) * (1 + 0.7 * Math.exp(-tp * 9));
+          var ta = Math.min(1, tp * 5) * (1 - seg(after, 0.78, 1)) * fade, ty = cy - s * 0.02;
+          ctx.save(); ctx.font = "900 " + fs + "px 'Cinzel', serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          var off = (1 - tp) * 10 + 3;
+          ctx.globalAlpha = ta * 0.85; ctx.fillStyle = e.c1; ctx.fillText(e.word, cx - off, ty); ctx.fillStyle = e.c2; ctx.fillText(e.word, cx + off, ty);
+          ctx.globalAlpha = ta; ctx.fillStyle = "#ffffff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 30; ctx.fillText(e.word, cx, ty);
+          ctx.restore();
+          /* the aura's name beneath */
+          var na = Math.min(1, seg(after, 0.2, 0.4)) * (1 - seg(after, 0.8, 1)) * fade;
+          ctx.save(); ctx.globalAlpha = na; ctx.fillStyle = "#e9e6ff"; ctx.shadowColor = e.c1; ctx.shadowBlur = 14; ctx.font = "700 " + Math.round(s * 0.035) + "px 'Cinzel', serif"; ctx.textAlign = "center"; ctx.fillText("by " + (e.auraName || ""), cx, ty + fs * 0.55); ctx.restore();
+          /* drifting debris */
+          ps.deb.forEach(function (d) { var y = (d.y - after * d.v) * e.h, x = d.x * e.w + Math.sin(d.w + p * 5) * 14; spark(x, y, d.r, Math.random() < 0.5 ? e.c1 : "#fde68a", Math.min(1, after * 3) * (1 - after) * fade); });
+        }
+        var bar = e.h * 0.12 * ease(Math.min(1, p / 0.08)) * fade; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, e.w, bar); ctx.fillRect(0, e.h - bar, e.w, bar);
+      }
+    };
+    function playKill(aura, word, big) {
+      canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+      var env = { w: canvas.width, h: canvas.height, cx: canvas.width / 2, cy: canvas.height / 2,
+        c1: aura.c1, c2: aura.c2, colors: aura.colors, sig: auraSig(aura), word: word, big: !!big, auraName: aura.name };
+      anim = { def: KILL, env: env, start: performance.now(), parts: KILL.parts(env) };
+      el.style.setProperty("--c1", aura.c1); el.style.setProperty("--c2", aura.c2);
+      nameEl.textContent = ""; userEl.textContent = "";
+      el.classList.remove("hidden");
+      cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
+      return KILL.dur;
+    }
+    return { play: play, clear: clear, kill: playKill, LIB: LIB };
   })();
 
   var SELF_ARCHS = { guard: 1, heal: 1, focus: 1, reflect: 1, shield: 1 };
@@ -3284,6 +3341,8 @@
     UFX.clear();
     unsnap("a", false);
     unsnap("b", false);
+    $("#fighter-a").classList.remove("killed");
+    $("#fighter-b").classList.remove("killed");
     var arena = $("#arena");
     arena.classList.remove("hidden");
     $("#battle-result").classList.add("hidden");
@@ -3477,12 +3536,31 @@
           delay = 700;
           break;
         case "end":
-          delay = 200;
+          var wf = battle[e.winner], loserSide = Engine.other(e.winner);
+          var ka = wf && wf.auraId !== null && wf.auraId !== undefined ? A.byId(wf.auraId) : null;
+          delay = ka && effRarity(ka, wf.shiny) >= 1e9 ? killScene(loserSide, ka, wf.shiny) : 200;
           break;
       }
       setTimeout(step, delay);
     }
     step();
+  }
+
+  /* A finisher cinematic when a kill is landed with a 1-in-a-billion-or-rarer aura: the loser is shattered and
+     a full-screen scene plays. Returns how long to wait before the result shows. */
+  function killScene(loser, aura, shiny) {
+    if (!battle) return 200;
+    var host = $("#fighter-" + loser);
+    /* A snap kill already plays the snap finisher (the foe turns to dust), so don't stack a kill scene on it. */
+    if (host.classList.contains("snapped")) return 200;
+    var r = effRarity(aura, shiny);
+    var word = r >= 1e15 ? "ERASED" : r >= 1e11 ? "ANNIHILATED" : "ELIMINATED", big = r >= 1e11;
+    host.classList.remove("killed", "reform"); void host.offsetWidth; host.classList.add("killed");
+    var dur = UFX.kill(aura, word, big);
+    Sound.boom(3); shake(3);
+    setTimeout(function () { shake(big ? 3 : 2); if (big) Sound.boom(3); }, dur * (big ? 0.62 : 0.56));
+    logLine("💀 " + word + "! " + sideName(loser) + " was wiped out by " + auraLabel(aura, shiny) + ".", "crit");
+    return dur + 150;
   }
 
   /* How a fighter reacts in the arena when a move lands on them (or, for moves on yourself, on the caster). */
