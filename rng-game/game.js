@@ -76,7 +76,7 @@
   /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
   var BUY_AMOUNTS = [1, 2, 5, 10, 100, 1000, "max"];
   /* How many potions one click uses (the quickbar/shop "Use" buttons). */
-  var USE_AMOUNTS = [1, 2, 5, 10, 50, 100, 1000, 10000, 100000];
+  var USE_AMOUNTS = [1, 2, 5, 10, 50, 100, 1000, 10000, 100000, "max"];
   /* Healing potions (Healing, Greater Healing and Full Restore together) a player can carry. */
   var MAX_HEALS = 3;
   var POTION_GROUPS = [["luck", "Luck potions"], ["special", "Magnets and shiny potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
@@ -604,7 +604,7 @@
   function renderQuickbar() {
     var bar = $("#quickbar");
     bar.innerHTML = "";
-    document.querySelectorAll("#use-amount [data-qty]").forEach(function (b) { b.classList.toggle("active", Number(b.dataset.qty) === S.settings.useAmount); });
+    document.querySelectorAll("#use-amount [data-qty]").forEach(function (b) { b.classList.toggle("active", b.dataset.qty === String(S.settings.useAmount)); });
     var any = false;
     POTION_ORDER.forEach(function (key) {
       var n = S.potions[key] || 0;
@@ -1115,7 +1115,8 @@
       return;
     }
 
-    var want = USE_AMOUNTS.indexOf(S.settings.useAmount) >= 0 ? S.settings.useAmount : 1;
+    var useAmt = S.settings.useAmount;
+    var want = useAmt === "max" ? owned : (USE_AMOUNTS.indexOf(useAmt) >= 0 ? useAmt : 1);
     var n = ONE_SHOT_KINDS[p.kind] ? 1 : Math.min(want, owned);
 
     if (p.kind === "luck") {
@@ -6176,7 +6177,7 @@
   $("#use-amount").addEventListener("click", function (e) {
     var b = e.target.closest("[data-qty]");
     if (!b) return;
-    S.settings.useAmount = Number(b.dataset.qty);
+    S.settings.useAmount = b.dataset.qty === "max" ? "max" : Number(b.dataset.qty);
     save();
     renderQuickbar();
   });
