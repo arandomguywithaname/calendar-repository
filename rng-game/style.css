@@ -128,9 +128,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .roll-stage.suspense .orb { animation: suspense .12s ease-in-out infinite; filter: brightness(.6) saturate(.6); }
 .roll-stage.suspense .roll-name { opacity: .5; }
 @keyframes suspense { 0%,100% { transform: translate(-2px, 1px) scale(.97); } 50% { transform: translate(2px, -1px) scale(.97); } }
-body.shake-1 { animation: shake1 .4s; }
-body.shake-2 { animation: shake2 .65s; }
-body.shake-3 { animation: shake3 .9s; }
+.shake-1 { animation: shake1 .4s; }
+.shake-2 { animation: shake2 .65s; }
+.shake-3 { animation: shake3 .9s; }
 @keyframes shake1 { 0%,100% { transform: none; } 25% { transform: translate(3px,-2px); } 50% { transform: translate(-3px,2px); } 75% { transform: translate(2px,2px); } }
 @keyframes shake2 { 0%,100% { transform: none; } 15% { transform: translate(8px,-5px) rotate(.3deg); } 30% { transform: translate(-7px,5px); } 45% { transform: translate(6px,3px) rotate(-.3deg); } 60% { transform: translate(-5px,-4px); } 75% { transform: translate(3px,2px); } 90% { transform: translate(-2px,1px); } }
 @keyframes shake3 { 0%,100% { transform: none; } 10% { transform: translate(14px,-9px) rotate(.6deg); } 20% { transform: translate(-13px,8px) rotate(-.5deg); } 30% { transform: translate(11px,6px); } 40% { transform: translate(-10px,-7px) rotate(.4deg); } 50% { transform: translate(8px,4px); } 60% { transform: translate(-6px,-4px); } 70% { transform: translate(5px,3px); } 80% { transform: translate(-3px,-2px); } 90% { transform: translate(2px,1px); } }

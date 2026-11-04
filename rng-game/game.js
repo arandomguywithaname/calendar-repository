@@ -869,12 +869,18 @@
     el.classList.add("go");
   }
 
+  /* Shake the game content and overlays — never document.body, because a transform on body (or any ancestor of
+     a position:fixed element) re-anchors the full-screen cinematic to the page instead of the viewport, which
+     made it jump by the scroll offset mid-animation. */
+  var SHAKE_SELECTORS = ["main", "header"];
+  function shakeTargets() { return SHAKE_SELECTORS.map(function (sel) { return document.querySelector(sel); }).filter(Boolean); }
   function shake(level) {
     if (!level) return;
-    document.body.classList.remove("shake-1", "shake-2", "shake-3");
+    var els = shakeTargets();
+    els.forEach(function (el) { el.classList.remove("shake-1", "shake-2", "shake-3"); });
     void document.body.offsetWidth;
-    document.body.classList.add("shake-" + level);
-    setTimeout(function () { document.body.classList.remove("shake-" + level); }, 1000);
+    els.forEach(function (el) { el.classList.add("shake-" + level); });
+    setTimeout(function () { shakeTargets().forEach(function (el) { el.classList.remove("shake-" + level); }); }, 1000);
   }
 
   function showBanner(aura, ti, shiny) {
@@ -4488,6 +4494,7 @@
       $("#fighter-" + side + " .slice") && document.querySelectorAll("#fighter-" + side + " .slice").forEach(function (n) { n.remove(); });
     });
     document.body.classList.remove("shake-1", "shake-2", "shake-3");
+    shakeTargets().forEach(function (el) { el.classList.remove("shake-1", "shake-2", "shake-3"); });
     $("#ult").classList.add("hidden");
     if (battle) renderArena();
   }
