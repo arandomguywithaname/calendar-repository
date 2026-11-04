@@ -190,7 +190,7 @@
       botWins: {},
       history: [],
       stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0 },
-      settings: { sound: true, skipCutscenes: false, buyAmount: 1, useAmount: 1 }
+      settings: { sound: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
     };
   }
 
@@ -948,6 +948,7 @@
 
   var RAINBOW = ["#ff6b6b", "#ffd93d", "#6bff95", "#6bd8ff", "#b06bff"];
   function revealEffects(aura, ti, shiny) {
+    if (S.settings.skipAnims) { if (ti >= 2) { showBanner(aura, ti, shiny); setGlow(aura, ti); } return; }
     if (isShiny(aura, shiny)) {
       FX.burst(RAINBOW.concat(["#ffffff"]), 140, 0.9);
       FX.ring("#ffd93d", 0.8);
@@ -998,14 +999,14 @@
     if (S.history.length > 12) S.history.length = 12;
     recordBest(aura, shiny);
     if (equippedAura() === null) { S.equipped = aura.id; S.equippedShiny = shiny; }
-    var cutscene = ti >= 3 && !S.settings.skipCutscenes;
+    var cutscene = ti >= 3 && !S.settings.skipCutscenes && !S.settings.skipAnims;
     if (cutscene) S.stats.cutscenes++;
     save();
 
     FX.clear();
     setGlow(null, 0);
     $("#roll-banner").className = "roll-banner";
-    var spinMs = ti <= 1 ? (hasteActive() ? 250 : 450) : ti === 2 ? 1100 : ti === 3 ? 1600 : 2200;
+    var spinMs = S.settings.skipAnims ? 120 : ti <= 1 ? (hasteActive() ? 250 : 450) : ti === 2 ? 1100 : ti === 3 ? 1600 : 2200;
     var stage = $("#roll-stage");
     runSpin(aura, ti, spinMs, function () {
       var finish = function () {
@@ -3215,6 +3216,7 @@
      Legendary and rarer auras take over the whole screen; everything else plays in the arena. */
   function abilityVisual(who, ab) {
     if (!battle || !ab) return 250;
+    if (S.settings.skipAnims) { Sound.ability(ab.arch); return 110; }
     var target = Engine.other(who);
     var f = battle[who];
     var aura = f.auraId !== null && f.auraId !== undefined ? A.byId(f.auraId) : null;
@@ -3549,7 +3551,7 @@
   /* A finisher cinematic when a kill is landed with a 1-in-a-billion-or-rarer aura: the loser is shattered and
      a full-screen scene plays. Returns how long to wait before the result shows. */
   function killScene(loser, aura, shiny) {
-    if (!battle) return 200;
+    if (!battle || S.settings.skipAnims) return 200;
     var host = $("#fighter-" + loser);
     /* A snap kill already plays the snap finisher (the foe turns to dust), so don't stack a kill scene on it. */
     if (host.classList.contains("snapped")) return 200;
@@ -3601,7 +3603,14 @@
   /* The Snap lands: the target crumbles into dust from the side facing the snapper while its HP drains slowly
      and the number counts down. If it survives, it pulls itself back together. Returns how long to wait. */
   function snapHit(e) {
-    var side = e.target, max = isEpicAura(battle[e.who]), ms = max ? 3600 : 3000;
+    var side = e.target;
+    if (S.settings.skipAnims) {
+      floatText(side, "-" + fmt(e.amount) + " 🫰", "t-chosen");
+      logLine("🫰 SNAP! " + (isMe(e.who) ? "You snap " + sideName(side) : sideName(e.who) + " snaps " + (isMe(side) ? "you" : sideName(side))) + " for " + fmt(e.amount), "crit");
+      setHP(e);
+      return 250;
+    }
+    var max = isEpicAura(battle[e.who]), ms = max ? 3600 : 3000;
     var vis = $("#fighter-" + side), bar = $("#hp-" + side), txt = $("#hptext-" + side);
     var a = vis.getBoundingClientRect(), b = $("#visual-" + e.who).getBoundingClientRect();
     var dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
@@ -4161,6 +4170,7 @@
     });
     $("#set-sound").checked = !!S.settings.sound;
     $("#set-skip").checked = !!S.settings.skipCutscenes;
+    $("#set-skipanims").checked = !!S.settings.skipAnims;
   }
 
   /* ---------- Admin console ---------- */
@@ -4366,7 +4376,7 @@
 
   function playCutscene(aura, preview, shiny) {
     return new Promise(function (resolve) {
-      if (CS.running) { resolve(); return; }
+      if (CS.running || S.settings.skipAnims) { resolve(); return; }
       var kind = aura.special || "generic";
       var level = aura.cutscene;
       var sh = isShiny(aura, shiny);
@@ -4463,6 +4473,38 @@
 
   /* A tap only skips once the name and odds are fully shown, so quick taps on Roll can't eat a rare reveal. */
   CS.el.addEventListener("click", function () { if (CS.running && (performance.now() - CS.start) / 1000 >= CS.skipAt) endCutscene(); });
+
+  /* Stop every animation that is playing right now: reveal cutscene, roll effects, battle cinematics, the snap
+     and kill scenes, and the screen shake. The game carries on at the state it was in. */
+  function cancelAnimations() {
+    try { if (CS.running) endCutscene(); } catch (e) { /* ignore */ }
+    try { FX.clear(); } catch (e) { /* ignore */ }
+    try { UFX.clear(); } catch (e) { /* ignore */ }
+    try { BFX.clear(); } catch (e) { /* ignore */ }
+    ["a", "b"].forEach(function (side) {
+      $("#fighter-" + side).classList.remove("snapped", "killed", "reform", "flare", "from-left", "from-right", "from-top", "from-bottom");
+      REACT_CLASSES.forEach(function (c) { $("#fighter-" + side).classList.remove(c); });
+      var v = $("#visual-" + side); if (v) v.classList.remove("sliced");
+      $("#fighter-" + side + " .slice") && document.querySelectorAll("#fighter-" + side + " .slice").forEach(function (n) { n.remove(); });
+    });
+    document.body.classList.remove("shake-1", "shake-2", "shake-3");
+    $("#ult").classList.add("hidden");
+    if (battle) renderArena();
+  }
+
+  function renderSkipAnimBtn() {
+    var on = !!S.settings.skipAnims;
+    var btn = $("#btn-skip-anim");
+    btn.textContent = on ? "▶️ Animations: OFF" : "⏩ Skip animations";
+    btn.classList.toggle("on", on);
+    $("#set-skipanims").checked = on;
+  }
+  function setSkipAnims(on) {
+    S.settings.skipAnims = !!on;
+    cancelAnimations();
+    renderSkipAnimBtn();
+    save();
+  }
 
   function drawCosmic() {
     var FLASH = 3.1;
@@ -6145,6 +6187,13 @@
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
+  $("#set-skipanims").addEventListener("change", function (e) { setSkipAnims(e.target.checked); });
+  $("#btn-skip-anim").addEventListener("click", function () {
+    /* Toggles the setting and, in either state, stops anything playing right now. */
+    setSkipAnims(!S.settings.skipAnims);
+    toast(S.settings.skipAnims ? "⏩ Animations off — they're skipped now" : "▶️ Animations back on", "gold");
+  });
+  renderSkipAnimBtn();
   /* ---------- Updates: a tab left open for days keeps running the old game (no chat, old moves...). Every few
      minutes, and whenever the player comes back to the tab, the game asks the site for its newest page; if
      that has a higher Version number it offers to update, and updates by itself when the player returns. ---------- */

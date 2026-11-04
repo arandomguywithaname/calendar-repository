@@ -274,6 +274,11 @@ No build step and no npm install.
   captcha (type the wavy characters; no outside service). It is remembered for the tab
   session, so reloads and auto-updates don't re-ask, and it is skipped for automated
   browsers (`navigator.webdriver`) so the test suite runs unblocked.
+- **Skip animations button.** A ⏩ button at the bottom-left turns all animations on or
+  off (reveal cutscenes, battle cinematics, the snap, the kill scene, screen shake) and
+  stops anything playing the moment you press it, so rolls and fights resolve instantly.
+  It sits above the cutscene overlay so it works mid-animation, and the choice is saved
+  (also as a "Skip all animations" box in the Stats settings).
 - **Players get updates by themselves.** A tab left open for days keeps running the
   old game. Every few minutes, and whenever a player comes back to the tab, the game
   asks the site for its newest page; when that has a higher Version number it shows a
