@@ -73,9 +73,17 @@ const CHAT_KEEP = 100;      /* messages the chat keeps */
 const CHAT_MAX_CHARS = 200;
 const CHAT_GAP_MS = 1500;   /* a player can send one message every 1.5 seconds */
 const MUTED_FOREVER = 8.64e15;
-/* Words the chat hides behind asterisks (and longer words starting with them). Kids play this game. */
-const BAD_WORDS = ["fuck", "shit", "bitch", "cunt", "asshole", "bastard", "slut", "whore", "nigg", "fag", "retard", "pussy", "dick", "cock", "twat", "wank", "piss"];
-const BAD_RE = new RegExp("\\b(" + BAD_WORDS.join("|") + ")[a-z]*", "gi");
+/* Kids play this game, so swearing is not allowed in chat. A message with any of these words is blocked and the
+   writer's auras are locked (see chatSend). Two tiers: mild swears lock auras for 2 days; the very worst words —
+   slurs and "mothertrucker" — lock them for 7 days. */
+const BAD_WORDS = ["fuck", "shit", "bitch", "cunt", "asshole", "bastard", "slut", "whore", "pussy", "dick", "cock", "twat", "wank", "piss"];
+const WORST_WORDS = ["nigg", "fag", "retard", "motherfuck", "mothertruck", "spic", "chink", "kike", "tranny", "coon", "dyke"];
+const ALL_BAD_WORDS = BAD_WORDS.concat(WORST_WORDS);
+const BAD_RE = new RegExp("\\b(" + ALL_BAD_WORDS.join("|") + ")[a-z]*", "gi");
+const WORST_RE = new RegExp("\\b(" + WORST_WORDS.join("|") + ")[a-z]*", "i");
+const ANY_BAD_RE = new RegExp("\\b(" + ALL_BAD_WORDS.join("|") + ")[a-z]*", "i");
+const LOCK_BAD_MS = 2 * 24 * 60 * 60 * 1000;   /* mild swear → auras locked 2 days */
+const LOCK_WORST_MS = 7 * 24 * 60 * 60 * 1000; /* slur / worst word → auras locked 7 days */
 
 /** JSON reply that is never cached. */
 function reply(status, body) {
@@ -249,6 +257,12 @@ async function mutedUntil(store, id, now) {
   return u && u.mutedUntil > now ? u.mutedUntil : 0;
 }
 
+/** When a player's swearing aura-lock ends (0 when their auras aren't locked). */
+async function aurasLockedUntil(store, id, now) {
+  const u = await store.get(chatUserKey(id), { type: "json" });
+  return u && u.aurasUntil > now ? u.aurasUntil : 0;
+}
+
 /** "for 9 more minutes" or "until an admin unmutes you". */
 function muteText(until, now) {
   return until >= MUTED_FOREVER ? "until an admin unmutes you" : "for " + Math.max(1, Math.ceil((until - now) / 60000)) + " more minute" + (until - now > 60000 ? "s" : "");
@@ -369,13 +383,14 @@ const ACTIONS = {
   async chat(body, store, now) {
     const since = Math.max(0, Math.floor(Number(body.since) || 0));
     const viewer = ID_RE.test(String(body.id)) ? String(body.id) : null;
-    const [log, muted, here] = await Promise.all([store.get(CHAT_KEY, { type: "json" }), viewer ? mutedUntil(store, viewer, now) : 0, chatHere(store, body.here ? viewer : null, now)]);
+    const [log, muted, aurasUntil, here] = await Promise.all([store.get(CHAT_KEY, { type: "json" }), viewer ? mutedUntil(store, viewer, now) : 0, viewer ? aurasLockedUntil(store, viewer, now) : 0, chatHere(store, body.here ? viewer : null, now)]);
     const l = log || { seq: 0, messages: [], removed: [], cleared: 0 };
     const names = [...new Set(Object.values(here).filter((h) => h && now - h.at < HERE_MS).map((h) => h.name))].slice(0, 30);
     return reply(200, {
       ok: true, seq: l.seq, cleared: l.cleared || 0, removed: l.removed || [], here: names,
       messages: l.messages.filter((m) => m.seq > since).map((m) => publicMsg(m, viewer)),
-      muted: muted ? { until: muted >= MUTED_FOREVER ? 0 : muted, text: muteText(muted, now) } : null
+      muted: muted ? { until: muted >= MUTED_FOREVER ? 0 : muted, text: muteText(muted, now) } : null,
+      aurasUntil: aurasUntil || 0
     });
   },
 
@@ -387,6 +402,14 @@ const ACTIONS = {
     const u = (await store.get(chatUserKey(body.id), { type: "json" })) || {};
     if (u.mutedUntil > now) return reply(403, { ok: false, code: 108, error: "An admin muted you, so you can't chat " + muteText(u.mutedUntil, now) + ".", until: u.mutedUntil >= MUTED_FOREVER ? 0 : u.mutedUntil });
     if (u.lastAt && now - u.lastAt < CHAT_GAP_MS) return reply(429, { ok: false, code: 98, slow: true, error: "Slow down! Wait a second before sending another message." });
+    /* Swearing is not allowed: block the message and lock the writer's auras (longer for the worst words). */
+    const worst = WORST_RE.test(body.text), swore = worst || ANY_BAD_RE.test(body.text);
+    if (swore) {
+      const until = Math.max(u.aurasUntil || 0, now + (worst ? LOCK_WORST_MS : LOCK_BAD_MS)), days = worst ? 7 : 2;
+      await store.setJSON(chatUserKey(body.id), { ...u, lastAt: now, aurasUntil: until });
+      return reply(403, { ok: false, code: 451, aurasUntil: until,
+        error: "🚫 No swearing in chat! Your message was blocked and your auras are locked for " + days + " days." + (worst ? " That word is one of the worst — that's why it's 7 days." : "") });
+    }
     await store.setJSON(chatUserKey(body.id), { ...u, lastAt: now });
     const aura = Number.isInteger(body.aura) && body.aura >= 0 && body.aura <= 1e6 ? body.aura : null;
     const done = await editChat(store, (log) => {

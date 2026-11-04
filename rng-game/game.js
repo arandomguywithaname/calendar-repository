@@ -12,7 +12,7 @@
   var TAB_KEY = "aura-realms-tab";
   var CLOUD_URL = "/.netlify/functions/account";
   /* Error codes shown to players. */
-  var ERR = { DUAL: 145, NETWORK: 404, POTION_BUY: 435, POTION_USE: 102, ACCOUNT: 98, CHAT_WIFI: 981, CHAT_CODE: 523, CHAT_MUTED: 108 };
+  var ERR = { DUAL: 145, NETWORK: 404, POTION_BUY: 435, POTION_USE: 102, ACCOUNT: 98, CHAT_WIFI: 981, CHAT_CODE: 523, CHAT_MUTED: 108, SWEAR: 451 };
   var currentUser = null; /* the 7-digit ID of the logged-in player, or null for guest */
   function saveKey() { return currentUser ? SAVE_BASE + ":" + currentUser : SAVE_BASE; }
   var ROLL_COOLDOWN = 1000;
@@ -162,8 +162,14 @@
     return false;
   }
   function towerResetIn() { return Math.max(0, (S.tower.cycleStart || Date.now()) + TOWER_CYCLE_MS - Date.now()); }
-  /* The highest floor you may enter: the next uncleared one, or 120. */
-  function towerReachable() { return Math.min(TOWER_FLOORS, (S.tower.best || 0) + 1); }
+  /* The ONE floor you may fight right now: the next one up from your unbroken run of clears this cycle
+     (floor 1 right after a reset). You climb strictly in order — first, then second, then third — one at a
+     time; a floor you've already cleared this cycle is locked until the 3-day reset re-opens the whole Tower. */
+  function towerReachable() {
+    var n = 0;
+    while (n < TOWER_FLOORS && S.tower.cleared[n + 1]) n++;
+    return Math.min(TOWER_FLOORS, n + 1);
+  }
 
   var AUTO_UNLOCK_COST = 1000;
   var PVP_WIN_REWARD = 500;
@@ -225,6 +231,7 @@
       botWins: {},
       doubloons: 0,
       tower: { best: 0, cleared: {}, cycleStart: 0 },
+      aurasLockedUntil: 0,
       history: [],
       stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0, towerWins: 0 },
       settings: { sound: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
@@ -275,6 +282,7 @@
       if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
       merged.tower.cycleStart = Math.floor(Number(merged.tower.cycleStart) || 0);
+      merged.aurasLockedUntil = Math.max(0, Math.floor(Number(merged.aurasLockedUntil) || 0));
       trimHeals(merged);
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
@@ -581,6 +589,12 @@
   function renderEffects() {
     var box = $("#active-effects");
     box.innerHTML = "";
+    if (aurasLocked()) {
+      var lk = document.createElement("span");
+      lk.className = "effect locked-effect";
+      lk.textContent = "🚫🔒 Auras locked (swearing) · " + aurasLockText();
+      box.appendChild(lk);
+    }
     S.luckEffects.forEach(function (e) {
       var el = document.createElement("span");
       el.className = "effect";
@@ -742,7 +756,7 @@
     return A.list[0];
   }
 
-  function canRoll() { return !busy && Date.now() >= cooldownUntil && !battle && !CS.running; }
+  function canRoll() { return !busy && Date.now() >= cooldownUntil && !battle && !CS.running && !aurasLocked(); }
 
   function showAura(aura, shiny) {
     var orb = $("#orb");
@@ -1423,6 +1437,18 @@
     if (!$("#tab-inventory").classList.contains("active")) return;
     var grid = $("#inventory-grid");
     grid.innerHTML = "";
+    $("#inv-more").classList.add("hidden");
+    if (aurasLocked()) {
+      $("#inv-count").textContent = "";
+      var lock = document.createElement("div");
+      lock.className = "lock-card";
+      lock.innerHTML = "<div class=\"lock-emoji\">🚫🔒</div>" +
+        "<div class=\"lock-title\">Your auras are locked</div>" +
+        "<div class=\"lock-sub\">You swore in chat, so all your auras are gone for now. They come back in <b>" + aurasLockText() + "</b>.</div>" +
+        "<div class=\"card-sub\">While they're locked you can't roll, equip, sell, gift, battle, or climb the Tower. Keep the chat clean!</div>";
+      grid.appendChild(lock);
+      return;
+    }
     var entries = [];
     ownedIds().forEach(function (id) {
       if (owns(id, false)) entries.push({ id: id, shiny: false, n: S.inventory[id] });
@@ -1496,6 +1522,7 @@
 
   /* Sell one of an aura for coins. Rare or equipped-last-copy sales ask first so nothing precious goes by a slip. */
   function sellAura(id, shiny) {
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     var a = A.byId(id); if (!a) return;
     var sh = isShiny(a, shiny), bag = sh ? S.shinyInventory : S.inventory;
     if (!(bag[id] > 0)) return;
@@ -1514,7 +1541,38 @@
     renderAll();
   }
 
+  /* Sell every spare copy at once: keep exactly one of each aura (and one of each shiny) and sell the rest for
+     coins. Keeping one means your equipped aura is never lost. Asks once, showing the total before anything sells. */
+  function sellAllDuplicates() {
+    if (aurasLocked()) { toast("Your auras are locked right now", "bad"); return; }
+    var plan = [], coins = 0, copies = 0;
+    function scan(bag, shiny) {
+      Object.keys(bag).forEach(function (id) {
+        var n = bag[id]; if (!(n >= 2)) return;
+        var a = A.byId(id); if (!a) return;
+        var extra = n - 1, val = sellValue(a, shiny) * extra;
+        plan.push({ id: id, shiny: shiny, extra: extra });
+        coins += val; copies += extra;
+      });
+    }
+    scan(S.inventory, false);
+    scan(S.shinyInventory, true);
+    if (!plan.length) { toast("No duplicates to sell — you have one of each", "bad"); return; }
+    if (!confirm("Sell " + fmt(copies) + " duplicate aura" + (copies === 1 ? "" : "s") + " for " + fmt(coins) + " coins? One of every aura is kept (so nothing you own disappears). This can't be undone.")) return;
+    plan.forEach(function (p) {
+      var bag = p.shiny ? S.shinyInventory : S.inventory;
+      bag[p.id] = 1; /* keep exactly one */
+    });
+    addCoins(coins);
+    S.stats.sold = (S.stats.sold || 0) + copies;
+    Sound.buy();
+    toast("💰 Sold " + fmt(copies) + " duplicate" + (copies === 1 ? "" : "s") + " for " + fmt(coins) + " coins", "gold");
+    save();
+    renderAll();
+  }
+
   function equip(id, shiny) {
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
     var a = A.byId(id), sh = isShiny(a, shiny) && owns(id, true);
     if (!owns(id, sh)) return;
@@ -3397,7 +3455,23 @@
     var s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
     if (d > 0) return d + "d " + h + "h";
     if (h > 0) return h + "h " + m + "m";
-    return m + "m";
+    if (m > 0) return m + "m";
+    return Math.max(1, s) + "s";
+  }
+
+  /* Auras are locked (a swearing punishment from chat) until S.aurasLockedUntil. While locked your auras are
+     "gone": you can't roll, equip, battle, climb the Tower, sell or gift until the timer runs out. */
+  function aurasLocked() { return (S.aurasLockedUntil || 0) > Date.now(); }
+  function aurasLockText() { return fmtDuration(Math.max(0, (S.aurasLockedUntil || 0) - Date.now())); }
+  /* Called when the server (or a save from another device) tells us the lock time. Saves if it changed. */
+  function setAuraLock(until) {
+    until = Math.max(0, Math.floor(Number(until) || 0));
+    if (until === (S.aurasLockedUntil || 0)) return;
+    var wasLocked = aurasLocked();
+    S.aurasLockedUntil = until;
+    saveLocal();
+    if (aurasLocked() && !wasLocked) toast("🚫 Your auras are locked for " + aurasLockText() + " for swearing in chat.", "bad", 8000);
+    renderAll();
   }
 
   function renderTower() {
@@ -3422,21 +3496,22 @@
     box.innerHTML = "";
     var canFight = !(battle && !battle.over) && PvP.status !== "connected" && !!eq;
     TOWER.forEach(function (fb) {
-      var floor = fb.floor, unlocked = floor <= reach, done = !!S.tower.cleared[floor];
-      var reward = done ? towerRepeat(floor) : towerFirst(floor);
+      var floor = fb.floor, done = !!S.tower.cleared[floor], isNext = floor === reach, locked = floor > reach;
+      var reward = towerFirst(floor);
       var ratio = pp / fb.power, verdict = ratio >= 1.3 ? "Easy" : ratio >= 1 ? "Fair" : ratio >= 0.75 ? "Hard" : "Deadly";
       var vcls = ratio >= 1 ? "t-uncommon" : ratio >= 0.75 ? "t-legendary" : "t-forbidden";
       var row = document.createElement("div");
-      row.className = "tower-row" + (unlocked ? "" : " locked") + (floor === reach ? " next" : "");
+      row.className = "tower-row" + (locked ? " locked" : "") + (isNext ? " next" : "") + (done ? " done" : "");
       row.innerHTML =
-        "<span class=\"tower-ic\">" + (unlocked ? fb.icon : "🔒") + "</span>" +
-        "<span class=\"tower-name\"><b>" + fb.name + "</b><span class=\"card-sub\">Power " + fmt(fb.power) + " · <span class=\"" + vcls + "\">" + verdict + "</span></span></span>" +
-        "<span class=\"tower-reward\">🪙 " + fmt(reward) + (done ? "" : " <span class=\"first\">first</span>") + "</span>";
+        "<span class=\"tower-ic\">" + (done ? "✅" : locked ? "🔒" : fb.icon) + "</span>" +
+        "<span class=\"tower-name\"><b>" + fb.name + "</b><span class=\"card-sub\">Power " + fmt(fb.power) +
+          (done ? " · <span class=\"t-uncommon\">cleared</span>" : locked ? " · locked" : " · <span class=\"" + vcls + "\">" + verdict + "</span>") + "</span></span>" +
+        "<span class=\"tower-reward\">🪙 " + fmt(reward) + (isNext ? " <span class=\"first\">next</span>" : "") + "</span>";
       var btn = document.createElement("button");
-      btn.className = "btn small" + (floor === reach ? " primary" : "");
-      btn.textContent = unlocked ? "Fight" : "Locked";
-      btn.disabled = !unlocked || !canFight;
-      btn.addEventListener("click", function () { startTowerFight(floor); });
+      btn.className = "btn small" + (isNext ? " primary" : "");
+      btn.textContent = done ? "✓ Cleared" : isNext ? "Fight" : "Locked";
+      btn.disabled = !isNext || !canFight;
+      if (isNext) btn.addEventListener("click", function () { startTowerFight(floor); });
       row.appendChild(btn);
       box.appendChild(row);
     });
@@ -3445,8 +3520,9 @@
   /* Fight a tower floor with the equipped aura (same engine as a bot fight; the win pays doubloons). */
   function startTowerFight(floor) {
     if (battle && !battle.over) return;
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     if (PvP.status === "connected") { toast("Leave the PvP room first", "bad"); return; }
-    if (floor > towerReachable()) { toast("Beat the floor below first", "bad"); return; }
+    if (floor !== towerReachable()) { toast("Fight the floors in order — one at a time", "bad"); return; }
     var aura = equippedAura();
     if (!aura) { toast("Equip an aura first", "bad"); return; }
     var fb = TOWER[floor - 1];
@@ -3515,6 +3591,7 @@
 
   function startBotFight(bot) {
     if (battle && !battle.over) return;
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     if (PvP.status === "connected") { toast("Leave the PvP room to fight bots", "bad"); return; }
     var aura = equippedAura();
     if (!aura) { toast("Equip an aura first", "bad"); return; }
@@ -3955,7 +4032,7 @@
     if (view.tower) {
       var tfloor = view.tower.floor;
       if (won) {
-        var first = !S.tower.cleared[tfloor], reward = first ? towerFirst(tfloor) : towerRepeat(tfloor);
+        var reward = towerFirst(tfloor);
         S.doubloons = (S.doubloons || 0) + reward;
         S.tower.cleared[tfloor] = true;
         if (tfloor > (S.tower.best || 0)) S.tower.best = tfloor;
@@ -3963,7 +4040,7 @@
         S.stats.streak = (S.stats.streak || 0) + 1;
         if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
         res.classList.add("win");
-        res.textContent = "🗼 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons" + (first ? " (first clear!)" : "") + (tfloor === TOWER_FLOORS && first ? " — you conquered the Tower!" : "");
+        res.textContent = "🗼 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons" + (tfloor === TOWER_FLOORS ? " — you conquered the Tower!" : " — Floor " + (tfloor + 1) + " is open!");
         Sound.win();
         logLine("🏆 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons", "crit");
       } else {
@@ -4085,6 +4162,7 @@
 
   function pvpHost() {
     if (!pvpTransportAvailable()) { pvpSetStatus("PvP needs the PeerJS library, which failed to load. Check your connection and reload.", "err"); return; }
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     if (!equippedAura()) { toast("Equip an aura first", "bad"); return; }
     pvpCleanup();
     var code = String(Math.floor(1000 + Math.random() * 9000));
@@ -4116,6 +4194,7 @@
   function pvpJoin(code) {
     if (!pvpTransportAvailable()) { pvpSetStatus("PvP needs the PeerJS library, which failed to load. Check your connection and reload.", "err"); return; }
     if (!/^\d{4}$/.test(code)) { pvpSetStatus("Enter the 4-digit room code.", "err"); return; }
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     if (!equippedAura()) { toast("Equip an aura first", "bad"); return; }
     pvpCleanup();
     PvP.role = "guest";
@@ -5376,6 +5455,7 @@
 
   /* Roll, but on an online account first make sure no other device is rolling on it. */
   function requestRoll(forced, forcedShiny) {
+    if (aurasLocked()) { toast("🚫 Your auras are locked for " + aurasLockText() + " (swearing in chat)", "bad"); if (autoOn) { autoOn = false; renderAll(); } return; }
     if (!canRoll()) return;
     if (!cloudOn()) { doRoll(forced, forcedShiny); return; }
     var left = Cloud.leaseUntil - Date.now();
@@ -5477,6 +5557,7 @@
 
   function openGift(id, shiny) {
     if (!giftReady()) return;
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     var a = A.byId(id), sh = isShiny(a, shiny), have = giftBag(sh)[id] || 0;
     if (!have) return;
     giftView = { kind: "aura", id: id, shiny: sh, step: "who", to: "", toName: "", count: 1 };
@@ -5771,6 +5852,7 @@
       Chat.error = null;
       Chat.muted = r.data.muted || null;
       Chat.here = Array.isArray(r.data.here) ? r.data.here : null;
+      if (viewer && typeof r.data.aurasUntil === "number") setAuraLock(r.data.aurasUntil);
       renderChat();
     }).catch(function (e) {
       Chat.error = e;
@@ -5948,6 +6030,10 @@
         Chat.muted = { until: r.data.until, text: (r.data.error || "").replace(/^An admin muted you, so you can't chat /, "").replace(/\.$/, "") };
         chatPendingFailed(pm, "Error 108: " + (r.data.error || "An admin muted you."));
         errorToast(ERR.CHAT_MUTED, r.data.error || "An admin muted you, so you can't chat.");
+      } else if (r.data.code === ERR.SWEAR) {
+        setAuraLock(r.data.aurasUntil);
+        chatPendingFailed(pm, "Error " + ERR.SWEAR + ": " + (r.data.error || "No swearing in chat."));
+        errorToast(ERR.SWEAR, r.data.error || "No swearing in chat — your auras are locked.");
       } else if (r.data.slow) {
         chatPendingFailed(pm, r.data.error);
       } else {
@@ -6523,6 +6609,7 @@
   $("#inv-more").addEventListener("click", function () { inventoryShown += INVENTORY_PAGE; renderInventory(); });
   $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });
   $("#btn-gift-coins").addEventListener("click", openGiftCoins);
+  $("#btn-sell-dupes").addEventListener("click", sellAllDuplicates);
   $("#gift-close").addEventListener("click", closeGift);
   $("#doubloon-close").addEventListener("click", closeDoubloonShop);
   $("#doubloon-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeDoubloonShop(); });

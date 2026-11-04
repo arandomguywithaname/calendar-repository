@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=54">
+  <link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -119,6 +119,7 @@
       <div class="inv-tools">
         <input id="inv-search" type="search" placeholder="Search your auras…" autocomplete="off" aria-label="Search your auras">
         <span id="inv-count" class="muted small-text"></span>
+        <button type="button" class="btn small" id="btn-sell-dupes">💰 Sell all duplicates</button>
         <button type="button" class="btn small" id="btn-gift-coins">🎁 Gift coins</button>
       </div>
       <div id="inventory-grid" class="card-grid"></div>
@@ -361,7 +362,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 54</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 55</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -471,9 +472,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=54"></script>
-  <script src="abilities.js?v=54"></script>
-  <script src="reveals.js?v=54"></script>
-  <script src="game.js?v=54"></script>
+  <script src="auras.js?v=55"></script>
+  <script src="abilities.js?v=55"></script>
+  <script src="reveals.js?v=55"></script>
+  <script src="game.js?v=55"></script>
 </body>
 </html>

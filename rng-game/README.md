@@ -173,18 +173,23 @@ loadout, and fight bots or a friend.
   sells for about 1,000 and a 1-in-a-quadrillion for about 31 million, and a shiny is
   worth more. Selling something valuable, or your only equipped copy, asks first; a
   sold-out equipped aura is unequipped. Stats count auras sold.
+- **💰 Sell all duplicates.** A **Sell all duplicates** button at the top of the
+  Inventory sells every spare copy at once — it keeps exactly one of each aura (and
+  one of each shiny), so nothing you own disappears and your equipped aura is always
+  safe, and turns the rest into coins. It asks once, showing the total coins and how
+  many copies before anything sells. Stats count every copy sold.
 - **🗼 The Tower.** A 120-floor climb on the **Tower** tab, fought with the aura you
   equip from your Inventory (its power decides how each floor goes: Easy, Fair, Hard
   or Deadly). Each floor is one bot fight using the same battle engine as the Arena.
-  Beating a floor pays **doubloons** (🪙, a separate currency from coins). The
-  **first** clear of a floor pays the big prize — floors 1–10 pay 1,200, floors
-  11–20 pay 2,300, and so on up the bands (every ten floors adds 1,100). After the
-  first clear, re-fighting that floor pays the small repeat prize (12, 23, … — one
-  hundredth of the first). You can only fight the next floor after beating the one
-  below, and your highest floor is saved. **The Tower resets every 3 days:** the
-  cleared floors wipe (so every floor pays its big first-clear prize again) while
-  your highest-floor record is kept, and the status card counts down to the next
-  reset. Losing a floor costs nothing but the fight.
+  You climb **strictly in order, one floor at a time** — only the next floor is
+  fightable; a floor you've already cleared shows a ✓ and is locked, and floors above
+  the next are locked too. Beating a floor pays **doubloons** (🪙, a separate currency
+  from coins): floors 1–10 pay 1,200, floors 11–20 pay 2,300, and so on up the bands
+  (every ten floors adds 1,100). Your highest floor is saved. **The Tower resets every
+  3 days:** every cleared floor re-opens, so you climb from floor 1 again and earn all
+  those big prizes a second (and third…) time, while your highest-floor record is kept
+  and the status card counts down to the next reset. Losing a floor costs nothing but
+  the fight.
 - **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
   potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
   at their own doubloon prices. The 3-healing-potion cap still applies, and a
@@ -211,11 +216,18 @@ loadout, and fight bots or a friend.
   "sending…", then as sent, or stays with the reason it failed and a Try again
   button. Messages show the player's name and
   equipped aura but never their ID (an ID logs into the account), are up to 200
-  characters, one every 1.5 seconds, with swear words starred out; the chat keeps the
-  newest 100. Its own red errors: **981** you can't chat because of a WiFi
-  (internet) error, **523** a code error (the chat server failed or isn't set up on
-  the site, or something broke in the chat code), **108** an admin muted you (it
-  says for how long). Admins get 🔇 (mute 10 minutes) and 🗑️ (delete) buttons
+  characters, one every 1.5 seconds; the chat keeps the newest 100. **Swearing is not
+  allowed:** a message with a swear word is blocked (never posted) and, as a
+  punishment, **all of that player's auras are locked for 2 days** — the worst words
+  (slurs and "mothertrucker") lock them for 7 days. While locked, the Inventory shows
+  a lock card instead of auras and the player can't roll, equip, sell, gift, battle or
+  climb the Tower until the timer runs out; then everything comes back. The lock lives
+  on the account server, so it follows the player across devices and reloads. Its own
+  red errors: **981** you can't chat because of a WiFi (internet) error, **523** a code
+  error (the chat server failed or isn't set up on the site, or something broke in the
+  chat code), **108** an admin muted you (it says for how long), **451** you swore, so
+  your message was blocked and your auras are locked (it says for how long). Admins get
+  🔇 (mute 10 minutes) and 🗑️ (delete) buttons
   next to every message, and a Chat section in the admin panel to mute a player for
   any number of minutes (0 = until unmuted), unmute, see who is muted and clear the
   whole chat.
