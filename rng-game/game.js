@@ -6069,6 +6069,62 @@
     setTimeout(function () { location.reload(); }, 150);
   }
   $("#update-now").addEventListener("click", applyUpdate);
+  /* ---------- Human check: a simple self-contained captcha shown before the game, once per visit. Not meant to
+     stop clever bots, just a friendly "prove you're a person" gate. Skipped for automated tests. ---------- */
+  (function captchaGate() {
+    var gate = $("#captcha");
+    if (!gate) return;
+    var passed = false;
+    try { passed = sessionStorage.getItem("aura-captcha-ok") === "1"; } catch (e) { /* ignore */ }
+    if (navigator.webdriver || passed) { gate.classList.add("hidden"); return; }
+    var canvas = $("#captcha-canvas"), cx = canvas.getContext("2d"), input = $("#captcha-input");
+    var chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; /* no I, O, L, 0, 1 — too easy to mix up */
+    var answer = "";
+    function make() {
+      answer = "";
+      for (var i = 0; i < 5; i++) answer += chars.charAt(Math.floor(Math.random() * chars.length));
+      var w = canvas.width, h = canvas.height;
+      cx.clearRect(0, 0, w, h);
+      cx.fillStyle = "#0d0b1a"; cx.fillRect(0, 0, w, h);
+      /* speckle + wavy line noise so it is not plain text */
+      for (var d = 0; d < 60; d++) { cx.fillStyle = "rgba(167,139,250," + (0.1 + Math.random() * 0.3) + ")"; cx.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+      for (var ln = 0; ln < 3; ln++) {
+        cx.strokeStyle = ln % 2 ? "rgba(244,114,182,.5)" : "rgba(96,165,250,.5)"; cx.lineWidth = 2; cx.beginPath();
+        for (var x = 0; x <= w; x += 10) { var y = h / 2 + Math.sin(x * 0.05 + ln * 2) * 18 + (Math.random() - 0.5) * 8; if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y); }
+        cx.stroke();
+      }
+      /* the characters, each with its own tilt, size, wavy baseline and gradient */
+      var cols = [["#c4b5fd", "#8b5cf6"], ["#f0abfc", "#db2777"], ["#93c5fd", "#2563eb"], ["#fde68a", "#f59e0b"], ["#86efac", "#16a34a"]];
+      for (var c = 0; c < answer.length; c++) {
+        cx.save();
+        var px = 30 + c * ((w - 50) / answer.length), py = h / 2 + Math.sin(c * 1.3) * 10;
+        cx.translate(px, py); cx.rotate((Math.random() - 0.5) * 0.6); cx.scale(1, 1 + (Math.random() - 0.5) * 0.25);
+        var g = cx.createLinearGradient(0, -24, 0, 24), col = cols[c % cols.length];
+        g.addColorStop(0, col[0]); g.addColorStop(1, col[1]);
+        cx.fillStyle = g; cx.font = "900 " + (34 + Math.floor(Math.random() * 10)) + "px 'Cinzel', Georgia, serif";
+        cx.textAlign = "center"; cx.textBaseline = "middle"; cx.shadowColor = col[0]; cx.shadowBlur = 8;
+        cx.fillText(answer.charAt(c), 0, 0);
+        cx.restore();
+      }
+      input.value = "";
+    }
+    function check() {
+      if (input.value.trim().toUpperCase() === answer) {
+        try { sessionStorage.setItem("aura-captcha-ok", "1"); } catch (e) { /* ignore */ }
+        gate.classList.add("done");
+        setTimeout(function () { gate.classList.add("hidden"); }, 400);
+      } else {
+        make();
+        $("#captcha-error").textContent = "That's not quite right — try the new code.";
+        input.classList.remove("wrong"); void input.offsetWidth; input.classList.add("wrong");
+      }
+    }
+    make();
+    $("#captcha-refresh").addEventListener("click", function () { make(); $("#captcha-error").textContent = ""; });
+    $("#captcha-form").addEventListener("submit", function (e) { e.preventDefault(); check(); });
+    setTimeout(function () { input.focus(); }, 100);
+  })();
+
   setTimeout(checkForUpdate, 8000);
   setInterval(function () { if (document.visibilityState === "visible") checkForUpdate(); }, 180000);
   document.addEventListener("visibilitychange", function () {

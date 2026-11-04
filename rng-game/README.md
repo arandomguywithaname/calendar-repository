@@ -261,6 +261,10 @@ No build step and no npm install.
   players see a one-time Error 404 note saying online accounts aren't set up.
   Gifting auras and the chat need the account function too (the chat shows Error 523
   without it). Everything else plays normally.
+- **Human check.** On the first visit each session the game shows a small self-contained
+  captcha (type the wavy characters; no outside service). It is remembered for the tab
+  session, so reloads and auto-updates don't re-ask, and it is skipped for automated
+  browsers (`navigator.webdriver`) so the test suite runs unblocked.
 - **Players get updates by themselves.** A tab left open for days keeps running the
   old game. Every few minutes, and whenever a player comes back to the tab, the game
   asks the site for its newest page; when that has a higher Version number it shows a
