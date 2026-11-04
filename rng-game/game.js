@@ -1436,9 +1436,39 @@
       gb.textContent = "🎁 Gift";
       gb.addEventListener("click", function () { openGift(en.id, sh); });
       actions.appendChild(gb);
+      var selb = document.createElement("button");
+      selb.className = "btn small";
+      selb.textContent = "💰 Sell " + fmt(sellValue(a, sh));
+      selb.title = "Sell one for coins (based on its rarity)";
+      selb.addEventListener("click", function () { sellAura(en.id, sh); });
+      actions.appendChild(selb);
       card.appendChild(actions);
       grid.appendChild(card);
     });
+  }
+
+  /* What an aura sells for: based on its rarity (the square root of its odds), so a 1-in-a-million sells for
+     ~1,000 and a 1-in-a-quadrillion for ~31 million. A shiny is worth more because its effective rarity is. */
+  function sellValue(aura, shiny) { return Math.max(5, Math.round(Math.sqrt(effRarity(aura, shiny)))); }
+
+  /* Sell one of an aura for coins. Rare or equipped-last-copy sales ask first so nothing precious goes by a slip. */
+  function sellAura(id, shiny) {
+    var a = A.byId(id); if (!a) return;
+    var sh = isShiny(a, shiny), bag = sh ? S.shinyInventory : S.inventory;
+    if (!(bag[id] > 0)) return;
+    var val = sellValue(a, sh), eq = equippedAura();
+    var isEq = !!(eq && eq.id === id && equippedShiny() === sh), lastCopy = bag[id] === 1;
+    if ((val >= 1000 || (isEq && lastCopy)) &&
+        !confirm("Sell " + auraLabel(a, sh) + " for " + fmt(val) + " coins?" + (isEq && lastCopy ? " It's equipped and your only one — this unequips it." : " This can't be undone."))) return;
+    bag[id]--;
+    if (!bag[id]) delete bag[id];
+    if (isEq && !owns(id, sh)) { S.equipped = null; S.equippedShiny = false; }
+    addCoins(val);
+    S.stats.sold = (S.stats.sold || 0) + 1;
+    Sound.buy();
+    toast("💰 Sold " + auraLabel(a, sh) + " for " + fmt(val) + " coins", "gold");
+    save();
+    renderAll();
   }
 
   function equip(id, shiny) {
@@ -4162,6 +4192,7 @@
       ["Training level", fmt(S.training)],
       ["Gifts", fmt(S.stats.giftsSent || 0) + " auras sent · " + fmt(S.stats.giftsReceived || 0) + " received"],
       ["Coins gifted", fmt(S.stats.coinsGifted || 0) + " sent · " + fmt(S.stats.coinsReceived || 0) + " received"],
+      ["Auras sold", fmt(S.stats.sold || 0)],
       ["Daily gifts", fmt(S.daily.claims || 0) + " claimed · streak " + fmt(S.daily.streak)],
       ["Equipped kit", equippedAura() ? loadoutFor(equippedAura()).map(function (i) { return K.kitFor(equippedAura())[i].name; }).join(", ") : "—"]
     ];

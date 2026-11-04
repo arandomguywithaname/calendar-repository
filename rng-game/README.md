@@ -168,6 +168,11 @@ loadout, and fight bots or a friend.
   button, and a search box that finds any aura (or its shiny) by name. It is only
   built while its tab is open, so even a collection of every aura and every shiny
   (over 1,500 cards) opens in a blink and doesn't slow auto roll down.
+- **💰 Sell auras.** Every aura in the Inventory has a **Sell** button that turns one
+  into coins, priced by its rarity (the square root of its odds): a 1-in-a-million
+  sells for about 1,000 and a 1-in-a-quadrillion for about 31 million, and a shiny is
+  worth more. Selling something valuable, or your only equipped copy, asks first; a
+  sold-out equipped aura is unequipped. Stats count auras sold.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's
