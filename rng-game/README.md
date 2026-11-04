@@ -147,6 +147,12 @@ loadout, and fight bots or a friend.
 - **Taps never get lost.** Auto roll redraws the page after every roll; while a mouse
   button or finger is down the redraw waits until the click has gone through, so
   Buy, Train, Equip and Fight buttons always respond.
+- **Use amount.** Above the potions on the Roll tab, a row picks how many potions each
+  click uses: x1, x2, x5, x10, x50, x100, x1000, x10000 or x100000 (capped at how many
+  you own). For luck, coin, shiny and magnet potions it combines into one longer effect
+  (10x Lucky = x2 luck for 200 rolls); speed potions add up their time; Mystery Potions
+  open that many at once with a summary. Potions that only keep their strongest (Strength,
+  shields, revives) still use just one.
 - **Collector's potion.** A locked 🔒 "? ? ?" card in the Luck potions shows how many
   of the 37 shop potions you have bought (and the icons of the ones still to buy).
   Buy each of them at least once (Celestial Nectar, Potion of Destiny and the Elixir

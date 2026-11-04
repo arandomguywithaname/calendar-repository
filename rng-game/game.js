@@ -75,6 +75,8 @@
   var POTION_ORDER = Object.keys(POTIONS);
   /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
   var BUY_AMOUNTS = [1, 2, 5, 10, 100, 1000, "max"];
+  /* How many potions one click uses (the quickbar/shop "Use" buttons). */
+  var USE_AMOUNTS = [1, 2, 5, 10, 50, 100, 1000, 10000, 100000];
   /* Healing potions (Healing, Greater Healing and Full Restore together) a player can carry. */
   var MAX_HEALS = 3;
   var POTION_GROUPS = [["luck", "Luck potions"], ["special", "Magnets and shiny potions"], ["coins", "Coins and speed"], ["battle", "Battle potions"]];
@@ -188,7 +190,7 @@
       botWins: {},
       history: [],
       stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0 },
-      settings: { sound: true, skipCutscenes: false, buyAmount: 1 }
+      settings: { sound: true, skipCutscenes: false, buyAmount: 1, useAmount: 1 }
     };
   }
 
@@ -218,6 +220,7 @@
       merged.stats = Object.assign(defaultState().stats, saved.stats || {});
       merged.settings = Object.assign(defaultState().settings, saved.settings || {});
       if (BUY_AMOUNTS.indexOf(merged.settings.buyAmount) < 0) merged.settings.buyAmount = 1;
+      if (USE_AMOUNTS.indexOf(merged.settings.useAmount) < 0) merged.settings.useAmount = 1;
       if (!merged.loadouts || typeof merged.loadouts !== "object") merged.loadouts = {};
       merged.daily = Object.assign(defaultState().daily, saved.daily || {});
       if (!Array.isArray(merged.goldEffects)) merged.goldEffects = [];
@@ -601,6 +604,7 @@
   function renderQuickbar() {
     var bar = $("#quickbar");
     bar.innerHTML = "";
+    document.querySelectorAll("#use-amount [data-qty]").forEach(function (b) { b.classList.toggle("active", Number(b.dataset.qty) === S.settings.useAmount); });
     var any = false;
     POTION_ORDER.forEach(function (key) {
       var n = S.potions[key] || 0;
@@ -615,6 +619,7 @@
       bar.appendChild(el);
     });
     if (!any) bar.innerHTML = "<div class=\"empty\">No potions yet. Visit the Shop.</div>";
+    $("#use-amount").classList.toggle("hidden", !any);
   }
 
   function renderHistory() {
@@ -1093,23 +1098,38 @@
 
   /* ---------- Potions ---------- */
 
+  /* Kinds where using more than one at once gives no benefit (only the strongest waiting one applies), so the
+     Use amount is ignored and one is used. */
+  var ONE_SHOT_KINDS = { strength: 1, shield: 1, revive: 1, everything: 1 };
+
   function usePotion(key) {
     var p = POTIONS[key];
     if (!p) return;
-    if (!S.potions[key]) { errorToast(ERR.POTION_USE, "You have no " + p.name + " left."); return; }
-    var note = "";
+    var owned = S.potions[key] || 0;
+    if (!owned) { errorToast(ERR.POTION_USE, "You have no " + p.name + " left."); return; }
+
+    /* Healing potions are drunk during a fight, one at a time; the Use amount doesn't apply. */
+    if (p.kind === "heal") {
+      if (!battle || battle.over || view.pvp) { errorToast(ERR.POTION_USE, "Healing potions are used during a bot fight."); return; }
+      healInBattle(key);
+      return;
+    }
+
+    var want = USE_AMOUNTS.indexOf(S.settings.useAmount) >= 0 ? S.settings.useAmount : 1;
+    var n = ONE_SHOT_KINDS[p.kind] ? 1 : Math.min(want, owned);
+
     if (p.kind === "luck") {
-      S.luckEffects.push({ mult: p.mult, rolls: p.rolls });
+      S.luckEffects.push({ mult: p.mult, rolls: p.rolls * n });
     } else if (p.kind === "floor") {
-      S.floorEffects.push({ min: p.min, rolls: p.rolls });
+      S.floorEffects.push({ min: p.min, rolls: p.rolls * n });
     } else if (p.kind === "shiny") {
-      S.shinyEffects.push({ mult: p.mult, rolls: p.rolls });
+      S.shinyEffects.push({ mult: p.mult, rolls: p.rolls * n });
     } else if (p.kind === "gold") {
-      S.goldEffects.push({ mult: p.mult, rolls: p.rolls });
+      S.goldEffects.push({ mult: p.mult, rolls: p.rolls * n });
     } else if (p.kind === "haste") {
       var active = hasteActive();
       if (active && p.div < S.hasteDiv) { errorToast(ERR.POTION_USE, "A stronger speed potion is already active."); return; }
-      S.hasteUntil = (active && p.div === S.hasteDiv ? S.hasteUntil : Date.now()) + p.seconds * 1000;
+      S.hasteUntil = (active && p.div === S.hasteDiv ? S.hasteUntil : Date.now()) + p.seconds * 1000 * n;
       S.hasteDiv = p.div;
     } else if (p.kind === "strength") {
       if (S.strengthMult >= p.mult) { errorToast(ERR.POTION_USE, "An equal or stronger damage boost is already waiting."); return; }
@@ -1133,23 +1153,28 @@
       S.strengthMult = Math.max(S.strengthMult, POTIONS.godslayer.mult);
       S.shieldReady = Math.max(S.shieldReady, POTIONS.steelwall.pct);
       S.reviveReady = Math.max(S.reviveReady, POTIONS.phoenix.pct);
-    } else if (p.kind === "heal") {
-      if (!battle || battle.over || view.pvp) { errorToast(ERR.POTION_USE, "Healing potions are used during a bot fight."); return; }
-      healInBattle(key);
-      return;
     } else if (p.kind === "mystery") {
-      var won = rollMysteryPotion(p);
-      S.potions[key]--;
-      addPotion(won, 1);
+      var tally = {}, distinct = 0;
+      for (var i = 0; i < n; i++) { var won = rollMysteryPotion(p); if (addPotion(won, 1)) { if (!tally[won]) distinct++; tally[won] = (tally[won] || 0) + 1; } }
+      S.potions[key] -= n;
       Sound.buy();
-      toast(p.icon + " The " + p.name + " became " + POTIONS[won].icon + " " + POTIONS[won].name + "!", "gold");
+      if (n === 1) {
+        var only = Object.keys(tally)[0];
+        toast(p.icon + " The " + p.name + " became " + (only ? POTIONS[only].icon + " " + POTIONS[only].name : "nothing") + "!", "gold", 5000);
+      } else if (distinct <= 4) {
+        var list = Object.keys(tally).map(function (k) { return POTIONS[k].icon + " " + fmt(tally[k]) + " " + POTIONS[k].name; }).join(", ");
+        toast(p.icon + " Opened " + fmt(n) + " " + p.name + "s: " + list, "gold", 7000);
+      } else {
+        toast(p.icon + " Opened " + fmt(n) + " " + p.name + "s into " + fmt(distinct) + " kinds of potion! Check your potions.", "gold", 7000);
+      }
       save();
       renderAll();
       return;
     }
-    S.potions[key]--;
+
+    S.potions[key] -= n;
     Sound.buy();
-    toast(p.icon + " " + p.name + " used" + note);
+    toast(p.icon + " " + (n > 1 ? "Used " + fmt(n) + " x " + p.name : p.name + " used"));
     save();
     renderAll();
   }
@@ -6147,6 +6172,13 @@
     S.settings.buyAmount = b.dataset.qty === "max" ? "max" : Number(b.dataset.qty);
     save();
     renderShop();
+  });
+  $("#use-amount").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-qty]");
+    if (!b) return;
+    S.settings.useAmount = Number(b.dataset.qty);
+    save();
+    renderQuickbar();
   });
   $("#btn-reset").addEventListener("click", function () {
     if (!confirm("Reset all progress? This cannot be undone.")) return;
