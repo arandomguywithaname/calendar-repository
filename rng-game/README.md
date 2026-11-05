@@ -180,16 +180,19 @@ loadout, and fight bots or a friend.
   many copies before anything sells. Stats count every copy sold.
 - **🗼 The Tower.** A 120-floor climb on the **Tower** tab, fought with the aura you
   equip from your Inventory (its power decides how each floor goes: Easy, Fair, Hard
-  or Deadly). Each floor is one bot fight using the same battle engine as the Arena.
-  You climb **strictly in order, one floor at a time** — only the next floor is
-  fightable; a floor you've already cleared shows a ✓ and is locked, and floors above
-  the next are locked too. Beating a floor pays **doubloons** (🪙, a separate currency
-  from coins): floors 1–10 pay 1,200, floors 11–20 pay 2,300, and so on up the bands
-  (every ten floors adds 1,100). Your highest floor is saved. **The Tower resets every
-  3 days:** every cleared floor re-opens, so you climb from floor 1 again and earn all
-  those big prizes a second (and third…) time, while your highest-floor record is kept
-  and the status card counts down to the next reset. Losing a floor costs nothing but
-  the fight.
+  or Deadly). Each floor is one bot fight using the same battle engine as the Arena,
+  and when it's over a **🗼 Back to the Tower** button takes you straight back to the
+  Tower (so a tower fight never dumps you on the Battle screen). The bots ramp up
+  fast: floor 1 is **1,000 power** and every floor up is **×1.15** (1,000 → 1,150 →
+  1,322 → …), reaching the billions near floor 120. You climb **strictly in order, one
+  floor at a time** — only the next floor is fightable; a floor you've already cleared
+  shows a ✓ and is locked, and floors above the next are locked too. Beating a floor
+  pays **doubloons** (🪙, a separate currency from coins): floors 1–10 pay 1,200,
+  floors 11–20 pay 2,300, and so on up the bands (every ten floors adds 1,100). Your
+  highest floor is saved. **The Tower resets every 3 days:** every cleared floor
+  re-opens, so you climb from floor 1 again and earn all those big prizes a second
+  (and third…) time, while your highest-floor record is kept and the status card
+  counts down to the next reset. Losing a floor costs nothing but the fight.
 - **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
   potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
   at their own doubloon prices. The 3-healing-potion cap still applies, and a

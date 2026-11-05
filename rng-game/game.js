@@ -141,7 +141,8 @@
   /* Repeat reward grows by band: 12, 23, 34, … 133. First clear pays 100× that: 1,200, 2,300, … 13,300. */
   function towerRepeat(floor) { return 11 * towerBand(floor) + 1; }
   function towerFirst(floor) { return 100 * towerRepeat(floor); }
-  function towerPower(floor) { return Math.round(24 * Math.pow(1.076, floor)); }
+  /* Floor power ramps hard: floor 1 is 1,000, and every floor up is x1.15 (1,000 → 1,150 → 1,322 → …). */
+  function towerPower(floor) { return Math.round(1000 * Math.pow(1.15, floor - 1)); }
   var TOWER = (function () {
     var kits = BOTS.map(function (b) { return b.id; }), out = [];
     for (var f = 1; f <= TOWER_FLOORS; f++) {
@@ -933,7 +934,7 @@
   var SHAKE_SELECTORS = ["main", "header"];
   function shakeTargets() { return SHAKE_SELECTORS.map(function (sel) { return document.querySelector(sel); }).filter(Boolean); }
   function shake(level) {
-    if (!level) return;
+    if (!level || S.settings.skipAnims) return; /* animations off → no screen shake */
     var els = shakeTargets();
     els.forEach(function (el) { el.classList.remove("shake-1", "shake-2", "shake-3"); });
     void document.body.offsetWidth;
@@ -3638,6 +3639,15 @@
     arena.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  /* Leave a finished Tower fight and go back to the Tower (so a tower fight never dumps you on the Battle screen). */
+  function leaveToTower() {
+    battle = null;
+    $("#arena").classList.add("hidden");
+    $("#post-battle").innerHTML = "";
+    switchTab("tower");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function fighterVisual(f, el) {
     el.innerHTML = "";
     if (f.auraId !== null && f.auraId !== undefined && A.byId(f.auraId)) {
@@ -4052,6 +4062,13 @@
         if (!fled) { Sound.lose(); logLine("💀 You were defeated on Floor " + tfloor + ".", "them"); }
       }
       renderArena();
+      var post = $("#post-battle");
+      post.innerHTML = "";
+      var back = document.createElement("button");
+      back.className = "btn small primary";
+      back.textContent = won && tfloor < TOWER_FLOORS ? "🗼 Back to the Tower (Floor " + (tfloor + 1) + " is open)" : "🗼 Back to the Tower";
+      back.addEventListener("click", leaveToTower);
+      post.appendChild(back);
       save();
       var finishedT = battle;
       setTimeout(function () { if (battle === finishedT) battle = null; renderAll(); renderTower(); }, 500);
