@@ -193,7 +193,11 @@ loadout, and fight bots or a friend.
 - **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
   potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
   at their own doubloon prices. The 3-healing-potion cap still applies, and a
-  purchase you can't afford shows **Error 435: not enough doubloons**.
+  purchase you can't afford shows **Error 435: not enough doubloons**. It also sells
+  the **👹 Monstrous Potion** (20,000 doubloons), a coin potion so strong it's sold
+  nowhere else: it gives **x2,000 coins on your next single roll**. Because it's
+  doubloon-only, it never shows up in the regular coin shop, the Mega Mystery pool, or
+  the "buy every potion" collection.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's

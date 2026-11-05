@@ -54,6 +54,7 @@
     rush:      { name: "Golden Rush",       icon: "💎", cost: 3000,    group: "coins",  kind: "gold", mult: 10, rolls: 10, desc: "x10 coins from rolls for 10 rolls" },
     treasure:  { name: "Treasure Tonic",    icon: "🪙", cost: 8000,    group: "coins",  kind: "gold", mult: 25, rolls: 10, desc: "x25 coins from rolls for 10 rolls" },
     hoard:     { name: "Dragon's Hoard",    icon: "🐉", cost: 40000,   group: "coins",  kind: "gold", mult: 100, rolls: 5, desc: "x100 coins from rolls for 5 rolls" },
+    monstrous: { name: "Monstrous Potion",  icon: "👹", cost: 0,        group: "coins",  kind: "gold", mult: 2000, rolls: 1, doubloon: true, desc: "x2,000 coins from a single roll. Only from the Doubloon shop." },
     haste:     { name: "Haste Potion",      icon: "⚡", cost: 200,     group: "coins",  kind: "haste", div: 2, seconds: 60,  desc: "Roll cooldown halved for 60 seconds" },
     blitz:     { name: "Blitz Potion",      icon: "🌀", cost: 800,     group: "coins",  kind: "haste", div: 4, seconds: 120, desc: "Roll cooldown quartered for 2 minutes" },
     timewarp:  { name: "Time Warp",         icon: "⏳", cost: 5000,    group: "coins",  kind: "haste", div: 8, seconds: 90,  desc: "Roll cooldown cut to 1/8 for 90 seconds" },
@@ -193,7 +194,7 @@
      least once, apart from these three. */
   var COLLECTION_SKIP = ["celestial", "destiny", "secret"];
   function collectionKeys() {
-    return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && COLLECTION_SKIP.indexOf(k) < 0; });
+    return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && COLLECTION_SKIP.indexOf(k) < 0; });
   }
   function collectionMissing() { return collectionKeys().filter(function (k) { return !(S.bought[k] > 0); }); }
   function collectionDone() { return collectionMissing().length === 0; }
@@ -1248,7 +1249,7 @@
      `minCost` and `maxCost` bound which potions it can become. */
   function rollMysteryPotion(m) {
     /* never a healing potion when there's no room to carry it */
-    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity) && potionRoom(k) > 0; });
+    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && !q.doubloon && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity) && potionRoom(k) > 0; });
     var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var r = Math.random() * total;
@@ -1303,7 +1304,7 @@
     });
     POTION_ORDER.forEach(function (key) {
       var p = POTIONS[key];
-      if (p.daily) return;
+      if (p.daily || p.doubloon) return; /* doubloon-only potions are sold in the Tower's Doubloon shop, not here */
       var grid = $("#shop-" + p.group);
       var card = document.createElement("div");
       card.className = "card";
@@ -3404,6 +3405,7 @@
 
   /* ---------- Doubloon shop: potions bought with tower doubloons ---------- */
   var DOUBLOON_SHOP = [
+    ["monstrous", 20000],
     ["fortune", 250], ["heavenly", 1200], ["starlight", 2500], ["godly", 6000], ["voidess", 12000],
     ["rush", 1500], ["treasure", 4000], ["hoard", 9000],
     ["magnet", 400], ["epicmagnet", 2000], ["lure", 8000], ["prism", 5000],
