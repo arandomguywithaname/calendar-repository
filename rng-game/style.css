@@ -604,7 +604,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
   .hud { margin-left: 0; width: 100%; justify-content: space-between; }
   .account { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .account-name { max-width: 110px; }
-  .hud-item { min-width: 0; flex: 1; padding: 4px 6px; }
+  .hud-item { min-width: 0; flex: 1 1 60px; padding: 4px 6px; overflow: hidden; }
+  .hud-value { font-size: 1rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .hud-label { font-size: .58rem; letter-spacing: .12em; }
   .btn.big { padding: 14px 36px; font-size: 1.15rem; }
   .arena { grid-template-columns: 1fr; }
   .vs { justify-self: center; }

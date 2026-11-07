@@ -18,6 +18,18 @@
   var ROLL_COOLDOWN = 1000;
   var PEER_PREFIX = "aura-realms-v1-";
   var fmt = function (n) { return Math.floor(n).toLocaleString("en-US"); };
+  /* Short number for the cramped HUD tiles so big values never overflow a phone: 9,999 stays full, then
+     10K, 12.3K, 1.5M, 2.1B, 3T… (exact value goes in the tile's title for a hover/long-press). */
+  var fmtShort = function (n) {
+    n = Math.floor(Number(n) || 0);
+    if (n < 10000) return n.toLocaleString("en-US");
+    var u = ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "De"], i = -1, x = n;
+    while (x >= 1000 && i < u.length - 1) { x /= 1000; i++; }
+    if (x >= 999.5 && i < u.length - 1) { x /= 1000; i++; } /* 999,999 reads 1M, not 1000K */
+    var s = x >= 100 ? String(Math.round(x)) : x.toFixed(x >= 10 ? 1 : 2);
+    if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
+    return s + u[i];
+  };
   /* Coin amounts too big to ever have (many training levels at once) read as words, not 100 digits. */
   var fmtCost = function (n) { return n < 1e15 ? fmt(n) : "more than 1,000,000,000,000,000"; };
 
@@ -581,11 +593,13 @@
   /* ---------- HUD and shared renders ---------- */
 
   function renderHUD() {
-    $("#hud-coins").textContent = fmt(S.coins);
-    $("#hud-luck").textContent = "x" + fmt(currentLuck());
-    $("#hud-rolls").textContent = fmt(S.rolls);
-    $("#hud-power").textContent = fmt(playerPower());
-    $("#hud-doubloons").textContent = fmt(S.doubloons || 0);
+    /* Short values keep the 5 HUD tiles from overflowing a phone; the exact number is in each tile's title. */
+    function setHud(id, n, prefix) { var el = $(id); el.textContent = (prefix || "") + fmtShort(n); el.parentNode.title = (prefix || "") + fmt(n); }
+    setHud("#hud-coins", S.coins);
+    setHud("#hud-luck", currentLuck(), "x");
+    setHud("#hud-rolls", S.rolls);
+    setHud("#hud-power", playerPower());
+    setHud("#hud-doubloons", S.doubloons || 0, "");
   }
 
   function renderEffects() {
