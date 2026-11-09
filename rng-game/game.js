@@ -5945,7 +5945,11 @@
     renderLeaderboard();
     chatFetch("leaderboard", { id: currentUser || undefined }).then(function (r) {
       LB.loading = false;
-      if (r.status !== 200 || !r.data || !r.data.ok) { LB.error = "server"; renderLeaderboard(); return; }
+      if (r.status !== 200 || !r.data || !r.data.ok) {
+        /* An old server doesn't know the "leaderboard" action and replies "Unknown action". */
+        LB.error = r.data && /unknown action/i.test(r.data.error || "") ? "outdated" : "server";
+        renderLeaderboard(); return;
+      }
       LB.data = r.data; LB.at = Date.now(); LB.error = null;
       renderLeaderboard();
     }).catch(function (e) {
@@ -5998,6 +6002,7 @@
     var list = $("#lb-list"), you = $("#lb-you"), count = $("#lb-count");
     if (LB.error) {
       var msg = LB.error === "missing" ? "The leaderboard needs the online account server, which isn't set up on this site."
+        : LB.error === "outdated" ? "The leaderboard isn't on the game server yet — this site is running an older version. Reload the page; if it still doesn't work, the site needs to be re-published with the latest update."
         : LB.error === "wifi" ? "You look offline — connect to the internet to see the leaderboard."
         : "Couldn't load the leaderboard. Tap 🔄 Refresh to try again.";
       list.innerHTML = "<div class=\"empty-note\"></div>";

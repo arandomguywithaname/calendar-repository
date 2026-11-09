@@ -68,6 +68,8 @@ const leaseKey = (id) => "lease/" + id;
 const giftKey = (id) => "gifts/" + id;
 const CHAT_KEY = "chat/log";
 const CHAT_HERE_KEY = "chat/here";
+const LEADERBOARD_KEY = "leaderboard/cache";
+const LEADERBOARD_TTL = 60000; /* the ranking is recomputed at most once a minute, so polling it never rescans every account */
 const HERE_MS = 60000;       /* a player counts as in the chat for a minute after their last check */
 const HERE_WRITE_MS = 25000; /* ...and their presence is written at most this often */
 const chatUserKey = (id) => "chatuser/" + id;
@@ -459,20 +461,27 @@ const ACTIONS = {
   /* The all-stars leaderboard: every account, ranked by rarest aura found (then coins, then rolls). Returns the
      top 100 plus the viewer's own row (so you always see yourself, even outside the top 100). No player IDs leave
      the server; the viewer's own row is flagged with `mine`. */
-  async leaderboard(body, store) {
+  async leaderboard(body, store, now) {
     const viewer = ID_RE.test(String(body.id)) ? String(body.id) : null;
-    const ids = await allIds(store);
-    const accts = await mapLimit(ids, 10, (id) => store.get(accountKey(id), { type: "json" }));
-    const ranked = accts.filter(Boolean).map(leaderEntry)
-      .sort((a, b) => (b.bestRarity - a.bestRarity) || (b.coins - a.coins) || (b.rolls - a.rolls));
+    /* Serve a cached ranking (ids kept server-side only) so polling never rescans every account; refresh it at
+       most once a minute. On a store with many accounts this is what keeps the request from timing out. */
+    let cache = null;
+    try { cache = await store.get(LEADERBOARD_KEY, { type: "json" }); } catch (e) { cache = null; }
+    if (!cache || !Array.isArray(cache.list) || now - (cache.at || 0) > LEADERBOARD_TTL) {
+      const ids = await allIds(store);
+      const accts = await mapLimit(ids, 10, (id) => store.get(accountKey(id), { type: "json" }));
+      const list = accts.filter(Boolean).map(leaderEntry)
+        .sort((a, b) => (b.bestRarity - a.bestRarity) || (b.coins - a.coins) || (b.rolls - a.rolls))
+        .map((e) => ({ id: e._id, name: e.name, best: e.best, bestShiny: e.bestShiny, bestRarity: e.bestRarity, coins: e.coins, rolls: e.rolls, auras: e.auras }));
+      cache = { at: now, list };
+      try { await store.setJSON(LEADERBOARD_KEY, cache); } catch (e) { /* best-effort cache */ }
+    }
+    const list = cache.list;
+    const rowOf = (e, i) => ({ rank: i + 1, name: e.name, best: e.best, bestShiny: e.bestShiny, bestRarity: e.bestRarity, coins: e.coins, rolls: e.rolls, auras: e.auras, mine: !!viewer && e.id === viewer });
+    const top = list.slice(0, 100).map(rowOf);
     let me = null;
-    const rows = ranked.map((e, i) => {
-      const mine = !!viewer && e._id === viewer;
-      const row = { rank: i + 1, name: e.name, best: e.best, bestShiny: e.bestShiny, bestRarity: e.bestRarity, coins: e.coins, rolls: e.rolls, auras: e.auras, mine };
-      if (mine) me = row;
-      return row;
-    });
-    return reply(200, { ok: true, count: rows.length, top: rows.slice(0, 100), me });
+    if (viewer) { const i = list.findIndex((e) => e.id === viewer); if (i >= 0) me = rowOf(list[i], i); }
+    return reply(200, { ok: true, count: list.length, top, me });
   },
 
   async admin(body, store, now, env) {
