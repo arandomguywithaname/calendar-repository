@@ -339,6 +339,12 @@ No build step and no npm install.
   break away (5+ minutes with the tab hidden or closed) resets you back to the gentle
   first break. The running total is kept in `localStorage` so a quick reload can't dodge a
   break. It works for everyone — logged in or not — and needs no server.
+- **✨ Break skips.** **Gifting your best aura** (the rarest one you currently own) to a
+  friend earns one **Break Skip**. A break overlay shows a gold "✨ Use a Break Skip"
+  button whenever you have any, and it closes **any** break at once — even a forced
+  one-minute break that normally can't be skipped. Each skip is spent when used, the count
+  is saved with your account, and because giving away a rare aura is a real cost it can't
+  be farmed — it's a reward for being generous.
 - **Players get updates by themselves.** A tab left open for days keeps running the
   old game. Every few minutes, and whenever a player comes back to the tab, the game
   asks the site for its newest page; when that has a higher Version number it shows a

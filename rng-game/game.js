@@ -246,8 +246,9 @@
       doubloons: 0,
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       aurasLockedUntil: 0,
+      breakSkips: 0,
       history: [],
-      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0, towerWins: 0 },
+      stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0, towerWins: 0, breakSkipsEarned: 0 },
       settings: { sound: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
     };
   }
@@ -297,6 +298,7 @@
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
       merged.tower.cycleStart = Math.floor(Number(merged.tower.cycleStart) || 0);
       merged.aurasLockedUntil = Math.max(0, Math.floor(Number(merged.aurasLockedUntil) || 0));
+      merged.breakSkips = Math.max(0, Math.floor(Number(merged.breakSkips) || 0));
       /* Backfill the leaderboard's rarity stat for saves made before it existed. */
       if (merged.stats.best != null && A.byId(merged.stats.best)) merged.stats.bestRarity = effRarity(A.byId(merged.stats.best), merged.stats.bestShiny);
       else merged.stats.bestRarity = Math.max(0, Number(merged.stats.bestRarity) || 0);
@@ -1446,6 +1448,23 @@
     var ids = {};
     [S.inventory, S.shinyInventory].forEach(function (bag) { Object.keys(bag).forEach(function (id) { if (bag[id] > 0) ids[id] = true; }); });
     return Object.keys(ids).map(Number).filter(function (id) { return !!A.byId(id); });
+  }
+
+  /* The highest effective rarity among all auras currently owned (0 if the inventory is empty). */
+  function bestOwnedRarity() {
+    var max = 0;
+    ownedIds().forEach(function (id) {
+      var a = A.byId(id);
+      if (owns(id, false)) max = Math.max(max, effRarity(a, false));
+      if (owns(id, true)) max = Math.max(max, effRarity(a, true));
+    });
+    return max;
+  }
+  /* True when this exact aura (and shininess) is (one of) the rarest you currently own — your "best aura". */
+  function isMyBestAura(id, shiny) {
+    var a = A.byId(id); if (!a) return false;
+    var r = effRarity(a, shiny);
+    return r > 0 && r >= bestOwnedRarity();
   }
 
   /* A collection can hold well over a thousand auras, each with an animated orb, and building them all on
@@ -5699,6 +5718,7 @@
     var bag = coins ? null : giftBag(g.shiny);
     if (coins ? S.coins < g.coins : (bag[g.id] || 0) < g.count) { setGiftStep("who", coins ? "You don't have that many coins any more." : "You don't have that many any more."); return; }
     if (Cloud.pushing || Cloud.claiming) { $("#gift-error").textContent = "Saving… try again in a moment."; return; }
+    var gaveBest = !coins && isMyBestAura(g.id, g.shiny); /* gifting your best aura earns a break skip */
     var before = coins ? { coins: S.coins } : { n: bag[g.id], equipped: S.equipped, equippedShiny: S.equippedShiny };
     if (coins) {
       S.coins -= g.coins;
@@ -5739,6 +5759,15 @@
         if (giftView === g) closeGift();
         Sound.buy();
         toast("🎁 Sent " + label + " to " + (r.data.toName || g.toName) + "!", "gold", 5000);
+        if (gaveBest) {
+          /* Reward for generosity: a break skip that can skip any break, even a forced one. */
+          S.breakSkips = (S.breakSkips || 0) + 1;
+          S.stats.breakSkipsEarned = (S.stats.breakSkipsEarned || 0) + 1;
+          saveLocal();
+          updateMeta(id, { dirty: true });
+          if (!Cloud.pushTimer) Cloud.pushTimer = setTimeout(pushSave, 3000);
+          setTimeout(function () { toast("✨ You gifted your best aura — you earned a Break Skip! Use it to skip any break (even a forced one). You have " + S.breakSkips + ".", "gold", 8000); }, 900);
+        }
         renderAll();
         return;
       }
@@ -6896,6 +6925,9 @@
       if (autoOn) { autoOn = false; var ab = $("#btn-auto"); if (ab) { ab.textContent = "Auto Roll: Off"; ab.classList.remove("on"); } } // a break pauses auto roll
       var ov = $("#break-overlay");
       $("#break-msg").textContent = "You've been playing for over 30 minutes straight. Come on — go do what you really need to do, like your homework!";
+      var skipBtn = $("#break-skip"), haveSkips = (S.breakSkips || 0) > 0;
+      skipBtn.classList.toggle("hidden", !haveSkips);
+      if (haveSkips) { skipBtn.disabled = false; skipBtn.textContent = "✨ Use a Break Skip (" + (S.breakSkips || 0) + ")"; }
       ov.classList.remove("hidden");
       ov.classList.toggle("forced", curForced);
       step(endAt);
@@ -6929,9 +6961,19 @@
       store();
     }
 
+    /* A break skip (earned by gifting your best aura) closes any break at once, even a forced one. */
+    function useSkip() {
+      if (!showing || (S.breakSkips || 0) <= 0) return;
+      S.breakSkips -= 1;
+      save();
+      finish();
+      toast("✨ Break skipped! " + (S.breakSkips > 0 ? S.breakSkips + " break skip" + (S.breakSkips === 1 ? "" : "s") + " left." : "That was your last break skip — be generous to earn more!"), "gold", 6000);
+    }
+
     function init() {
       load();
       $("#break-btn").addEventListener("click", finish);
+      $("#break-skip").addEventListener("click", useSkip);
       document.addEventListener("visibilitychange", function () { lastActive = Date.now(); });
       setInterval(tick, 1000);
     }

@@ -740,6 +740,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .break-overlay.forced .break-title { color: #fca5a5; }
 .break-card .btn.big { margin-top: 4px; }
 .break-card .btn:disabled { opacity: .5; cursor: not-allowed; }
+.break-skip { background: linear-gradient(135deg, #f59e0b, #fbbf24); border-color: transparent; color: #3a2a00; font-weight: 800; }
+.break-skip:hover { filter: brightness(1.08); }
 
 /* The Tower */
 .tower-status { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--card-border); background: var(--card); }
