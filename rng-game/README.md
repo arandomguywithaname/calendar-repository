@@ -23,6 +23,14 @@ loadout, and fight bots or a friend.
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
   Fury of Darkness and the Forbidden rank, a cyan system glow for Administrative and
   golden sun rays for Chosen.
+- **Every aura wears its own sigil.** On top of the orb each aura shows a unique glowing
+  symbol (a star, rune, planet, zodiac or alchemy glyph) inside a slow-spinning rune-ring,
+  picked deterministically from the aura's id — so an aura reads as its own crest, not a
+  plain circle, everywhere it appears (roll screen, inventory, battle, gift popup).
+- **Rolls land, they don't just stop.** Even a Common roll now takes a beat: the names
+  decelerate like a slot machine with a rising tick, then the orb pops and the reveal
+  fires a small colour burst, ring and glow. Rarer rolls build longer before their flash,
+  banner and (Epic+) full cutscene.
 - **Its own cutscene for every Epic+ aura.** Common, Uncommon and Rare rolls stay on
   the roll screen (Rare still gets the slot-machine slowdown, flash and banner). Each
   of the 704 auras from Epic upward takes over the screen with a cutscene no other

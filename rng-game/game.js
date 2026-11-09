@@ -471,6 +471,13 @@
     return "conic-gradient(from 0deg, " + colors.concat([colors[0]]).join(", ") + ")";
   }
 
+  /* Each aura gets its own glowing sigil (a symbol + a rune-ring at its own angle), so it reads as a unique
+     crest instead of a plain circle. Deterministic from the aura's id, all BMP glyphs (single UTF-16 units). */
+  var EMBLEM_GLYPHS = "★✦✧✶✷✸✹✺❂❖◆◈◉⬢⬟⬣⊛⊕⊗☉☽☿♀♁♂♃♄☥⚚⚛⚜♈♉♊♋♌♍♎♏♐♑♒♓ᚠᚦᚨᚱᚲᚷᚺᚾᛁᛃᛉᛊᛏᛒᛚᛜᛟ";
+  function auraHash(aura) { var id = aura && aura.id != null ? aura.id : 0; return (((id + 1) * 2654435761) >>> 0); }
+  function emblemGlyph(aura) { return EMBLEM_GLYPHS.charAt(auraHash(aura) % EMBLEM_GLYPHS.length); }
+  function emblemRot(aura) { return (auraHash(aura) >>> 3) % 360; }
+
   function fillStyle(aura) {
     var c = aura.colors;
     var layers = [];
@@ -489,12 +496,17 @@
     if (paint) paint.style.background = fillStyle(aura);
     el.className = el.className.replace(/\b(tier|shine)-\S+/g, "").replace(/\s+/g, " ").trim() + " tier-" + aura.tier + " shine-" + shineLevel(aura);
     if (!el.querySelector(".orb-sparkle")) { var sp = document.createElement("div"); sp.className = "orb-sparkle"; el.appendChild(sp); }
+    var emblem = el.querySelector(".orb-emblem");
+    if (!emblem) { emblem = document.createElement("div"); emblem.className = "orb-emblem"; emblem.innerHTML = "<span class=\"orb-sigil\"></span>"; el.insertBefore(emblem, el.querySelector(".orb-gloss") || null); }
+    var sigil = emblem.querySelector(".orb-sigil");
+    if (sigil) sigil.textContent = emblemGlyph(aura);
+    el.style.setProperty("--emblem-rot", emblemRot(aura) + "deg");
   }
 
   function makeOrb(aura, cls, shiny) {
     var el = document.createElement("div");
     el.className = "orb " + (cls || "");
-    el.innerHTML = "<div class=\"orb-fill\"><div class=\"orb-paint\"></div></div><div class=\"orb-core\"></div><div class=\"orb-gloss\"></div><div class=\"orb-sparkle\"></div>";
+    el.innerHTML = "<div class=\"orb-fill\"><div class=\"orb-paint\"></div></div><div class=\"orb-core\"></div><div class=\"orb-emblem\"><span class=\"orb-sigil\"></span></div><div class=\"orb-gloss\"></div><div class=\"orb-sparkle\"></div>";
     setOrb(el, aura, shiny);
     return el;
   }
@@ -1021,7 +1033,8 @@
       orb.style.setProperty("--c1", a.c1);
       paint.style.background = fillStyle(a);
       if (slow) Sound.tick(220 + p * p * 700);
-      spinTimer = setTimeout(tick, slow ? 45 + Math.pow(p, 2.2) * 330 : 55);
+      else if (p > 0.55) Sound.tick(300 + p * p * 500); /* commons tick near the end as they slow down */
+      spinTimer = setTimeout(tick, slow ? 45 + Math.pow(p, 2.2) * 330 : 38 + Math.pow(p, 2.8) * 170);
     }
     tick();
   }
@@ -1042,7 +1055,13 @@
       Sound.shiny();
       if (ti < 2) { showBanner(aura, ti, true); return; }
     }
-    if (ti < 2) return;
+    if (ti < 2) {
+      /* Even a common roll lands with a little burst, ring and glow so it feels like a reveal, not a spin-stop. */
+      FX.burst(aura.colors, 28, 0.42);
+      FX.ring(aura.c1, 0.34);
+      setGlow(aura, 1);
+      return;
+    }
     var power = ti === 2 ? 0.5 : ti === 3 ? 0.8 : ti >= 7 ? 1.4 : 1.1;
     screenFlash(aura, power);
     FX.burst(aura.colors, ti === 2 ? 50 : ti === 3 ? 130 : ti >= 7 ? 420 : 260, power);
@@ -1092,7 +1111,7 @@
     FX.clear();
     setGlow(null, 0);
     $("#roll-banner").className = "roll-banner";
-    var spinMs = S.settings.skipAnims ? 120 : ti <= 1 ? (hasteActive() ? 250 : 450) : ti === 2 ? 1100 : ti === 3 ? 1600 : 2200;
+    var spinMs = S.settings.skipAnims ? 120 : ti <= 1 ? (hasteActive() ? 320 : 750) : ti === 2 ? 1250 : ti === 3 ? 1800 : 2400;
     var stage = $("#roll-stage");
     runSpin(aura, ti, spinMs, function () {
       var finish = function () {
