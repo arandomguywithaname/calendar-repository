@@ -3,7 +3,7 @@
 A static browser game: roll for auras, earn coins, buy potions, build an ability
 loadout, and fight bots or a friend.
 
-- **847 auras in 11 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
+- **858 auras in 11 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
   1,000,000,000), then twenty more Forbidden auras beyond it (Abyssal Crown, Void Sovereign,
   Shattered Infinity, Crimson Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis,
   Wrath of the Unmade, Eternal Damnation, Final Silence, Obsidian Requiem, Hellfire Monarch,
@@ -12,13 +12,20 @@ loadout, and fight bots or a friend.
   billion). **Administrative** has 42 auras with hand-set power: Root
   Access (1 in 500 billion, 10,000 power), Absolute Authority (1 in 1 trillion, 12,000
   power), 40 more from Kernel Panic (1 in 1.2 trillion, 12,500 power) to Eternal Operator
-  (1 in 840 trillion, 32,000 power). The last rank, **Chosen**, holds only **The Chosen
+  (1 in 840 trillion, 32,000 power). The last rank, **Chosen**, starts with **The Chosen
   One**: 1 in 1,000,000,000,000,000 (a quadrillion), 50,000 power, its own named moves
   (Chosen Strike, Prophecy Storm, Fated Aegis, Second Coming, Final Judgement and 🌟
   **Destiny Unbound**, exactly 1,000,000 damage that nothing can block, shield, reflect
   or boost, 4 turn cooldown) plus a 7th, its own 🫰 **Snap** for exactly 1,000,000
   damage with a 7 turn cooldown, a gold orb, banner and title, and a constellation-and-god-
-  rays reveal, the longest in the game. Administrative auras have a cyan orb style.
+  rays reveal, the longest in the game. Ten more Chosen auras follow it, rarer still (The
+  Awakened, Herald of Fate, The Ascended, Keeper of Prophecy, The Eternal Chosen, Avatar of
+  Creation, The First Light, Hand of Destiny, The Immortal Oath and The Final Chosen: 1 in
+  1.5 quadrillion up to 1 in 400 quadrillion, 56,000–135,000 power). Rarest of all is
+  **The Unknown** (1 in 1,000,000,000,000,000,000 — a quintillion — 500,000 power), whose
+  signature 🕳️ **Oblivion** and 🫰 **Erasure** each erase the enemy for exactly
+  **10,000,000** damage that nothing can block, shield, reflect or boost. Administrative
+  auras have a cyan orb style.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
   Fury of Darkness and the Forbidden rank, a cyan system glow for Administrative and
@@ -200,7 +207,10 @@ loadout, and fight bots or a friend.
   highest floor is saved. **The Tower resets every 3 days:** every cleared floor
   re-opens, so you climb from floor 1 again and earn all those big prizes a second
   (and third…) time, while your highest-floor record is kept and the status card
-  counts down to the next reset. Losing a floor costs nothing but the fight.
+  counts down to the next reset. Losing a floor costs nothing but the fight. If a bot
+  is too tough, the next floor also has a **⏭️ Skip** button: pay coins (the price
+  scales with that bot's power — floor power × 4) to skip it and move straight on. A
+  skipped floor counts as cleared so the next unlocks, but earns **no doubloons**.
 - **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
   potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
   at their own doubloon prices. The 3-healing-potion cap still applies, and a

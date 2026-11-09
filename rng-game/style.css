@@ -772,6 +772,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .tower-reward { color: var(--gold); font-weight: 700; font-size: .9rem; white-space: nowrap; }
 .tower-reward .first { font-size: .68rem; background: rgba(167,139,250,.25); color: #ddd6fe; padding: 1px 6px; border-radius: 999px; margin-left: 2px; }
 .tower-row .btn { min-width: 68px; }
+.tower-actions { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.tower-skip { font-size: .72rem; padding: 5px 8px; min-width: 68px; background: rgba(255,255,255,.04); }
+.tower-skip:not(:disabled):hover { background: rgba(251,191,36,.15); border-color: rgba(251,191,36,.4); }
 @media (max-width: 560px) { .tower-row { grid-template-columns: 28px 1fr auto; } .tower-reward { grid-column: 2 / 4; } }
 
 /* Aura lock (swearing punishment) */

@@ -50,7 +50,9 @@
     snap:      { icon: "🫰", mult: 0,    cd: 7, flat: 100000, names: ["Snap"],
                  desc: "Snaps reality for exactly {F} damage. Nothing can block, shield, reflect or boost it." },
     destiny:   { icon: "🌟", mult: 0,    cd: 4, flat: 1000000, names: ["Destiny Unbound"],
-                 desc: "Unleashes destiny for exactly {F} damage. Nothing can block, shield, reflect or boost it." }
+                 desc: "Unleashes destiny for exactly {F} damage. Nothing can block, shield, reflect or boost it." },
+    oblivion:  { icon: "🕳️", mult: 0,    cd: 5, flat: 10000000, names: ["Oblivion"],
+                 desc: "Erases the enemy for exactly {F} damage. Nothing can block, shield, reflect or boost it." }
   };
 
   /* Which mechanics each tier can roll. Later tiers unlock the nastier ones. */
@@ -71,7 +73,8 @@
   /* Extra signature moves some auras get on top of their usual six. */
   var EXTRA_MOVES = {
     "Absolute Authority": [["snap", "Snap"]],
-    "The Chosen One": [["snap", "Snap", { flat: 1000000 }]]
+    "The Chosen One": [["snap", "Snap", { flat: 1000000 }]],
+    "The Unknown": [["snap", "Erasure", { flat: 10000000 }]]
   };
 
   /* Hand-written kits for the headline auras. [archetype, name, optional mult override] */
@@ -99,6 +102,10 @@
     "Jackpot": [
       ["strike", "Lucky Strike"], ["precision", "Seven Seven Seven"], ["heavy", "Jackpot Slam"],
       ["focus", "All In"], ["stun", "Coin Flip"], ["drain", "House Edge"]
+    ],
+    "The Unknown": [
+      ["strike", "Glitch Strike"], ["drain", "Memory Leak"], ["weaken", "Reality Error"],
+      ["reflect", "Mirror of Nothing"], ["execute", "Delete"], ["oblivion", "Oblivion"]
     ]
   };
 

@@ -155,6 +155,8 @@
   function towerFirst(floor) { return 100 * towerRepeat(floor); }
   /* Floor power ramps hard: floor 1 is 1,000, and every floor up is x1.15 (1,000 → 1,150 → 1,322 → …). */
   function towerPower(floor) { return Math.round(1000 * Math.pow(1.15, floor - 1)); }
+  /* Coins to skip a floor's bot instead of fighting it — scaled to how much power that bot has. */
+  function towerSkipCost(floor) { return Math.max(500, Math.round(towerPower(floor) * 4)); }
   var TOWER = (function () {
     var kits = BOTS.map(function (b) { return b.id; }), out = [];
     for (var f = 1; f <= TOWER_FLOORS; f++) {
@@ -3572,7 +3574,23 @@
       btn.textContent = done ? "✓ Cleared" : isNext ? "Fight" : "Locked";
       btn.disabled = !isNext || !canFight;
       if (isNext) btn.addEventListener("click", function () { startTowerFight(floor); });
-      row.appendChild(btn);
+      if (isNext) {
+        /* The next floor also offers a coin skip (price scales with the bot's power). */
+        var actions = document.createElement("div");
+        actions.className = "tower-actions";
+        actions.appendChild(btn);
+        var cost = towerSkipCost(floor), canAct = !(battle && !battle.over) && PvP.status !== "connected" && !aurasLocked();
+        var skipBtn = document.createElement("button");
+        skipBtn.className = "btn small tower-skip";
+        skipBtn.textContent = "⏭️ Skip 🪙" + fmtShort(cost);
+        skipBtn.title = "Pay " + fmt(cost) + " coins to skip this bot and move on (no doubloons).";
+        skipBtn.disabled = !canAct || S.coins < cost;
+        skipBtn.addEventListener("click", function () { skipTowerFloor(floor); });
+        actions.appendChild(skipBtn);
+        row.appendChild(actions);
+      } else {
+        row.appendChild(btn);
+      }
       box.appendChild(row);
     });
   }
@@ -3604,6 +3622,27 @@
     save();
     renderArena();
     renderAll();
+  }
+
+  /* Pay coins (scaled to the bot's power) to skip a floor instead of fighting it. You advance, but earn no
+     doubloons for a skipped floor. Only the next floor can be skipped, one at a time. */
+  function skipTowerFloor(floor) {
+    if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
+    if (PvP.status === "connected") { toast("Leave the PvP room first", "bad"); return; }
+    if (floor !== towerReachable()) { toast("You can only skip the next floor", "bad"); return; }
+    if (S.tower.cleared[floor]) return;
+    var cost = towerSkipCost(floor);
+    if (S.coins < cost) { toast("You need " + fmt(cost) + " coins to skip Floor " + floor, "bad"); return; }
+    if (!confirm("Pay " + fmt(cost) + " coins to skip Floor " + floor + " (" + TOWER[floor - 1].name + ", Power " + fmt(towerPower(floor)) + ")? You move straight to the next floor, but a skipped floor earns no doubloons.")) return;
+    S.coins -= cost;
+    S.tower.cleared[floor] = true;
+    if (floor > (S.tower.best || 0)) S.tower.best = floor;
+    Sound.buy();
+    toast("⏭️ Skipped Floor " + floor + " for " + fmt(cost) + " coins. " + (floor < TOWER_FLOORS ? "Floor " + (floor + 1) + " is open!" : "You reached the top!"), "gold", 6000);
+    save();
+    renderAll();
+    renderTower();
   }
 
   function renderBots() {

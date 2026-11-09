@@ -257,8 +257,20 @@
     var colors = ["hsl(" + hue + ", 95%, 62%)", "hsl(" + hue + ", 80%, 6%)", "hsl(" + gold + ", 95%, 65%)", "hsl(" + ((hue + 30) % 360) + ", 90%, 80%)", "#ffffff"];
     EXTRA_AURAS.push([name, Math.round(exact / step) * step, colors, i % 5 === 4 ? 0 : 2 + (adminShiny++ % 4), 12500 + i * 500]);
   });
-  /* The last aura of all, the only one of the Chosen rank: one of a kind, no shiny form. */
+  /* The Chosen rank: The Chosen One, then ten more Chosen auras rarer than it, and finally The Unknown — the
+     rarest aura of all, whose signature move erases the enemy for 10,000,000 damage. None has a shiny form. */
   EXTRA_AURAS.push(["The Chosen One", 1e15, ["#fff7cc", "#0b0700", "#fde047", "#ffffff", "#f59e0b"], 0, 50000]);
+  EXTRA_AURAS.push(["The Awakened",       1.5e15, ["#fde68a", "#1a1200", "#fef3c7", "#f59e0b", "#ffffff"], 0, 56000]);
+  EXTRA_AURAS.push(["Herald of Fate",     2e15,   ["#fca5a5", "#160000", "#fecaca", "#dc2626", "#fff1f1"], 0, 62000]);
+  EXTRA_AURAS.push(["The Ascended",       3e15,   ["#a5f3fc", "#001418", "#cffafe", "#06b6d4", "#ffffff"], 0, 70000]);
+  EXTRA_AURAS.push(["Keeper of Prophecy", 5e15,   ["#ddd6fe", "#0b0620", "#ede9fe", "#7c3aed", "#ffffff"], 0, 78000]);
+  EXTRA_AURAS.push(["The Eternal Chosen", 8e15,   ["#fef08a", "#141000", "#fffbeb", "#eab308", "#fde047"], 0, 86000]);
+  EXTRA_AURAS.push(["Avatar of Creation", 1.5e16, ["#bbf7d0", "#001a0d", "#dcfce7", "#16a34a", "#ffffff"], 0, 95000]);
+  EXTRA_AURAS.push(["The First Light",    3e16,   ["#ffffff", "#111111", "#fde68a", "#e5e7eb", "#f59e0b"], 0, 104000]);
+  EXTRA_AURAS.push(["Hand of Destiny",    6e16,   ["#fdba74", "#190800", "#ffedd5", "#ea580c", "#fff7ed"], 0, 112000]);
+  EXTRA_AURAS.push(["The Immortal Oath",  1.5e17, ["#f0abfc", "#14001a", "#fae8ff", "#c026d3", "#ffffff"], 0, 122000]);
+  EXTRA_AURAS.push(["The Final Chosen",   4e17,   ["#fef9c3", "#1a1500", "#fde047", "#facc15", "#ffffff"], 0, 135000]);
+  EXTRA_AURAS.push(["The Unknown",        1e18,   ["#e5e5e5", "#000000", "#a855f7", "#0a0a0a", "#22d3ee"], 0, 500000]);
   EXTRA_AURAS.forEach(function (e) {
     var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };
     var tier = tierOf(a);
