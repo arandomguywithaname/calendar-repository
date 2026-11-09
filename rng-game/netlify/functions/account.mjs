@@ -31,7 +31,9 @@
                luck     { id, mult, rolls }     add a luck boost for a number of rolls
                eraseAll { except: [ids] }       remove every aura (and waiting gift) on every account except the ones listed
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
-                                                with an empty gift box
+                                                with an empty gift box (backs each up first)
+               banAuras { id }                  delete every aura the one account `id` owns (backs it up first)
+               restore                          put back the saves from just before the last Detonate or ban
                resetLuck                        clear every account's active luck boosts
                chatMute   { seq | id, minutes } mute the writer of chat message `seq` (or player `id`); 0 minutes = until unmuted
                chatUnmute { seq | id }          let them chat again
@@ -70,6 +72,8 @@ const CHAT_KEY = "chat/log";
 const CHAT_HERE_KEY = "chat/here";
 const LEADERBOARD_KEY = "leaderboard/cache";
 const LEADERBOARD_TTL = 60000; /* the ranking is recomputed at most once a minute, so polling it never rescans every account */
+const backupKey = (id) => "backup/" + id;      /* the save an account had just before the last destructive admin op */
+const LAST_OP_KEY = "admin/last-destroy";       /* which accounts the last Detonate/ban touched, so Restore can undo it */
 const HERE_MS = 60000;       /* a player counts as in the chat for a minute after their last check */
 const HERE_WRITE_MS = 25000; /* ...and their presence is written at most this often */
 const chatUserKey = (id) => "chatuser/" + id;
@@ -174,6 +178,26 @@ async function adminEdit(store, id, now, change, note) {
     const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: ADMIN_DEVICE, adminNote: note || null, adminBase: acct.rev };
     const res = await store.setJSON(accountKey(id), next, { onlyIfMatch: cur.etag });
     if (res.modified) return { acct: next, result };
+  }
+  throw new Error("Account " + id + " kept changing; try again.");
+}
+
+/** Like adminEdit, but first snapshots the account's current save under backupKey(id) so a later Restore can
+    put it back. Used by the destructive ops (Detonate, ban). */
+async function adminEditBackup(store, id, now, change, note) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const cur = await store.getWithMetadata(accountKey(id), { type: "json" });
+    if (!cur) return null;
+    const acct = cur.data;
+    const before = JSON.parse(JSON.stringify(acct.save && typeof acct.save === "object" ? acct.save : {}));
+    const save = acct.save && typeof acct.save === "object" ? acct.save : { rolls: 0, coins: 0 };
+    const result = change(save);
+    const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: ADMIN_DEVICE, adminNote: note || null, adminBase: acct.rev };
+    const res = await store.setJSON(accountKey(id), next, { onlyIfMatch: cur.etag });
+    if (res.modified) {
+      try { await store.setJSON(backupKey(id), { save: before, at: now }); } catch (e) { /* best-effort backup */ }
+      return { acct: next, result };
+    }
   }
   throw new Error("Account " + id + " kept changing; try again.");
 }
@@ -498,11 +522,37 @@ const ACTIONS = {
       if (!keep.size) return reply(400, { ok: false, code: 98, error: "Log in to your own account first, so Detonate knows which account to keep." });
       const ids = (await allIds(store)).filter((id) => !keep.has(id));
       /* A fresh save rather than deleting the account: a deleted account would just be uploaded again
-         from the player's device, while a reset save replaces the progress on every device. */
+         from the player's device, while a reset save replaces the progress on every device. Each account's
+         save is backed up first, so Restore can undo an accidental Detonate. */
       const reset = (save) => { for (const k of Object.keys(save)) delete save[k]; Object.assign(save, { rolls: 0, coins: 100 }); return 1; };
-      const done = await mapLimit(ids, 10, (id) => adminEdit(store, id, now, reset, "reset"));
+      const done = await mapLimit(ids, 10, (id) => adminEditBackup(store, id, now, reset, "reset"));
       await mapLimit(ids, 10, (id) => dropGifts(store, id, null));
-      return reply(200, { ok: true, accounts: done.filter(Boolean).length, kept: [...keep] });
+      const hit = ids.filter((id, i) => done[i]);
+      try { await store.setJSON(LAST_OP_KEY, { at: now, op: "detonate", ids: hit }); } catch (e) { /* best-effort */ }
+      return reply(200, { ok: true, accounts: hit.length, kept: [...keep] });
+    }
+    if (body.op === "banAuras") {
+      const target = String(body.id);
+      if (!ID_RE.test(target)) return reply(400, { ok: false, code: 98, error: "Enter the player's 7-digit ID." });
+      const acct = await store.get(accountKey(target), { type: "json" });
+      if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      const done = await adminEditBackup(store, target, now, (save) => eraseAuras(save, null), "ban");
+      if (!done) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      await dropGifts(store, target, null);
+      try { await store.setJSON(LAST_OP_KEY, { at: now, op: "ban", ids: [target] }); } catch (e) { /* best-effort */ }
+      return reply(200, { ok: true, id: target, name: acct.name, removed: done.result });
+    }
+    if (body.op === "restore") {
+      const last = await store.get(LAST_OP_KEY, { type: "json" });
+      if (!last || !Array.isArray(last.ids) || !last.ids.length) return reply(400, { ok: false, code: 98, error: "Nothing to restore — no recent Detonate or ban to undo." });
+      const ids = last.ids.filter((id) => ID_RE.test(String(id)));
+      const done = await mapLimit(ids, 10, async (id) => {
+        const bk = await store.get(backupKey(id), { type: "json" });
+        if (!bk || !bk.save) return null;
+        /* Replace the whole save with the backed-up one. Not backed up again, so Restore can be re-run. */
+        return adminEdit(store, id, now, (save) => { for (const k of Object.keys(save)) delete save[k]; Object.assign(save, bk.save); return 1; }, "restore");
+      });
+      return reply(200, { ok: true, accounts: done.filter(Boolean).length, op: last.op || "detonate", at: last.at || 0 });
     }
     if (body.op === "resetLuck") {
       const ids = await allIds(store);

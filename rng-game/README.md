@@ -316,7 +316,13 @@ loadout, and fight bots or a friend.
   at x1. **💥 Detonate** resets every other player's
   account to a brand new save (all auras, coins, potions and stats) and keeps the account
   you're logged into; you have to type DETONATE to confirm. Reset players see "An admin
-  reset this account" the next time their game syncs. Players who are online get the change within
+  reset this account" the next time their game syncs. **⛔ Ban a player** deletes every
+  aura the player in the ID box owns; it asks you to re-enter the admin password and then
+  type DETONATE before it does anything. **↩️ Restore last save** puts everyone's saves
+  back to exactly how they were just before the last Detonate or ban — so an accidental
+  Detonate (or a ban you change your mind about) can be undone. The server snapshots each
+  account before a Detonate or ban and remembers which accounts the last one touched, so
+  Restore only brings back those. Players who are online get the change within
   about 20 seconds, with an "An admin updated your account" message. To change the
   password, update both hashes (`ADMIN_PW` in `game.js`, `ADMIN_SALT`/`ADMIN_HASH` in
   `netlify/functions/account.mjs`; each file shows the command). An `ADMIN_KEY`

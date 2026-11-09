@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=64">
+  <link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -364,10 +364,24 @@
               </div>
             </div>
             <div class="aa-group aa-danger">
+              <div class="aa-label">⛔ Ban a player</div>
+              <div class="muted small-text">Deletes every aura the player in the ID box above owns. Asks for the admin password and the DETONATE code first. Can be undone with Restore.</div>
+              <div class="aa-row">
+                <button type="button" class="btn small danger" id="aa-ban">⛔ Ban (delete their auras)</button>
+              </div>
+            </div>
+            <div class="aa-group aa-danger">
               <div class="aa-label">💥 Detonate</div>
               <div class="muted small-text">Erases ALL progress on every other player's account: auras, coins, potions, everything. Only the account you're logged into is kept.</div>
               <div class="aa-row">
                 <button type="button" class="btn detonate-btn" id="aa-detonate">💥 DETONATE</button>
+              </div>
+            </div>
+            <div class="aa-group">
+              <div class="aa-label">↩️ Restore</div>
+              <div class="muted small-text">Puts back everyone's saves from just before the last Detonate or ban — in case you did it by accident.</div>
+              <div class="aa-row">
+                <button type="button" class="btn small" id="aa-restore">↩️ Restore last save</button>
               </div>
             </div>
           </div>
@@ -377,7 +391,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 64</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 65</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -499,9 +513,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=64"></script>
-  <script src="abilities.js?v=64"></script>
-  <script src="reveals.js?v=64"></script>
-  <script src="game.js?v=64"></script>
+  <script src="auras.js?v=65"></script>
+  <script src="abilities.js?v=65"></script>
+  <script src="reveals.js?v=65"></script>
+  <script src="game.js?v=65"></script>
 </body>
 </html>

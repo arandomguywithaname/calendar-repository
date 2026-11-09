@@ -6709,6 +6709,35 @@
     });
   }
 
+  /* Ban one player: delete all their auras, but only after re-entering the admin password AND the DETONATE
+     code. Backed up on the server, so Restore can undo it. */
+  function aaBan() {
+    var id = aaTargetId();
+    if (!id) return;
+    var label = aaLabel(id);
+    var pw = prompt("⛔ BAN " + label + " — this deletes EVERY aura they own.\n\nStep 1 of 2: re-enter the admin password to continue.");
+    if (pw === null) return;
+    if (pw !== aaKey) { aaPrint("Ban cancelled: the admin password didn't match."); return; }
+    var typed = prompt("Step 2 of 2: this erases every aura " + label + " owns (you can undo it with Restore).\n\nType DETONATE to confirm the ban.");
+    if (typed === null) return;
+    if (typed.trim().toUpperCase() !== "DETONATE") { aaPrint("Ban cancelled: you didn't type DETONATE."); return; }
+    accountAdmin("banAuras", { id: id }).then(function (d) {
+      if (!d) return;
+      Sound.boom(2);
+      aaPrint("⛔ Banned " + (d.name ? d.name + " (" + id + ")" : "ID " + id) + ": deleted " + fmt(d.removed) + " aura" + (d.removed === 1 ? "" : "s") + ". Use Restore to undo.");
+      aaChanged(id === currentUser);
+    });
+  }
+
+  /* Restore everyone's save from just before the last Detonate or ban (undo an accident). */
+  function aaRestore() {
+    accountAdmin("restore", {}).then(function (d) {
+      if (!d) return;
+      aaPrint("↩️ Restored " + fmt(d.accounts) + " account" + (d.accounts === 1 ? "" : "s") + " from before the last " + (d.op === "ban" ? "ban" : "Detonate") + ".");
+      aaChanged(true);
+    });
+  }
+
   /* Aura names for the erase box's suggestions, filled the first time it's used. */
   function fillAuraList() {
     var list = $("#aa-aura-list"), frag = document.createDocumentFragment();
@@ -6913,6 +6942,8 @@
   renderChat();
   chatSchedule(1500);
   $("#aa-detonate").addEventListener("click", aaDetonate);
+  $("#aa-ban").addEventListener("click", aaBan);
+  $("#aa-restore").addEventListener("click", aaRestore);
   $("#aa-reset-luck").addEventListener("click", aaResetLuck);
   $("#aa-id").addEventListener("input", aaShowWho);
   $("#aa-aura").addEventListener("focus", fillAuraList, { once: true });
