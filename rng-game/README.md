@@ -319,6 +319,15 @@ No build step and no npm install.
   stops anything playing the moment you press it, so rolls and fights resolve instantly.
   It sits above the cutscene overlay so it works mid-animation, and the choice is saved
   (also as a "Skip all animations" box in the Stats settings).
+- **⏰ Break reminder.** After **30 minutes of continuous play**, a full-screen reminder
+  appears: "Take a break — you've been playing for over 30 minutes straight. Come on, go
+  do what you really need to do, like your homework!" The **first** break lasts 15
+  seconds and can be skipped with the button; every break **after** that lasts a full
+  minute with no skip — the button stays "Please wait…" and counts down before you can go
+  back. A break pauses Auto Roll. Time only counts while the tab is in front, and a real
+  break away (5+ minutes with the tab hidden or closed) resets you back to the gentle
+  first break. The running total is kept in `localStorage` so a quick reload can't dodge a
+  break. It works for everyone — logged in or not — and needs no server.
 - **Players get updates by themselves.** A tab left open for days keeps running the
   old game. Every few minutes, and whenever a player comes back to the tab, the game
   asks the site for its newest page; when that has a higher Version number it shows a

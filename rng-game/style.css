@@ -729,6 +729,18 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .skip-anim-btn.on { background: linear-gradient(135deg, #7c3aed, #db2777); border-color: transparent; color: #fff; }
 @media (max-width: 560px) { .skip-anim-btn { padding: 8px 11px; font-size: .78rem; } }
 
+/* Break reminder overlay (above everything, even the captcha) */
+.break-overlay { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; background: radial-gradient(1000px 700px at 50% -10%, rgba(124,58,237,.4), transparent), rgba(5,4,12,.93); backdrop-filter: blur(6px); animation: pop .3s; }
+.break-overlay.hidden { display: none; }
+.break-card { max-width: 440px; text-align: center; padding: 32px 26px; border-radius: 20px; border: 1px solid var(--card-border); background: linear-gradient(135deg, rgba(30,27,56,.97), rgba(17,15,34,.97)); box-shadow: 0 24px 80px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.break-emoji { font-size: 3rem; }
+.break-title { font-size: 1.7rem; font-weight: 800; margin: 0; color: #c4b5fd; }
+.break-msg { font-size: 1.1rem; line-height: 1.5; margin: 0; color: var(--text); }
+.break-timer { font-size: .92rem; color: var(--muted); min-height: 1.25em; }
+.break-overlay.forced .break-title { color: #fca5a5; }
+.break-card .btn.big { margin-top: 4px; }
+.break-card .btn:disabled { opacity: .5; cursor: not-allowed; }
+
 /* The Tower */
 .tower-status { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--card-border); background: var(--card); }
 .tower-top { display: flex; flex-wrap: wrap; gap: 10px 26px; }

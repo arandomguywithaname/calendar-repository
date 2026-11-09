@@ -6736,14 +6736,106 @@
   });
   window.addEventListener("beforeunload", function () { if (PvP.conn) pvpSend({ t: "forfeit" }); });
 
+  /* ---------- Break reminder: after 30 minutes of continuous play, nudge the player to stop. The first break
+     lasts 15 seconds and can be skipped; every break after that lasts a full minute and can't be skipped. A real
+     break away (5+ minutes with the tab hidden or closed) resets the streak back to the gentle first break. The
+     count of active play is kept in localStorage so a quick reload can't dodge a break. ---------- */
+  var Break = (function () {
+    var KEY = "aura-realms-break-v1";
+    var AFTER_MS = 30 * 60 * 1000;    // play this long -> a break
+    var RESET_GAP_MS = 5 * 60 * 1000; // away this long -> streak + escalation reset (that counts as a real break)
+    var FIRST_MS = 15 * 1000;         // first break: 15s, skippable
+    var FORCED_MS = 60 * 1000;        // later breaks: 60s, no skip
+    var playMs = 0, breakCount = 0, lastActive = Date.now(), showing = false, curForced = false, cdTimer = null;
+
+    function store() { try { localStorage.setItem(KEY, JSON.stringify({ playMs: playMs, breakCount: breakCount, lastActive: lastActive })); } catch (e) { /* ignore */ } }
+    function load() {
+      try {
+        var r = JSON.parse(localStorage.getItem(KEY) || "null");
+        if (r && typeof r === "object" && Date.now() - (+r.lastActive || 0) < RESET_GAP_MS) {
+          playMs = Math.max(0, +r.playMs || 0);
+          breakCount = Math.max(0, +r.breakCount || 0);
+        }
+      } catch (e) { /* ignore */ }
+      lastActive = Date.now();
+    }
+
+    function tick() {
+      if (document.visibilityState !== "visible") return;
+      var now = Date.now();
+      if (showing) { lastActive = now; return; }
+      var gap = now - lastActive;
+      lastActive = now;
+      if (gap >= RESET_GAP_MS) { playMs = 0; breakCount = 0; store(); return; } // a real break away resets it
+      playMs += Math.min(Math.max(gap, 0), 2000); // count active time; never count long hidden gaps
+      store();
+      if (playMs >= AFTER_MS) show();
+    }
+
+    /* Add play time directly (used by the on-page timer's catch-up and by tests). */
+    function addPlay(ms) { if (showing) return; playMs += Math.max(0, +ms || 0); store(); if (playMs >= AFTER_MS) show(); }
+
+    function show() {
+      if (showing) return;
+      showing = true;
+      curForced = breakCount >= 1;
+      var endAt = Date.now() + (curForced ? FORCED_MS : FIRST_MS);
+      if (autoOn) { autoOn = false; var ab = $("#btn-auto"); if (ab) { ab.textContent = "Auto Roll: Off"; ab.classList.remove("on"); } } // a break pauses auto roll
+      var ov = $("#break-overlay");
+      $("#break-msg").textContent = "You've been playing for over 30 minutes straight. Come on — go do what you really need to do, like your homework!";
+      ov.classList.remove("hidden");
+      ov.classList.toggle("forced", curForced);
+      step(endAt);
+      clearInterval(cdTimer);
+      cdTimer = setInterval(function () { step(endAt); }, 250);
+    }
+
+    function step(endAt) {
+      var left = Math.max(0, endAt - Date.now()), secs = Math.ceil(left / 1000), btn = $("#break-btn"), timer = $("#break-timer");
+      if (curForced) {
+        timer.textContent = left > 0 ? "This break can't be skipped. Back in " + secs + "s…" : "Thanks for taking a real break! 🙂";
+        btn.disabled = left > 0;
+        btn.textContent = left > 0 ? "Please wait…" : "Back to the game";
+        if (left <= 0) { clearInterval(cdTimer); cdTimer = null; } // wait for the player to click Back
+      } else {
+        timer.textContent = "This closes in " + secs + "s — or you can skip it. (Your next break will be a whole minute you can't skip.)";
+        btn.disabled = false;
+        btn.textContent = "I'll take a break later";
+        if (left <= 0) finish(); // the first break auto-closes after 15s
+      }
+    }
+
+    function finish() {
+      if (!showing) return;
+      showing = false;
+      clearInterval(cdTimer); cdTimer = null;
+      $("#break-overlay").classList.add("hidden");
+      playMs = 0;
+      breakCount += 1;
+      lastActive = Date.now();
+      store();
+    }
+
+    function init() {
+      load();
+      $("#break-btn").addEventListener("click", finish);
+      document.addEventListener("visibilitychange", function () { lastActive = Date.now(); });
+      setInterval(tick, 1000);
+    }
+
+    return { init: init, addPlay: addPlay, info: function () { return { playMs: playMs, breakCount: breakCount, showing: showing, forced: curForced }; } };
+  })();
+
   buildIndex();
   resetRollDisplay();
   renderAccount();
   renderAll();
   syncAccount();
+  Break.init();
 
   /* Console hooks. */
   window.AuraRealms = {
+    breakTimer: { addPlay: Break.addPlay, info: Break.info },
     /* Without admin unlocked these hand out copies, so the browser console can't change the game. */
     state: function () { return adminUnlocked ? S : JSON.parse(JSON.stringify(S)); },
     preview: function (name, shiny) { var a = findAura(name); if (a) playCutscene(a, true, !!shiny); },
