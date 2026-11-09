@@ -297,6 +297,9 @@
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
       merged.tower.cycleStart = Math.floor(Number(merged.tower.cycleStart) || 0);
       merged.aurasLockedUntil = Math.max(0, Math.floor(Number(merged.aurasLockedUntil) || 0));
+      /* Backfill the leaderboard's rarity stat for saves made before it existed. */
+      if (merged.stats.best != null && A.byId(merged.stats.best)) merged.stats.bestRarity = effRarity(A.byId(merged.stats.best), merged.stats.bestShiny);
+      else merged.stats.bestRarity = Math.max(0, Number(merged.stats.bestRarity) || 0);
       trimHeals(merged);
       /* History entries used to be bare ids; they are now { id, shiny }. */
       merged.history = (Array.isArray(merged.history) ? merged.history : []).map(function (h) { return typeof h === "number" ? { id: h, shiny: false } : h; }).filter(function (h) { return h && A.byId(h.id); });
@@ -431,6 +434,8 @@
   function recordBest(aura, shiny) {
     var best = S.stats.best !== null ? A.byId(S.stats.best) : null;
     if (!best || effRarity(best, S.stats.bestShiny) < effRarity(aura, shiny)) { S.stats.best = aura.id; S.stats.bestShiny = isShiny(aura, shiny); }
+    /* The rarest aura's rarity is uploaded with the save so the leaderboard can rank players without the aura table. */
+    S.stats.bestRarity = S.stats.best !== null && A.byId(S.stats.best) ? effRarity(A.byId(S.stats.best), S.stats.bestShiny) : 0;
   }
 
   /* Slot indices (0-5, or 0-6 for an aura with an extra move) of the chosen abilities for an aura. */
@@ -5839,6 +5844,112 @@
   }
   setInterval(function () { if (document.visibilityState === "visible") checkGifts(); }, 20000);
 
+  /* ---------- All-Stars leaderboard: every online account ranked by rarest aura, fetched from the account server ---------- */
+
+  var LB = { loading: false, error: null, data: null, at: 0 };
+
+  function leaderboardOpen() { return $("#tab-leaderboard").classList.contains("active"); }
+
+  /* Fetch the leaderboard (cached for 15s unless `force`). Guests can view it; a logged-in player is flagged. */
+  function loadLeaderboard(force) {
+    if (!leaderboardOpen() || LB.loading) return;
+    if (!force && LB.data && Date.now() - LB.at < 15000) { renderLeaderboard(); return; }
+    LB.loading = true; LB.error = null;
+    renderLeaderboard();
+    chatFetch("leaderboard", { id: currentUser || undefined }).then(function (r) {
+      LB.loading = false;
+      if (r.status !== 200 || !r.data || !r.data.ok) { LB.error = "server"; renderLeaderboard(); return; }
+      LB.data = r.data; LB.at = Date.now(); LB.error = null;
+      renderLeaderboard();
+    }).catch(function (e) {
+      LB.loading = false;
+      LB.error = e && e.missing ? "missing" : e && e.chat === ERR.CHAT_WIFI ? "wifi" : "server";
+      renderLeaderboard();
+    });
+  }
+
+  /* One ranked row. The player name is untrusted, so it only ever goes in via textContent. */
+  function lbRow(row) {
+    var el = document.createElement("div");
+    el.className = "lb-row" + (row.mine ? " mine" : "") + (row.rank <= 3 ? " medal" : "");
+    var rank = document.createElement("span");
+    rank.className = "lb-rank";
+    rank.textContent = row.rank === 1 ? "🥇" : row.rank === 2 ? "🥈" : row.rank === 3 ? "🥉" : "#" + fmt(row.rank);
+    el.appendChild(rank);
+
+    var aura = row.best != null && A.byId(row.best) ? A.byId(row.best) : null;
+    var sh = aura ? !!(row.bestShiny && aura.shiny) : false;
+    var mid = document.createElement("span");
+    mid.className = "lb-mid";
+    var nm = document.createElement("div");
+    nm.className = "lb-name";
+    nm.textContent = row.name;
+    if (row.mine) { var tag = document.createElement("span"); tag.className = "lb-tag"; tag.textContent = "you"; nm.appendChild(document.createTextNode(" ")); nm.appendChild(tag); }
+    var sub = document.createElement("div");
+    sub.className = "card-sub lb-sub";
+    if (aura) {
+      var an = document.createElement("span");
+      an.className = "t-" + aura.tier;
+      an.textContent = (sh ? "✨ Shiny " : "") + aura.name;
+      sub.appendChild(an);
+      sub.appendChild(document.createTextNode(" · " + A.formatOdds(row.bestRarity || effRarity(aura, sh))));
+    } else {
+      sub.textContent = "no auras yet";
+    }
+    mid.appendChild(nm); mid.appendChild(sub);
+    el.appendChild(mid);
+
+    var coins = document.createElement("span");
+    coins.className = "lb-coins";
+    coins.textContent = "🪙 " + fmtShort(row.coins);
+    el.appendChild(coins);
+    return el;
+  }
+
+  function renderLeaderboard() {
+    if (!leaderboardOpen()) return;
+    var list = $("#lb-list"), you = $("#lb-you"), count = $("#lb-count");
+    if (LB.error) {
+      var msg = LB.error === "missing" ? "The leaderboard needs the online account server, which isn't set up on this site."
+        : LB.error === "wifi" ? "You look offline — connect to the internet to see the leaderboard."
+        : "Couldn't load the leaderboard. Tap 🔄 Refresh to try again.";
+      list.innerHTML = "<div class=\"empty-note\"></div>";
+      list.firstChild.textContent = msg;
+      you.classList.add("hidden"); count.textContent = "";
+      return;
+    }
+    if (!LB.data) {
+      list.innerHTML = "<div class=\"empty-note\"></div>";
+      list.firstChild.textContent = LB.loading ? "Loading the leaderboard…" : "Tap 🔄 Refresh to load.";
+      you.classList.add("hidden"); count.textContent = "";
+      return;
+    }
+    var d = LB.data;
+    count.textContent = fmt(d.count) + " player" + (d.count === 1 ? "" : "s") + (LB.loading ? " · refreshing…" : "");
+    list.innerHTML = "";
+    if (!d.top.length) {
+      list.innerHTML = "<div class=\"empty-note\"></div>";
+      list.firstChild.textContent = "No players yet — be the first! Log in and roll a rare aura.";
+    } else {
+      d.top.forEach(function (row) { list.appendChild(lbRow(row)); });
+    }
+    if (!currentUser) {
+      you.classList.remove("hidden");
+      you.innerHTML = "<div class=\"lb-you-login\">Log in to join the leaderboard and see your rank.</div>";
+    } else if (d.me && d.me.rank > d.top.length) {
+      /* Outside the shown top — show the player their own row so they always see themselves. */
+      you.classList.remove("hidden");
+      you.innerHTML = "";
+      var lbl = document.createElement("div");
+      lbl.className = "lb-you-label";
+      lbl.textContent = "Your place · #" + fmt(d.me.rank) + " of " + fmt(d.count);
+      you.appendChild(lbl);
+      you.appendChild(lbRow(d.me));
+    } else {
+      you.classList.add("hidden");
+    }
+  }
+
   /* ---------- Global chat: messages live on the account server; this tab asks for new ones every few seconds ---------- */
 
   var Chat = { seq: 0, messages: [], nodes: {}, pending: [], timer: null, loading: false, unread: 0, muted: null, error: null, here: null, sending: false, pendingNo: 0 };
@@ -6521,6 +6632,7 @@
     if (name === "roll") FX.resize();
     if (name === "inventory") renderInventory();
     if (name === "tower") renderTower();
+    if (name === "leaderboard") loadLeaderboard();
     if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }
   }
 
@@ -6643,6 +6755,7 @@
   $("#gift-form").addEventListener("submit", function (e) { e.preventDefault(); giftSubmit(); });
   $("#btn-gift-coins").addEventListener("click", openGiftCoins);
   $("#btn-sell-dupes").addEventListener("click", sellAllDuplicates);
+  $("#lb-refresh").addEventListener("click", function () { loadLeaderboard(true); });
   $("#gift-close").addEventListener("click", closeGift);
   $("#doubloon-close").addEventListener("click", closeDoubloonShop);
   $("#doubloon-modal").addEventListener("click", function (e) { if (e.target === e.currentTarget) closeDoubloonShop(); });

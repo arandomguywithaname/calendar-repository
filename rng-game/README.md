@@ -238,6 +238,17 @@ loadout, and fight bots or a friend.
   next to every message, and a Chat section in the admin panel to mute a player for
   any number of minutes (0 = until unmuted), unmute, see who is muted and clear the
   whole chat.
+- **🏆 All-Stars leaderboard.** The Leaderboard tab ranks **every online account** by the
+  **rarest aura they've ever found** (ties broken by coins, then rolls), showing the top
+  100 with 🥇🥈🥉 for the top three, each player's name, their rarest aura (name, tier
+  colour and odds) and their coins. If you're logged in, **your own row is highlighted**
+  with a "you" tag; if you're ranked below the top 100, your row and rank are shown at
+  the bottom so you always see yourself. Guests can read the board and are invited to log
+  in to join. It is served by the account server (the client sends no player IDs and the
+  server never returns any — a 7-digit ID is a login secret), the client caches it for 15
+  seconds, and a 🔄 Refresh button reloads it. The rarity used for ranking rides along in
+  each player's save (`stats.bestRarity`), so the server can rank without the aura table;
+  saves from before the leaderboard backfill it from the rarest aura on their next load.
 - **Login on any device**: a new player enters a name (2 to 50 characters) and gets a
   random 7-digit ID, shown at the top of the page (click it to copy). Entering that ID
   on another phone or computer loads the same progress. Saves upload a few seconds

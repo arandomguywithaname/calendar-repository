@@ -21,6 +21,8 @@
                                             with `here`, that player counts as in the chat for a minute. Replies
                                             with the names of everyone in the chat right now
      chatSend { id, text, aura, shiny }     post a message as that account (108 when an admin muted it)
+     leaderboard { id? }                    every account ranked by rarest aura (then coins, rolls); returns the
+                                            top 100 plus the viewer's own row. No player IDs are returned
      admin   { key, op, ... }               owner tools, locked by the admin password (see ADMIN_HASH):
                list                             every account with its aura count, coins and luck
                erase    { id, aura }            remove one aura (both forms) or, without `aura`, every aura
@@ -139,6 +141,23 @@ function summary(acct) {
   const owned = (o) => Object.keys(o || {}).filter((k) => o[k] > 0).length;
   const luck = (Array.isArray(s.luckEffects) ? s.luckEffects : []).reduce((m, e) => Math.max(m, Number(e && e.mult) || 1), 1);
   return { id: acct.id, name: acct.name, auras: owned(s.inventory) + owned(s.shinyInventory), coins: Math.floor(Number(s.coins) || 0), luck, rolls: Number(s.rolls) || 0, updatedAt: acct.updatedAt };
+}
+
+/** One public leaderboard row for an account. `_id` is internal (to flag the viewer's own row) and is stripped
+    before the response goes out — a player ID is a login secret and must never be returned to anyone. */
+function leaderEntry(acct) {
+  const s = acct.save || {}, st = s.stats || {};
+  const owned = (o) => Object.keys(o || {}).filter((k) => o[k] > 0).length;
+  return {
+    _id: acct.id,
+    name: acct.name,
+    best: Number.isInteger(st.best) ? st.best : null,
+    bestShiny: !!st.bestShiny,
+    bestRarity: Math.max(0, Number(st.bestRarity) || 0),
+    coins: Math.floor(Number(s.coins) || 0),
+    rolls: Math.max(0, Math.floor(Number(s.rolls) || 0)),
+    auras: owned(s.inventory) + owned(s.shinyInventory)
+  };
 }
 
 /** Apply an admin change to an account's save and store it as a new revision; players' devices then load it.
@@ -437,6 +456,25 @@ const ACTIONS = {
     return reply(200, { ok: true, rev: stored.rev });
   },
 
+  /* The all-stars leaderboard: every account, ranked by rarest aura found (then coins, then rolls). Returns the
+     top 100 plus the viewer's own row (so you always see yourself, even outside the top 100). No player IDs leave
+     the server; the viewer's own row is flagged with `mine`. */
+  async leaderboard(body, store) {
+    const viewer = ID_RE.test(String(body.id)) ? String(body.id) : null;
+    const ids = await allIds(store);
+    const accts = await mapLimit(ids, 10, (id) => store.get(accountKey(id), { type: "json" }));
+    const ranked = accts.filter(Boolean).map(leaderEntry)
+      .sort((a, b) => (b.bestRarity - a.bestRarity) || (b.coins - a.coins) || (b.rolls - a.rolls));
+    let me = null;
+    const rows = ranked.map((e, i) => {
+      const mine = !!viewer && e._id === viewer;
+      const row = { rank: i + 1, name: e.name, best: e.best, bestShiny: e.bestShiny, bestRarity: e.bestRarity, coins: e.coins, rolls: e.rolls, auras: e.auras, mine };
+      if (mine) me = row;
+      return row;
+    });
+    return reply(200, { ok: true, count: rows.length, top: rows.slice(0, 100), me });
+  },
+
   async admin(body, store, now, env) {
     if (!(await adminKeyOk(body.key, env.ADMIN_KEY))) {
       await new Promise((r) => setTimeout(r, 400)); /* slows down guessing */
@@ -558,7 +596,7 @@ export async function handle(req, store, now = Date.now(), env = process.env) {
   if (!body || typeof body !== "object") return reply(400, { ok: false, code: 98, error: "That request was not valid JSON." });
   const action = Object.prototype.hasOwnProperty.call(ACTIONS, body.action) ? ACTIONS[body.action] : null;
   if (!action) return reply(400, { ok: false, code: 98, error: "Unknown action." });
-  if (!["ping", "create", "admin", "chat"].includes(body.action) && !ID_RE.test(String(body.id))) return reply(400, { ok: false, code: 98, error: "An ID is 7 digits." });
+  if (!["ping", "create", "admin", "chat", "leaderboard"].includes(body.action) && !ID_RE.test(String(body.id))) return reply(400, { ok: false, code: 98, error: "An ID is 7 digits." });
   if (["create", "claim", "save", "release", "gift", "openGifts"].includes(body.action) && !DEVICE_RE.test(String(body.device))) return reply(400, { ok: false, code: 98, error: "Missing device." });
   try {
     return await action(body, store, now, env);

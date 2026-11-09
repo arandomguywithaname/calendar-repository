@@ -770,3 +770,22 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .lock-sub b { color: #fca5a5; }
 .effect.locked-effect { background: rgba(248,113,113,.18); border-color: rgba(248,113,113,.5); color: #fecaca; font-weight: 700; }
 #doubloon-grid .price { color: var(--gold); }
+
+/* All-Stars leaderboard */
+.lb-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.lb-tools .btn { margin-left: auto; }
+.lb-list { display: flex; flex-direction: column; gap: 6px; }
+.lb-row { display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(255,255,255,.02); }
+.lb-row.medal { background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(255,255,255,.02)); border-color: rgba(251,191,36,.3); }
+.lb-row.mine { border-color: rgba(167,139,250,.65); background: linear-gradient(135deg, rgba(124,58,237,.18), rgba(219,39,119,.1)); box-shadow: 0 0 0 1px rgba(167,139,250,.35); }
+.lb-rank { font-weight: 800; font-size: 1.1rem; text-align: center; color: var(--muted); }
+.lb-row.medal .lb-rank { font-size: 1.4rem; }
+.lb-mid { min-width: 0; display: flex; flex-direction: column; }
+.lb-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-tag { font-size: .62rem; text-transform: uppercase; letter-spacing: .1em; background: rgba(167,139,250,.3); color: #ddd6fe; padding: 1px 6px; border-radius: 999px; vertical-align: middle; }
+.lb-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-coins { color: var(--gold); font-weight: 700; font-size: .9rem; white-space: nowrap; }
+.lb-you { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--card-border); }
+.lb-you-label { font-size: .8rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .1em; }
+.lb-you-login { text-align: center; color: var(--muted); padding: 10px; }
+@media (max-width: 560px) { .lb-row { grid-template-columns: 38px 1fr auto; padding: 8px 10px; } }
