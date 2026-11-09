@@ -140,7 +140,14 @@
     { id: "chrono",    name: "Chrono Bot",     icon: "⏳", power: 58000,  reward: 4000000 },
     { id: "quantum",   name: "Quantum Bot",    icon: "⚛️", power: 64000,  reward: 5000000 },
     { id: "overlord",  name: "Overlord Bot",   icon: "👁️", power: 72000,  reward: 7000000, boss: true },
-    { id: "creator",   name: "Creator Bot",    icon: "✨", power: 120000, reward: 10000000, boss: true }
+    { id: "creator",   name: "Creator Bot",    icon: "✨", power: 120000, reward: 10000000, boss: true },
+    { id: "destroyer", name: "Destroyer Bot",  icon: "💥", power: 160000,  reward: 15000000, boss: true },
+    { id: "singularity", name: "Singularity Bot", icon: "🌀", power: 220000, reward: 25000000 },
+    { id: "leviathan", name: "Leviathan Prime", icon: "🐙", power: 300000, reward: 40000000, boss: true },
+    { id: "nullbot",   name: "Oblivion Bot",   icon: "🕳️", power: 420000, reward: 65000000 },
+    { id: "apocalypse",name: "Apocalypse Engine", icon: "☢️", power: 600000, reward: 100000000, boss: true },
+    { id: "architect", name: "The Architect",  icon: "📐", power: 850000, reward: 175000000, boss: true },
+    { id: "omniarch",  name: "Omniarch",       icon: "👑", power: 1200000, reward: 300000000, boss: true }
   ];
 
   /* ---------- The Tower: 120 floors of bots fought with your equipped aura, paying doubloons. First clear of a

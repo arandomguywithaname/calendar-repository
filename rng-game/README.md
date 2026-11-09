@@ -96,11 +96,13 @@ loadout, and fight bots or a friend.
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
-  their own named kits (Titan Bot has no healing move). 30 bots run from the Training
-  Dummy (power 15) to Creator Bot (power 120,000, +10,000,000 coins): after Eternity Bot
+  their own named kits (Titan Bot has no healing move). 37 bots run from the Training
+  Dummy (power 15) up: after Eternity Bot
   come Nova, Kraken, Sentinel Prime, Cyber Hydra, Grim, Colossus, Storm Titan, Abyss
-  Lord, Solar, Lunar, Galaxy, Chrono, Quantum, Overlord and Creator, tuned by simulation
-  for Administrative-strength auras; only The Chosen One reliably beats Creator Bot. Every mechanic has its own battle animation (slashes, a
+  Lord, Solar, Lunar, Galaxy, Chrono, Quantum, Overlord and Creator (power 120,000,
+  +10,000,000 coins), then seven even stronger ones — Destroyer Bot, Singularity Bot,
+  Leviathan Prime, Oblivion Bot, Apocalypse Engine, The Architect and finally **Omniarch**
+  (power 1,200,000, +300,000,000 coins) — a real test even for a top-rank aura. Every mechanic has its own battle animation (slashes, a
   falling hammer, lightning, a nova, a hex shield, a life-drain stream, and so on),
   with the attacker lunging or casting, a floating ability name, and a matching
   sound. When the attacker's aura is Legendary or rarer, the ability takes over the

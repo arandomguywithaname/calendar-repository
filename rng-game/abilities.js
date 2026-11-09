@@ -217,7 +217,14 @@
     chrono:    [["strike", "Time Slice"], ["stun", "Time Freeze"], ["focus", "Rewind"], ["execute", "End of Time"], ["heal", "Second Chance"], ["barrage", "Time Loop"]],
     quantum:   [["precision", "Particle Beam"], ["strike", "Wave Function"], ["reflect", "Superposition"], ["burst", "Quantum Collapse"], ["shield", "Entanglement"], ["stun", "Uncertainty"]],
     overlord:  [["strike", "Overlord Strike"], ["burst", "Dominion Blast"], ["execute", "Final Order"], ["shield", "Iron Will"], ["heal", "Restore Order"], ["weaken", "Crushing Gaze"]],
-    creator:   [["strike", "Creation Spark"], ["burst", "Big Crunch"], ["execute", "Unmaking"], ["heal", "Genesis"], ["shield", "World Shell"], ["drain", "Life Thread"], ["stun", "Stop Time"]]
+    creator:   [["strike", "Creation Spark"], ["burst", "Big Crunch"], ["execute", "Unmaking"], ["heal", "Genesis"], ["shield", "World Shell"], ["drain", "Life Thread"], ["stun", "Stop Time"]],
+    destroyer: [["heavy", "Annihilate"], ["burst", "Detonation", 2.6], ["execute", "Demolish"], ["strike", "Wrecking Blow"], ["stun", "Shockwave"], ["shield", "Blast Plating"]],
+    singularity:[["burst", "Event Horizon", 2.8], ["drain", "Gravity Siphon"], ["weaken", "Spaghettify"], ["stun", "Time Dilation"], ["reflect", "Warped Space"], ["strike", "Gravity Crush"]],
+    leviathan: [["heavy", "Tidal Crush"], ["barrage", "Tentacle Barrage"], ["drain", "Deep Devour"], ["stun", "Maelstrom"], ["burst", "Abyssal Surge", 2.7], ["heal", "Regenerate"]],
+    nullbot:   [["strike", "Null Strike"], ["execute", "Delete"], ["weaken", "Corrupt"], ["drain", "Data Leak"], ["reflect", "Firewall"], ["burst", "System Wipe", 2.9]],
+    apocalypse:[["burst", "Extinction Beam", 3.0], ["heavy", "Doom Hammer"], ["execute", "Final Hour"], ["poison", "Fallout"], ["stun", "Cataclysm"], ["shield", "Bunker Mode"], ["heal", "Rebuild"]],
+    architect: [["precision", "Blueprint Strike"], ["burst", "Grand Design", 3.0], ["shield", "Fortress"], ["reflect", "Mirror Protocol"], ["execute", "Deconstruct"], ["heal", "Reconstruct"], ["stun", "Lockdown"]],
+    omniarch:  [["burst", "Omega Ray", 3.4], ["execute", "Royal Decree"], ["heavy", "Crown Crush"], ["drain", "Dominion"], ["barrage", "Scepter Storm"], ["shield", "Divine Aegis"], ["heal", "Ascend"], ["stun", "Absolute Command"]]
   };
 
   function botKit(botId) {
