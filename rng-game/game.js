@@ -6478,6 +6478,11 @@
     if (Cloud.state === "missing") { aaPrint("⚠️ Error 404: Online accounts aren't set up on this site, so there are no accounts to change."); return Promise.resolve(null); }
     return cloudCall("admin", Object.assign({ key: key, op: op }, fields || {})).then(function (r) {
       if (r.status === 200) return r.data;
+      if (/unknown action/i.test(r.data.error || "")) {
+        /* The server is older than this page and doesn't know this admin action yet (e.g. Restore or Ban). */
+        aaPrint("⚠️ This site's game SERVER is an older version, so \"" + op + "\" isn't available yet. Re-publish the site with the latest update (Netlify → Deploys → Trigger deploy), then this and the Leaderboard will work.");
+        return null;
+      }
       aaPrint("⚠️ Error " + (r.data.code || ERR.ACCOUNT) + ": " + (r.data.error || "That didn't work."));
       return null;
     }, function (e) {
