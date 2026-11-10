@@ -142,7 +142,7 @@ loadout, and fight bots or a friend.
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
   week. Miss two days and the streak restarts.
-- **39 potions** in four groups. Luck from x2 up to the Potion of Destiny
+- **52 potions** in four groups. Luck from x2 up to the Potion of Destiny
   (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
   rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
   way. Magnets and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
@@ -158,7 +158,12 @@ loadout, and fight bots or a friend.
   shield); Second Wind and Phoenix Feather (survive a killing blow once, back at 40%
   or full HP). Potions of the same kind don't stack: the strongest one counts, and a
   stronger shield or revive replaces a weaker one that is waiting. Battle potions are
-  used up the moment the fight starts.
+  used up the moment the fight starts. Thirteen more fill out the groups: Four-Leaf Brew
+  (x4 luck), Mythic Potion (x100 luck) and Supernova Elixir (x2500 luck); Glimmer (x4)
+  and Radiance (x25) shiny potions; the Cosmic Magnet (Cosmic or better) and Divine Magnet
+  (Divine or better); Fortune Coins (x50) and King's Ransom (x500) coin potions; the Flash
+  Potion (cooldown cut to 1/16); and three battle potions — Berserk Brew (+700% damage),
+  World Ender (+1400%) and the Aegis Potion (a 100%-HP shield).
 - **Buy amount.** A row at the top of the Potion Shop picks how many potions each Buy
   button buys: x1, x2, x5, x10, x100, x1000 or **Max** (as many as your coins cover).
   It works for **Training** too (x10 trains 10 levels, Max as many levels as you can
@@ -175,9 +180,10 @@ loadout, and fight bots or a friend.
   shields, revives) still use just one.
 - **Collector's potion.** A locked 🔒 "? ? ?" card in the Luck potions shows how many
   of the 37 shop potions you have bought (and the icons of the ones still to buy).
-  Buy each of them at least once (Celestial Nectar, Potion of Destiny and the Elixir
-  of the Million don't count, and potions from mystery potions, the daily gift or the
-  admin console aren't "bought") and ⚗️ **Potion of Everything** appears for
+  Buy each of them at least once (Celestial Nectar, Potion of Destiny, the Elixir
+  of the Million and the thirteen newer potions don't count, and potions from mystery
+  potions, the daily gift or the admin console aren't "bought") and ⚗️ **Potion of
+  Everything** appears for
   5,000,000 coins: x50,000 luck, always shiny, Epic or better and x100 coins for 3
   rolls, Time Warp speed, and a Godslayer Tonic, Steel Wall and Phoenix Feather for
   the next bot fight. Mystery potions never turn into it.

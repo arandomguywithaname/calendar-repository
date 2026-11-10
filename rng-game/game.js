@@ -83,7 +83,21 @@
     ironskin:  { name: "Iron Skin",         icon: "🛡️", cost: 400,     group: "battle", kind: "shield", pct: 0.3, desc: "Start your next bot fight with a shield worth 30% of your HP" },
     steelwall: { name: "Steel Wall",        icon: "🧱", cost: 1500,    group: "battle", kind: "shield", pct: 0.6, desc: "Start your next bot fight with a shield worth 60% of your HP" },
     secondwind:{ name: "Second Wind",       icon: "🕊️", cost: 1500,    group: "battle", kind: "revive", pct: 0.4, desc: "Survive a killing blow once in your next bot fight and come back at 40% HP" },
-    phoenix:   { name: "Phoenix Feather",   icon: "🪶", cost: 6000,    group: "battle", kind: "revive", pct: 1,   desc: "Survive a killing blow once in your next bot fight and come back at full HP" }
+    phoenix:   { name: "Phoenix Feather",   icon: "🪶", cost: 6000,    group: "battle", kind: "revive", pct: 1,   desc: "Survive a killing blow once in your next bot fight and come back at full HP" },
+    /* More potions */
+    fourleaf:  { name: "Four-Leaf Brew",    icon: "🌿", cost: 1200,    group: "luck",   kind: "luck", mult: 4,     rolls: 30, desc: "x4 luck for 30 rolls" },
+    mythic:    { name: "Mythic Potion",     icon: "🔮", cost: 12000,   group: "luck",   kind: "luck", mult: 100,   rolls: 6,  desc: "x100 luck for 6 rolls" },
+    supernova: { name: "Supernova Elixir",  icon: "🌋", cost: 250000,  group: "luck",   kind: "luck", mult: 2500,  rolls: 3,  desc: "x2500 luck for 3 rolls" },
+    glimmer:   { name: "Glimmer Potion",    icon: "⭐", cost: 6000,    group: "special", kind: "shiny", mult: 4,  rolls: 8,  desc: "x4 shiny chance for 8 rolls" },
+    radiance:  { name: "Radiance Potion",   icon: "🪩", cost: 60000,   group: "special", kind: "shiny", mult: 25, rolls: 4,  desc: "x25 shiny chance for 4 rolls" },
+    cosmicmagnet:{ name: "Cosmic Magnet",   icon: "🎯", cost: 500000,  group: "special", kind: "floor", min: 1000000,  rolls: 2, desc: "Your next 2 rolls are Cosmic or better" },
+    divinemagnet:{ name: "Divine Magnet",   icon: "🔱", cost: 3000000, group: "special", kind: "floor", min: 10000000, rolls: 1, desc: "Your next roll is Divine or better" },
+    fortunecoins:{ name: "Fortune Coins",   icon: "🤑", cost: 20000,   group: "coins",  kind: "gold", mult: 50,  rolls: 8,  desc: "x50 coins from rolls for 8 rolls" },
+    ransom:    { name: "King's Ransom",     icon: "💷", cost: 150000,  group: "coins",  kind: "gold", mult: 500, rolls: 3,  desc: "x500 coins from rolls for 3 rolls" },
+    flash:     { name: "Flash Potion",      icon: "🏃", cost: 15000,   group: "coins",  kind: "haste", div: 16, seconds: 75, desc: "Roll cooldown cut to 1/16 for 75 seconds" },
+    berserk:   { name: "Berserk Brew",      icon: "🩸", cost: 30000,   group: "battle", kind: "strength", mult: 8,  desc: "+700% damage in your next bot fight" },
+    worldender: { name: "World Ender",      icon: "💥", cost: 120000,  group: "battle", kind: "strength", mult: 15, desc: "+1400% damage in your next bot fight" },
+    aegis:     { name: "Aegis Potion",      icon: "🏰", cost: 5000,    group: "battle", kind: "shield", pct: 1, desc: "Start your next bot fight with a shield worth 100% of your HP" }
   };
   var POTION_ORDER = Object.keys(POTIONS);
   /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
@@ -214,7 +228,11 @@
 
   /* The collector's potion (Potion of Everything) appears once every other shop potion has been bought at
      least once, apart from these three. */
-  var COLLECTION_SKIP = ["celestial", "destiny", "secret"];
+  var COLLECTION_SKIP = ["celestial", "destiny", "secret",
+    /* The newer potions don't count toward the "buy every potion" collection, so it stays the same challenge
+       and players who already unlocked the Potion of Everything keep it. */
+    "fourleaf", "mythic", "supernova", "glimmer", "radiance", "cosmicmagnet", "divinemagnet",
+    "fortunecoins", "ransom", "flash", "berserk", "worldender", "aegis"];
   function collectionKeys() {
     return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && COLLECTION_SKIP.indexOf(k) < 0; });
   }
