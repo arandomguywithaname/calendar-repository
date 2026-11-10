@@ -71,6 +71,15 @@ loadout, and fight bots or a friend.
   the roll screen with a shiny banner, rainbow burst and chime. The Index tags each
   aura's multiplier, counts shinies found and, for Epic and rarer, has a ✨ button to
   preview the shiny cutscene.
+- **✨ Shiny shards — make any aura shiny.** Every bot you beat (in the Arena or the
+  Tower) pays out **shiny shards** as well as coins — stronger bots give more (Omniarch
+  is worth over 100 a win; the Training Dummy, 2). In the Arena's supply stand you can
+  spend shards to turn one of your own auras shiny — **even auras that have no natural
+  shiny form, like The Unknown.** The rarer the aura, the more shards it costs: a Common
+  is 40 shards, a 1-in-a-billion aura 810, and The Unknown 3,240. A shard-made shiny is
+  a real shiny — its own sparkly inventory card, ✨ Shiny name, and ×3 power and coins —
+  and the new shiny copy is equipped for you. (Making an aura shiny with shards never
+  changes what your *rolls* can produce; only auras with a natural shiny form roll shiny.)
 - **Reveals always finish.** The timeline is worked out per aura so rarer tiers
   build longer and the name and odds always finish before anything fades. Taps
   can't skip a reveal until the name and odds are fully shown, so quick taps on
@@ -149,7 +158,7 @@ loadout, and fight bots or a friend.
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
   week. Miss two days and the streak restarts.
-- **52 potions** in four groups. Luck from x2 up to the Potion of Destiny
+- **54 potions** in four groups. Luck from x2 up to the Potion of Destiny
   (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
   rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
   way. Magnets and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
@@ -171,6 +180,13 @@ loadout, and fight bots or a friend.
   (Divine or better); Fortune Coins (x50) and King's Ransom (x500) coin potions; the Flash
   Potion (cooldown cut to 1/16); and three battle potions — Berserk Brew (+700% damage),
   World Ender (+1400%) and the Aegis Potion (a 100%-HP shield).
+- **🏟️ Arena supplies (arena-only potions).** Two potions are sold **only** at the
+  Arena's own supply stand, for **doubloons**, and never show up in the Potion Shop or
+  the Doubloon shop: the **🍶 Elixir Potion** (×30,000,000 luck for 2 rolls — the
+  strongest luck in the game — for 60,000 doubloons) and the **🎣 Rage Bait Potion**
+  (×5 damage in your next bot fight, for 46,000 doubloons). The stand also shows your
+  shiny-shard and doubloon balances and holds the make-an-aura-shiny station. It sits at
+  the top of the Battle tab and hides itself while a fight is on.
 - **Buy amount.** A row at the top of the Potion Shop picks how many potions each Buy
   button buys: x1, x2, x5, x10, x100, x1000 or **Max** (as many as your coins cover).
   It works for **Training** too (x10 trains 10 levels, Max as many levels as you can

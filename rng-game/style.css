@@ -313,6 +313,18 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
    list are hidden so a fight is its own clean screen, not "the battle section" with everything behind it. */
 #tab-battle.fighting > :not(#arena) { display: none !important; }
 #tab-battle.fighting > #arena { margin-bottom: 0; }
+/* Arena supply stand: shards/doubloons, arena-only potions and the make-an-aura-shiny station. */
+.arena-supplies { margin-bottom: 22px; padding: 16px; border-radius: var(--radius); border: 1px solid var(--card-border); background: linear-gradient(180deg, rgba(255,210,120,.07), rgba(255,255,255,.02)); }
+.arena-supplies .section-title { margin-top: 0; }
+.supply-bal { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 14px; }
+.supply-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid var(--card-border); font-size: .9rem; }
+.supply-pill b { color: var(--accent); }
+.arena-potion-grid { margin-bottom: 14px; }
+.shard-station { border: 1px solid rgba(255,210,120,.35); background: linear-gradient(180deg, rgba(255,210,120,.09), rgba(255,255,255,.02)); }
+.shard-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 6px; }
+.shard-select { flex: 1 1 220px; min-width: 0; padding: 9px 12px; border-radius: 10px; background: var(--card); color: var(--text); border: 1px solid var(--card-border); font: inherit; }
+.shard-apply { white-space: nowrap; }
+.shard-hint { margin-top: 4px; }
 .arena-banner { grid-column: 1 / -1; text-align: center; font-size: .8rem; letter-spacing: .3em; text-transform: uppercase; color: var(--accent); font-weight: 700; min-height: 1em; }
 .arena-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 .fighter { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; position: relative; }

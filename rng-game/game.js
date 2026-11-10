@@ -97,7 +97,10 @@
     flash:     { name: "Flash Potion",      icon: "🏃", cost: 15000,   group: "coins",  kind: "haste", div: 16, seconds: 75, desc: "Roll cooldown cut to 1/16 for 75 seconds" },
     berserk:   { name: "Berserk Brew",      icon: "🩸", cost: 30000,   group: "battle", kind: "strength", mult: 8,  desc: "+700% damage in your next bot fight" },
     worldender: { name: "World Ender",      icon: "💥", cost: 120000,  group: "battle", kind: "strength", mult: 15, desc: "+1400% damage in your next bot fight" },
-    aegis:     { name: "Aegis Potion",      icon: "🏰", cost: 5000,    group: "battle", kind: "shield", pct: 1, desc: "Start your next bot fight with a shield worth 100% of your HP" }
+    aegis:     { name: "Aegis Potion",      icon: "🏰", cost: 5000,    group: "battle", kind: "shield", pct: 1, desc: "Start your next bot fight with a shield worth 100% of your HP" },
+    /* Arena-only potions — bought with doubloons, and ONLY from the Arena's supply stand (not the shops). */
+    elixir:    { name: "Elixir Potion",     icon: "🍶", cost: 0, group: "luck",   kind: "luck", mult: 30000000, rolls: 2, arena: true, doubloonCost: 60000, desc: "x30,000,000 luck for 2 rolls — the strongest luck in the game. Arena only, 60,000 doubloons." },
+    ragebait:  { name: "Rage Bait Potion",  icon: "🎣", cost: 0, group: "battle", kind: "strength", mult: 5,       arena: true, doubloonCost: 46000, desc: "x5 damage in your next bot fight. Arena only, 46,000 doubloons." }
   };
   var POTION_ORDER = Object.keys(POTIONS);
   /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
@@ -234,7 +237,7 @@
     "fourleaf", "mythic", "supernova", "glimmer", "radiance", "cosmicmagnet", "divinemagnet",
     "fortunecoins", "ransom", "flash", "berserk", "worldender", "aegis"];
   function collectionKeys() {
-    return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && COLLECTION_SKIP.indexOf(k) < 0; });
+    return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && !POTIONS[k].arena && COLLECTION_SKIP.indexOf(k) < 0; });
   }
   function collectionMissing() { return collectionKeys().filter(function (k) { return !(S.bought[k] > 0); }); }
   function collectionDone() { return collectionMissing().length === 0; }
@@ -271,6 +274,7 @@
       playerName: "",
       botWins: {},
       doubloons: 0,
+      shards: 0,
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       aurasLockedUntil: 0,
       breakSkips: 0,
@@ -320,6 +324,7 @@
       if (!merged.bought || typeof merged.bought !== "object") merged.bought = {};
       if (!Array.isArray(merged.giftsOpened)) merged.giftsOpened = [];
       if (typeof merged.doubloons !== "number" || !(merged.doubloons >= 0)) merged.doubloons = Math.max(0, Math.floor(Number(merged.doubloons) || 0));
+      merged.shards = Math.max(0, Math.floor(Number(merged.shards) || 0));
       if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
       if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
@@ -437,16 +442,62 @@
   }
 
   /* ---------- Shiny helpers ---------- */
+  /* Default shiny multiplier for an aura made shiny with shards when it has no natural shiny form. */
+  var SHARD_SHINY_MULT = 3;
   function owns(id, shiny) { return ((shiny ? S.shinyInventory : S.inventory)[id] || 0) > 0; }
   function ownsAny(id) { return owns(id, false) || owns(id, true); }
-  function isShiny(aura, shiny) { return !!(shiny && aura && aura.shiny); }
-  function effRarity(aura, shiny) { return isShiny(aura, shiny) ? aura.shinyRarity : aura.rarity; }
-  function auraPower(aura, shiny) { return isShiny(aura, shiny) ? aura.shinyPower : aura.power; }
-  function auraCoins(aura, shiny) { return isShiny(aura, shiny) ? aura.shinyCoins : aura.coins; }
+  /* A copy is shiny whenever its shiny flag is set — natural shiny forms AND auras made shiny with shards. The
+     aura objects are frozen, so shard-granted shiny stats are computed here on the fly rather than stored on them. */
+  function shinyMult(aura) { return aura.shiny || SHARD_SHINY_MULT; }
+  function shinyRarityOf(aura) { return aura.shinyRarity || aura.rarity * SHARD_SHINY_MULT; }
+  function shinyPowerOf(aura) { return aura.shinyPower || (aura.fixedPower ? Math.round(aura.power * (1 + 0.1 * SHARD_SHINY_MULT)) : A.powerFor(aura.rarity * SHARD_SHINY_MULT)); }
+  function shinyCoinsOf(aura) { return aura.shinyCoins || (aura.coins || 0) * SHARD_SHINY_MULT; }
+  function isShiny(aura, shiny) { return !!(shiny && aura); }
+  function effRarity(aura, shiny) { return isShiny(aura, shiny) ? shinyRarityOf(aura) : aura.rarity; }
+  function auraPower(aura, shiny) { return isShiny(aura, shiny) ? shinyPowerOf(aura) : aura.power; }
+  function auraCoins(aura, shiny) { return isShiny(aura, shiny) ? shinyCoinsOf(aura) : aura.coins; }
   function auraLabel(aura, shiny) { return (isShiny(aura, shiny) ? "✨ Shiny " : "") + aura.name; }
-  function oddsText(aura, shiny) { return A.formatOdds(effRarity(aura, shiny)) + (isShiny(aura, shiny) ? " · ✨×" + aura.shiny : ""); }
-  /* A shiny-capable aura rolls shiny 1 time in its multiplier, so a shiny's true odds are its normal odds × the multiplier. */
-  function rollShiny(aura) { return !!aura.shiny && Math.random() < Math.min(1, currentShinyMult() / aura.shiny); }
+  function oddsText(aura, shiny) { return A.formatOdds(effRarity(aura, shiny)) + (isShiny(aura, shiny) ? " · ✨×" + shinyMult(aura) : ""); }
+  /* A shiny-capable aura rolls shiny 1 time in its multiplier, so a shiny's true odds are its normal odds × the multiplier.
+     Only auras with a NATURAL shiny form can roll shiny — shiny shards can grant a shiny form to any aura
+     without changing what rolls can produce. */
+  function rollShiny(aura) { return !!NATURAL_SHINY[aura.id] && Math.random() < Math.min(1, currentShinyMult() / aura.shiny); }
+
+  /* ---------- Shiny shards: earned by fighting bots, spent to make an owned aura shiny (even The Unknown) ---------- */
+  /* Snapshot of which auras can roll shiny naturally, so shard-made shiny copies never change what rolls produce. */
+  var NATURAL_SHINY = {};
+  A.list.forEach(function (a) { if (a.shiny) NATURAL_SHINY[a.id] = true; });
+
+  /* Shards a bot win pays out — stronger bots give more (cube root of their power). */
+  function shardsFromBot(power) { return Math.max(1, Math.round(Math.cbrt(Math.max(1, power || 1)))); }
+
+  /* How many shiny shards it costs to make an aura shiny — the rarer the aura, the more it costs. */
+  function shardCost(aura) {
+    var digits = Math.max(2, Math.round(Math.log(effRarity(aura, false)) / Math.LN10));
+    return Math.round(10 * digits * digits / 10) * 10;
+  }
+
+  /* Spend shards to turn one owned normal copy of an aura into a shiny one. */
+  function makeAuraShiny(id) {
+    var a = A.byId(id);
+    if (!a) return;
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
+    if (!owns(id, false)) { toast("You need a normal copy of " + a.name + " to make it shiny.", "bad"); return; }
+    var cost = shardCost(a);
+    if ((S.shards || 0) < cost) { toast("Not enough shiny shards — " + a.name + " needs " + fmt(cost) + " (you have " + fmt(S.shards || 0) + "). Win bot fights for more.", "bad"); return; }
+    var wasEquippedThis = S.equipped === id && !S.equippedShiny;
+    S.shards -= cost;
+    S.inventory[id] = (S.inventory[id] || 0) - 1;
+    if (S.inventory[id] <= 0) delete S.inventory[id];
+    S.shinyInventory[id] = (S.shinyInventory[id] || 0) + 1;
+    S.stats.shinies = (S.stats.shinies || 0) + 1;
+    recordBest(a, true);
+    if (wasEquippedThis || !equippedAura() || isMyBestAura(id, true)) { S.equipped = id; S.equippedShiny = true; abilitiesViewAura = id; }
+    toast("✨ " + a.name + " is now Shiny! (−" + fmt(cost) + " shards)", "gold");
+    Sound.win();
+    save();
+    renderAll();
+  }
 
   function equippedAura() {
     if (S.equipped === null || S.equipped === undefined) return null;
@@ -1343,7 +1394,7 @@
      `minCost` and `maxCost` bound which potions it can become. */
   function rollMysteryPotion(m) {
     /* never a healing potion when there's no room to carry it */
-    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && !q.doubloon && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity) && potionRoom(k) > 0; });
+    var pool = POTION_ORDER.filter(function (k) { var q = POTIONS[k]; return q.kind !== "mystery" && !q.daily && !q.secret && !q.collector && !q.doubloon && !q.arena && q.cost >= (m.minCost || 0) && q.cost <= (m.maxCost || Infinity) && potionRoom(k) > 0; });
     var weights = pool.map(function (k) { return 1 / Math.sqrt(POTIONS[k].cost + 100); });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var r = Math.random() * total;
@@ -1398,7 +1449,7 @@
     });
     POTION_ORDER.forEach(function (key) {
       var p = POTIONS[key];
-      if (p.daily || p.doubloon) return; /* doubloon-only potions are sold in the Tower's Doubloon shop, not here */
+      if (p.daily || p.doubloon || p.arena) return; /* doubloon-only and arena-only potions are sold in their own stands, not here */
       var grid = $("#shop-" + p.group);
       var card = document.createElement("div");
       card.className = "card";
@@ -1586,7 +1637,7 @@
       card.className = "card" + (isEq ? " equipped" : "") + (sh ? " shiny-card" : "");
       var badge = document.createElement("div");
       badge.className = "count-badge" + (sh ? " shiny-badge" : "");
-      badge.textContent = (sh ? "✨ ×" + a.shiny + " · " : "") + "x" + en.n;
+      badge.textContent = (sh ? "✨ ×" + shinyMult(a) + " · " : "") + "x" + en.n;
       card.appendChild(badge);
       var row = document.createElement("div");
       row.className = "row";
@@ -3563,6 +3614,21 @@
     renderDoubloonShop();
   }
 
+  /* Buy an arena-only potion with doubloons from the Arena's supply stand (not any shop). */
+  function buyArenaPotion(key) {
+    var pot = POTIONS[key];
+    if (!pot || !pot.arena) return;
+    var cost = pot.doubloonCost || 0;
+    if (potionRoom(key) < 1) { errorToast(ERR.POTION_BUY, "You're already carrying as many as you can. Use one first."); return; }
+    if ((S.doubloons || 0) < cost) { errorToast(ERR.POTION_BUY, "Not enough doubloons for " + pot.name + " (" + fmt(cost) + " needed). Win floors in the Tower for doubloons."); return; }
+    S.doubloons -= cost;
+    addPotion(key, 1);
+    Sound.buy();
+    toast("🪙 Bought " + pot.name + " for " + fmt(cost) + " doubloons", "gold");
+    save();
+    renderAll();
+  }
+
   /* Pretty "2d 4h" style countdown. */
   function fmtDuration(ms) {
     var s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
@@ -3696,7 +3762,120 @@
     renderTower();
   }
 
+  /* The aura currently chosen in the make-shiny station (kept across redraws). */
+  var shardPick = null;
+  var ARENA_POTIONS = ["elixir", "ragebait"];
+
+  /* The Arena's own supply stand: shiny-shard / doubloon balances, the arena-only potions, and the
+     "make an aura shiny" station. Shown only in the Battle tab (and auto-hidden during a fight). */
+  function renderArenaSupplies() {
+    var box = $("#arena-supplies");
+    if (!box) return;
+    box.innerHTML = "";
+
+    var head = document.createElement("h3");
+    head.className = "section-title";
+    head.textContent = "🏟️ Arena supplies";
+    box.appendChild(head);
+
+    var intro = document.createElement("p");
+    intro.className = "muted small-text";
+    intro.textContent = "Only here in the Arena. Win bot fights to earn ✨ shiny shards; win Tower floors for 🪙 doubloons.";
+    box.appendChild(intro);
+
+    var bal = document.createElement("div");
+    bal.className = "supply-bal";
+    bal.innerHTML = "<span class=\"supply-pill\">✨ <b>" + fmt(S.shards || 0) + "</b> shiny shards</span>" +
+                    "<span class=\"supply-pill\">🪙 <b>" + fmt(S.doubloons || 0) + "</b> doubloons</span>";
+    box.appendChild(bal);
+
+    /* Arena-only potions, bought with doubloons. */
+    var pgrid = document.createElement("div");
+    pgrid.className = "card-grid arena-potion-grid";
+    ARENA_POTIONS.forEach(function (key) {
+      var p = POTIONS[key], cost = p.doubloonCost || 0, have = S.potions[key] || 0;
+      var card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        "<div class=\"row\"><div class=\"big-icon\">" + p.icon + "</div><div><div class=\"card-title\">" + p.name + "</div>" +
+        "<div class=\"card-sub\">" + p.desc + "</div></div></div>" +
+        "<div class=\"row\"><span class=\"price\">🪙 " + fmt(cost) + " doubloons</span><span class=\"card-sub\">owned: " + fmt(have) + "</span></div>";
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      var buy = document.createElement("button");
+      var afford = (S.doubloons || 0) >= cost;
+      buy.className = "btn small primary" + (afford ? "" : " cant-afford");
+      buy.textContent = "Buy";
+      buy.addEventListener("click", function () { buyArenaPotion(key); });
+      actions.appendChild(buy);
+      card.appendChild(actions);
+      pgrid.appendChild(card);
+    });
+    box.appendChild(pgrid);
+
+    /* Make-an-aura-shiny station. */
+    var station = document.createElement("div");
+    station.className = "card shard-station";
+    var title = document.createElement("div");
+    title.className = "card-title";
+    title.textContent = "✨ Make an aura shiny";
+    station.appendChild(title);
+    var sub = document.createElement("div");
+    sub.className = "card-sub";
+    sub.textContent = "Spend shiny shards to turn one of your auras shiny — yes, even The Unknown. The rarer the aura, the more shards it costs.";
+    station.appendChild(sub);
+
+    var ownNormal = Object.keys(S.inventory).map(Number).filter(function (id) { return S.inventory[id] > 0 && A.byId(id); });
+    ownNormal.sort(function (a, b) { return A.byId(b).rarity - A.byId(a).rarity; });
+
+    if (!ownNormal.length) {
+      var none = document.createElement("div");
+      none.className = "card-sub shard-hint";
+      none.textContent = "Roll and own an aura first, then come back to make it shiny.";
+      station.appendChild(none);
+    } else {
+      if (shardPick === null || ownNormal.indexOf(shardPick) < 0) shardPick = ownNormal[0];
+      var row = document.createElement("div");
+      row.className = "shard-row";
+      var sel = document.createElement("select");
+      sel.id = "shard-aura";
+      sel.className = "shard-select";
+      ownNormal.forEach(function (id) {
+        var a = A.byId(id);
+        var o = document.createElement("option");
+        o.value = id;
+        o.textContent = a.name + " ×" + fmt(S.inventory[id]) + "  (" + A.formatOdds(a.rarity) + ")";
+        if (id === shardPick) o.selected = true;
+        sel.appendChild(o);
+      });
+      row.appendChild(sel);
+      var apply = document.createElement("button");
+      apply.className = "btn small primary shard-apply";
+      row.appendChild(apply);
+      station.appendChild(row);
+
+      var hint = document.createElement("div");
+      hint.className = "card-sub shard-hint";
+      station.appendChild(hint);
+
+      var refresh = function () {
+        var a = A.byId(shardPick);
+        if (!a) return;
+        var cost = shardCost(a), can = (S.shards || 0) >= cost;
+        apply.textContent = "Make Shiny · ✨" + fmt(cost);
+        apply.classList.toggle("cant-afford", !can);
+        var already = owns(shardPick, true) ? " You already own a shiny " + a.name + "." : "";
+        hint.textContent = "✨ " + a.name + " costs " + fmt(cost) + " shiny shards — you have " + fmt(S.shards || 0) + "." + already;
+      };
+      refresh();
+      sel.addEventListener("change", function () { shardPick = Number(sel.value); refresh(); });
+      apply.addEventListener("click", function () { makeAuraShiny(shardPick); });
+    }
+    box.appendChild(station);
+  }
+
   function renderBots() {
+    renderArenaSupplies();
     var grid = $("#bot-grid");
     grid.innerHTML = "";
     var pp = playerPower();
@@ -4207,15 +4386,17 @@
       if (won) {
         var reward = towerFirst(tfloor);
         S.doubloons = (S.doubloons || 0) + reward;
+        var tshards = shardsFromBot(view.bot.power);
+        S.shards = (S.shards || 0) + tshards;
         S.tower.cleared[tfloor] = true;
         if (tfloor > (S.tower.best || 0)) S.tower.best = tfloor;
         S.stats.towerWins = (S.stats.towerWins || 0) + 1;
         S.stats.streak = (S.stats.streak || 0) + 1;
         if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
         res.classList.add("win");
-        res.textContent = "🗼 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons" + (tfloor === TOWER_FLOORS ? " — you conquered the Tower!" : " — Floor " + (tfloor + 1) + " is open!");
+        res.textContent = "🗼 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons · +" + fmt(tshards) + " ✨ shards" + (tfloor === TOWER_FLOORS ? " — you conquered the Tower!" : " — Floor " + (tfloor + 1) + " is open!");
         Sound.win();
-        logLine("🏆 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons", "crit");
+        logLine("🏆 Floor " + tfloor + " cleared! +" + fmt(reward) + " 🪙 doubloons, +" + fmt(tshards) + " ✨ shiny shards", "crit");
       } else {
         S.stats.streak = 0;
         res.classList.add("lose");
@@ -4265,14 +4446,16 @@
     } else if (won) {
       var reward = view.bot.reward;
       addCoins(reward);
+      var bshards = shardsFromBot(view.bot.power);
+      S.shards = (S.shards || 0) + bshards;
       S.botWins[view.bot.id] = (S.botWins[view.bot.id] || 0) + 1;
       S.stats.won++;
       S.stats.streak++;
       if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
       res.classList.add("win");
-      res.textContent = "Victory! +" + fmt(reward) + " coins";
+      res.textContent = "Victory! +" + fmt(reward) + " coins · +" + fmt(bshards) + " ✨ shards";
       Sound.win();
-      logLine("🏆 " + oppName + " defeated! +" + fmt(reward) + " coins", "crit");
+      logLine("🏆 " + oppName + " defeated! +" + fmt(reward) + " coins, +" + fmt(bshards) + " ✨ shiny shards", "crit");
     } else {
       S.stats.lost++;
       S.stats.streak = 0;
@@ -4695,6 +4878,9 @@
     "help                      show this list",
     "luck <mult> [rolls]       add a luck boost, e.g. luck 1000 10",
     "coins <amount>            add coins (negative to remove)",
+    "shards <amount>           add shiny shards (negative to remove)",
+    "doubloons <amount>        add tower doubloons (negative to remove)",
+    "makeshiny <aura name|id>  make an owned aura shiny with shards (free for admins)",
     "give <aura name|id> [shiny]  add an aura (or its shiny form) to your inventory",
     "roll <aura name|id> [shiny]  force your next roll to be that aura (plays its reveal)",
     "potion <key> [count]      add potions: " + POTION_ORDER.join(", "),
@@ -4759,6 +4945,29 @@
         if (!POTIONS[key] || !(cnt > 0)) { adminPrint("Usage: potion <" + POTION_ORDER.join("|") + "> [count]"); break; }
         var added = addPotion(key, cnt);
         adminPrint("Added " + added + " x " + POTIONS[key].name + "." + (added < cnt ? " (Healing potions are capped at " + MAX_HEALS + " in total.)" : ""));
+        break;
+      }
+      case "shards": {
+        var sn = Number(parts[0]);
+        if (!isFinite(sn)) { adminPrint("Usage: shards <amount>"); break; }
+        S.shards = Math.max(0, (S.shards || 0) + Math.floor(sn));
+        adminPrint("Shiny shards: " + fmt(S.shards));
+        break;
+      }
+      case "doubloons": {
+        var dn = Number(parts[0]);
+        if (!isFinite(dn)) { adminPrint("Usage: doubloons <amount>"); break; }
+        S.doubloons = Math.max(0, (S.doubloons || 0) + Math.floor(dn));
+        adminPrint("Doubloons: " + fmt(S.doubloons));
+        break;
+      }
+      case "makeshiny": {
+        var msa = findAura(rest);
+        if (!msa) { adminPrint("No aura matches \"" + rest + "\"."); break; }
+        if (!owns(msa.id, false)) { S.inventory[msa.id] = (S.inventory[msa.id] || 0) + 1; adminPrint("(gave you a normal " + msa.name + " first)"); }
+        S.shards = (S.shards || 0) + shardCost(msa); /* admins don't pay */
+        makeAuraShiny(msa.id);
+        adminPrint("Made " + msa.name + " shiny.");
         break;
       }
       case "training": {
@@ -6828,6 +7037,7 @@
     document.querySelectorAll(".panel").forEach(function (p) { p.classList.toggle("active", p.id === "tab-" + name); });
     if (name === "roll") FX.resize();
     if (name === "inventory") renderInventory();
+    if (name === "battle") renderArenaSupplies();
     if (name === "tower") renderTower();
     if (name === "leaderboard") loadLeaderboard();
     if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }
