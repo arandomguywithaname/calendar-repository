@@ -125,7 +125,12 @@ loadout, and fight bots or a friend.
   so two auras with the same move look clearly different while the action (sword,
   hammer...) still reads the same. The target reacts in the arena when the hit lands: it is cut in two and
   slides back together, squashed flat, zapped, knocked back, poisoned green, chained,
-  drained grey and so on (bots' hits do this too).
+  drained grey and so on (bots' hits do this too). **A fight is its own clean screen:**
+  starting any fight (a bot, a Tower floor or a friend in PvP) scrolls to the top and
+  hides the Battle tab's heading, the PvP box and the whole bot list, so you see only
+  the arena instead of the fight buried in the middle of the battle section. When it
+  ends, a clear button brings you back — ⚔️ Back to the bots for an arena bot, 🗼 Back
+  to the Tower for a Tower floor, ⬅️ Back for PvP.
 - **Cinematic moves for auras rarer than 1 in 3,000,000.** Every move of those auras
   plays as a cinematic: cinema bars, the screen dropping to black, rays of light and
   a giant spinning rune circle in the aura's colours, speed lines rushing in, the

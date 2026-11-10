@@ -3783,15 +3783,29 @@
     $("#battle-log").innerHTML = "";
     $("#post-battle").innerHTML = "";
     switchTab("battle");
-    arena.scrollIntoView({ behavior: "smooth", block: "start" });
+    /* While a fight is on, show only the arena — hide the Battle tab's heading, PvP box and bot list so a
+       fight is its own clean screen instead of "the battle section" with everything around it. */
+    $("#tab-battle").classList.add("fighting");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   /* Leave a finished Tower fight and go back to the Tower (so a tower fight never dumps you on the Battle screen). */
   function leaveToTower() {
     battle = null;
     $("#arena").classList.add("hidden");
+    $("#tab-battle").classList.remove("fighting");
     $("#post-battle").innerHTML = "";
     switchTab("tower");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* Leave a finished regular/PvP fight: hide the arena and bring the Battle tab's bot list and PvP box back. */
+  function leaveArena() {
+    battle = null;
+    $("#arena").classList.add("hidden");
+    $("#tab-battle").classList.remove("fighting");
+    $("#post-battle").innerHTML = "";
+    renderAll();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -4267,6 +4281,12 @@
       Sound.lose();
       logLine("💀 You were defeated.", "them");
     }
+    /* A clear way out of the arena back to the Battle tab's bot list / PvP box (which are hidden mid-fight). */
+    var backBtn = document.createElement("button");
+    backBtn.className = "btn small" + (view.pvp ? "" : " primary");
+    backBtn.textContent = view.pvp ? "⬅️ Back" : "⚔️ Back to the bots";
+    backBtn.addEventListener("click", leaveArena);
+    $("#post-battle").appendChild(backBtn);
     renderArena();
     save();
     var finished = battle;
