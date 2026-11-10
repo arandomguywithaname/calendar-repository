@@ -158,7 +158,7 @@ loadout, and fight bots or a friend.
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
   week. Miss two days and the streak restarts.
-- **54 potions** in four groups. Luck from x2 up to the Potion of Destiny
+- **59 potions** in four groups. Luck from x2 up to the Potion of Destiny
   (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
   rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
   way. Magnets and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
@@ -249,7 +249,13 @@ loadout, and fight bots or a friend.
   the **👹 Monstrous Potion** (20,000 doubloons), a coin potion so strong it's sold
   nowhere else: it gives **x2,000 coins on your next single roll**. Because it's
   doubloon-only, it never shows up in the regular coin shop, the Mega Mystery pool, or
-  the "buy every potion" collection.
+  the "buy every potion" collection. **Five more doubloon-only potions** are sold the
+  same way — nowhere else: **🐙 Kraken's Luck** (45,000 doubloons, x5,000,000 luck for
+  2 rolls), **🏴‍☠️ Pirate's Bounty** (30,000, x10,000 coins on one roll), **🌊 Tidal
+  Fury** (25,000, +2,900% damage / x30 in your next bot fight), **🫧 Abyssal Shimmer**
+  (28,000, x100 shiny chance for 3 rolls) and **⚓ Deep Magnet** (50,000, your next roll
+  is Forbidden or better). Like the Monstrous Potion they never appear in the regular
+  shop, the Mystery pool or the collection.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's

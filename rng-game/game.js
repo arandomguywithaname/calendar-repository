@@ -100,7 +100,13 @@
     aegis:     { name: "Aegis Potion",      icon: "🏰", cost: 5000,    group: "battle", kind: "shield", pct: 1, desc: "Start your next bot fight with a shield worth 100% of your HP" },
     /* Arena-only potions — bought with doubloons, and ONLY from the Arena's supply stand (not the shops). */
     elixir:    { name: "Elixir Potion",     icon: "🍶", cost: 0, group: "luck",   kind: "luck", mult: 30000000, rolls: 2, arena: true, doubloonCost: 60000, desc: "x30,000,000 luck for 2 rolls — the strongest luck in the game. Arena only, 60,000 doubloons." },
-    ragebait:  { name: "Rage Bait Potion",  icon: "🎣", cost: 0, group: "battle", kind: "strength", mult: 5,       arena: true, doubloonCost: 46000, desc: "x5 damage in your next bot fight. Arena only, 46,000 doubloons." }
+    ragebait:  { name: "Rage Bait Potion",  icon: "🎣", cost: 0, group: "battle", kind: "strength", mult: 5,       arena: true, doubloonCost: 46000, desc: "x5 damage in your next bot fight. Arena only, 46,000 doubloons." },
+    /* Doubloon-only potions — bought ONLY in the Tower's Doubloon shop (like the Monstrous Potion), never the shop. */
+    krakenluck:{ name: "Kraken's Luck",      icon: "🐙", cost: 0, group: "luck",   kind: "luck",     mult: 5000000, rolls: 2, doubloon: true, desc: "x5,000,000 luck for 2 rolls. Only from the Doubloon shop." },
+    bounty:    { name: "Pirate's Bounty",    icon: "🏴‍☠️", cost: 0, group: "coins", kind: "gold",   mult: 10000,   rolls: 1, doubloon: true, desc: "x10,000 coins from a single roll. Only from the Doubloon shop." },
+    tidalfury: { name: "Tidal Fury",         icon: "🌊", cost: 0, group: "battle", kind: "strength", mult: 30,      doubloon: true, desc: "+2,900% damage (x30) in your next bot fight. Only from the Doubloon shop." },
+    abyssal:   { name: "Abyssal Shimmer",    icon: "🫧", cost: 0, group: "special", kind: "shiny",   mult: 100,     rolls: 3, doubloon: true, desc: "x100 shiny chance for 3 rolls. Only from the Doubloon shop." },
+    deepmagnet:{ name: "Deep Magnet",        icon: "⚓", cost: 0, group: "special", kind: "floor",   min: 1000000000, rolls: 1, doubloon: true, desc: "Your next roll is Forbidden or better. Only from the Doubloon shop." }
   };
   var POTION_ORDER = Object.keys(POTIONS);
   /* The shop's "Buy amount" choices. Max buys as many as the coins cover. */
@@ -3568,6 +3574,8 @@
   /* ---------- Doubloon shop: potions bought with tower doubloons ---------- */
   var DOUBLOON_SHOP = [
     ["monstrous", 20000],
+    /* Doubloon-only potions sold nowhere else. */
+    ["krakenluck", 45000], ["bounty", 30000], ["tidalfury", 25000], ["abyssal", 28000], ["deepmagnet", 50000],
     ["fortune", 250], ["heavenly", 1200], ["starlight", 2500], ["godly", 6000], ["voidess", 12000],
     ["rush", 1500], ["treasure", 4000], ["hoard", 9000],
     ["magnet", 400], ["epicmagnet", 2000], ["lure", 8000], ["prism", 5000],
