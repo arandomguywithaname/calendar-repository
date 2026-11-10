@@ -29,7 +29,9 @@ loadout, and fight bots or a friend.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
   Fury of Darkness and the Forbidden rank, a cyan system glow for Administrative and
-  golden sun rays for Chosen.
+  golden sun rays for Chosen. On an Epic+ roll the stage erupts with a cinematic light
+  show — a breathing halo, drifting god-rays, sharp spinning laser beams and a bright
+  scanner beam sweeping all the way round — around the orb's own rotating sigil ring.
 - **Every aura wears its own sigil.** On top of the orb each aura shows a unique glowing
   symbol (a star, rune, planet, zodiac or alchemy glyph) inside a slow-spinning rune-ring,
   picked deterministically from the aura's id — so an aura reads as its own crest, not a

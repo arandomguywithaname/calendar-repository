@@ -912,25 +912,51 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       var c = center();
       if (beams.on) {
-        var n = beams.level >= 7 ? 18 : 12;
-        var len = Math.max(canvas.width, canvas.height);
+        var lvl = beams.level, cols = beams.colors.length ? beams.colors : ["#ffffff"];
+        var len = Math.max(canvas.width, canvas.height) * 1.15, TAU = Math.PI * 2;
         ctx.save();
         ctx.translate(c.x, c.y);
         ctx.globalCompositeOperation = "lighter";
+        /* a soft halo behind the orb that breathes in and out */
+        var pulse = 0.5 + 0.5 * Math.sin(now / 650);
+        var halo = ctx.createRadialGradient(0, 0, c.r * 0.4, 0, 0, c.r * (2.2 + pulse));
+        halo.addColorStop(0, cols[0]); halo.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.globalAlpha = 0.10 + 0.06 * pulse; ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(0, 0, c.r * (2.2 + pulse), 0, TAU); ctx.fill();
+        /* wide god-rays whose length and width breathe independently */
+        var n = lvl >= 7 ? 16 : 12;
         for (var k = 0; k < n; k++) {
-          var ang = now / (beams.level >= 7 ? 2500 : 4500) * Math.PI * 2 * (k % 2 ? 1 : -1) + k * Math.PI * 2 / n;
-          var col = beams.colors[k % beams.colors.length];
-          var g = ctx.createLinearGradient(0, 0, Math.cos(ang) * len, Math.sin(ang) * len);
-          g.addColorStop(0, col);
-          g.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.globalAlpha = 0.16 + 0.08 * Math.sin(now / 300 + k);
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(Math.cos(ang - 0.05) * len, Math.sin(ang - 0.05) * len);
-          ctx.lineTo(Math.cos(ang + 0.05) * len, Math.sin(ang + 0.05) * len);
-          ctx.closePath();
-          ctx.fill();
+          var ang = now / (lvl >= 7 ? 3200 : 5200) * TAU * (k % 2 ? 1 : -1) + k * TAU / n;
+          var rl = len * (0.5 + 0.5 * (0.5 + 0.5 * Math.sin(now / 420 + k * 1.3)));
+          var w = 0.035 + 0.03 * (0.5 + 0.5 * Math.sin(now / 260 + k));
+          var col = cols[k % cols.length];
+          var g = ctx.createLinearGradient(0, 0, Math.cos(ang) * rl, Math.sin(ang) * rl);
+          g.addColorStop(0, col); g.addColorStop(0.45, col); g.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = 0.13 + 0.06 * Math.sin(now / 300 + k); ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(ang - w) * rl, Math.sin(ang - w) * rl);
+          ctx.lineTo(Math.cos(ang + w) * rl, Math.sin(ang + w) * rl);
+          ctx.closePath(); ctx.fill();
+        }
+        /* a few sharp laser rays with a glowing core, spinning faster */
+        var lasers = lvl >= 7 ? 6 : 4;
+        ctx.lineWidth = 2;
+        for (var m = 0; m < lasers; m++) {
+          var la = now / 1500 * TAU + m * TAU / lasers, lc = cols[(m + 1) % cols.length];
+          ctx.strokeStyle = lc; ctx.shadowColor = lc; ctx.shadowBlur = 14;
+          ctx.globalAlpha = 0.45 + 0.2 * Math.sin(now / 200 + m);
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(la) * len, Math.sin(la) * len); ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        /* one bright scanner beam sweeping all the way round, leaving a trailing fan */
+        var sa = (now / 2400) % 1 * TAU;
+        for (var t = 0; t < 9; t++) {
+          var ta = sa - t * 0.05;
+          ctx.globalAlpha = (1 - t / 9) * 0.2;
+          var gg = ctx.createLinearGradient(0, 0, Math.cos(ta) * len, Math.sin(ta) * len);
+          gg.addColorStop(0, "#ffffff"); gg.addColorStop(0.25, cols[0]); gg.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.strokeStyle = gg; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ta) * len, Math.sin(ta) * len); ctx.stroke();
         }
         ctx.restore();
         ctx.globalAlpha = 1;
