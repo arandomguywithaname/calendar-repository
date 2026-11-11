@@ -3653,7 +3653,7 @@
 
   /* ---------- VIP shop: offers bought with 💎 Gems, a premium currency EARNED by playing (never real money) ---------- */
   var VIP_DAILY_MS = 20 * 60 * 60 * 1000;  /* free gems claimable once every 20 hours */
-  var VIP_DAILY_GEMS = 10;
+  var VIP_DAILY_GEMS = 25;
   var VIP_BOSS_GEMS = 3;                    /* gems for beating a boss bot in the Arena */
   /* Each offer gives in-game rewards for Gems. give() applies the reward when bought. */
   var VIP_OFFERS = [
@@ -3662,9 +3662,57 @@
     { key: "coins3",    icon: "🐉", name: "Dragon's Hoard",    gems: 150, desc: "+200,000,000 coins",          give: function () { addCoins(200000000); } },
     { key: "potions",   icon: "🧪", name: "Potion Pack",       gems: 25,  desc: "3 Mega Mystery Potions",      give: function () { addPotion("megamystery", 3); } },
     { key: "luck",      icon: "🌠", name: "VIP Luck Vial",     gems: 60,  desc: "x1,000,000 luck for 2 rolls", give: function () { S.luckEffects.push({ mult: 1000000, rolls: 2 }); } },
+    { key: "luck1t",    icon: "🌌", name: "Trillion Luck Potion", gems: 100, desc: "x1,000,000,000,000 luck for 1 roll", give: function () { S.luckEffects.push({ mult: 1000000000000, rolls: 1 }); } },
+    { key: "battlepack",icon: "⚔️", name: "VIP Battle Pack",    gems: 40,  desc: "World Ender + Aegis + Phoenix Feather", give: function () { addPotion("worldender", 1); addPotion("aegis", 1); addPotion("phoenix", 1); } },
+    { key: "shinypack", icon: "💫", name: "VIP Shiny Pack",     gems: 35,  desc: "a Prism + a Radiance shiny potion", give: function () { addPotion("prism", 1); addPotion("radiance", 1); } },
     { key: "shards",    icon: "✨", name: "Shiny Shard Pack",   gems: 50,  desc: "+500 shiny shards",           give: function () { S.shards = (S.shards || 0) + 500; } },
     { key: "doubloons", icon: "🪙", name: "Doubloon Pack",     gems: 30,  desc: "+20,000 doubloons",           give: function () { S.doubloons = (S.doubloons || 0) + 20000; } }
   ];
+  /* Craft Gems by melting down spare auras: 1 Cosmic + 100 Commons + coins -> Gems. Consumes normal copies only
+     (shiny auras are never melted), weakest first, so your best auras and all shinies are safe. */
+  var CRAFT = { cosmic: 1, commons: 100, coins: 500000, gems: 20 };
+  /* How many copies of auras of a given tier you own in your NORMAL inventory. */
+  function tierCopiesNormal(tierKey) {
+    var n = 0;
+    Object.keys(S.inventory).forEach(function (id) {
+      var a = A.byId(id);
+      if (a && S.inventory[id] > 0 && A.tierOf(a).key === tierKey) n += S.inventory[id];
+    });
+    return n;
+  }
+  /* Remove `count` normal copies of auras in `tierKey`, weakest (least rare) first. */
+  function consumeNormalTier(tierKey, count) {
+    var remaining = count;
+    var ids = Object.keys(S.inventory).filter(function (id) { var a = A.byId(id); return a && S.inventory[id] > 0 && A.tierOf(a).key === tierKey; });
+    ids.sort(function (x, y) { return A.byId(x).rarity - A.byId(y).rarity; });
+    ids.forEach(function (id) {
+      if (remaining <= 0) return;
+      var take = Math.min(remaining, S.inventory[id]);
+      S.inventory[id] -= take; remaining -= take;
+      if (S.inventory[id] <= 0) delete S.inventory[id];
+    });
+    return remaining <= 0;
+  }
+  function canCraftGems() {
+    return tierCopiesNormal("cosmic") >= CRAFT.cosmic && tierCopiesNormal("common") >= CRAFT.commons && (S.coins || 0) >= CRAFT.coins;
+  }
+  function craftGems() {
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
+    if (tierCopiesNormal("cosmic") < CRAFT.cosmic) { toast("Crafting needs a Cosmic aura to melt down.", "bad"); return; }
+    if (tierCopiesNormal("common") < CRAFT.commons) { toast("Crafting needs " + CRAFT.commons + " Common auras to melt down.", "bad"); return; }
+    if ((S.coins || 0) < CRAFT.coins) { toast("Crafting needs " + fmt(CRAFT.coins) + " coins.", "bad"); return; }
+    if (!confirm("Melt down 1 Cosmic aura + " + CRAFT.commons + " Common auras + " + fmt(CRAFT.coins) + " coins to craft " + CRAFT.gems + " 💎 Gems?\n\nThe weakest ones are used first (shinies are never melted), and this can't be undone.")) return;
+    consumeNormalTier("cosmic", CRAFT.cosmic);
+    consumeNormalTier("common", CRAFT.commons);
+    S.coins -= CRAFT.coins;
+    S.gems = (S.gems || 0) + CRAFT.gems;
+    if (S.equipped != null && !S.equippedShiny && !owns(S.equipped, false)) S.equipped = null;
+    S.stats.sold = (S.stats.sold || 0) + CRAFT.cosmic + CRAFT.commons;
+    Sound.buy();
+    toast("⚒️ Crafted " + CRAFT.gems + " 💎 Gems from spare auras!", "gold");
+    save();
+    renderAll();
+  }
   function vipDailyReady() { return Date.now() - (S.vipDaily || 0) >= VIP_DAILY_MS; }
   function vipDailyIn() { return Math.max(0, VIP_DAILY_MS - (Date.now() - (S.vipDaily || 0))); }
 
@@ -3746,6 +3794,24 @@
       grid.appendChild(card);
     });
     body.appendChild(grid);
+
+    /* Craft Gems from spare auras. */
+    var craft = document.createElement("div");
+    craft.className = "vip-craft";
+    craft.innerHTML = "<h3 class=\"section-title\">⚒️ Craft Gems</h3>" +
+      "<p class=\"muted small-text\">Melt spare auras into Gems. Each craft needs <b>1 Cosmic aura</b> + <b>" + CRAFT.commons + " Common auras</b> + <b>" + fmt(CRAFT.coins) + " coins</b> → <b>" + CRAFT.gems + " 💎 Gems</b>. The weakest ones go first; shinies are never melted.</p>";
+    var have = document.createElement("div");
+    have.className = "card-sub craft-have";
+    have.textContent = "You have " + fmt(tierCopiesNormal("cosmic")) + " Cosmic and " + fmt(tierCopiesNormal("common")) + " Common auras to melt, and " + fmt(S.coins || 0) + " coins.";
+    craft.appendChild(have);
+    var cbtn = document.createElement("button");
+    var can = canCraftGems();
+    cbtn.className = "btn small primary" + (can ? "" : " cant-afford");
+    cbtn.textContent = "⚒️ Craft " + CRAFT.gems + " 💎 Gems";
+    cbtn.disabled = !can;
+    cbtn.addEventListener("click", craftGems);
+    craft.appendChild(cbtn);
+    body.appendChild(craft);
 
     var rm = document.createElement("div");
     rm.className = "vip-realmoney";

@@ -258,14 +258,20 @@ loadout, and fight bots or a friend.
   shop, the Mystery pool or the collection.
 - **👑 VIP Shop.** The **VIP** tab is a premium shop stocked with exclusive **offers** —
   Coin Chest (+250,000), Coin Vault (+5,000,000), Dragon's Hoard (+200,000,000), a Potion
-  Pack (3 Mega Mystery Potions), a VIP Luck Vial (×1,000,000 luck for 2 rolls), a Shiny
-  Shard Pack (+500 shards) and a Doubloon Pack (+20,000) — all bought with **💎 Gems**.
-  **Gems are a premium currency you earn free by playing, never with real money:** claim
-  **10 free Gems every 20 hours**, and win **3 Gems every time you beat a boss bot** in
-  the Arena. There is a **💳 "Buy Gems with real money"** button, but real-money payments
-  are **turned off on purpose** — Aura Realms is a free game for kids, so tapping it only
-  shows an honest **Error 747** explaining there's nothing to buy with real cash and
-  pointing you back to earning Gems. Nothing ever asks for a card or takes any money.
+  Pack (3 Mega Mystery Potions), a VIP Luck Vial (×1,000,000 luck for 2 rolls), the
+  **🌌 Trillion Luck Potion** (×1,000,000,000,000 luck for one roll, 100 Gems), a **VIP
+  Battle Pack** (World Ender + Aegis + Phoenix Feather), a **VIP Shiny Pack** (Prism +
+  Radiance), a Shiny Shard Pack (+500 shards) and a Doubloon Pack (+20,000) — all bought
+  with **💎 Gems**. **Gems are a premium currency you earn free by playing, never with
+  real money:** claim **25 free Gems every 20 hours**, and win **3 Gems every time you
+  beat a boss bot** in the Arena.
+  - **⚒️ Craft Gems.** You can also melt spare auras into Gems: **1 Cosmic aura + 100
+    Common auras + 500,000 coins → 20 💎 Gems**. The weakest auras are used first and
+    shinies are never melted, so your best collection is safe.
+  - There is a **💳 "Buy Gems with real money"** button, but real-money payments are
+    **turned off on purpose** — Aura Realms is a free game for kids, so tapping it only
+    shows an honest **Error 747** (payments disabled, no processor connected) and points
+    you back to earning Gems. Nothing ever asks for a card or takes any money.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's
