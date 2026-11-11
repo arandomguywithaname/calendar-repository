@@ -3,11 +3,12 @@
 
    POST /.netlify/functions/account with JSON { action, ... }:
      ping                                   is the server there?
-     create  { name, device, save, preferId }  new account; preferId keeps an ID made before accounts went online
-     load    { id }                         the account's save
+     create  { name, device, save, preferId, secret }  new account; secret is the account's own key (see SECRET_RE);
+                                            preferId keeps an ID made before accounts went online
+     load    { id, secret }                 the account's save (refused with 403 for a protected account without its secret)
      peek    { id }                         the account's revision only (cheap "has it changed?" check)
-     claim   { id, device, rev }            take or renew the roll lease; returns the newest save if `rev` is old
-     save    { id, device, rev, save }      store a new save; refused while another device holds the lease
+     claim   { id, device, rev, secret }    take or renew the roll lease; returns the newest save if `rev` is old
+     save    { id, device, rev, save, secret }  store a new save; refused while another device holds the lease
      release { id, device }                 give the lease back (tab closed, logged out)
      gift    { id, device, rev, save, to, aura, shiny, count | coins }
                                             send auras (or coins) to player `to`: they go into that player's gift box, and
@@ -33,6 +34,7 @@
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
                                                 with an empty gift box (backs each up first)
                banAuras { id }                  delete every aura the one account `id` owns (backs it up first)
+               unprotect { id }                 clear one account's secret so its owner can protect it again (lockout recovery)
                restore                          put back the saves from just before the last Detonate or ban
                resetLuck                        clear every account's active luck boosts
                chatMute   { seq | id, minutes } mute the writer of chat message `seq` (or player `id`); 0 minutes = until unmuted
@@ -55,6 +57,11 @@ const MAX_GIFT_COUNT = 1000000;
 const MAX_GIFT_COINS = 1e15;  /* coins one gift can carry (a quadrillion) */
 const ID_RE = /^\d{7}$/;
 const DEVICE_RE = /^[a-z0-9]{8,40}$/;
+/* A per-account secret key: the thing that protects an account beyond its public, shareable 7-digit ID.
+   Made by the owner's device and never returned by any read, so knowing an ID alone can't read, overwrite
+   or impersonate an account. Accounts made before this existed have none yet and are "unprotected" until the
+   owner's next save sets one (so nobody is locked out); the Save Code carries it to a new device. */
+const SECRET_RE = /^[a-z0-9]{16,64}$/;
 const NAME_RE = /^[\p{L}\p{N} _'.-]+$/u;
 const DUAL_MSG = "You are rolling on two devices simultaneously. Only one device can roll on an account at a time.";
 const ADMIN_DEVICE = "admin"; /* recorded as the last writer of admin edits; too short to be a real device ID */
@@ -96,6 +103,18 @@ const LOCK_WORST_MS = 7 * 24 * 60 * 60 * 1000; /* slur / worst word → auras lo
 /** JSON reply that is never cached. */
 function reply(status, body) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+}
+
+/** True when `given` matches the account's secret, or the account has none yet (unprotected/legacy). */
+function secretOk(acct, given) {
+  if (!acct || !acct.secret) return true;
+  const g = typeof given === "string" ? given : "";
+  if (g.length !== acct.secret.length) return false;
+  try { return timingSafeEqual(Buffer.from(g), Buffer.from(acct.secret)); } catch (e) { return false; }
+}
+/** The reply when a protected account is reached without its secret (another device, or a stolen ID). */
+function lockedReply() {
+  return reply(403, { ok: false, code: 403, locked: true, error: "This account is protected. On a new device, log in with your Save Code (Account → Save code) instead of just the ID." });
 }
 
 /** The save object if it looks like a game save and is not too big, otherwise null. */
@@ -218,18 +237,25 @@ function hasLuck(save) {
     when another device saved since this one last synced (98, with that newer save). Returns { rev } or
     { refusal } (a reply to send back). */
 async function storeSave(store, body, save, now) {
+  /* Check the secret before anything else, so a stolen ID is always turned away cleanly (not with a lease error). */
+  const pre = await store.get(accountKey(body.id), { type: "json" });
+  if (pre && pre.secret && !secretOk(pre, body.secret)) return { refusal: lockedReply() };
   const lease = await store.get(leaseKey(body.id), { type: "json" });
   if (lease && lease.device !== body.device && lease.until > now) return { refusal: reply(409, { ok: false, code: 145, error: DUAL_MSG, waitMs: lease.until - now }) };
   for (let attempt = 0; attempt < 3; attempt++) {
     const cur = await store.getWithMetadata(accountKey(body.id), { type: "json" });
     if (!cur) return { refusal: reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." }) };
     const acct = cur.data;
+    /* A protected account only accepts a save from a device that knows its secret, so a stolen ID can't
+       overwrite it. A legacy account with no secret yet adopts the one this device sends (trust on first save). */
+    if (acct.secret && !secretOk(acct, body.secret)) return { refusal: lockedReply() };
     /* Someone else saved since this device last synced: send theirs back instead of overwriting it.
        A matching device means our own earlier save landed but its reply was lost, so it is safe. */
     if (acct.rev !== body.rev && acct.device !== body.device) {
       return { refusal: reply(409, { ok: false, code: 98, error: "This account was changed on another device.", rev: acct.rev, save: acct.save, name: acct.name, ...adminInfo(acct) }) };
     }
-    const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: body.device };
+    const secret = acct.secret || (SECRET_RE.test(String(body.secret)) ? String(body.secret) : null);
+    const next = { ...acct, save, rev: acct.rev + 1, updatedAt: now, device: body.device, secret };
     const res = await store.setJSON(accountKey(body.id), next, { onlyIfMatch: cur.etag });
     if (res.modified) return { rev: next.rev };
   }
@@ -336,9 +362,10 @@ const ACTIONS = {
     const save = body.save == null ? null : checkSave(body.save);
     if (body.save != null && !save) return reply(400, { ok: false, code: 98, error: "That save is not valid." });
     const prefer = ID_RE.test(String(body.preferId)) ? String(body.preferId) : null;
+    const secret = SECRET_RE.test(String(body.secret)) ? String(body.secret) : null;
     for (let i = 0; i < 25; i++) {
       const id = i === 0 && prefer ? prefer : String(randomInt(1000000, 10000000));
-      const record = { id, name, created: now, updatedAt: now, rev: 1, device: body.device, save };
+      const record = { id, name, created: now, updatedAt: now, rev: 1, device: body.device, save, secret };
       const res = await store.setJSON(accountKey(id), record, { onlyIfNew: true });
       if (res.modified) return reply(200, { ok: true, id, name, rev: 1 });
     }
@@ -348,6 +375,8 @@ const ACTIONS = {
   async load(body, store) {
     const acct = await store.get(accountKey(body.id), { type: "json" });
     if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
+    /* A protected account's save is only handed to a device that knows its secret, so a stolen ID can't read it. */
+    if (acct.secret && !secretOk(acct, body.secret)) return lockedReply();
     return reply(200, { ok: true, id: acct.id, name: acct.name, rev: acct.rev, save: acct.save, updatedAt: acct.updatedAt, ...adminInfo(acct) });
   },
 
@@ -360,6 +389,15 @@ const ACTIONS = {
   async claim(body, store, now) {
     const acct = await store.get(accountKey(body.id), { type: "json" });
     if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + "." });
+    if (acct.secret && !secretOk(acct, body.secret)) return lockedReply();
+    /* A legacy account with no secret yet adopts the one this device sends, so it becomes protected without
+       anyone being locked out (the owner's device is the one claiming the roll lease). Best-effort. */
+    if (!acct.secret && SECRET_RE.test(String(body.secret))) {
+      try {
+        const c = await store.getWithMetadata(accountKey(body.id), { type: "json" });
+        if (c && !c.data.secret) await store.setJSON(accountKey(body.id), { ...c.data, secret: String(body.secret) }, { onlyIfMatch: c.etag });
+      } catch (e) { /* bound on the next save instead */ }
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await store.getWithMetadata(leaseKey(body.id), { type: "json" });
       const lease = cur ? cur.data : null;
@@ -444,6 +482,8 @@ const ACTIONS = {
     if (!text) return reply(400, { ok: false, code: 98, error: "Type a message first." });
     const acct = await store.get(accountKey(body.id), { type: "json" });
     if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + body.id + ". Log in again to chat." });
+    /* Only a device that knows the account's secret can post as it, so a stolen ID can't impersonate anyone. */
+    if (acct.secret && !secretOk(acct, body.secret)) return lockedReply();
     const u = (await store.get(chatUserKey(body.id), { type: "json" })) || {};
     if (u.mutedUntil > now) return reply(403, { ok: false, code: 108, error: "An admin muted you, so you can't chat " + muteText(u.mutedUntil, now) + ".", until: u.mutedUntil >= MUTED_FOREVER ? 0 : u.mutedUntil });
     if (u.lastAt && now - u.lastAt < CHAT_GAP_MS) return reply(429, { ok: false, code: 98, slow: true, error: "Slow down! Wait a second before sending another message." });
@@ -467,6 +507,8 @@ const ACTIONS = {
   },
 
   async gifts(body, store) {
+    const acct = await store.get(accountKey(body.id), { type: "json" });
+    if (acct && acct.secret && !secretOk(acct, body.secret)) return lockedReply();
     const box = await store.get(giftKey(body.id), { type: "json" });
     return reply(200, { ok: true, gifts: box && Array.isArray(box.gifts) ? box.gifts : [] });
   },
@@ -554,6 +596,16 @@ const ACTIONS = {
       });
       return reply(200, { ok: true, accounts: done.filter(Boolean).length, op: last.op || "detonate", at: last.at || 0 });
     }
+    if (body.op === "unprotect") {
+      /* Recovery valve: clear an account's secret so its owner's device can protect it again. For when a
+         player is locked out (lost device / an attacker bound a secret before the owner's first new save). */
+      const target = String(body.id);
+      if (!ID_RE.test(target)) return reply(400, { ok: false, code: 98, error: "Enter the player's 7-digit ID." });
+      const cur = await store.getWithMetadata(accountKey(target), { type: "json" });
+      if (!cur) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      await store.setJSON(accountKey(target), { ...cur.data, secret: null }, { onlyIfMatch: cur.etag });
+      return reply(200, { ok: true, id: target, name: cur.data.name });
+    }
     if (body.op === "resetLuck") {
       const ids = await allIds(store);
       const clear = (save) => { save.luckEffects = []; save.floorEffects = []; save.shinyEffects = []; delete save.floorRolls; return 1; };
@@ -639,6 +691,8 @@ const ACTIONS = {
   },
 
   async release(body, store, now) {
+    const acct = await store.get(accountKey(body.id), { type: "json" });
+    if (acct && acct.secret && !secretOk(acct, body.secret)) return lockedReply();
     const cur = await store.getWithMetadata(leaseKey(body.id), { type: "json" });
     if (cur && cur.data.device === body.device && cur.data.until > now) {
       await store.setJSON(leaseKey(body.id), { ...cur.data, until: 0 }, { onlyIfMatch: cur.etag });

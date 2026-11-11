@@ -5583,13 +5583,14 @@
       start.playerName = name.slice(0, 16);
       if (Cloud.state === "missing") { finishNewAccount(newAccountId(acc), name, start, 0); return; }
       setLoginBusy(true);
-      cloudCall("create", { name: name, device: deviceId, save: start }).then(function (r) {
-        if (r.status === 200) finishNewAccount(r.data.id, r.data.name, start, r.data.rev);
+      var newSecret = genSecret();
+      cloudCall("create", { name: name, device: deviceId, save: start, secret: newSecret }).then(function (r) {
+        if (r.status === 200) finishNewAccount(r.data.id, r.data.name, start, r.data.rev, newSecret);
         else loginError(r.data.code || ERR.ACCOUNT, r.data.error || "Could not create your account.");
       }, function (err) {
         /* Offline: make the account on this device now; it goes online the next time the server answers. */
         noteNetwork(err);
-        finishNewAccount(newAccountId(readAccounts()), name, start, 0);
+        finishNewAccount(newAccountId(readAccounts()), name, start, 0, newSecret);
       }).then(function () { setLoginBusy(false); });
     } else {
       var typed = $("#login-id").value.trim();
@@ -5603,7 +5604,10 @@
       if (Cloud.state === "missing") { loginError(ERR.ACCOUNT, "No player with ID " + typed + " on this device. Online accounts aren't set up on this site, so import your save code below."); return; }
       setLoginBusy(true);
       cloudCall("load", { id: typed }).then(function (r) {
-        if (r.status !== 200) { loginError(r.data.code || ERR.ACCOUNT, r.data.error || "Could not load that account."); return; }
+        if (r.status !== 200) {
+          if (r.data && r.data.locked) { loginError(403, "That account is protected and lives on another device. To play it here, paste your Save Code in the box below (make one from the Account menu on your other device)."); return; }
+          loginError(r.data.code || ERR.ACCOUNT, r.data.error || "Could not load that account."); return;
+        }
         var list = readAccounts();
         list[typed] = { id: typed, name: r.data.name, created: Date.now(), cloud: true, rev: r.data.rev, dirty: false };
         writeAccounts(list);
@@ -5618,9 +5622,9 @@
   }
 
   /* Store a newly made account on this device and switch to it. rev 0 means it is not online yet. */
-  function finishNewAccount(id, name, start, rev) {
+  function finishNewAccount(id, name, start, rev, secret) {
     var acc = readAccounts();
-    acc[id] = { id: id, name: name, created: Date.now(), cloud: rev > 0, rev: rev, dirty: false };
+    acc[id] = { id: id, name: name, created: Date.now(), cloud: rev > 0, rev: rev, dirty: false, secret: secret || genSecret() };
     writeAccounts(acc);
     try { localStorage.setItem(SAVE_BASE + ":" + id, JSON.stringify(start)); } catch (e) { /* ignore */ }
     switchUser(id);
@@ -5673,7 +5677,8 @@
     pushing: false,
     changes: 0,       /* bumps on every save, so a finished upload knows whether newer changes are waiting */
     contestSeen: 0,
-    netWarned: false
+    netWarned: false,
+    lockWarned: false
   };
   var CONFLICT_MSG = "This account was played on another device at the same time, so its newest save was loaded here.";
 
@@ -5686,6 +5691,23 @@
     if (!acc[id]) return;
     Object.assign(acc[id], fields);
     writeAccounts(acc);
+  }
+  /* A random 32-hex-character account secret: the key that protects an account beyond its public, shareable ID. */
+  function genSecret() {
+    var buf = new Uint8Array(16), i, s = "";
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(buf);
+    else for (i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+    for (i = 0; i < buf.length; i++) s += ("0" + buf[i].toString(16)).slice(-2);
+    return s;
+  }
+  /* This account's secret, made and saved on first need. Sent with every write so a stolen ID can't read,
+     overwrite or impersonate it; an account made before secrets existed gets one the next time it syncs. */
+  function accountSecret(id) {
+    if (!id) return null;
+    var acc = readAccounts();
+    if (!acc[id]) return null;
+    if (!acc[id].secret || !/^[a-z0-9]{16,64}$/.test(acc[id].secret)) { acc[id].secret = genSecret(); writeAccounts(acc); }
+    return acc[id].secret;
   }
   function cloudOn() {
     var m = accountMeta(currentUser);
@@ -5751,7 +5773,7 @@
     Cloud.pushing = true;
     var stamp = Cloud.changes;
     setCloudState("saving");
-    cloudCall("save", { id: id, device: deviceId, rev: m.rev || 0, save: S }, keepalive).then(function (r) {
+    cloudCall("save", { id: id, device: deviceId, rev: m.rev || 0, save: S, secret: accountSecret(id) }, keepalive).then(function (r) {
       var still = id === currentUser && stamp !== Cloud.changes;
       if (r.status === 200) {
         updateMeta(id, { rev: r.data.rev, dirty: still });
@@ -5766,6 +5788,13 @@
         /* The account is gone from the server (for example a fresh site): upload it again. */
         updateMeta(id, { cloud: false });
         if (id === currentUser) goOnline();
+      } else if (r.status === 403 || (r.data && r.data.locked)) {
+        /* This device's secret doesn't match the account's: it's locked to another device. Keep playing
+           locally, but stop trying to sync and explain how to take it over (import a Save Code here). */
+        if (id === currentUser) {
+          setCloudState("offline");
+          if (!Cloud.lockWarned) { Cloud.lockWarned = true; errorToast(ERR.ACCOUNT, "This account is protected and is attached to another device. Your progress is safe here but won't sync online. To play it here, import its Save Code (Account → paste Save code)."); }
+        }
       } else {
         errorToast(ERR.ACCOUNT, r.data.error || "Your save could not be stored online.");
       }
@@ -5820,7 +5849,7 @@
   function claimLease() {
     if (Cloud.claiming) return Cloud.claiming;
     var id = currentUser, m = accountMeta(id);
-    Cloud.claiming = cloudCall("claim", { id: id, device: deviceId, rev: m.rev || 0 }).then(function (r) {
+    Cloud.claiming = cloudCall("claim", { id: id, device: deviceId, rev: m.rev || 0, secret: accountSecret(id) }).then(function (r) {
       if (id !== currentUser) return false;
       if (r.status === 200) {
         Cloud.leaseUntil = Date.now() + r.data.leaseMs;
@@ -5853,7 +5882,7 @@
   function releaseLease() {
     if (!currentUser || Cloud.leaseUntil <= Date.now()) return;
     Cloud.leaseUntil = 0;
-    cloudCall("release", { id: currentUser, device: deviceId }, true).catch(function () { /* the lease runs out by itself */ });
+    cloudCall("release", { id: currentUser, device: deviceId, secret: accountSecret(currentUser) }, true).catch(function () { /* the lease runs out by itself */ });
   }
 
   /* Roll, but on an online account first make sure no other device is rolling on it. */
@@ -5877,7 +5906,7 @@
     renderCloudStatus();
     if (!m || Cloud.state === "missing") return;
     if (!m.cloud) { goOnline(); return; }
-    cloudCall("load", { id: id }).then(function (r) {
+    cloudCall("load", { id: id, secret: accountSecret(id) }).then(function (r) {
       if (id !== currentUser) return;
       if (r.status === 404) { updateMeta(id, { cloud: false }); goOnline(); return; }
       if (r.status !== 200) return;
@@ -5897,7 +5926,7 @@
     var name = String(m.name || "").replace(/[^\p{L}\p{N} _'.-]/gu, "").trim().slice(0, 50);
     if (name.length < 2) name = "Player " + id;
     var stamp = Cloud.changes;
-    cloudCall("create", { name: name, device: deviceId, save: S, preferId: id }).then(function (r) {
+    cloudCall("create", { name: name, device: deviceId, save: S, preferId: id, secret: accountSecret(id) }).then(function (r) {
       if (id !== currentUser) return;
       if (r.status !== 200) { errorToast(r.data.code || ERR.ACCOUNT, r.data.error || "Your account could not be put online."); return; }
       if (r.data.id !== id) moveAccount(id, r.data.id);
@@ -5935,7 +5964,7 @@
       if (Cloud.state === "offline") setCloudState("synced");
       var meta = accountMeta(id);
       if (r.data.rev === meta.rev) { if (meta.dirty) pushSave(); return; }
-      return cloudCall("load", { id: id }).then(function (l) {
+      return cloudCall("load", { id: id, secret: accountSecret(id) }).then(function (l) {
         if (id !== currentUser || l.status !== 200 || busy || CS.running || (battle && !battle.over)) return;
         adoptCloudSave(l.data, CONFLICT_MSG, true);
       });
@@ -6092,8 +6121,8 @@
     setCloudState("saving");
     $("#gift-submit").disabled = true;
     $("#gift-submit").textContent = "Sending…";
-    var payload = coins ? { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, coins: g.coins }
-                        : { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, aura: g.id, shiny: g.shiny, count: g.count };
+    var payload = coins ? { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, coins: g.coins, secret: accountSecret(id) }
+                        : { id: id, device: deviceId, rev: m.rev || 0, save: S, to: g.to, aura: g.id, shiny: g.shiny, count: g.count, secret: accountSecret(id) };
     cloudCall("gift", payload).then(function (r) {
       if (id !== currentUser) return;
       var label = coins ? fmt(g.coins) + " coins" : (g.count > 1 ? fmt(g.count) + " x " : "") + auraLabel(A.byId(g.id), g.shiny);
@@ -6141,7 +6170,7 @@
     if (!cloudOn() || Cloud.pushing || Cloud.claiming || Cloud.openingGifts) return;
     var id = currentUser;
     Cloud.openingGifts = true;
-    cloudCall("gifts", { id: id }).then(function (r) {
+    cloudCall("gifts", { id: id, secret: accountSecret(id) }).then(function (r) {
       if (id !== currentUser || r.status !== 200 || !Array.isArray(r.data.gifts) || !r.data.gifts.length) return;
       if (Cloud.pushing || Cloud.claiming) return; /* busy saving: the next check picks them up */
       var all = r.data.gifts, fresh = [];
@@ -6180,7 +6209,7 @@
       var m = accountMeta(id), stamp = Cloud.changes;
       Cloud.pushing = true;
       setCloudState("saving");
-      return cloudCall("openGifts", { id: id, device: deviceId, rev: m.rev || 0, save: S, ids: all.map(function (g) { return g && g.id; }) }).then(function (o) {
+      return cloudCall("openGifts", { id: id, device: deviceId, rev: m.rev || 0, save: S, ids: all.map(function (g) { return g && g.id; }), secret: accountSecret(id) }).then(function (o) {
         if (id !== currentUser) return;
         setCloudState("synced");
         if (o.status === 200) {
@@ -6684,8 +6713,16 @@
 
   function exportSave() {
     save();
-    var body = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
-    var code = "AR2." + body + "." + codeSum(body);
+    var code, body;
+    /* When logged into an online account, the Save Code carries the account's ID and secret key too, so pasting
+       it on another device logs you into the SAME protected account there (an ID alone no longer can). */
+    if (currentUser && cloudOn()) {
+      body = btoa(unescape(encodeURIComponent(JSON.stringify({ v: 3, id: currentUser, k: accountSecret(currentUser), s: S }))));
+      code = "AR3." + body + "." + codeSum(body);
+    } else {
+      body = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+      code = "AR2." + body + "." + codeSum(body);
+    }
     var ta = $("#save-code");
     ta.value = code;
     ta.select();
@@ -6694,8 +6731,8 @@
   }
 
   function importSave() {
-    var code = $("#save-code").value.replace(/\s+/g, ""), body;
-    if (code.indexOf("AR2.") === 0) {
+    var code = $("#save-code").value.replace(/\s+/g, ""), body, acctInfo = null;
+    if (code.indexOf("AR3.") === 0 || code.indexOf("AR2.") === 0) {
       var dot = code.lastIndexOf(".");
       body = code.slice(4, dot);
       if (dot <= 4 || codeSum(body) !== code.slice(dot + 1)) { loginError(ERR.ACCOUNT, "That save code was changed or is broken, so it can't be imported."); return; }
@@ -6710,7 +6747,25 @@
     try {
       var json = decodeURIComponent(escape(atob(body)));
       var data = JSON.parse(json);
+      /* An AR3 code wraps the save with the account's ID and secret so it logs you in (and unlocks saving) here. */
+      if (data && data.v === 3 && data.s && typeof data.s.rolls === "number") {
+        if (/^\d{7}$/.test(String(data.id)) && /^[a-z0-9]{16,64}$/.test(String(data.k || ""))) acctInfo = { id: String(data.id), secret: String(data.k) };
+        data = data.s;
+      }
       if (!data || typeof data !== "object" || typeof data.rolls !== "number") throw new Error("bad");
+      if (acctInfo) {
+        if (!confirm("Log in here as " + (data.playerName || "player") + " (ID " + acctInfo.id + ")? This unlocks the account on this device.")) return;
+        if (battle && !battle.over) forfeit();
+        var acc = readAccounts();
+        acc[acctInfo.id] = Object.assign(acc[acctInfo.id] || {}, { id: acctInfo.id, name: data.playerName || (acc[acctInfo.id] && acc[acctInfo.id].name) || ("Player " + acctInfo.id), created: (acc[acctInfo.id] && acc[acctInfo.id].created) || Date.now(), cloud: true, rev: (acc[acctInfo.id] && acc[acctInfo.id].rev) || 0, dirty: true, secret: acctInfo.secret });
+        writeAccounts(acc);
+        try { localStorage.setItem(SAVE_BASE + ":" + acctInfo.id, JSON.stringify(hydrate(data))); } catch (e) { /* ignore */ }
+        Cloud.lockWarned = false;
+        switchUser(acctInfo.id);
+        closeLogin();
+        toast("Logged in as " + (data.playerName || acctInfo.id) + " — synced and unlocked on this device.", "gold");
+        return;
+      }
       if (!confirm("Import this save? It will replace the current progress for " + (currentUser ? accountName(currentUser) || currentUser : "guest") + ".")) return;
       if (battle && !battle.over) forfeit();
       S = hydrate(data);
@@ -7031,6 +7086,16 @@
     });
   }
 
+  /* Clear one account's secret so its owner can protect it fresh from their device — unlocks a locked-out player. */
+  function aaUnprotect() {
+    var id = aaTargetId();
+    if (!id) return;
+    accountAdmin("unprotect", { id: id }).then(function (d) {
+      if (!d) return;
+      aaPrint("🔓 Cleared the protection on " + (d.name ? d.name + " (" + id + ")" : "ID " + id) + ". Their own device will protect it again next time they play.");
+    });
+  }
+
   /* Aura names for the erase box's suggestions, filled the first time it's used. */
   function fillAuraList() {
     var list = $("#aa-aura-list"), frag = document.createDocumentFragment();
@@ -7238,6 +7303,7 @@
   $("#aa-detonate").addEventListener("click", aaDetonate);
   $("#aa-ban").addEventListener("click", aaBan);
   $("#aa-restore").addEventListener("click", aaRestore);
+  $("#aa-unprotect").addEventListener("click", aaUnprotect);
   $("#aa-reset-luck").addEventListener("click", aaResetLuck);
   $("#aa-id").addEventListener("input", aaShowWho);
   $("#aa-aura").addEventListener("focus", fillAuraList, { once: true });
