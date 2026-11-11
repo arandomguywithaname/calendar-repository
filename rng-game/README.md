@@ -331,7 +331,10 @@ loadout, and fight bots or a friend.
     made on your device and sent (never shown) with every save, so knowing someone's ID
     is **not** enough to read, overwrite or impersonate their account. The server turns
     away any `load`, `save`, `claim`, `chatSend` or gift-box read that doesn't carry the
-    right secret (Error 403). So you can safely share your ID for gifts.
+    right secret (Error 403). So you can safely share your ID for gifts. **Protection never
+    blocks play:** if a device's secret doesn't match (e.g. a second device), it just
+    plays on locally — rolling still works — and only online syncing waits until that
+    device imports the account's Save Code.
   - **Moving to a new device uses your Save Code.** Because the ID alone no longer logs
     you in on a brand-new device, export a **Save Code** (Account → Export save code) on
     your current device and import it on the new one — the code carries your ID *and*

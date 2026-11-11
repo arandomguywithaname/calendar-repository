@@ -6073,6 +6073,14 @@
         return false;
       }
       if (r.status === 404) { updateMeta(id, { cloud: false }); goOnline(); return true; }
+      if (r.status === 403 || (r.data && r.data.locked)) {
+        /* This device's secret doesn't match the protected account (e.g. a second device). Never block rolling:
+           play on locally, like offline — progress just won't sync until its Save Code is imported here. */
+        Cloud.leaseUntil = 0;
+        setCloudState("offline");
+        if (!Cloud.lockWarned) { Cloud.lockWarned = true; errorToast(ERR.ACCOUNT, "This account is protected and attached to another device, so progress won't sync here — but you can keep playing. To sync, import its Save Code (Account → paste Save code)."); }
+        return true;
+      }
       errorToast(ERR.ACCOUNT, r.data.error || "Your account could not be checked.");
       return false;
     }, function (e) {
