@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=76">
+  <link rel="stylesheet" href="style.css?v=77">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -374,6 +374,15 @@
                 <button type="button" class="btn small danger" id="aa-chat-clear">Clear the whole chat</button>
               </div>
             </div>
+            <div class="aa-group">
+              <div class="aa-label">🎯 Force a player's next roll</div>
+              <div class="muted small-text">Make the next roll on the player in the ID box above land on a chosen aura. It happens the next time they roll (after their game syncs).</div>
+              <div class="aa-row">
+                <input id="aa-force-aura" type="text" list="aa-aura-list" placeholder="Aura name or id" autocomplete="off">
+                <label class="aa-check"><input type="checkbox" id="aa-force-shiny"> shiny</label>
+                <button type="button" class="btn small" id="aa-force">🎯 Force next roll</button>
+              </div>
+            </div>
             <div class="aa-group aa-danger">
               <div class="aa-label">⛔ Ban a player</div>
               <div class="muted small-text">Deletes every aura the player in the ID box above owns. Asks for the admin password and the DETONATE code first. Can be undone with Restore.</div>
@@ -409,7 +418,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 76</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 77</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -531,9 +540,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=76"></script>
-  <script src="abilities.js?v=76"></script>
-  <script src="reveals.js?v=76"></script>
-  <script src="game.js?v=76"></script>
+  <script src="auras.js?v=77"></script>
+  <script src="abilities.js?v=77"></script>
+  <script src="reveals.js?v=77"></script>
+  <script src="game.js?v=77"></script>
 </body>
 </html>

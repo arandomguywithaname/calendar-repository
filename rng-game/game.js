@@ -335,6 +335,8 @@
       merged.shards = Math.max(0, Math.floor(Number(merged.shards) || 0));
       merged.gems = Math.max(0, Math.floor(Number(merged.gems) || 0));
       merged.vipDaily = Math.max(0, Math.floor(Number(merged.vipDaily) || 0));
+      /* A forced roll (set by an admin) survives in the save until it's used; drop it if the aura is unknown. */
+      if (merged.forceRoll == null || !A.byId(merged.forceRoll)) { delete merged.forceRoll; merged.forceShiny = false; }
       if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
       if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
@@ -1192,6 +1194,12 @@
 
   function doRoll(forced, forcedShiny) {
     if (!canRoll()) return;
+    /* An admin forced this account's next roll (stored in the save): use that aura once, then clear the flag. */
+    if (!forced && S.forceRoll != null && A.byId(S.forceRoll)) {
+      forced = A.byId(S.forceRoll);
+      if (forcedShiny === undefined && S.forceShiny) forcedShiny = true;
+      S.forceRoll = null; S.forceShiny = false;
+    }
     busy = true;
     $("#btn-roll").disabled = true;
     Sound.roll();
@@ -3657,6 +3665,7 @@
   var VIP_BOSS_GEMS = 3;                    /* gems for beating a boss bot in the Arena */
   /* Each offer gives in-game rewards for Gems. give() applies the reward when bought. */
   var VIP_OFFERS = [
+    { key: "superroll", icon: "🚀", name: "Super Roll",        gems: 10,  desc: "Roll 100x faster for 50 seconds", give: function () { S.hasteUntil = (hasteActive() && (S.hasteDiv || 2) >= 100 ? S.hasteUntil : Date.now()) + 50000; S.hasteDiv = Math.max(S.hasteDiv || 2, 100); } },
     { key: "coins1",    icon: "🪙", name: "Coin Chest",        gems: 10,  desc: "+250,000 coins",              give: function () { addCoins(250000); } },
     { key: "coins2",    icon: "💰", name: "Coin Vault",        gems: 40,  desc: "+5,000,000 coins",            give: function () { addCoins(5000000); } },
     { key: "coins3",    icon: "🐉", name: "Dragon's Hoard",    gems: 150, desc: "+200,000,000 coins",          give: function () { addCoins(200000000); } },
@@ -5074,6 +5083,7 @@
     "doubloons <amount>        add tower doubloons (negative to remove)",
     "makeshiny <aura name|id>  make an owned aura shiny with shards (free for admins)",
     "give <aura name|id> [shiny]  add an aura (or its shiny form) to your inventory",
+    "giveall [shiny]           give yourself one of every aura (the whole collection)",
     "roll <aura name|id> [shiny]  force your next roll to be that aura (plays its reveal)",
     "potion <key> [count]      add potions: " + POTION_ORDER.join(", "),
     "training <level>          set training level",
@@ -5119,6 +5129,17 @@
         recordBest(a, wantShiny);
         if (!equippedAura()) { S.equipped = a.id; S.equippedShiny = wantShiny; }
         adminPrint("Added " + auraLabel(a, wantShiny) + " (" + oddsText(a, wantShiny) + ").");
+        break;
+      }
+      case "giveall": {
+        var wantShinyAll = /\bshiny\b/i.test(rest), addedAll = 0, bestA = null;
+        A.list.forEach(function (au) {
+          var bagA = wantShinyAll && au.shiny ? S.shinyInventory : S.inventory;
+          var sh = wantShinyAll && !!au.shiny;
+          if (!(bagA[au.id] > 0)) { bagA[au.id] = (bagA[au.id] || 0) + 1; addedAll++; recordBest(au, sh); if (!bestA || au.rarity > bestA.rarity) bestA = au; }
+        });
+        if (!equippedAura() && bestA) { S.equipped = bestA.id; S.equippedShiny = false; }
+        adminPrint("Gave one of every aura you were missing (" + fmt(addedAll) + " new). You now own all " + fmt(A.TOTAL) + "." + (wantShinyAll ? " (shiny where available)" : ""));
         break;
       }
       case "roll": {
@@ -7270,6 +7291,21 @@
     });
   }
 
+  /* Force a player's next roll to be a chosen aura (honored by their client the next time they roll). */
+  function aaForceRoll() {
+    var id = aaTargetId();
+    if (!id) return;
+    var name = $("#aa-force-aura").value.trim();
+    var a = findAura(name);
+    if (!a) { aaPrint("⚠️ Error 98: No aura matches \"" + name + "\"."); return; }
+    var shiny = !!$("#aa-force-shiny").checked;
+    if (shiny && !a.shiny) { aaPrint(a.name + " has no shiny form — forcing it as normal."); shiny = false; }
+    accountAdmin("forceRoll", { id: id, aura: a.id, shiny: shiny }).then(function (d) {
+      if (!d) return;
+      aaPrint("🎯 " + (d.name ? d.name + " (" + id + ")" : "ID " + id) + "'s next roll is forced to " + (shiny ? "✨ Shiny " : "") + a.name + ". It lands the next time they roll (after their game syncs).");
+    });
+  }
+
   /* Clear one account's secret so its owner can protect it fresh from their device — unlocks a locked-out player. */
   function aaUnprotect() {
     var id = aaTargetId();
@@ -7489,6 +7525,7 @@
   $("#aa-ban").addEventListener("click", aaBan);
   $("#aa-restore").addEventListener("click", aaRestore);
   $("#aa-unprotect").addEventListener("click", aaUnprotect);
+  $("#aa-force").addEventListener("click", aaForceRoll);
   $("#aa-reset-luck").addEventListener("click", aaResetLuck);
   $("#aa-id").addEventListener("input", aaShowWho);
   $("#aa-aura").addEventListener("focus", fillAuraList, { once: true });

@@ -34,6 +34,7 @@
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
                                                 with an empty gift box (backs each up first)
                banAuras { id }                  delete every aura the one account `id` owns (backs it up first)
+               forceRoll { id, aura, shiny }    force that account's NEXT roll to be a chosen aura (its client honors it once)
                unprotect { id }                 clear one account's secret so its owner can protect it again (lockout recovery)
                restore                          put back the saves from just before the last Detonate or ban
                resetLuck                        clear every account's active luck boosts
@@ -595,6 +596,18 @@ const ACTIONS = {
         return adminEdit(store, id, now, (save) => { for (const k of Object.keys(save)) delete save[k]; Object.assign(save, bk.save); return 1; }, "restore");
       });
       return reply(200, { ok: true, accounts: done.filter(Boolean).length, op: last.op || "detonate", at: last.at || 0 });
+    }
+    if (body.op === "forceRoll") {
+      /* Force one account's NEXT roll to be a chosen aura: stored in their save, honored and cleared by their
+         client the next time they roll (once they sync). */
+      const target = String(body.id);
+      if (!ID_RE.test(target)) return reply(400, { ok: false, code: 98, error: "Enter the player's 7-digit ID." });
+      const aura = Number(body.aura);
+      if (!Number.isInteger(aura) || aura < 0 || aura > 1e6) return reply(400, { ok: false, code: 98, error: "That aura doesn't exist." });
+      const shiny = !!body.shiny;
+      const done = await adminEdit(store, target, now, (save) => { save.forceRoll = aura; save.forceShiny = shiny; return 1; }, "force");
+      if (!done) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      return reply(200, { ok: true, id: target, aura, name: (await store.get(accountKey(target), { type: "json" }) || {}).name });
     }
     if (body.op === "unprotect") {
       /* Recovery valve: clear an account's secret so its owner's device can protect it again. For when a

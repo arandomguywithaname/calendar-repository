@@ -257,6 +257,7 @@ loadout, and fight bots or a friend.
   is Forbidden or better). Like the Monstrous Potion they never appear in the regular
   shop, the Mystery pool or the collection.
 - **👑 VIP Shop.** The **VIP** tab is a premium shop stocked with exclusive **offers** —
+  a **🚀 Super Roll** (roll 100x faster for 50 seconds, 10 Gems),
   Coin Chest (+250,000), Coin Vault (+5,000,000), Dragon's Hoard (+200,000,000), a Potion
   Pack (3 Mega Mystery Potions), a VIP Luck Vial (×1,000,000 luck for 2 rolls), the
   **🌌 Trillion Luck Potion** (×1,000,000,000,000 luck for one roll, 100 Gems), a **VIP
@@ -365,8 +366,9 @@ loadout, and fight bots or a friend.
   admin is locked, the browser console can't change the game either: the debug hooks
   hand out copies, and aura and ability data is frozen.
 - **Admin console** (your own account, after unlocking). Commands: `luck 1000 10`, `coins 5000`,
-  `give Cosmic Veil`, `roll Fury of Darkness`, `give Cosmic Veil shiny`,
-  `roll Beyond Axiom shiny`, `potion zenith 3`, `ability all`,
+  `give Cosmic Veil`, `giveall` (one of every aura at once), `roll Fury of Darkness`,
+  `give Cosmic Veil shiny`, `roll Beyond Axiom shiny`, `potion zenith 3`,
+  `shards 500`, `doubloons 20000`, `makeshiny The Unknown`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
   It only changes the account on the device you're using.
 - **Player panel** (Stats tab, under the console, after unlocking): lists every online
@@ -382,7 +384,10 @@ loadout, and fight bots or a friend.
   you're logged into; you have to type DETONATE to confirm. Reset players see "An admin
   reset this account" the next time their game syncs. **⛔ Ban a player** deletes every
   aura the player in the ID box owns; it asks you to re-enter the admin password and then
-  type DETONATE before it does anything. **↩️ Restore last save** puts everyone's saves
+  type DETONATE before it does anything. **🎯 Force a player's next roll** makes the next
+  roll on the player in the ID box land on an aura you pick (type its name, tick *shiny*
+  for the shiny form); it's stored in their save and happens the next time they roll, once
+  their game syncs. **↩️ Restore last save** puts everyone's saves
   back to exactly how they were just before the last Detonate or ban — so an accidental
   Detonate (or a ban you change your mind about) can be undone. The server snapshots each
   account before a Detonate or ban and remembers which accounts the last one touched, so
