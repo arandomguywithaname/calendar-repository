@@ -281,6 +281,8 @@
       botWins: {},
       doubloons: 0,
       shards: 0,
+      gems: 0,
+      vipDaily: 0,
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       aurasLockedUntil: 0,
       breakSkips: 0,
@@ -331,6 +333,8 @@
       if (!Array.isArray(merged.giftsOpened)) merged.giftsOpened = [];
       if (typeof merged.doubloons !== "number" || !(merged.doubloons >= 0)) merged.doubloons = Math.max(0, Math.floor(Number(merged.doubloons) || 0));
       merged.shards = Math.max(0, Math.floor(Number(merged.shards) || 0));
+      merged.gems = Math.max(0, Math.floor(Number(merged.gems) || 0));
+      merged.vipDaily = Math.max(0, Math.floor(Number(merged.vipDaily) || 0));
       if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
       if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
@@ -844,6 +848,7 @@
     renderAbilities();
     renderShop();
     renderBots();
+    renderVip();
     renderPvpPanel();
     updateIndex();
     renderStats();
@@ -3646,6 +3651,117 @@
     return Math.max(1, s) + "s";
   }
 
+  /* ---------- VIP shop: offers bought with 💎 Gems, a premium currency EARNED by playing (never real money) ---------- */
+  var VIP_DAILY_MS = 20 * 60 * 60 * 1000;  /* free gems claimable once every 20 hours */
+  var VIP_DAILY_GEMS = 10;
+  var VIP_BOSS_GEMS = 3;                    /* gems for beating a boss bot in the Arena */
+  /* Each offer gives in-game rewards for Gems. give() applies the reward when bought. */
+  var VIP_OFFERS = [
+    { key: "coins1",    icon: "🪙", name: "Coin Chest",        gems: 10,  desc: "+250,000 coins",              give: function () { addCoins(250000); } },
+    { key: "coins2",    icon: "💰", name: "Coin Vault",        gems: 40,  desc: "+5,000,000 coins",            give: function () { addCoins(5000000); } },
+    { key: "coins3",    icon: "🐉", name: "Dragon's Hoard",    gems: 150, desc: "+200,000,000 coins",          give: function () { addCoins(200000000); } },
+    { key: "potions",   icon: "🧪", name: "Potion Pack",       gems: 25,  desc: "3 Mega Mystery Potions",      give: function () { addPotion("megamystery", 3); } },
+    { key: "luck",      icon: "🌠", name: "VIP Luck Vial",     gems: 60,  desc: "x1,000,000 luck for 2 rolls", give: function () { S.luckEffects.push({ mult: 1000000, rolls: 2 }); } },
+    { key: "shards",    icon: "✨", name: "Shiny Shard Pack",   gems: 50,  desc: "+500 shiny shards",           give: function () { S.shards = (S.shards || 0) + 500; } },
+    { key: "doubloons", icon: "🪙", name: "Doubloon Pack",     gems: 30,  desc: "+20,000 doubloons",           give: function () { S.doubloons = (S.doubloons || 0) + 20000; } }
+  ];
+  function vipDailyReady() { return Date.now() - (S.vipDaily || 0) >= VIP_DAILY_MS; }
+  function vipDailyIn() { return Math.max(0, VIP_DAILY_MS - (Date.now() - (S.vipDaily || 0))); }
+
+  /* Claim the free daily gems. */
+  function claimVipDaily() {
+    if (!vipDailyReady()) { toast("Your next free gems are in " + fmtDuration(vipDailyIn()), "bad"); return; }
+    S.gems = (S.gems || 0) + VIP_DAILY_GEMS;
+    S.vipDaily = Date.now();
+    Sound.buy();
+    toast("👑 +" + VIP_DAILY_GEMS + " 💎 Gems claimed! Come back in a day for more.", "gold");
+    save();
+    renderAll();
+  }
+
+  /* Buy a VIP offer with gems. */
+  function buyVipOffer(key) {
+    var o = null, i;
+    for (i = 0; i < VIP_OFFERS.length; i++) if (VIP_OFFERS[i].key === key) o = VIP_OFFERS[i];
+    if (!o) return;
+    if ((S.gems || 0) < o.gems) { toast("Not enough gems — " + o.name + " costs " + o.gems + " 💎 (you have " + fmt(S.gems || 0) + "). Claim daily gems and beat bosses for more.", "bad"); return; }
+    S.gems -= o.gems;
+    o.give();
+    Sound.buy();
+    toast("👑 Bought " + o.name + " — " + o.desc + " for " + o.gems + " 💎", "gold");
+    save();
+    renderAll();
+  }
+
+  /* The real-money button: real-money buying is turned off on purpose (this is a free game for kids), so it shows
+     an honest Error 747 instead of taking any money or card details. It points players back to earning Gems. */
+  function vipRealMoney() {
+    var el = $("#vip-rm-error");
+    if (el) el.textContent = "⚠️ Error 747: Real-money payments are turned off. Aura Realms is a free game for everyone, so there's nothing to buy with real cash — earn 💎 Gems by playing (claim your daily gems and beat bosses) and spend them on the offers above!";
+    Sound.lose();
+    errorToast(747, "Real-money payments are off — earn 💎 Gems by playing instead.");
+  }
+
+  function renderVip() {
+    if (!$("#tab-vip").classList.contains("active")) return;
+    var body = $("#vip-body");
+    body.innerHTML = "";
+
+    var top = document.createElement("div");
+    top.className = "vip-top";
+    var bal = document.createElement("div");
+    bal.className = "vip-gems";
+    bal.innerHTML = "💎 <b>" + fmt(S.gems || 0) + "</b> Gems";
+    top.appendChild(bal);
+    var ready = vipDailyReady();
+    var claim = document.createElement("button");
+    claim.className = "btn small primary" + (ready ? "" : " cant-afford");
+    claim.textContent = ready ? "🎁 Claim " + VIP_DAILY_GEMS + " free 💎" : "Next free 💎 in " + fmtDuration(vipDailyIn());
+    claim.disabled = !ready;
+    claim.addEventListener("click", claimVipDaily);
+    top.appendChild(claim);
+    body.appendChild(top);
+
+    var note = document.createElement("p");
+    note.className = "muted small-text";
+    note.textContent = "Earn 💎 Gems for free: claim your daily gems above, and win " + VIP_BOSS_GEMS + " 💎 every time you beat a boss bot in the Arena.";
+    body.appendChild(note);
+
+    var grid = document.createElement("div");
+    grid.className = "card-grid vip-offers";
+    VIP_OFFERS.forEach(function (o) {
+      var card = document.createElement("div");
+      card.className = "card vip-card";
+      card.innerHTML =
+        "<div class=\"row\"><div class=\"big-icon\">" + o.icon + "</div><div><div class=\"card-title\">" + o.name + "</div><div class=\"card-sub\">" + o.desc + "</div></div></div>" +
+        "<div class=\"row\"><span class=\"price\">💎 " + o.gems + " Gems</span></div>";
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      var buy = document.createElement("button");
+      buy.className = "btn small primary" + ((S.gems || 0) >= o.gems ? "" : " cant-afford");
+      buy.textContent = "Buy";
+      buy.addEventListener("click", function () { buyVipOffer(o.key); });
+      actions.appendChild(buy);
+      card.appendChild(actions);
+      grid.appendChild(card);
+    });
+    body.appendChild(grid);
+
+    var rm = document.createElement("div");
+    rm.className = "vip-realmoney";
+    rm.innerHTML = "<h3 class=\"section-title\">💳 Real money</h3><p class=\"muted small-text\">Trying to buy Gems with real money?</p>";
+    var rmBtn = document.createElement("button");
+    rmBtn.className = "btn small vip-rm-btn";
+    rmBtn.textContent = "💳 Buy Gems with real money";
+    rmBtn.addEventListener("click", vipRealMoney);
+    rm.appendChild(rmBtn);
+    var rmErr = document.createElement("div");
+    rmErr.id = "vip-rm-error";
+    rmErr.className = "vip-rm-error";
+    rm.appendChild(rmErr);
+    body.appendChild(rm);
+  }
+
   /* Auras are locked (a swearing punishment from chat) until S.aurasLockedUntil. While locked your auras are
      "gone": you can't roll, equip, battle, climb the Tower, sell or gift until the timer runs out. */
   function aurasLocked() { return (S.aurasLockedUntil || 0) > Date.now(); }
@@ -4456,14 +4572,16 @@
       addCoins(reward);
       var bshards = shardsFromBot(view.bot.power);
       S.shards = (S.shards || 0) + bshards;
+      var bgems = view.bot.boss ? VIP_BOSS_GEMS : 0;
+      if (bgems) S.gems = (S.gems || 0) + bgems;
       S.botWins[view.bot.id] = (S.botWins[view.bot.id] || 0) + 1;
       S.stats.won++;
       S.stats.streak++;
       if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
       res.classList.add("win");
-      res.textContent = "Victory! +" + fmt(reward) + " coins · +" + fmt(bshards) + " ✨ shards";
+      res.textContent = "Victory! +" + fmt(reward) + " coins · +" + fmt(bshards) + " ✨ shards" + (bgems ? " · +" + bgems + " 💎 gems" : "");
       Sound.win();
-      logLine("🏆 " + oppName + " defeated! +" + fmt(reward) + " coins, +" + fmt(bshards) + " ✨ shiny shards", "crit");
+      logLine("🏆 " + oppName + " defeated! +" + fmt(reward) + " coins, +" + fmt(bshards) + " ✨ shiny shards" + (bgems ? ", +" + bgems + " 💎 gems" : ""), "crit");
     } else {
       S.stats.lost++;
       S.stats.streak = 0;
@@ -7111,6 +7229,7 @@
     if (name === "roll") FX.resize();
     if (name === "inventory") renderInventory();
     if (name === "battle") renderArenaSupplies();
+    if (name === "vip") renderVip();
     if (name === "tower") renderTower();
     if (name === "leaderboard") loadLeaderboard();
     if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }

@@ -256,6 +256,16 @@ loadout, and fight bots or a friend.
   (28,000, x100 shiny chance for 3 rolls) and **⚓ Deep Magnet** (50,000, your next roll
   is Forbidden or better). Like the Monstrous Potion they never appear in the regular
   shop, the Mystery pool or the collection.
+- **👑 VIP Shop.** The **VIP** tab is a premium shop stocked with exclusive **offers** —
+  Coin Chest (+250,000), Coin Vault (+5,000,000), Dragon's Hoard (+200,000,000), a Potion
+  Pack (3 Mega Mystery Potions), a VIP Luck Vial (×1,000,000 luck for 2 rolls), a Shiny
+  Shard Pack (+500 shards) and a Doubloon Pack (+20,000) — all bought with **💎 Gems**.
+  **Gems are a premium currency you earn free by playing, never with real money:** claim
+  **10 free Gems every 20 hours**, and win **3 Gems every time you beat a boss bot** in
+  the Arena. There is a **💳 "Buy Gems with real money"** button, but real-money payments
+  are **turned off on purpose** — Aura Realms is a free game for kids, so tapping it only
+  shows an honest **Error 747** explaining there's nothing to buy with real cash and
+  pointing you back to earning Gems. Nothing ever asks for a card or takes any money.
 - **🎁 Gift auras.** Every aura in the Inventory has a **Gift** button. Enter a
   friend's 7-digit ID and how many to send. The game looks the friend up and asks
   "Send … to Bob?" before anything leaves your inventory. Gifts wait in the friend's

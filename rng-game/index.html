@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=73">
+  <link rel="stylesheet" href="style.css?v=74">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -54,6 +54,7 @@
       <button class="tab" data-tab="shop">Shop</button>
       <button class="tab" data-tab="battle">Battle</button>
       <button class="tab" data-tab="tower">🗼 Tower</button>
+      <button class="tab" data-tab="vip">👑 VIP</button>
       <button class="tab" data-tab="leaderboard">🏆 Leaderboard</button>
       <button class="tab" data-tab="index">Index</button>
       <button class="tab" data-tab="stats">Stats</button>
@@ -252,6 +253,15 @@
       <div id="tower-floors" class="tower-floors"></div>
     </section>
 
+    <!-- VIP SHOP -->
+    <section id="tab-vip" class="panel">
+      <div class="panel-head">
+        <h2>👑 VIP Shop</h2>
+        <p class="muted">Spend 💎 <b>Gems</b> on exclusive VIP offers — big coin bundles, potion packs and more. Gems are earned free by playing: claim your daily gems and win gems from boss fights.</p>
+      </div>
+      <div id="vip-body"></div>
+    </section>
+
     <!-- LEADERBOARD -->
     <section id="tab-leaderboard" class="panel">
       <div class="panel-head">
@@ -399,7 +409,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 73</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 74</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -521,9 +531,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=73"></script>
-  <script src="abilities.js?v=73"></script>
-  <script src="reveals.js?v=73"></script>
-  <script src="game.js?v=73"></script>
+  <script src="auras.js?v=74"></script>
+  <script src="abilities.js?v=74"></script>
+  <script src="reveals.js?v=74"></script>
+  <script src="game.js?v=74"></script>
 </body>
 </html>
