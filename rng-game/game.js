@@ -3697,9 +3697,9 @@
      an honest Error 747 instead of taking any money or card details. It points players back to earning Gems. */
   function vipRealMoney() {
     var el = $("#vip-rm-error");
-    if (el) el.textContent = "⚠️ Error 747: Real-money payments are turned off. Aura Realms is a free game for everyone, so there's nothing to buy with real cash — earn 💎 Gems by playing (claim your daily gems and beat bosses) and spend them on the offers above!";
+    if (el) el.textContent = "⚠️ Error 747 — Payments disabled. No payment processor is connected to this game (and none ever will be — Aura Realms is free for everyone). Earn 💎 Gems by playing: claim daily + beat bosses.";
     Sound.lose();
-    errorToast(747, "Real-money payments are off — earn 💎 Gems by playing instead.");
+    errorToast(747, "Payments are disabled — this is a free game. Earn 💎 Gems by playing instead.");
   }
 
   function renderVip() {
