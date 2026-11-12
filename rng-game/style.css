@@ -247,6 +247,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .roll-tier { font-weight: 600; letter-spacing: .25em; text-transform: uppercase; font-size: .85rem; color: var(--muted); }
 .roll-odds { font-size: 1.1rem; font-variant-numeric: tabular-nums; color: var(--muted); min-height: 1.5rem; }
 .roll-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+.roll-speed { text-align: center; margin: 8px 0 2px; font-size: .9rem; font-variant-numeric: tabular-nums; color: var(--muted); min-height: 1.2em; }
+.roll-speed.cooling { color: var(--accent); }
+.roll-speed.fast { color: #67e8f9; font-weight: 700; }
 .effects { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 28px; }
 .effect { font-size: .85rem; padding: 3px 12px; border-radius: 999px; background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.35); color: #bbf7d0; }
 .effect.gold { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.4); color: #fde68a; }

@@ -441,6 +441,13 @@ No build step and no npm install.
   stops anything playing the moment you press it, so rolls and fights resolve instantly.
   It sits above the cutscene overlay so it works mid-animation, and the choice is saved
   (also as a "Skip all animations" box in the Stats settings).
+- **Settings** (Stats tab): **Sound effects**, **Pop-up notifications** (turn it off to
+  stop the little toast messages — important ⚠️ Error pop-ups still show), **Skip
+  cutscenes** and **Skip all animations**.
+- **⚡ Roll speed readout.** Under the ROLL button a live line shows **how fast your next
+  roll is**: your current roll cooldown ("Roll speed: one every 1.0s") when you're ready,
+  a ticking countdown ("Next roll in 0.4s") while it recharges, and the boosted speed
+  when a Haste/Time Warp/Super Roll is active (e.g. "one every 0.01s — ×100 haste!").
 - **⏰ Break reminder.** After **30 minutes of continuous play**, a full-screen reminder
   appears: "Take a break — you've been playing for over 30 minutes straight. Come on, go
   do what you really need to do, like your homework!" The **first** break lasts 15

@@ -323,7 +323,7 @@
       breakSkips: 0,
       history: [],
       stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0, towerWins: 0, breakSkipsEarned: 0 },
-      settings: { sound: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
+      settings: { sound: true, notifications: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
     };
   }
 
@@ -434,6 +434,8 @@
   /* ---------- Helpers ---------- */
 
   function toast(msg, cls, ms) {
+    /* With pop-up notifications turned off, only error toasts (⚠️ Error …) still show. */
+    if (cls !== "err" && S && S.settings && S.settings.notifications === false) return;
     var el = document.createElement("div");
     el.className = "toast" + (cls ? " " + cls : "");
     el.textContent = msg;
@@ -454,6 +456,21 @@
 
   function hasteActive() { return Date.now() < S.hasteUntil; }
   function rollCooldown() { return hasteActive() ? ROLL_COOLDOWN / (S.hasteDiv || 2) : ROLL_COOLDOWN; }
+
+  /* Live "roll speed" readout: how fast your next roll is — a countdown while cooling down, else the cooldown length. */
+  function updateRollSpeed() {
+    var el = document.getElementById("roll-speed");
+    if (!el) return;
+    var now = Date.now(), cd = rollCooldown(), haste = hasteActive();
+    if (now < cooldownUntil) {
+      var left = (cooldownUntil - now) / 1000;
+      el.className = "roll-speed cooling";
+      el.textContent = "⏱️ Next roll in " + left.toFixed(left < 1 ? 2 : 1) + "s";
+    } else {
+      el.className = "roll-speed ready" + (haste ? " fast" : "");
+      el.textContent = (haste ? "⚡ " : "🎲 ") + "Roll speed: one every " + (cd / 1000).toFixed(cd < 1000 ? 2 : 1) + "s" + (haste ? " — ×" + (S.hasteDiv || 2) + " haste!" : "");
+    }
+  }
 
   function currentGoldMult() {
     var m = 1;
@@ -5249,6 +5266,7 @@
       grid.appendChild(d);
     });
     $("#set-sound").checked = !!S.settings.sound;
+    $("#set-notifs").checked = S.settings.notifications !== false;
     $("#set-skip").checked = !!S.settings.skipCutscenes;
     $("#set-skipanims").checked = !!S.settings.skipAnims;
   }
@@ -7559,8 +7577,11 @@
   $("#btn-heal").addEventListener("click", function () { healInBattle(); });
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
+  $("#set-notifs").addEventListener("change", function (e) { S.settings.notifications = e.target.checked; save(); toast(e.target.checked ? "🔔 Notifications on" : "🔕 Notifications off", "", 1500); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
   $("#set-skipanims").addEventListener("change", function (e) { setSkipAnims(e.target.checked); });
+  setInterval(updateRollSpeed, 100);
+  updateRollSpeed();
   $("#btn-skip-anim").addEventListener("click", function () {
     /* Toggles the setting and, in either state, stops anything playing right now. */
     setSkipAnims(!S.settings.skipAnims);
