@@ -389,6 +389,26 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 @keyframes pHop    { 0% { transform: translateY(0); } 30% { transform: translateY(-11px); } 60% { transform: translateY(0); } 76% { transform: translateY(-4px); } 100% { transform: translateY(0); } }
 @keyframes pBrace  { 0% { transform: translateY(0) scaleY(1); } 40% { transform: translateY(7px) scaleY(.86); } 72% { transform: translateY(7px) scaleY(.86); } 100% { transform: translateY(0) scaleY(1); } }
 @keyframes pCharge { 0%, 100% { transform: translateX(0); } 15% { transform: translateX(-2.5px); } 35% { transform: translateX(2.5px); } 55% { transform: translateX(-2.5px); } 75% { transform: translateX(2.5px); } 90% { transform: translateX(-1.5px); } }
+/* Red flash when the stickman takes damage */
+.stickman::after { content: ""; position: absolute; inset: -12%; border-radius: 50%; background: radial-gradient(circle, rgba(239,68,68,.7), rgba(239,68,68,0) 68%); opacity: 0; pointer-events: none; z-index: 2; }
+.fighter.hit .stickman::after { animation: smRedFlash .4s ease-out; }
+@keyframes smRedFlash { 0% { opacity: 0; } 22% { opacity: 1; } 100% { opacity: 0; } }
+/* Blue shield bubble around the stickman; pops when the shield breaks */
+.shield-bubble { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: 108px; height: 108px; border-radius: 50%; pointer-events: none; z-index: 3;
+  background: radial-gradient(circle at 38% 32%, rgba(191,219,254,.45), rgba(59,130,246,.18) 54%, rgba(59,130,246,.06) 72%, transparent 79%);
+  border: 2px solid rgba(147,197,253,.8); box-shadow: 0 0 14px rgba(96,165,250,.6), inset 0 0 20px rgba(191,219,254,.5);
+  animation: bubbleIdle 2.6s ease-in-out infinite; }
+@keyframes bubbleIdle { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.05); } }
+.shield-bubble.forming { animation: bubbleForm .42s ease-out; }
+@keyframes bubbleForm { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 70% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); } }
+.shield-bubble.flash { animation: bubbleHit .3s ease-out; }
+@keyframes bubbleHit { 30% { border-color: #fff; box-shadow: 0 0 26px rgba(191,219,254,1), inset 0 0 26px rgba(255,255,255,.9); } }
+.shield-bubble.pop { animation: bubblePop .42s ease-out forwards; }
+@keyframes bubblePop { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 40% { transform: translate(-50%, -50%) scale(1.26); opacity: .95; border-color: #fff; box-shadow: 0 0 32px rgba(255,255,255,.95); } 100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; } }
+/* Death fall — a defeated stickman topples over */
+.fighter.fallen .stickman { transform-origin: 50% 92%; animation: smFall .85s cubic-bezier(.35,1.3,.5,1) forwards; }
+.fighter.fallen .stickman-aura { transition: opacity .5s; opacity: .25; }
+@keyframes smFall { 0% { transform: rotate(0) translateY(0); } 55% { transform: rotate(74deg) translateY(10px); } 78% { transform: rotate(86deg) translateY(18px); } 100% { transform: rotate(84deg) translateY(18px); opacity: .85; } }
 /* Avatar picker (Stats tab) */
 .avatar-preview { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
 .avatar-demo { min-height: 120px; }

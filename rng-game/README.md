@@ -95,7 +95,9 @@ loadout, and fight bots or a friend.
   **jab** for a strike, an overhead **smash** for heavy/execute moves, a lean-and-**blast**
   for beam/barrage attacks, a reach-and-**pull** for drains, arms-up **cheer** for heals,
   a **brace** crouch for guard/shield, and a powering-up **charge** shake for focus and
-  the snap. They stagger when hit.
+  the snap. A hit **flashes the stickman red**, a **shield** wraps it in a glowing blue
+  **bubble that pops** the moment the shield breaks (a hit bigger than what's left), and a
+  defeated stickman **falls over**.
   Your stickman wears **your avatar** — a face emoji and a body colour you pick in
   **Stats → Your avatar** (18 to choose from: 🙂 😎 🥷 🤖 👽 🐱 🐲 👑 💀 🦊 🌟 👻 🧙 😈 🐻
   🦾 🤡 🧟). Your avatar also shows next to your name in the header, and travels to your

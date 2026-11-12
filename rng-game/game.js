@@ -1986,10 +1986,10 @@
           var blocked = false;
           if (them.guard) { dmg *= 0.4; them.guard = false; blocked = true; }
           dmg = Math.max(1, Math.round(dmg));
-          var absorbed = 0;
+          var prevShield = them.shield, absorbed = 0;
           if (them.shield > 0) { absorbed = Math.min(them.shield, dmg); them.shield -= absorbed; dmg -= absorbed; }
           them.hp -= dmg;
-          ev.push({ type: "damage", who: who, target: other, amount: dmg, absorbed: absorbed, crit: crit, blocked: blocked, executed: executed, hpA: b.a.hp, hpB: b.b.hp });
+          ev.push({ type: "damage", who: who, target: other, amount: dmg, absorbed: absorbed, shieldLeft: them.shield, shieldBroke: prevShield > 0 && them.shield === 0, crit: crit, blocked: blocked, executed: executed, hpA: b.a.hp, hpB: b.b.hp });
           if (ab.lifesteal && dmg > 0) {
             var heal = Math.round(dmg * ab.lifesteal);
             me.hp = Math.min(me.maxHp, me.hp + heal);
@@ -4200,8 +4200,10 @@
     UFX.clear();
     unsnap("a", false);
     unsnap("b", false);
-    $("#fighter-a").classList.remove("killed");
-    $("#fighter-b").classList.remove("killed");
+    ["a", "b"].forEach(function (s) {
+      $("#fighter-" + s).classList.remove("killed", "fallen", "hit", "healed", "lunge-left", "lunge-right", "cast", "slam", "flare");
+      SM_POSES.forEach(function (p) { $("#fighter-" + s).classList.remove("sm-pose-" + p); });
+    });
     var arena = $("#arena");
     arena.classList.remove("hidden");
     $("#battle-result").classList.add("hidden");
@@ -4270,8 +4272,26 @@
     face.className = "stickman-face";
     face.textContent = emoji;
     sm.appendChild(face);
+    /* A blue shield bubble around the stickman while it has a shield (it pops when the shield breaks). */
+    if (f.shield > 0) {
+      var bub = document.createElement("div");
+      bub.className = "shield-bubble";
+      sm.appendChild(bub);
+    }
     fig.appendChild(sm);
     el.appendChild(fig);
+  }
+
+  /* The shield bubble element for a side's stickman, or null. */
+  function shieldBubble(side) { return $("#visual-" + side).querySelector(".shield-bubble"); }
+  /* Make sure a side's stickman shows a shield bubble (used when a shield is gained mid-fight). */
+  function ensureShieldBubble(side) {
+    var sm = $("#visual-" + side).querySelector(".stickman");
+    if (sm && !sm.querySelector(".shield-bubble")) {
+      var bub = document.createElement("div");
+      bub.className = "shield-bubble forming";
+      sm.appendChild(bub);
+    }
   }
 
   function statusChips(f) {
@@ -4371,6 +4391,30 @@
     el.classList.add(cls);
   }
 
+  /* On a hit, pop the target's shield bubble if the shield just broke, or flash it if it held. */
+  function popShield(e) {
+    var bub = shieldBubble(e.target);
+    if (!bub) return;
+    if (e.shieldBroke) {
+      bub.classList.remove("forming");
+      bub.classList.add("pop");
+      Sound.lose && Sound.lose();
+      setTimeout(function () { if (bub && bub.parentNode) bub.remove(); }, 450);
+    } else if (e.absorbed > 0) {
+      bub.classList.remove("flash"); void bub.offsetWidth; bub.classList.add("flash");
+    }
+  }
+
+  /* Make a defeated fighter's stickman fall over. */
+  function fighterFall(side) {
+    var el = $("#fighter-" + side);
+    SM_POSES.forEach(function (p) { el.classList.remove("sm-pose-" + p); });
+    el.classList.remove("lunge-left", "lunge-right", "cast", "slam");
+    el.classList.add("fallen");
+    var bub = shieldBubble(side);
+    if (bub) bub.remove();
+  }
+
   function sideName(side) { return battle[side].name; }
   function isMe(side) { return side === view.me; }
 
@@ -4401,6 +4445,7 @@
           floatText(e.target, "-" + fmt(e.amount) + (e.flat ? " " + flatTag : e.crit ? "!" : ""), e.flat ? "t-chosen" : e.crit ? "t-divine" : "t-forbidden");
           Sound.hit(e.crit);
           logLine((e.flat ? flatTag + " " + String(e.flatName || "").slice(0, 30).toUpperCase() + "! " : "") + (e.crit ? "💥 CRIT! " : "") + (e.executed ? "EXECUTE! " : "") + (isMe(e.who) ? "You hit " + sideName(e.target) : sideName(e.who) + " hits " + (isMe(e.target) ? "you" : sideName(e.target))) + " for " + fmt(e.amount) + (e.absorbed ? " (" + fmt(e.absorbed) + " absorbed)" : "") + (e.blocked ? " (blocked 60%)" : ""), e.crit || e.executed ? "crit" : (isMe(e.who) ? "you" : "them"));
+          popShield(e);
           setHP(e);
           break;
         case "heal":
@@ -4424,6 +4469,7 @@
           break;
         case "buff":
           logLine((isMe(e.who) ? "You gain " : sideName(e.who) + " gains ") + (e.effect === "shield" ? "a shield of " + fmt(e.amount) : e.effect), isMe(e.who) ? "you" : "them");
+          if (e.effect === "shield") { ensureShieldBubble(e.who); Sound.buy && Sound.buy(); }
           delay = 250;
           break;
         case "debuff":
@@ -4448,7 +4494,8 @@
         case "end":
           var wf = battle[e.winner], loserSide = Engine.other(e.winner);
           var ka = wf && wf.auraId !== null && wf.auraId !== undefined ? A.byId(wf.auraId) : null;
-          delay = ka && effRarity(ka, wf.shiny) >= 1e9 ? killScene(loserSide, ka, wf.shiny) : 200;
+          if (ka && effRarity(ka, wf.shiny) >= 1e9) { delay = killScene(loserSide, ka, wf.shiny); }
+          else { fighterFall(loserSide); delay = 950; }
           break;
       }
       setTimeout(step, delay);
