@@ -98,10 +98,12 @@ loadout, and fight bots or a friend.
   the snap. A hit **flashes the stickman red**, a **shield** wraps it in a glowing blue
   **bubble that pops** the moment the shield breaks (a hit bigger than what's left), and a
   defeated stickman **falls over**.
-  Your stickman wears **your avatar** — a face emoji and a body colour you pick in
-  **Stats → Your avatar** (18 to choose from: 🙂 😎 🥷 🤖 👽 🐱 🐲 👑 💀 🦊 🌟 👻 🧙 😈 🐻
-  🦾 🤡 🧟). Your avatar also shows next to your name in the header, and travels to your
-  opponent's screen in a PvP fight. An aura-wielder's stickman keeps its spinning aura
+  Your stickman wears **your avatar**, which you **build yourself** in **Stats → Your
+  avatar**: pick any **face** from a big emoji grid (36 of them — 🙂 😎 🥷 🤖 👽 🐲 👑 💀
+  🦊 🧙 😈 🐼 🦁 🦄 🦖 and more) **and** mix it with any **body colour** — 18 swatches plus
+  a full **custom colour picker**, so the combinations are yours. A live preview shows
+  your stickman as you change it. Your avatar also shows next to your name in the header,
+  and travels to your opponent's screen in a PvP fight. An aura-wielder's stickman keeps its spinning aura
   orb glowing above its head; a bot is a steel-grey stickman wearing the bot's icon.
 - **Turn-based battles with signature abilities.** Every aura has its own kit of 6
   abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova

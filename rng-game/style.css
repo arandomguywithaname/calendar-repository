@@ -416,6 +416,13 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .avatar-opt { width: 48px; height: 48px; font-size: 1.5rem; line-height: 1; border-radius: 12px; border: 2px solid var(--card-border); background: rgba(255,255,255,.04); cursor: pointer; transition: transform .1s, border-color .1s, box-shadow .1s; }
 .avatar-opt:hover { transform: translateY(-2px); }
 .avatar-opt.on { border-color: var(--av); box-shadow: 0 0 0 2px var(--av), 0 0 14px var(--av); background: rgba(255,255,255,.08); }
+.avatar-label { margin: 2px 0 6px; font-weight: 700; }
+.avatar-colors { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.color-opt { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--card-border); cursor: pointer; transition: transform .1s, box-shadow .1s; }
+.color-opt:hover { transform: translateY(-2px); }
+.color-opt.on { border-color: #fff; box-shadow: 0 0 10px #fff; transform: translateY(-2px); }
+.avatar-custom { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; cursor: pointer; }
+.avatar-custom input[type="color"] { width: 42px; height: 32px; padding: 0; border: 1px solid var(--card-border); border-radius: 8px; background: none; cursor: pointer; }
 .fighter-name { font-family: var(--font-head); font-weight: 700; }
 .fighter.hit { animation: hit .35s; }
 .fighter.healed .fighter-visual { animation: healglow .6s; }

@@ -195,6 +195,17 @@
     { id: "zombie", emoji: "🧟", color: "#86d36a" }
   ];
   function avatarById(id) { for (var i = 0; i < AVATARS.length; i++) if (AVATARS[i].id === id) return AVATARS[i]; return AVATARS[0]; }
+  /* A customizable avatar is a face (emoji) + a body colour, mixed freely by the player. */
+  var FACES = ["🙂", "😎", "🥷", "🤖", "👽", "🐱", "🐲", "👑", "💀", "🦊", "🌟", "👻", "🧙", "😈", "🐻", "🦾", "🤡", "🧟", "😀", "🥶", "🤠", "🫡", "😤", "🤯", "🥳", "😇", "🤓", "👹", "🎃", "🐶", "🐼", "🦁", "🐸", "🦄", "🐧", "🦖"];
+  var AV_COLORS = ["#ffd24a", "#4aa3ff", "#ff6b6b", "#74e39a", "#a78bfa", "#ff8a4a", "#5fd0b0", "#ffd700", "#d7dbe0", "#ff5fa2", "#67e8f9", "#c9b7ff", "#86d36a", "#f472b6", "#c99a66", "#9fb4c7", "#ffffff", "#8a8f99"];
+  var DEFAULT_AVATAR = { face: "🙂", color: "#ffd24a" };
+  var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+  /* Normalize a stored avatar (a {face,color} object, or a legacy preset-id string) to {face,color}. */
+  function avatarLook(av) {
+    if (av && typeof av === "object" && typeof av.face === "string" && HEX_RE.test(String(av.color))) return { face: av.face.slice(0, 8), color: av.color };
+    if (typeof av === "string") { var p = avatarById(av); return { face: p.emoji, color: p.color }; }
+    return DEFAULT_AVATAR;
+  }
 
   /* ---------- The Tower: 120 floors of bots fought with your equipped aura, paying doubloons. First clear of a
      floor each 3-day cycle pays big; later clears pay 1/100 as much. ---------- */
@@ -306,7 +317,7 @@
       shards: 0,
       gems: 0,
       vipDaily: 0,
-      avatar: "hero",
+      avatar: { face: "🙂", color: "#ffd24a" },
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       aurasLockedUntil: 0,
       breakSkips: 0,
@@ -359,7 +370,7 @@
       merged.shards = Math.max(0, Math.floor(Number(merged.shards) || 0));
       merged.gems = Math.max(0, Math.floor(Number(merged.gems) || 0));
       merged.vipDaily = Math.max(0, Math.floor(Number(merged.vipDaily) || 0));
-      if (!AVATARS.some(function (av) { return av.id === merged.avatar; })) merged.avatar = "hero";
+      merged.avatar = avatarLook(merged.avatar); /* migrate a legacy preset id, or validate the {face,color} */
       /* A forced roll (set by an admin) survives in the save until it's used; drop it if the aura is unknown. */
       if (merged.forceRoll == null || !A.byId(merged.forceRoll)) { delete merged.forceRoll; merged.forceShiny = false; }
       if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
@@ -4253,8 +4264,8 @@
     var color, emoji, orbAura = null, orbShiny = false;
     if (f.isBot) { color = "#9fb4c7"; emoji = f.icon || "🤖"; }
     else {
-      var av = avatarById(f.avatar);
-      color = av.color; emoji = av.emoji;
+      var av = avatarLook(f.avatar);
+      color = av.color; emoji = av.face;
       if (f.auraId !== null && f.auraId !== undefined && A.byId(f.auraId)) { orbAura = A.byId(f.auraId); orbShiny = f.shiny; }
     }
     var fig = document.createElement("div");
@@ -4960,7 +4971,9 @@
     var size = auraId !== null ? K.kitFor(A.byId(auraId)).length : K.KIT_SIZE;
     var loadout = raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < size && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE);
     if (!loadout.length) loadout = DEFAULT_LOADOUT.slice();
-    var avatar = AVATARS.some(function (av) { return av.id === spec.avatar; }) ? spec.avatar : "hero";
+    var sa = spec.avatar;
+    var avatar = { face: sa && typeof sa === "object" && FACES.indexOf(sa.face) >= 0 ? sa.face : "🙂",
+                   color: sa && typeof sa === "object" && HEX_RE.test(String(sa.color)) ? sa.color : "#ffd24a" };
     return { name: name, power: power, auraId: auraId, shiny: auraId !== null && isShiny(A.byId(auraId), spec.shiny === true), loadout: loadout, isBot: false, avatar: avatar };
   }
 
@@ -5139,21 +5152,31 @@
     });
   }
 
-  /* ---------- Avatar picker ---------- */
+  /* ---------- Avatar customizer: pick a face and a body colour ---------- */
 
-  function setAvatar(id) {
-    if (!AVATARS.some(function (av) { return av.id === id; })) return;
-    S.avatar = id;
-    if (battle && !battle.over) { renderArena(); }
+  function afterAvatarChange() {
+    if (battle && !battle.over) renderArena();
     save();
     renderAvatarPicker();
     renderAccount();
   }
+  function setAvatarFace(face) {
+    if (FACES.indexOf(face) < 0) return;
+    var a = avatarLook(S.avatar);
+    S.avatar = { face: face, color: a.color };
+    afterAvatarChange();
+  }
+  function setAvatarColor(color) {
+    if (!HEX_RE.test(color)) return;
+    var a = avatarLook(S.avatar);
+    S.avatar = { face: a.face, color: color };
+    afterAvatarChange();
+  }
 
   function renderAvatarPicker() {
-    var prev = $("#avatar-preview"), grid = $("#avatar-grid");
-    if (!grid) return;
-    var cur = avatarById(S.avatar);
+    var prev = $("#avatar-preview"), faces = $("#avatar-faces"), colors = $("#avatar-colors"), custom = $("#avatar-color-custom");
+    if (!faces) return;
+    var cur = avatarLook(S.avatar);
     if (prev) {
       prev.innerHTML = "";
       var box = document.createElement("div");
@@ -5165,17 +5188,30 @@
       label.textContent = "This is you in battle.";
       prev.appendChild(label);
     }
-    grid.innerHTML = "";
-    AVATARS.forEach(function (av) {
+    faces.innerHTML = "";
+    FACES.forEach(function (face) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "avatar-opt" + (av.id === cur.id ? " on" : "");
-      b.style.setProperty("--av", av.color);
-      b.textContent = av.emoji;
-      b.title = av.id;
-      b.addEventListener("click", function () { setAvatar(av.id); });
-      grid.appendChild(b);
+      b.className = "avatar-opt" + (face === cur.face ? " on" : "");
+      b.style.setProperty("--av", cur.color);
+      b.textContent = face;
+      b.addEventListener("click", function () { setAvatarFace(face); });
+      faces.appendChild(b);
     });
+    if (colors) {
+      colors.innerHTML = "";
+      AV_COLORS.forEach(function (c) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "color-opt" + (c.toLowerCase() === cur.color.toLowerCase() ? " on" : "");
+        b.style.background = c;
+        b.title = c;
+        b.addEventListener("click", function () { setAvatarColor(c); });
+        colors.appendChild(b);
+      });
+    }
+    if (custom && !custom.__wired) { custom.__wired = true; custom.addEventListener("input", function () { setAvatarColor(custom.value); }); }
+    if (custom) custom.value = cur.color;
   }
 
   /* ---------- Stats ---------- */
@@ -5912,7 +5948,7 @@
 
   function renderAccount() {
     var name = currentUser ? accountName(currentUser) : null;
-    $("#account-name").textContent = (name ? avatarById(S.avatar).emoji + " " + name : avatarById(S.avatar).emoji + " Guest");
+    $("#account-name").textContent = avatarLook(S.avatar).face + " " + (name || "Guest");
     var badge = $("#account-id");
     badge.classList.toggle("hidden", !currentUser);
     badge.textContent = currentUser ? "ID " + currentUser : "";
