@@ -359,6 +359,26 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .fighter.active-turn .fighter-name { color: var(--gold); text-shadow: 0 0 12px rgba(251,191,36,.6); }
 .fighter-visual { min-height: 110px; display: flex; align-items: center; justify-content: center; }
 .fighter-icon { font-size: 4.5rem; line-height: 1; filter: drop-shadow(0 0 16px rgba(255,255,255,.25)); }
+/* Stickman fighters */
+.stickman-fig { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.stickman-aura { width: 44px; height: 44px; margin-bottom: 2px; filter: drop-shadow(0 0 10px rgba(255,255,255,.25)); }
+.stickman-aura .orb { width: 44px; height: 44px; }
+.stickman { position: relative; width: 74px; height: 116px; animation: smBob 1.6s ease-in-out infinite; }
+.sm-svg { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 3px 6px rgba(0,0,0,.4)); }
+.stickman-face { position: absolute; left: 50%; top: 17%; transform: translate(-50%, -50%); font-size: 1.4rem; line-height: 1; pointer-events: none; }
+.sm-arms { transform-box: fill-box; transform-origin: 50% 0%; }
+@keyframes smBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes smPunch { 0% { transform: rotate(0); } 35% { transform: rotate(-20deg); } 100% { transform: rotate(0); } }
+.fighter.lunge-right .sm-arms, .fighter.lunge-left .sm-arms, .fighter.slam .sm-arms, .fighter.cast .sm-arms, .fighter.flare .sm-arms { animation: smPunch .5s ease-out; }
+.fighter.hit .stickman { animation: smBob 1.6s ease-in-out infinite, smStagger .35s; }
+@keyframes smStagger { 20% { transform: rotate(-8deg) translateX(-4px); } 60% { transform: rotate(5deg) translateX(3px); } }
+/* Avatar picker (Stats tab) */
+.avatar-preview { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
+.avatar-demo { min-height: 120px; }
+.avatar-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.avatar-opt { width: 48px; height: 48px; font-size: 1.5rem; line-height: 1; border-radius: 12px; border: 2px solid var(--card-border); background: rgba(255,255,255,.04); cursor: pointer; transition: transform .1s, border-color .1s, box-shadow .1s; }
+.avatar-opt:hover { transform: translateY(-2px); }
+.avatar-opt.on { border-color: var(--av); box-shadow: 0 0 0 2px var(--av), 0 0 14px var(--av); background: rgba(255,255,255,.08); }
 .fighter-name { font-family: var(--font-head); font-weight: 700; }
 .fighter.hit { animation: hit .35s; }
 .fighter.healed .fighter-visual { animation: healglow .6s; }

@@ -173,6 +173,29 @@
     { id: "omniarch",  name: "Omniarch",       icon: "👑", power: 1200000, reward: 300000000, boss: true }
   ];
 
+  /* Avatars: the stickman fighter that represents you in battle — a face emoji and a body colour. */
+  var AVATARS = [
+    { id: "hero",   emoji: "🙂", color: "#ffd24a" },
+    { id: "cool",   emoji: "😎", color: "#4aa3ff" },
+    { id: "ninja",  emoji: "🥷", color: "#8a8f99" },
+    { id: "robot",  emoji: "🤖", color: "#9fb4c7" },
+    { id: "alien",  emoji: "👽", color: "#74e39a" },
+    { id: "cat",    emoji: "🐱", color: "#ffb36b" },
+    { id: "dragon", emoji: "🐲", color: "#5fd0b0" },
+    { id: "king",   emoji: "👑", color: "#ffd700" },
+    { id: "skull",  emoji: "💀", color: "#d7dbe0" },
+    { id: "fox",    emoji: "🦊", color: "#ff8a4a" },
+    { id: "star",   emoji: "🌟", color: "#ffe066" },
+    { id: "ghost",  emoji: "👻", color: "#c9b7ff" },
+    { id: "wizard", emoji: "🧙", color: "#a78bfa" },
+    { id: "devil",  emoji: "😈", color: "#ef6a9a" },
+    { id: "bear",   emoji: "🐻", color: "#c99a66" },
+    { id: "robo2",  emoji: "🦾", color: "#67e8f9" },
+    { id: "clown",  emoji: "🤡", color: "#fb7185" },
+    { id: "zombie", emoji: "🧟", color: "#86d36a" }
+  ];
+  function avatarById(id) { for (var i = 0; i < AVATARS.length; i++) if (AVATARS[i].id === id) return AVATARS[i]; return AVATARS[0]; }
+
   /* ---------- The Tower: 120 floors of bots fought with your equipped aura, paying doubloons. First clear of a
      floor each 3-day cycle pays big; later clears pay 1/100 as much. ---------- */
   var TOWER_FLOORS = 120;
@@ -283,6 +306,7 @@
       shards: 0,
       gems: 0,
       vipDaily: 0,
+      avatar: "hero",
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       aurasLockedUntil: 0,
       breakSkips: 0,
@@ -335,6 +359,7 @@
       merged.shards = Math.max(0, Math.floor(Number(merged.shards) || 0));
       merged.gems = Math.max(0, Math.floor(Number(merged.gems) || 0));
       merged.vipDaily = Math.max(0, Math.floor(Number(merged.vipDaily) || 0));
+      if (!AVATARS.some(function (av) { return av.id === merged.avatar; })) merged.avatar = "hero";
       /* A forced roll (set by an admin) survives in the save until it's used; drop it if the aura is unknown. */
       if (merged.forceRoll == null || !A.byId(merged.forceRoll)) { delete merged.forceRoll; merged.forceShiny = false; }
       if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
@@ -1864,7 +1889,8 @@
         kit: o.kit, abilities: o.abilities.slice(), cooldowns: {},
         guard: false, focus: false, reflect: false, stunned: false, skip: false, shield: 0, revive: 0,
         poison: null, weaken: 0, dmgMult: o.dmgMult || 1,
-        auraId: o.auraId === undefined ? null : o.auraId, shiny: !!o.shiny, icon: o.icon || null, isBot: !!o.isBot
+        auraId: o.auraId === undefined ? null : o.auraId, shiny: !!o.shiny, icon: o.icon || null, isBot: !!o.isBot,
+        avatar: o.avatar || null
       };
     },
     create: function (a, b, first) {
@@ -4104,7 +4130,7 @@
 
   function myFighterSpec() {
     var aura = equippedAura();
-    return { name: (S.playerName || "You"), power: playerPower(), auraId: aura ? aura.id : null, shiny: equippedShiny(), loadout: aura ? loadoutFor(aura) : DEFAULT_LOADOUT.slice(), isBot: false };
+    return { name: (S.playerName || "You"), power: playerPower(), auraId: aura ? aura.id : null, shiny: equippedShiny(), loadout: aura ? loadoutFor(aura) : DEFAULT_LOADOUT.slice(), isBot: false, avatar: S.avatar };
   }
 
   /* Build a fighter from a spec: its kit comes from the aura, its abilities from the loadout slots. */
@@ -4114,7 +4140,7 @@
     var slots = Array.isArray(spec.loadout) && spec.loadout.length ? spec.loadout : DEFAULT_LOADOUT;
     var abilities = slots.filter(function (i) { return kit[i]; }).map(function (i) { return kit[i].id; });
     if (!abilities.length) abilities = [kit[0].id];
-    return Engine.makeFighter({ name: spec.name, power: spec.power, kit: kit, abilities: abilities, auraId: aura ? aura.id : null, shiny: isShiny(aura, spec.shiny), dmgMult: spec.dmgMult || 1, isBot: false });
+    return Engine.makeFighter({ name: spec.name, power: spec.power, kit: kit, abilities: abilities, auraId: aura ? aura.id : null, shiny: isShiny(aura, spec.shiny), dmgMult: spec.dmgMult || 1, isBot: false, avatar: spec.avatar });
   }
 
   function startBotFight(bot) {
@@ -4187,16 +4213,44 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  /* A stick-figure fighter in `color`, drawn as an SVG. The emoji face is overlaid separately (see fighterVisual). */
+  function stickmanSVG(color) {
+    return '<svg class="sm-svg" viewBox="0 0 64 104" aria-hidden="true">' +
+      '<g class="sm-legs" stroke="' + color + '" stroke-width="5" stroke-linecap="round" fill="none"><line x1="32" y1="66" x2="20" y2="94"/><line x1="32" y1="66" x2="44" y2="94"/></g>' +
+      '<line class="sm-torso" x1="32" y1="35" x2="32" y2="66" stroke="' + color + '" stroke-width="5" stroke-linecap="round"/>' +
+      '<g class="sm-arms" stroke="' + color + '" stroke-width="5" stroke-linecap="round" fill="none"><line x1="32" y1="43" x2="14" y2="53"/><line class="sm-punch" x1="32" y1="43" x2="50" y2="53"/></g>' +
+      '<circle class="sm-head" cx="32" cy="20" r="15" fill="' + color + '" fill-opacity="0.22" stroke="' + color + '" stroke-width="4"/>' +
+      '</svg>';
+  }
+
+  /* Each fighter in the arena is a stickman: the player uses their avatar (face + colour), a bot its own icon on a
+     steel-grey figure, and an aura-wielder keeps their aura orb glowing above the stickman's head. */
   function fighterVisual(f, el) {
     el.innerHTML = "";
-    if (f.auraId !== null && f.auraId !== undefined && A.byId(f.auraId)) {
-      el.appendChild(makeOrb(A.byId(f.auraId), "small", f.shiny));
-    } else {
-      var ic = document.createElement("div");
-      ic.className = "fighter-icon";
-      ic.textContent = f.icon || "🤖";
-      el.appendChild(ic);
+    var color, emoji, orbAura = null, orbShiny = false;
+    if (f.isBot) { color = "#9fb4c7"; emoji = f.icon || "🤖"; }
+    else {
+      var av = avatarById(f.avatar);
+      color = av.color; emoji = av.emoji;
+      if (f.auraId !== null && f.auraId !== undefined && A.byId(f.auraId)) { orbAura = A.byId(f.auraId); orbShiny = f.shiny; }
     }
+    var fig = document.createElement("div");
+    fig.className = "stickman-fig";
+    if (orbAura) {
+      var auraWrap = document.createElement("div");
+      auraWrap.className = "stickman-aura";
+      auraWrap.appendChild(makeOrb(orbAura, "small", orbShiny));
+      fig.appendChild(auraWrap);
+    }
+    var sm = document.createElement("div");
+    sm.className = "stickman";
+    sm.innerHTML = stickmanSVG(color);
+    var face = document.createElement("div");
+    face.className = "stickman-face";
+    face.textContent = emoji;
+    sm.appendChild(face);
+    fig.appendChild(sm);
+    el.appendChild(fig);
   }
 
   function statusChips(f) {
@@ -4838,7 +4892,8 @@
     var size = auraId !== null ? K.kitFor(A.byId(auraId)).length : K.KIT_SIZE;
     var loadout = raw.filter(function (i, pos) { return Number.isInteger(i) && i >= 0 && i < size && raw.indexOf(i) === pos; }).slice(0, LOADOUT_SIZE);
     if (!loadout.length) loadout = DEFAULT_LOADOUT.slice();
-    return { name: name, power: power, auraId: auraId, shiny: auraId !== null && isShiny(A.byId(auraId), spec.shiny === true), loadout: loadout, isBot: false };
+    var avatar = AVATARS.some(function (av) { return av.id === spec.avatar; }) ? spec.avatar : "hero";
+    return { name: name, power: power, auraId: auraId, shiny: auraId !== null && isShiny(A.byId(auraId), spec.shiny === true), loadout: loadout, isBot: false, avatar: avatar };
   }
 
   function pvpStartBattle() {
@@ -5016,9 +5071,49 @@
     });
   }
 
+  /* ---------- Avatar picker ---------- */
+
+  function setAvatar(id) {
+    if (!AVATARS.some(function (av) { return av.id === id; })) return;
+    S.avatar = id;
+    if (battle && !battle.over) { renderArena(); }
+    save();
+    renderAvatarPicker();
+    renderAccount();
+  }
+
+  function renderAvatarPicker() {
+    var prev = $("#avatar-preview"), grid = $("#avatar-grid");
+    if (!grid) return;
+    var cur = avatarById(S.avatar);
+    if (prev) {
+      prev.innerHTML = "";
+      var box = document.createElement("div");
+      box.className = "fighter-visual avatar-demo";
+      fighterVisual({ isBot: false, avatar: S.avatar, auraId: null }, box);
+      prev.appendChild(box);
+      var label = document.createElement("div");
+      label.className = "muted small-text";
+      label.textContent = "This is you in battle.";
+      prev.appendChild(label);
+    }
+    grid.innerHTML = "";
+    AVATARS.forEach(function (av) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "avatar-opt" + (av.id === cur.id ? " on" : "");
+      b.style.setProperty("--av", av.color);
+      b.textContent = av.emoji;
+      b.title = av.id;
+      b.addEventListener("click", function () { setAvatar(av.id); });
+      grid.appendChild(b);
+    });
+  }
+
   /* ---------- Stats ---------- */
 
   function renderStats() {
+    renderAvatarPicker();
     var grid = $("#stats-grid");
     var found = ownedIds().length;
     var shinyFound = Object.keys(S.shinyInventory).filter(function (id) { return S.shinyInventory[id] > 0; }).length;
@@ -5749,7 +5844,7 @@
 
   function renderAccount() {
     var name = currentUser ? accountName(currentUser) : null;
-    $("#account-name").textContent = name ? "👤 " + name : "Guest";
+    $("#account-name").textContent = (name ? avatarById(S.avatar).emoji + " " + name : avatarById(S.avatar).emoji + " Guest");
     var badge = $("#account-id");
     badge.classList.toggle("hidden", !currentUser);
     badge.textContent = currentUser ? "ID " + currentUser : "";

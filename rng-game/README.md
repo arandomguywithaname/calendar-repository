@@ -90,6 +90,13 @@ loadout, and fight bots or a friend.
   Million (1,000,000 coins, x1,000,000 luck for one roll) reveals itself to anyone
   holding a million coins, anyone who clicks the ✦ logo seven times, or the admin
   word `secret`.
+- **🧍 Stickman fighters & avatars.** Both fighters in the arena are drawn as stick
+  figures that bob, lunge and throw a punch when they attack (when animations are on).
+  Your stickman wears **your avatar** — a face emoji and a body colour you pick in
+  **Stats → Your avatar** (18 to choose from: 🙂 😎 🥷 🤖 👽 🐱 🐲 👑 💀 🦊 🌟 👻 🧙 😈 🐻
+  🦾 🤡 🧟). Your avatar also shows next to your name in the header, and travels to your
+  opponent's screen in a PvP fight. An aura-wielder's stickman keeps its spinning aura
+  orb glowing above its head; a bot is a steel-grey stickman wearing the bot's icon.
 - **Turn-based battles with signature abilities.** Every aura has its own kit of 6
   abilities, named after the aura (Cosmic Veil brings Meteor Cascade and Supernova
   Unveiled; Fury of Darkness brings Darkness Rend and Fury Unleashed). Absolute
