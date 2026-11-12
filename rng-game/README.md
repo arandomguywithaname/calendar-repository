@@ -91,7 +91,11 @@ loadout, and fight bots or a friend.
   holding a million coins, anyone who clicks the ✦ logo seven times, or the admin
   word `secret`.
 - **🧍 Stickman fighters & avatars.** Both fighters in the arena are drawn as stick
-  figures that bob, lunge and throw a punch when they attack (when animations are on).
+  figures that bob, lunge and **act out each ability** when animations are on — a quick
+  **jab** for a strike, an overhead **smash** for heavy/execute moves, a lean-and-**blast**
+  for beam/barrage attacks, a reach-and-**pull** for drains, arms-up **cheer** for heals,
+  a **brace** crouch for guard/shield, and a powering-up **charge** shake for focus and
+  the snap. They stagger when hit.
   Your stickman wears **your avatar** — a face emoji and a body colour you pick in
   **Stats → Your avatar** (18 to choose from: 🙂 😎 🥷 🤖 👽 🐱 🐲 👑 💀 🦊 🌟 👻 🧙 😈 🐻
   🦾 🤡 🧟). Your avatar also shows next to your name in the header, and travels to your

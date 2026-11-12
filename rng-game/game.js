@@ -3544,6 +3544,26 @@
     el.classList.add(cls);
   }
 
+  /* Which stickman move each ability archetype acts out, so the stickman really "does" the ability. */
+  var SM_POSES = ["jab", "smash", "blast", "pull", "cheer", "brace", "charge", "cast"];
+  var MOVE_POSE = {
+    strike: "jab", precision: "jab",
+    heavy: "smash", execute: "smash",
+    burst: "blast", barrage: "blast",
+    drain: "pull",
+    heal: "cheer",
+    guard: "brace", shield: "brace",
+    focus: "charge", snap: "charge", oblivion: "charge",
+    weaken: "cast", poison: "cast", stun: "cast", mirror: "cast", reflect: "cast"
+  };
+  /* Make a fighter's stickman act out an ability (a jab, overhead smash, blast, heal-cheer, brace, charge…). */
+  function stickmanAct(side, arch) {
+    var el = $("#fighter-" + side);
+    SM_POSES.forEach(function (p) { el.classList.remove("sm-pose-" + p); });
+    void el.offsetWidth;
+    el.classList.add("sm-pose-" + (MOVE_POSE[arch] || "jab"));
+  }
+
   function abilityLabel(side, ab, c1) {
     var target = $("#fighter-" + side);
     var r = target.getBoundingClientRect();
@@ -3569,6 +3589,7 @@
     var self = SELF_ARCHS[ab.arch];
     var pose = self || ab.arch === "snap" ? "cast" : (ab.arch === "heavy" || ab.arch === "execute" ? "slam" : (who === "a" ? "lunge-right" : "lunge-left"));
     fighterPose(who, pose);
+    stickmanAct(who, ab.arch);
     $("#fighter-" + who).style.setProperty("--c1", c1);
     $("#fighter-" + who).classList.remove("flare"); void $("#fighter-" + who).offsetWidth; $("#fighter-" + who).classList.add("flare");
     abilityLabel(who, ab, c1);

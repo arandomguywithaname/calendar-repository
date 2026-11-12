@@ -368,10 +368,27 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .stickman-face { position: absolute; left: 50%; top: 17%; transform: translate(-50%, -50%); font-size: 1.4rem; line-height: 1; pointer-events: none; }
 .sm-arms { transform-box: fill-box; transform-origin: 50% 0%; }
 @keyframes smBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-@keyframes smPunch { 0% { transform: rotate(0); } 35% { transform: rotate(-20deg); } 100% { transform: rotate(0); } }
-.fighter.lunge-right .sm-arms, .fighter.lunge-left .sm-arms, .fighter.slam .sm-arms, .fighter.cast .sm-arms, .fighter.flare .sm-arms { animation: smPunch .5s ease-out; }
 .fighter.hit .stickman { animation: smBob 1.6s ease-in-out infinite, smStagger .35s; }
 @keyframes smStagger { 20% { transform: rotate(-8deg) translateX(-4px); } 60% { transform: rotate(5deg) translateX(3px); } }
+/* The stickman acts out each ability archetype. Arm moves animate the .sm-arms group; the rest move the body. */
+.sm-pose-jab .sm-arms   { animation: pJab .45s ease-out; }
+.sm-pose-cast .sm-arms  { animation: pFlick .55s ease-out; }
+.sm-pose-cheer .sm-arms { animation: pArmsUp .7s ease-out; }
+.sm-pose-smash .stickman { animation: smBob 1.6s ease-in-out infinite, pSmash .6s ease-in-out; }
+.sm-pose-blast .stickman { animation: smBob 1.6s ease-in-out infinite, pBlast .55s ease-out; }
+.sm-pose-pull .stickman  { animation: smBob 1.6s ease-in-out infinite, pPull .6s ease-in-out; }
+.sm-pose-cheer .stickman { animation: smBob 1.6s ease-in-out infinite, pHop .7s ease-out; }
+.sm-pose-brace .stickman { animation: smBob 1.6s ease-in-out infinite, pBrace .6s ease-in-out; }
+.sm-pose-charge .stickman { animation: smBob 1.6s ease-in-out infinite, pCharge .7s ease-in-out; }
+@keyframes pJab    { 0% { transform: rotate(0); } 30% { transform: rotate(-26deg); } 100% { transform: rotate(0); } }
+@keyframes pFlick  { 0% { transform: rotate(0); } 42% { transform: rotate(-78deg); } 100% { transform: rotate(0); } }
+@keyframes pArmsUp { 0% { transform: rotate(0); } 30% { transform: rotate(150deg); } 72% { transform: rotate(150deg); } 100% { transform: rotate(0); } }
+@keyframes pSmash  { 0% { transform: translateY(0); } 26% { transform: translateY(-12px) scaleY(1.06); } 55% { transform: translateY(-9px); } 78% { transform: translateY(6px) scaleY(.9); } 100% { transform: translateY(0); } }
+@keyframes pBlast  { 0% { transform: translateX(0) rotate(0); } 28% { transform: translateX(-7px) rotate(-6deg); } 56% { transform: translateX(10px) rotate(5deg); } 100% { transform: translateX(0) rotate(0); } }
+@keyframes pPull   { 0% { transform: translateX(0); } 32% { transform: translateX(9px); } 66% { transform: translateX(-7px); } 100% { transform: translateX(0); } }
+@keyframes pHop    { 0% { transform: translateY(0); } 30% { transform: translateY(-11px); } 60% { transform: translateY(0); } 76% { transform: translateY(-4px); } 100% { transform: translateY(0); } }
+@keyframes pBrace  { 0% { transform: translateY(0) scaleY(1); } 40% { transform: translateY(7px) scaleY(.86); } 72% { transform: translateY(7px) scaleY(.86); } 100% { transform: translateY(0) scaleY(1); } }
+@keyframes pCharge { 0%, 100% { transform: translateX(0); } 15% { transform: translateX(-2.5px); } 35% { transform: translateX(2.5px); } 55% { transform: translateX(-2.5px); } 75% { transform: translateX(2.5px); } 90% { transform: translateX(-1.5px); } }
 /* Avatar picker (Stats tab) */
 .avatar-preview { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
 .avatar-demo { min-height: 120px; }
