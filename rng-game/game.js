@@ -316,6 +316,7 @@
       shards: 0,
       gems: 0,
       vipDaily: 0,
+      wheelDaily: 0,
       avatar: { face: "🙂", color: "#ffd24a" },
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       aurasLockedUntil: 0,
@@ -369,6 +370,7 @@
       merged.shards = Math.max(0, Math.floor(Number(merged.shards) || 0));
       merged.gems = Math.max(0, Math.floor(Number(merged.gems) || 0));
       merged.vipDaily = Math.max(0, Math.floor(Number(merged.vipDaily) || 0));
+      merged.wheelDaily = Math.max(0, Math.floor(Number(merged.wheelDaily) || 0));
       merged.avatar = avatarLook(merged.avatar); /* migrate a legacy preset id, or validate the {face,color} */
       /* A forced roll (set by an admin) survives in the save until it's used; drop it if the aura is unknown. */
       if (merged.forceRoll == null || !A.byId(merged.forceRoll)) { delete merged.forceRoll; merged.forceShiny = false; }
@@ -897,6 +899,7 @@
     renderEffects();
     renderQuickbar();
     renderDaily();
+    renderWheel();
     renderHistory();
     renderInventory();
     renderAbilities();
@@ -1375,7 +1378,7 @@
     renderAll();
   }
 
-  setInterval(function () { if (!dailyReady()) renderDaily(); }, 30000);
+  setInterval(function () { if (!dailyReady()) renderDaily(); if (typeof renderWheel === "function" && !wheelReady()) renderWheel(); }, 30000);
 
   /* ---------- Potions ---------- */
 
@@ -3731,6 +3734,83 @@
     if (h > 0) return h + "h " + m + "m";
     if (m > 0) return m + "m";
     return Math.max(1, s) + "s";
+  }
+
+  /* ---------- Daily Spin the Wheel: once a day, spin for a random free prize ---------- */
+  var WHEEL_MS = 20 * 60 * 60 * 1000; /* one free spin every 20 hours */
+  /* Each wedge: icon shown on the wheel, its colour, a pick weight, and what it gives (with a result message). */
+  var WHEEL_SEGMENTS = [
+    { icon: "🪙", label: "50K",    color: "#f6c453", weight: 24, msg: "+50,000 coins",                        give: function () { addCoins(50000); } },
+    { icon: "💎", label: "15",     color: "#a78bfa", weight: 10, msg: "+15 Gems",                             give: function () { S.gems = (S.gems || 0) + 15; } },
+    { icon: "🪙", label: "1M",     color: "#f59e0b", weight: 14, msg: "+1,000,000 coins",                     give: function () { addCoins(1000000); } },
+    { icon: "✨", label: "100",    color: "#38bdf8", weight: 12, msg: "+100 shiny shards",                    give: function () { S.shards = (S.shards || 0) + 100; } },
+    { icon: "🪙", label: "5K",     color: "#5fd0b0", weight: 12, msg: "+5,000 doubloons",                     give: function () { S.doubloons = (S.doubloons || 0) + 5000; } },
+    { icon: "🍀", label: "Luck",   color: "#4ade80", weight: 10, msg: "x1,000 luck for 5 rolls",              give: function () { S.luckEffects.push({ mult: 1000, rolls: 5 }); } },
+    { icon: "🧪", label: "x2",     color: "#c084fc", weight: 14, msg: "2 Mega Mystery Potions",               give: function () { addPotion("megamystery", 2); } },
+    { icon: "🎉", label: "JACKPOT",color: "#ff5fa2", weight: 4,  msg: "JACKPOT! +25,000,000 coins & +50 💎",  give: function () { addCoins(25000000); S.gems = (S.gems || 0) + 50; } }
+  ];
+  var wheelBuilt = false, wheelSpinning = false, wheelRotation = 0;
+  function wheelReady() { return Date.now() - (S.wheelDaily || 0) >= WHEEL_MS; }
+  function wheelIn() { return Math.max(0, WHEEL_MS - (Date.now() - (S.wheelDaily || 0))); }
+
+  /* A point on the wheel (radius `rad`) at `d` degrees measured clockwise from the top. */
+  function wheelPoint(d, rad, cx, cy) {
+    var a = d * Math.PI / 180;
+    return [cx + rad * Math.sin(a), cy - rad * Math.cos(a)];
+  }
+  function buildWheelSVG() {
+    var n = WHEEL_SEGMENTS.length, seg = 360 / n, cx = 120, cy = 120, r = 116, svg = "";
+    for (var i = 0; i < n; i++) {
+      var a0 = i * seg, a1 = (i + 1) * seg, am = a0 + seg / 2;
+      var p0 = wheelPoint(a0, r, cx, cy), p1 = wheelPoint(a1, r, cx, cy);
+      svg += '<path d="M ' + cx + ' ' + cy + ' L ' + p0[0].toFixed(2) + ' ' + p0[1].toFixed(2) + ' A ' + r + ' ' + r + ' 0 0 1 ' + p1[0].toFixed(2) + ' ' + p1[1].toFixed(2) + ' Z" fill="' + WHEEL_SEGMENTS[i].color + '" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>';
+      var ep = wheelPoint(am, r * 0.66, cx, cy), lp = wheelPoint(am, r * 0.42, cx, cy);
+      svg += '<text x="' + ep[0].toFixed(1) + '" y="' + ep[1].toFixed(1) + '" text-anchor="middle" dominant-baseline="central" font-size="22">' + WHEEL_SEGMENTS[i].icon + '</text>';
+      svg += '<text x="' + lp[0].toFixed(1) + '" y="' + lp[1].toFixed(1) + '" text-anchor="middle" dominant-baseline="central" font-size="8.5" font-weight="700" fill="#1b1b24">' + WHEEL_SEGMENTS[i].label + '</text>';
+    }
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="14" fill="#fff" stroke="rgba(0,0,0,.3)" stroke-width="2"/>';
+    return '<svg viewBox="0 0 240 240" aria-hidden="true">' + svg + '</svg>';
+  }
+  function pickWheelIndex() {
+    var total = 0, i;
+    for (i = 0; i < WHEEL_SEGMENTS.length; i++) total += WHEEL_SEGMENTS[i].weight;
+    var r = Math.random() * total;
+    for (i = 0; i < WHEEL_SEGMENTS.length; i++) { r -= WHEEL_SEGMENTS[i].weight; if (r < 0) return i; }
+    return 0;
+  }
+  function spinWheel() {
+    if (wheelSpinning) return;
+    if (!wheelReady()) { toast("Your next free spin is in " + fmtDuration(wheelIn()), "bad"); return; }
+    wheelSpinning = true;
+    var idx = pickWheelIndex(), seg = 360 / WHEEL_SEGMENTS.length;
+    var want = (360 - (idx * seg + seg / 2)) % 360;          /* final orientation that puts this wedge under the top pointer */
+    var cur = ((wheelRotation % 360) + 360) % 360;
+    wheelRotation += 360 * 5 + ((want - cur + 360) % 360);   /* 5 full turns, then settle on the prize */
+    var wheel = $("#wheel");
+    wheel.style.transition = "transform 4.2s cubic-bezier(.17,.72,.18,1)";
+    wheel.style.transform = "rotate(" + wheelRotation + "deg)";
+    S.wheelDaily = Date.now(); /* lock the daily spin at once */
+    renderWheel();
+    save();
+    Sound.roll && Sound.roll();
+    setTimeout(function () {
+      var reward = WHEEL_SEGMENTS[idx];
+      reward.give();
+      S.stats.wheelSpins = (S.stats.wheelSpins || 0) + 1;
+      Sound.win && Sound.win();
+      toast("🎡 " + reward.msg + "!", "gold", 4500);
+      wheelSpinning = false;
+      save();
+      renderAll();
+    }, 4300);
+  }
+  function renderWheel() {
+    var wheel = $("#wheel"), sub = $("#wheel-sub"), btn = $("#wheel-spin");
+    if (!wheel) return;
+    if (!wheelBuilt) { wheel.innerHTML = buildWheelSVG(); wheelBuilt = true; }
+    var ready = wheelReady();
+    if (sub) sub.textContent = wheelSpinning ? "Spinning…" : ready ? "Spin once a day for a free prize — coins, gems, potions or the JACKPOT!" : "Next free spin in " + fmtDuration(wheelIn()) + ".";
+    if (btn) { btn.textContent = ready || wheelSpinning ? "Spin!" : "Spun ✓"; btn.disabled = !ready || wheelSpinning; }
   }
 
   /* ---------- VIP shop: offers bought with 💎 Gems, a premium currency EARNED by playing (never real money) ---------- */
@@ -7712,6 +7792,7 @@
   });
   $("#ability-aura").addEventListener("change", function (e) { abilitiesViewAura = Number(e.target.value); renderAbilities(); });
   $("#btn-daily").addEventListener("click", claimDaily);
+  $("#wheel-spin").addEventListener("click", spinWheel);
   var brandClicks = 0;
   $(".brand").addEventListener("click", function () {
     brandClicks++;

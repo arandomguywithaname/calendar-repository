@@ -173,6 +173,12 @@ loadout, and fight bots or a friend.
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
   week. Miss two days and the streak restarts.
+- **🎡 Daily Spin the Wheel.** On the Roll screen, a colourful 8-wedge prize wheel you
+  can spin **once every 20 hours**. Press **Spin!** and it whirls round (five full turns)
+  and lands under the pointer on a random free prize — **coins** (50,000 or 1,000,000),
+  **💎 15 Gems**, **✨ 100 shiny shards**, **🪙 5,000 doubloons**, **🍀 x1,000 luck for 5
+  rolls**, **🧪 2 Mega Mystery Potions**, or the rare **🎉 JACKPOT** (25,000,000 coins
+  **and** 50 Gems). The prize is picked fairly (weighted) and the wheel always lands on it.
 - **58 potions** in four groups. Luck from x2 up to the Potion of Destiny
   (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
   rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
