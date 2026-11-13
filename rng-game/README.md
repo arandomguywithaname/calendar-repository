@@ -173,7 +173,7 @@ loadout, and fight bots or a friend.
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
   week. Miss two days and the streak restarts.
-- **59 potions** in four groups. Luck from x2 up to the Potion of Destiny
+- **58 potions** in four groups. Luck from x2 up to the Potion of Destiny
   (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
   rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
   way. Magnets and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
@@ -193,8 +193,8 @@ loadout, and fight bots or a friend.
   (x4 luck), Mythic Potion (x100 luck) and Supernova Elixir (x2500 luck); Glimmer (x4)
   and Radiance (x25) shiny potions; the Cosmic Magnet (Cosmic or better) and Divine Magnet
   (Divine or better); Fortune Coins (x50) and King's Ransom (x500) coin potions; the Flash
-  Potion (cooldown cut to 1/16); and three battle potions — Berserk Brew (+700% damage),
-  World Ender (+1400%) and the Aegis Potion (a 100%-HP shield).
+  Potion (cooldown cut to 1/16); and two battle potions — Berserk Brew (+700% damage)
+  and the Aegis Potion (a 100%-HP shield).
 - **🏟️ Arena supplies (arena-only potions).** Two potions are sold **only** at the
   Arena's own supply stand, for **doubloons**, and never show up in the Potion Shop or
   the Doubloon shop: the **🍶 Elixir Potion** (×30,000,000 luck for 2 rolls — the
@@ -276,7 +276,7 @@ loadout, and fight bots or a friend.
   Coin Chest (+250,000), Coin Vault (+5,000,000), Dragon's Hoard (+200,000,000), a Potion
   Pack (3 Mega Mystery Potions), a VIP Luck Vial (×1,000,000 luck for 2 rolls), the
   **🌌 Trillion Luck Potion** (×1,000,000,000,000 luck for one roll, 100 Gems), a **VIP
-  Battle Pack** (World Ender + Aegis + Phoenix Feather), a **VIP Shiny Pack** (Prism +
+  Battle Pack** (Berserk Brew + Aegis + Phoenix Feather), a **VIP Shiny Pack** (Prism +
   Radiance), a Shiny Shard Pack (+500 shards) and a Doubloon Pack (+20,000) — all bought
   with **💎 Gems**. **Gems are a premium currency you earn free by playing, never with
   real money:** claim **25 free Gems every 20 hours**, and win **3 Gems every time you

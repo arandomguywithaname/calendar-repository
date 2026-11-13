@@ -96,7 +96,6 @@
     ransom:    { name: "King's Ransom",     icon: "💷", cost: 150000,  group: "coins",  kind: "gold", mult: 500, rolls: 3,  desc: "x500 coins from rolls for 3 rolls" },
     flash:     { name: "Flash Potion",      icon: "🏃", cost: 15000,   group: "coins",  kind: "haste", div: 16, seconds: 75, desc: "Roll cooldown cut to 1/16 for 75 seconds" },
     berserk:   { name: "Berserk Brew",      icon: "🩸", cost: 30000,   group: "battle", kind: "strength", mult: 8,  desc: "+700% damage in your next bot fight" },
-    worldender: { name: "World Ender",      icon: "💥", cost: 120000,  group: "battle", kind: "strength", mult: 15, desc: "+1400% damage in your next bot fight" },
     aegis:     { name: "Aegis Potion",      icon: "🏰", cost: 5000,    group: "battle", kind: "shield", pct: 1, desc: "Start your next bot fight with a shield worth 100% of your HP" },
     /* Arena-only potions — bought with doubloons, and ONLY from the Arena's supply stand (not the shops). */
     elixir:    { name: "Elixir Potion",     icon: "🍶", cost: 0, group: "luck",   kind: "luck", mult: 30000000, rolls: 2, arena: true, doubloonCost: 60000, desc: "x30,000,000 luck for 2 rolls — the strongest luck in the game. Arena only, 60,000 doubloons." },
@@ -275,7 +274,7 @@
     /* The newer potions don't count toward the "buy every potion" collection, so it stays the same challenge
        and players who already unlocked the Potion of Everything keep it. */
     "fourleaf", "mythic", "supernova", "glimmer", "radiance", "cosmicmagnet", "divinemagnet",
-    "fortunecoins", "ransom", "flash", "berserk", "worldender", "aegis"];
+    "fortunecoins", "ransom", "flash", "berserk", "aegis"];
   function collectionKeys() {
     return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && !POTIONS[k].arena && COLLECTION_SKIP.indexOf(k) < 0; });
   }
@@ -3747,7 +3746,7 @@
     { key: "potions",   icon: "🧪", name: "Potion Pack",       gems: 25,  desc: "3 Mega Mystery Potions",      give: function () { addPotion("megamystery", 3); } },
     { key: "luck",      icon: "🌠", name: "VIP Luck Vial",     gems: 60,  desc: "x1,000,000 luck for 2 rolls", give: function () { S.luckEffects.push({ mult: 1000000, rolls: 2 }); } },
     { key: "luck1t",    icon: "🌌", name: "Trillion Luck Potion", gems: 100, desc: "x1,000,000,000,000 luck for 1 roll", give: function () { S.luckEffects.push({ mult: 1000000000000, rolls: 1 }); } },
-    { key: "battlepack",icon: "⚔️", name: "VIP Battle Pack",    gems: 40,  desc: "World Ender + Aegis + Phoenix Feather", give: function () { addPotion("worldender", 1); addPotion("aegis", 1); addPotion("phoenix", 1); } },
+    { key: "battlepack",icon: "⚔️", name: "VIP Battle Pack",    gems: 40,  desc: "Berserk Brew + Aegis + Phoenix Feather", give: function () { addPotion("berserk", 1); addPotion("aegis", 1); addPotion("phoenix", 1); } },
     { key: "shinypack", icon: "💫", name: "VIP Shiny Pack",     gems: 35,  desc: "a Prism + a Radiance shiny potion", give: function () { addPotion("prism", 1); addPotion("radiance", 1); } },
     { key: "shards",    icon: "✨", name: "Shiny Shard Pack",   gems: 50,  desc: "+500 shiny shards",           give: function () { S.shards = (S.shards || 0) + 500; } },
     { key: "doubloons", icon: "🪙", name: "Doubloon Pack",     gems: 30,  desc: "+20,000 doubloons",           give: function () { S.doubloons = (S.doubloons || 0) + 20000; } }
