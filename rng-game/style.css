@@ -233,6 +233,16 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .orb.tier-chosen::after { border: 3px solid #fff7cc; box-shadow: 0 0 30px #ffd700, 0 0 60px rgba(255,215,0,.6), inset 0 0 22px rgba(255,215,0,.6); animation-duration: 8s; }
 @keyframes chosen-pulse { 0%,100% { box-shadow: 0 0 60px 10px rgba(255,215,0,.6), 0 0 0 3px rgba(255,255,255,.6); } 50% { box-shadow: 0 0 140px 40px rgba(255,215,0,.85), 0 0 0 6px rgba(255,255,255,.95); } }
 
+/* Beyond the Chosen: the seven new ranks. They share the Chosen's bright core and twin halos (tinted to each
+   aura's own colour via --c1/--c2) and add their own coloured aura-glow so the rarest auras look the grandest. */
+.orb.tier-ascendant::before, .orb.tier-empyrean::before, .orb.tier-primordial::before, .orb.tier-omniscient::before, .orb.tier-boundless::before, .orb.tier-infinite::before, .orb.tier-omnipotent::before { opacity: .95; inset: -42%; animation: spin 9s linear infinite; background: repeating-conic-gradient(from 0deg, transparent 0deg 5deg, color-mix(in srgb, var(--c1) 90%, white) 5deg 7deg, transparent 7deg 13deg, color-mix(in srgb, var(--c3, #fff) 85%, white) 13deg 13.8deg); }
+.orb.tier-ascendant::after, .orb.tier-empyrean::after, .orb.tier-primordial::after, .orb.tier-omniscient::after, .orb.tier-boundless::after, .orb.tier-infinite::after, .orb.tier-omnipotent::after { opacity: 1; inset: -10px; border: 3px solid color-mix(in srgb, var(--c1) 85%, white); box-shadow: 0 0 30px var(--c1), inset 0 0 22px color-mix(in srgb, var(--c1) 55%, transparent); animation: spin-rev 6s linear infinite; }
+.orb.tier-ascendant .orb-core, .orb.tier-empyrean .orb-core, .orb.tier-primordial .orb-core, .orb.tier-omniscient .orb-core, .orb.tier-boundless .orb-core, .orb.tier-infinite .orb-core, .orb.tier-omnipotent .orb-core { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.9), rgba(255,255,255,0) 42%), radial-gradient(circle at 50% 50%, rgba(255,255,255,.6) 0%, rgba(255,255,255,0) 34%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%); }
+.orb.tier-ascendant .orb-paint, .orb.tier-empyrean .orb-paint, .orb.tier-primordial .orb-paint, .orb.tier-omniscient .orb-paint, .orb.tier-boundless .orb-paint, .orb.tier-infinite .orb-paint, .orb.tier-omnipotent .orb-paint { animation: spin 4.5s linear infinite, hueshift 9s linear infinite; }
+.orb.tier-ascendant, .orb.tier-empyrean, .orb.tier-primordial, .orb.tier-boundless { animation: beyond-pulse 1.9s ease-in-out infinite; }
+.orb.tier-omniscient, .orb.tier-infinite, .orb.tier-omnipotent { animation: beyond-pulse 1.4s ease-in-out infinite; }
+@keyframes beyond-pulse { 0%,100% { box-shadow: 0 0 60px 10px color-mix(in srgb, var(--c1) 65%, transparent), 0 0 0 3px rgba(255,255,255,.55); } 50% { box-shadow: 0 0 150px 46px color-mix(in srgb, var(--c1) 90%, transparent), 0 0 0 6px rgba(255,255,255,.9); } }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes spin-rev { to { transform: rotate(-360deg); } }
 .orb.spinning { animation: wobble .4s ease-in-out infinite; filter: blur(1px) saturate(1.4); }

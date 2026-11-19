@@ -3,7 +3,7 @@
 A static browser game: roll for auras, earn coins, buy potions, build an ability
 loadout, and fight bots or a friend.
 
-- **858 auras in 11 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
+- **1258 auras in 18 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
   1,000,000,000), then twenty more Forbidden auras beyond it (Abyssal Crown, Void Sovereign,
   Shattered Infinity, Crimson Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis,
   Wrath of the Unmade, Eternal Damnation, Final Silence, Obsidian Requiem, Hellfire Monarch,
@@ -26,6 +26,15 @@ loadout, and fight bots or a friend.
   signature 🕳️ **Oblivion** and 🫰 **Erasure** each erase the enemy for exactly
   **10,000,000** damage that nothing can block, shield, reflect or boost. Administrative
   auras have a cyan orb style.
+- **Beyond the Chosen — seven new ranks, 400 new auras, all stronger than The Unknown.**
+  Past the Chosen rank climb **Ascendant**, **Empyrean**, **Primordial**, **Omniscient**,
+  **Boundless**, **Infinite** and **Omnipotent**, 400 auras in all (about 57 per rank), each
+  rarer than The Unknown and far harder-hitting: fixed power climbs from **1,000,000**
+  (Ascendant, ~1 in 10¹⁹) up to **500,000,000** (Omnipotent, ~1 in 10⁵⁹) — compared with
+  The Unknown's 500,000. Their names, odds, colours and shiny forms are all generated
+  deterministically, so every player sees the same collection, and they are appended last so
+  no older aura's ID changes. Each new rank gets a bright core, twin spinning halos tinted to
+  the aura's own colour and a coloured aura-glow, so the rarest auras look the grandest.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
   Fury of Darkness and the Forbidden rank, a cyan system glow for Administrative and
@@ -57,9 +66,9 @@ loadout, and fight bots or a friend.
   a lava lamp, jellyfish, a maze, a prism, a rocket launch, sky lanterns and a
   spinning globe. Beyond Axiom always gets the graph; Cosmic Veil and Fury of
   Darkness keep bespoke sequences.
-- **Shiny forms.** 665 of the 847 auras (78.5%: 615 of the 784 generated ones, 18 of the
-  20 extra Forbidden ones and 32 of the 40 later Administrative ones; Root Access, Absolute
-  Authority and The Chosen One have none) have a shiny form
+- **Shiny forms.** Most auras have one: 78.5% of the 784 generated auras, plus the extra
+  Forbidden, Administrative and Beyond-the-Chosen auras that carry a multiplier (the Chosen
+  rank itself has none; Root Access and Absolute Authority have none)
   fixed at ×2, ×3, ×4 or ×5, spread evenly, except Fury of Darkness, whose shiny is ×10.
   Rolling one of them has a 1-in-that-number chance of coming out shiny, so a shiny
   Fury of Darkness is 1 in 10,000,000,000 and a ×4 shiny Null Dominion is 1 in

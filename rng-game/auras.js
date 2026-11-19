@@ -1,7 +1,9 @@
-/* auras.js — generates the 847 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
+/* auras.js — generates the 1258 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
    up to Fury of Darkness at 1 in 1,000,000,000), 20 hand-made Forbidden auras beyond it (up to Null Dominion at
-   1 in 80,000,000,000), 42 Administrative auras and, alone in the last rank (Chosen), The Chosen One at
-   1 in 1,000,000,000,000,000. Rarity is expressed as "1 in N". */
+   1 in 80,000,000,000), 42 Administrative auras, the Chosen rank from The Chosen One (1 in 1,000,000,000,000,000)
+   up to The Unknown (1 in 1,000,000,000,000,000,000), and 400 newer auras in seven ranks beyond that — Ascendant,
+   Empyrean, Primordial, Omniscient, Boundless, Infinite and Omnipotent — each stronger than The Unknown.
+   Rarity is expressed as "1 in N". */
 (function (global) {
   "use strict";
 
@@ -35,12 +37,22 @@
     { key: "transcendent", name: "Transcendent", max: 1e9,      color: "#f472b6", cutscene: 4 },
     { key: "forbidden",    name: "Forbidden",    max: 1e11,     color: "#ef4444", cutscene: 5 },
     { key: "administrative", name: "Administrative", max: 1e15,  color: "#22d3ee", cutscene: 6 },
-    { key: "chosen",       name: "Chosen",       max: Infinity, color: "#ffd700", cutscene: 7 }
+    { key: "chosen",       name: "Chosen",       max: 1e19,     color: "#ffd700", cutscene: 7 },
+    /* Seven new ranks above the Chosen — every aura in them is stronger than The Unknown. */
+    { key: "ascendant",    name: "Ascendant",    max: 1e24,     color: "#38bdf8", cutscene: 7 },
+    { key: "empyrean",     name: "Empyrean",     max: 1e28,     color: "#fbbf24", cutscene: 7 },
+    { key: "primordial",   name: "Primordial",   max: 1e33,     color: "#a78bfa", cutscene: 7 },
+    { key: "omniscient",   name: "Omniscient",   max: 1e39,     color: "#2dd4bf", cutscene: 7 },
+    { key: "boundless",    name: "Boundless",    max: 1e46,     color: "#f472b6", cutscene: 7 },
+    { key: "infinite",     name: "Infinite",     max: 1e54,     color: "#818cf8", cutscene: 7 },
+    { key: "omnipotent",   name: "Omnipotent",   max: Infinity, color: "#f87171", cutscene: 7 }
   ];
 
   var TIER_COIN_BONUS = {
     common: 0, uncommon: 0, rare: 10, epic: 40, legendary: 200,
-    cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000, administrative: 2500000, chosen: 25000000
+    cosmic: 1000, divine: 5000, transcendent: 25000, forbidden: 250000, administrative: 2500000, chosen: 25000000,
+    ascendant: 100000000, empyrean: 250000000, primordial: 600000000, omniscient: 1500000000,
+    boundless: 4000000000, infinite: 10000000000, omnipotent: 30000000000
   };
 
   /* Battle power grows with rarity; every aura gets twice the base curve. */
@@ -271,6 +283,54 @@
   EXTRA_AURAS.push(["The Immortal Oath",  1.5e17, ["#f0abfc", "#14001a", "#fae8ff", "#c026d3", "#ffffff"], 0, 122000]);
   EXTRA_AURAS.push(["The Final Chosen",   4e17,   ["#fef9c3", "#1a1500", "#fde047", "#facc15", "#ffffff"], 0, 135000]);
   EXTRA_AURAS.push(["The Unknown",        1e18,   ["#e5e5e5", "#000000", "#a855f7", "#0a0a0a", "#22d3ee"], 0, 500000]);
+
+  /* ── Beyond the Chosen ── 400 brand-new auras split across the seven new ranks. Every one is rarer than
+     The Unknown and hits harder too: fixed power climbs from 1,000,000 (Ascendant) to 500,000,000 (Omnipotent),
+     well past The Unknown's 500,000. Names, odds, colours and shiny forms are all generated deterministically so
+     every player sees the same collection. They are appended last, so no existing aura's ID ever changes. */
+  (function () {
+    /* rarity band [low, high) kept strictly inside each tier's boundary; power band [pLo, pHi] per rank. */
+    var NEW_TIERS = [
+      { name: "Ascendant",  low: 1.2e19, high: 9e23,  count: 58, hue: 200, pLo: 1000000,   pHi: 2200000,   pre: ["Ascendant","Rising","Dawnforged","Skybound","Luminous","Soaring","Exalted","Uplifted"],      core: ["Herald","Pinnacle","Vanguard","Beacon","Summit","Aurora","Crest","Zenith"] },
+      { name: "Empyrean",   low: 1.2e24, high: 9e27,  count: 57, hue: 45,  pLo: 2500000,   pHi: 5000000,   pre: ["Empyreal","Heavenly","Gilded","Seraphic","Celestial","Hallowed","Radiant","Sanctified"],     core: ["Throne","Halo","Choir","Sanctum","Firmament","Covenant","Reliquary","Dominion"] },
+      { name: "Primordial", low: 1.2e28, high: 9e32,  count: 57, hue: 270, pLo: 6000000,   pHi: 12000000,  pre: ["Primordial","Ancient","Elder","Primeval","Abyssal","Unborn","Fathomless","Deepforged"],      core: ["Origin","Leviathan","Monolith","Wellspring","Chasm","Progenitor","Aeon","Titan"] },
+      { name: "Omniscient", low: 1.2e33, high: 9e38,  count: 57, hue: 168, pLo: 15000000,  pHi: 30000000,  pre: ["Omniscient","All-Seeing","Unblinking","Clairvoyant","Enlightened","Knowing","Lucid","Mindful"], core: ["Oracle","Eye","Mind","Truth","Insight","Vision","Cognition","Awareness"] },
+      { name: "Boundless",  low: 1.2e39, high: 9e45,  count: 57, hue: 320, pLo: 35000000,  pHi: 60000000,  pre: ["Boundless","Endless","Limitless","Unbound","Measureless","Vast","Immeasurable","Sprawling"], core: ["Expanse","Horizon","Continuum","Frontier","Threshold","Reach","Breadth","Span"] },
+      { name: "Infinite",   low: 1.2e46, high: 9e53,  count: 57, hue: 232, pLo: 70000000,  pHi: 120000000, pre: ["Infinite","Eternal","Timeless","Everlasting","Perpetual","Undying","Deathless","Ceaseless"],  core: ["Eternity","Aevum","Forever","Epoch","Infinity","Cycle","Singularity","Loop"] },
+      { name: "Omnipotent", low: 1.2e54, high: 9e59,  count: 57, hue: 8,   pLo: 150000000, pHi: 500000000, pre: ["Omnipotent","Almighty","Supreme","Absolute","Sovereign","Ultimate","Paramount","Unrivaled"],  core: ["Godhead","Oversoul","Demiurge","Archon","Paragon","Dominion","Apex","Finality"] }
+    ];
+    /* Names must not collide with any existing aura or with each other. */
+    var used = {};
+    list.forEach(function (a) { used[a.name] = 1; });
+    EXTRA_AURAS.forEach(function (e) { used[e[0]] = 1; });
+    var g = 0; /* running index across all 400, for deterministic colours/shiny */
+    NEW_TIERS.forEach(function (t, ti) {
+      /* build all pre×core pairs, shuffle deterministically, then take unique un-used names. */
+      var pairs = [], pi, ci;
+      for (pi = 0; pi < t.pre.length; pi++) for (ci = 0; ci < t.core.length; ci++) pairs.push([pi, ci]);
+      var sh = mulberry32(777 + ti), k;
+      for (k = pairs.length - 1; k > 0; k--) { var j = Math.floor(sh() * (k + 1)), tmp = pairs[k]; pairs[k] = pairs[j]; pairs[j] = tmp; }
+      var made = 0, pp = 0;
+      while (made < t.count) {
+        var base, nm;
+        if (pp < pairs.length) { base = t.pre[pairs[pp][0]] + " " + t.core[pairs[pp][1]]; pp++; }
+        else { base = t.pre[pp % t.pre.length] + " " + t.core[(pp * 3) % t.core.length]; pp++; }
+        nm = base; var roman = 2;
+        while (used[nm]) { nm = base + " " + ["II","III","IV","V","VI","VII","VIII","IX","X"][Math.min(roman - 2, 8)]; roman++; }
+        used[nm] = 1;
+        /* log-spaced rarity strictly inside the band, rounded to 3 significant figures. */
+        var frac = (made + 0.5) / t.count;
+        var rarity = roundSig(t.low * Math.pow(t.high / t.low, frac), 3);
+        var power = Math.round(t.pLo + (t.pHi - t.pLo) * (t.count > 1 ? made / (t.count - 1) : 0));
+        var pr = mulberry32(60000 + g), h = ((t.hue + Math.floor(pr() * 40) - 20) % 360 + 360) % 360, h2 = (h + 150 + Math.floor(pr() * 50)) % 360;
+        var colors = ["hsl(" + h + ", 90%, 62%)", "hsl(" + h + ", 72%, 7%)", "hsl(" + h2 + ", 92%, 66%)", "hsl(" + ((h + 25) % 360) + ", 85%, 80%)", "#ffffff"];
+        var shinyMult = g % 5 === 4 ? 0 : 2 + (g % 4); /* ~80% get a shiny form, x2–x5 */
+        EXTRA_AURAS.push([nm, rarity, colors, shinyMult, power]);
+        made++; g++;
+      }
+    });
+  })();
+
   EXTRA_AURAS.forEach(function (e) {
     var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };
     var tier = tierOf(a);
@@ -287,9 +347,10 @@
   });
   var TOTAL = list.length;
 
-  /* Shiny forms: 78.5% of auras get one (615 of the 784 generated ones, 18 of the 20 extra Forbidden ones and
-     32 of the 40 later Administrative ones; Root Access, Absolute Authority and The Chosen One have none: 665 of 847). Each is fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a
-     1-in-multiplier chance of being shiny, so a shiny's true odds are its normal odds times the multiplier. */
+  /* Shiny forms: 78.5% of the 784 generated auras get one, plus the extra Forbidden, Administrative and the
+     seven new Beyond-the-Chosen ranks that carry a shiny multiplier (the Chosen rank itself has none). Each is
+     fixed at x2, x3, x4 or x5, the multipliers spread evenly. Rolling that aura has a 1-in-multiplier chance of
+     being shiny, so a shiny's true odds are its normal odds times the multiplier. */
   var SHINY_SHARE = 0.785;
   /* Hand-picked shiny multipliers that override the even x2-x5 spread. */
   var SHINY_OVERRIDES = { "Fury of Darkness": 10 };

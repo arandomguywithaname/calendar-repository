@@ -1745,11 +1745,15 @@
     for (var j = pairs.length - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)), tmp = pairs[j]; pairs[j] = pairs[k]; pairs[k] = tmp; }
     assignments = {};
     list.forEach(function (a) { var f = FORCED[a.name]; if (f) { used[f.scene + "|" + f.accent] = true; assignments[a.id] = f; } });
-    var ptr = 0;
+    var ptr = 0, np = pairs.length;
     list.forEach(function (a) {
       if (assignments[a.id] || a.rarity < 10000) return;
-      while (used[pairs[ptr]]) ptr++;
-      var pr = pairs[ptr++].split("|");
+      /* Give each Epic+ aura a unique scene+accent pairing while any remain. There are now more Epic+ auras
+         than pairings (the 400 new ranks), so once every pairing is taken, cycle back through them — the title
+         and overlay still vary — rather than running off the end of the list. */
+      var guard = 0;
+      while (guard < np && used[pairs[ptr % np]]) { ptr++; guard++; }
+      var pr = pairs[ptr++ % np].split("|");
       used[pr[0] + "|" + pr[1]] = true;
       assignments[a.id] = { scene: pr[0], accent: pr[1], title: TITLE_KEYS[Math.floor(pick() * TITLE_KEYS.length)], overlay: OVERLAY_KEYS[Math.floor(pick() * OVERLAY_KEYS.length)] };
     });
