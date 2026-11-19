@@ -271,7 +271,9 @@ loadout, and fight bots or a friend.
   counts down to the next reset. Losing a floor costs nothing but the fight. If a bot
   is too tough, the next floor also has a **⏭️ Skip** button: pay coins (the price
   scales with that bot's power — floor power × 4) to skip it and move straight on. A
-  skipped floor counts as cleared so the next unlocks, but earns **no doubloons**.
+  skipped floor counts as cleared so the next unlocks, but earns **no doubloons**. Next
+  to it is a **⏭️⏭️ Skip ×10** button that buys the next ten floors in one tap (it skips
+  as many of the next ten as you can afford and shows the total before you confirm).
 - **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
   potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
   at their own doubloon prices. The 3-healing-potion cap still applies, and a
@@ -448,8 +450,23 @@ No build step and no npm install.
   It sits above the cutscene overlay so it works mid-animation, and the choice is saved
   (also as a "Skip all animations" box in the Stats settings).
 - **Settings** (Stats tab): **Sound effects**, **Pop-up notifications** (turn it off to
-  stop the little toast messages — important ⚠️ Error pop-ups still show), **Skip
-  cutscenes** and **Skip all animations**.
+  stop the little toast messages — important ⚠️ Error pop-ups still show), **Short
+  numbers**, **Skip cutscenes** and **Skip all animations**.
+- **🔢 Short numbers.** A Stats-tab toggle. With it on, huge odds read **1 in 100T** /
+  **1 in 1Qi** / **1 in 1Oc** instead of a line of zeros — every place the game shows
+  odds, including the cutscene's counting/reel animations. Off (the default) keeps the
+  fully spelled-out "1 in 1,000,000,000,000,000,000". Either way, odds beyond a quintillion
+  (the new ranks) are auto-shortened inside the cutscene so a reel of 50+ digits never
+  appears. The short units go K, M, B, T, Qa, Qi, Sx, Sp, Oc, No, De … up to Vg.
+- **⚡ Lag-free fast rolling.** While a strong speed boost is active (a Super Roll or a
+  ×10-or-faster potion), rolls use a **turbo path**: no spin animation, no screen-takeover
+  cutscene and no confetti per roll, and the screen redraw, the coin pop-up and the save
+  are batched to about four times a second instead of once per roll. You still collect
+  every aura and all the coins — it just stops the game chugging when you roll really fast.
+- **🍀 Buy Luck** (Roll screen). Pick how strong the luck is (×2 up to ×1000) and how many
+  rolls it lasts (50–1000), and buy it with **coins or doubloons**. The price scales with
+  luck × rolls — e.g. **×2 luck for 200 rolls = 5,000 coins or 1,000 doubloons** (12.5
+  coins or 2.5 doubloons per luck-roll). The boost drops straight into your active effects.
 - **⚡ Roll speed readout.** Under the ROLL button a live line shows **how fast your next
   roll is**: your current roll cooldown ("Roll speed: one every 1.0s") when you're ready,
   a ticking countdown ("Next roll in 0.4s") while it recharges, and the boosted speed

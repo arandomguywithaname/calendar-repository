@@ -23,7 +23,7 @@
   var fmtShort = function (n) {
     n = Math.floor(Number(n) || 0);
     if (n < 10000) return n.toLocaleString("en-US");
-    var u = ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "De"], i = -1, x = n;
+    var u = ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "De", "UDe", "DDe", "TDe", "QaDe", "QiDe", "SxDe", "SpDe", "OcDe", "NoDe", "Vg"], i = -1, x = n;
     while (x >= 1000 && i < u.length - 1) { x /= 1000; i++; }
     if (x >= 999.5 && i < u.length - 1) { x /= 1000; i++; } /* 999,999 reads 1M, not 1000K */
     var s = x >= 100 ? String(Math.round(x)) : x.toFixed(x >= 10 ? 1 : 2);
@@ -323,7 +323,7 @@
       breakSkips: 0,
       history: [],
       stats: { best: null, bestShiny: false, shinies: 0, won: 0, lost: 0, pvpWon: 0, pvpLost: 0, earned: 0, streak: 0, bestStreak: 0, cutscenes: 0, giftsSent: 0, giftsReceived: 0, towerWins: 0, breakSkipsEarned: 0 },
-      settings: { sound: true, notifications: true, skipCutscenes: false, skipAnims: false, buyAmount: 1, useAmount: 1 }
+      settings: { sound: true, notifications: true, skipCutscenes: false, skipAnims: false, shortNum: false, buyAmount: 1, useAmount: 1 }
     };
   }
 
@@ -458,6 +458,24 @@
   function hasteActive() { return Date.now() < S.hasteUntil; }
   function rollCooldown() { return hasteActive() ? ROLL_COOLDOWN / (S.hasteDiv || 2) : ROLL_COOLDOWN; }
 
+  /* "Turbo" rolling = strong haste (Super Roll, or a big speed potion, ×10 or faster). At that speed the
+     per-roll spin animation, cutscene, confetti burst, pop-up toast and localStorage save all pile up and make
+     the game chug — the "the faster you roll the more laggy it is" problem. Turbo rolls skip all of that: the
+     aura still appears instantly, but the heavy screen redraw, the toast and the save are batched to about four
+     times a second instead of once per roll, so fast rolling stays smooth. */
+  function turboRoll() { return hasteActive() && (S.hasteDiv || 2) >= 10; }
+  var turboCoins = 0, turboFlushPending = false;
+  function turboFlush() {
+    turboFlushPending = false;
+    save();
+    renderAll();
+    if (turboCoins > 0) { toast("⚡ +" + fmt(turboCoins) + " coins", "gold"); turboCoins = 0; }
+  }
+  function turboAfterRoll(coins) {
+    turboCoins += coins;
+    if (!turboFlushPending) { turboFlushPending = true; setTimeout(turboFlush, 250); }
+  }
+
   /* Live "roll speed" readout: how fast your next roll is — a countdown while cooling down, else the cooldown length. */
   function updateRollSpeed() {
     var el = document.getElementById("roll-speed");
@@ -523,7 +541,10 @@
   function auraPower(aura, shiny) { return isShiny(aura, shiny) ? shinyPowerOf(aura) : aura.power; }
   function auraCoins(aura, shiny) { return isShiny(aura, shiny) ? shinyCoinsOf(aura) : aura.coins; }
   function auraLabel(aura, shiny) { return (isShiny(aura, shiny) ? "✨ Shiny " : "") + aura.name; }
-  function oddsText(aura, shiny) { return A.formatOdds(effRarity(aura, shiny)) + (isShiny(aura, shiny) ? " · ✨×" + shinyMult(aura) : ""); }
+  /* Odds string. With the "Short numbers" setting on, big odds read 1 in 100T / 1 in 1Qi instead of a line of
+     zeros; off, they stay fully spelled out. Everywhere the game shows odds goes through here. */
+  function oddsStr(r) { return (S && S.settings && S.settings.shortNum) ? "1 in " + fmtShort(r) : A.formatOdds(r); }
+  function oddsText(aura, shiny) { return oddsStr(effRarity(aura, shiny)) + (isShiny(aura, shiny) ? " · ✨×" + shinyMult(aura) : ""); }
   /* A shiny-capable aura rolls shiny 1 time in its multiplier, so a shiny's true odds are its normal odds × the multiplier.
      Only auras with a NATURAL shiny form can roll shiny — shiny shards can grant a shiny form to any aura
      without changing what rolls can produce. */
@@ -909,8 +930,60 @@
     renderPvpPanel();
     updateIndex();
     renderStats();
+    renderBuyLuck();
     $("#btn-auto").textContent = "Auto Roll: " + (autoOn ? "On" : "Off");
     $("#btn-auto").classList.toggle("on", autoOn);
+  }
+
+  /* ---------- Buy Luck ---------- */
+
+  /* Buy a luck boost straight from the Roll screen, priced by how strong it is and how many rolls it lasts.
+     The worked example from the request: ×2 luck for 200 rolls = 5,000 coins or 1,000 doubloons. So a unit of
+     "luck×rolls" costs 12.5 coins or 2.5 doubloons (coins are the softer currency, doubloons the premium one). */
+  var BUYLUCK_MULTS = [2, 5, 10, 25, 100, 1000];
+  var BUYLUCK_ROLLS = [50, 100, 200, 500, 1000];
+  var buyLuckPick = { mult: 2, rolls: 200 };
+  function buyLuckCoinCost(mult, rolls) { return Math.round(mult * rolls * 12.5); }
+  function buyLuckDoubCost(mult, rolls) { return Math.round(mult * rolls * 2.5); }
+
+  function renderBuyLuck() {
+    var box = document.getElementById("buyluck-card");
+    if (!box) return;
+    var mult = buyLuckPick.mult, rolls = buyLuckPick.rolls;
+    var cc = buyLuckCoinCost(mult, rolls), dc = buyLuckDoubCost(mult, rolls);
+    var multChips = BUYLUCK_MULTS.map(function (m) { return "<button type=\"button\" class=\"btn small chip bl-mult" + (m === mult ? " on" : "") + "\" data-m=\"" + m + "\">×" + fmtShort(m) + "</button>"; }).join("");
+    var rollChips = BUYLUCK_ROLLS.map(function (r) { return "<button type=\"button\" class=\"btn small chip bl-rolls" + (r === rolls ? " on" : "") + "\" data-r=\"" + r + "\">" + fmt(r) + "</button>"; }).join("");
+    box.innerHTML =
+      "<div class=\"bl-head\">🍀 Buy Luck <span class=\"muted small-text\">pick how strong, and for how many rolls</span></div>" +
+      "<div class=\"bl-pick\"><span class=\"bl-label\">Luck</span><div class=\"bl-chips\">" + multChips + "</div></div>" +
+      "<div class=\"bl-pick\"><span class=\"bl-label\">Rolls</span><div class=\"bl-chips\">" + rollChips + "</div></div>" +
+      "<div class=\"bl-deal\">×" + fmtShort(mult) + " luck for <b>" + fmt(rolls) + "</b> rolls</div>" +
+      "<div class=\"bl-buy\">" +
+        "<button type=\"button\" class=\"btn small primary\" id=\"bl-buy-coins\"" + (S.coins < cc ? " disabled" : "") + ">💰 " + fmt(cc) + " coins</button>" +
+        "<button type=\"button\" class=\"btn small\" id=\"bl-buy-doub\"" + ((S.doubloons || 0) < dc ? " disabled" : "") + ">🪙 " + fmt(dc) + " doubloons</button>" +
+      "</div>";
+    box.querySelectorAll(".bl-mult").forEach(function (b) { b.addEventListener("click", function () { buyLuckPick.mult = Number(b.getAttribute("data-m")); renderBuyLuck(); }); });
+    box.querySelectorAll(".bl-rolls").forEach(function (b) { b.addEventListener("click", function () { buyLuckPick.rolls = Number(b.getAttribute("data-r")); renderBuyLuck(); }); });
+    var bc = document.getElementById("bl-buy-coins"); if (bc) bc.addEventListener("click", function () { buyLuck("coins"); });
+    var bd = document.getElementById("bl-buy-doub"); if (bd) bd.addEventListener("click", function () { buyLuck("doubloons"); });
+  }
+
+  function buyLuck(cur) {
+    var mult = buyLuckPick.mult, rolls = buyLuckPick.rolls;
+    if (cur === "coins") {
+      var cc = buyLuckCoinCost(mult, rolls);
+      if (S.coins < cc) { toast("Not enough coins — you need " + fmt(cc), "bad"); return; }
+      S.coins -= cc;
+    } else {
+      var dc = buyLuckDoubCost(mult, rolls);
+      if ((S.doubloons || 0) < dc) { toast("Not enough doubloons — you need " + fmt(dc), "bad"); return; }
+      S.doubloons = (S.doubloons || 0) - dc;
+    }
+    S.luckEffects.push({ mult: mult, rolls: rolls });
+    Sound.buy();
+    toast("🍀 Bought ×" + fmtShort(mult) + " luck for " + fmt(rolls) + " rolls!", "gold");
+    save();
+    renderAll();
   }
 
   /* ---------- Rolling ---------- */
@@ -1282,8 +1355,22 @@
     if (S.history.length > 12) S.history.length = 12;
     recordBest(aura, shiny);
     if (equippedAura() === null) { S.equipped = aura.id; S.equippedShiny = shiny; }
-    var cutscene = ti >= 3 && !S.settings.skipCutscenes && !S.settings.skipAnims;
+    var cutscene = ti >= 3 && !S.settings.skipCutscenes && !S.settings.skipAnims && !turboRoll();
     if (cutscene) S.stats.cutscenes++;
+
+    if (turboRoll()) {
+      /* Fast path: no spin, no cutscene, no confetti, no per-roll save/toast — just show the aura and let the
+         screen + save catch up a few times a second. This is what "deletes the lag" while a Super Roll is active. */
+      stopSpin();
+      showAura(aura, shiny);
+      if (ti >= 2) { showBanner(aura, ti, shiny); setGlow(aura, ti); }
+      busy = false;
+      cooldownUntil = Date.now() + rollCooldown();
+      $("#btn-roll").disabled = false;
+      turboAfterRoll(coins);
+      return;
+    }
+
     save();
 
     FX.clear();
@@ -1725,7 +1812,7 @@
       tier.textContent = (sh ? "Shiny " : "") + tierName(a);
       var sub = document.createElement("div");
       sub.className = "card-sub";
-      sub.textContent = A.formatOdds(effRarity(a, sh)) + " · " + fmt(auraPower(a, sh)) + " power";
+      sub.textContent = oddsStr(effRarity(a, sh)) + " · " + fmt(auraPower(a, sh)) + " power";
       info.appendChild(title); info.appendChild(tier); info.appendChild(sub);
       row.appendChild(info);
       card.appendChild(row);
@@ -4057,6 +4144,18 @@
         skipBtn.disabled = !canAct || S.coins < cost;
         skipBtn.addEventListener("click", function () { skipTowerFloor(floor); });
         actions.appendChild(skipBtn);
+        /* Skip ×10: pay to clear the next batch of floors in one tap (as many of the next ten as you can afford). */
+        var batch = 0, batchCost = 0, bf = floor;
+        while (batch < 10 && bf <= TOWER_FLOORS && !S.tower.cleared[bf]) { batchCost += towerSkipCost(bf); bf++; batch++; }
+        if (batch > 1) {
+          var skip10 = document.createElement("button");
+          skip10.className = "btn small tower-skip";
+          skip10.textContent = "⏭️⏭️ Skip ×" + batch + " 🪙" + fmtShort(batchCost);
+          skip10.title = "Pay " + fmt(batchCost) + " coins to skip the next " + batch + " bots at once (no doubloons). Skips as many as you can afford.";
+          skip10.disabled = !canAct || S.coins < cost;
+          skip10.addEventListener("click", function () { skipTowerFloors(floor, 10); });
+          actions.appendChild(skip10);
+        }
         row.appendChild(actions);
       } else {
         row.appendChild(btn);
@@ -4110,6 +4209,40 @@
     if (floor > (S.tower.best || 0)) S.tower.best = floor;
     Sound.buy();
     toast("⏭️ Skipped Floor " + floor + " for " + fmt(cost) + " coins. " + (floor < TOWER_FLOORS ? "Floor " + (floor + 1) + " is open!" : "You reached the top!"), "gold", 6000);
+    save();
+    renderAll();
+    renderTower();
+  }
+
+  /* How many of the next `want` floors (starting at the next floor) the player could skip with the coins they
+     have, and what that costs. Greedy from the bottom up, so it stops as soon as the next one is unaffordable. */
+  function towerSkipPlan(startFloor, want) {
+    var floors = [], total = 0, f = startFloor;
+    while (floors.length < want && f <= TOWER_FLOORS && !S.tower.cleared[f]) {
+      var c = towerSkipCost(f);
+      if (S.coins < total + c) break;
+      floors.push(f); total += c; f++;
+    }
+    return { floors: floors, total: total };
+  }
+
+  /* Pay coins to skip up to `want` floors in one go (the Skip ×10 button). Skips as many of the next floors as
+     the player can afford, in order; skipped floors advance you but earn no doubloons. */
+  function skipTowerFloors(startFloor, want) {
+    if (battle && !battle.over) { toast("Finish the fight first", "bad"); return; }
+    if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
+    if (PvP.status === "connected") { toast("Leave the PvP room first", "bad"); return; }
+    if (startFloor !== towerReachable()) { toast("You can only skip from the next floor", "bad"); return; }
+    if (S.tower.cleared[startFloor]) return;
+    var plan = towerSkipPlan(startFloor, want);
+    if (plan.floors.length === 0) { toast("You need " + fmt(towerSkipCost(startFloor)) + " coins to skip Floor " + startFloor, "bad"); return; }
+    if (plan.floors.length === 1) { skipTowerFloor(startFloor); return; }
+    var first = plan.floors[0], last = plan.floors[plan.floors.length - 1];
+    if (!confirm("Pay " + fmt(plan.total) + " coins to skip " + plan.floors.length + " floors (Floor " + first + "–" + last + ") at once? Skipped floors earn no doubloons.")) return;
+    S.coins -= plan.total;
+    plan.floors.forEach(function (fl) { S.tower.cleared[fl] = true; if (fl > (S.tower.best || 0)) S.tower.best = fl; });
+    Sound.buy();
+    toast("⏭️ Skipped " + plan.floors.length + " floors for " + fmt(plan.total) + " coins. " + (last < TOWER_FLOORS ? "Floor " + (last + 1) + " is open!" : "You reached the top!"), "gold", 6000);
     save();
     renderAll();
     renderTower();
@@ -4197,7 +4330,7 @@
         var a = A.byId(id);
         var o = document.createElement("option");
         o.value = id;
-        o.textContent = a.name + " ×" + fmt(S.inventory[id]) + "  (" + A.formatOdds(a.rarity) + ")";
+        o.textContent = a.name + " ×" + fmt(S.inventory[id]) + "  (" + oddsStr(a.rarity) + ")";
         if (id === shardPick) o.selected = true;
         sel.appendChild(o);
       });
@@ -5190,7 +5323,7 @@
       tier.textContent = tierName(a);
       var odds = document.createElement("span");
       odds.className = "odds";
-      odds.textContent = A.formatOdds(a.rarity);
+      odds.textContent = oddsStr(a.rarity);
       var cnt = document.createElement("span");
       cnt.className = "cnt";
       row.appendChild(makeSwatch(a)); row.appendChild(name); row.appendChild(tier); row.appendChild(odds); row.appendChild(cnt);
@@ -5322,7 +5455,7 @@
       ["Total rolls", fmt(S.rolls)],
       ["Auras found", found + " / " + A.TOTAL],
       ["Shinies found", shinyFound + " / " + A.SHINY_COUNT + " (" + fmt(S.stats.shinies || 0) + " rolled)"],
-      ["Best aura", best ? auraLabel(best, S.stats.bestShiny) + " (" + A.formatOdds(effRarity(best, S.stats.bestShiny)) + ")" : "—"],
+      ["Best aura", best ? auraLabel(best, S.stats.bestShiny) + " (" + oddsStr(effRarity(best, S.stats.bestShiny)) + ")" : "—"],
       ["Coins earned", fmt(S.stats.earned)],
       ["Bot fights", fmt(S.stats.won) + " won · " + fmt(S.stats.lost) + " lost"],
       ["PvP record", fmt(S.stats.pvpWon) + " won · " + fmt(S.stats.pvpLost) + " lost"],
@@ -5346,6 +5479,7 @@
     });
     $("#set-sound").checked = !!S.settings.sound;
     $("#set-notifs").checked = S.settings.notifications !== false;
+    $("#set-shortnum").checked = !!S.settings.shortNum;
     $("#set-skip").checked = !!S.settings.skipCutscenes;
     $("#set-skipanims").checked = !!S.settings.skipAnims;
   }
@@ -5622,7 +5756,11 @@
       CS.onResize = resize;
       window.addEventListener("resize", resize);
 
-      var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: effRarity(aura, sh), dur: tl.sceneDur, level: level, shiny: sh, tierName: (sh ? "Shiny " : "") + tierName(aura), rng: REVEALS.mulberry32(aura.id * 31 + 7) };
+      var csRarity = effRarity(aura, sh);
+      /* Scenes that spell the odds out digit-by-digit use short numbers when the player asked for them, and
+         automatically for odds beyond a quintillion (the new ranks) so a reel of 20+ zeros never appears. */
+      var csFmtBig = (S.settings.shortNum || csRarity > 1e18) ? fmtShort : fmt;
+      var env = { aura: aura, colors: aura.colors, c1: aura.c1, c2: aura.c2, name: aura.name, rarity: csRarity, dur: tl.sceneDur, level: level, shiny: sh, tierName: (sh ? "Shiny " : "") + tierName(aura), fmtBig: csFmtBig, rng: REVEALS.mulberry32(aura.id * 31 + 7) };
       if (kind === "cosmic") {
         CS.draw = drawCosmic();
         Sound.cosmic();
@@ -6804,7 +6942,7 @@
       an.className = "t-" + aura.tier;
       an.textContent = (sh ? "✨ Shiny " : "") + aura.name;
       sub.appendChild(an);
-      sub.appendChild(document.createTextNode(" · " + A.formatOdds(row.bestRarity || effRarity(aura, sh))));
+      sub.appendChild(document.createTextNode(" · " + oddsStr(row.bestRarity || effRarity(aura, sh))));
     } else {
       sub.textContent = "no auras yet";
     }
@@ -7652,6 +7790,7 @@
   $("#btn-flee").addEventListener("click", forfeit);
   $("#set-sound").addEventListener("change", function (e) { S.settings.sound = e.target.checked; save(); });
   $("#set-notifs").addEventListener("change", function (e) { S.settings.notifications = e.target.checked; save(); toast(e.target.checked ? "🔔 Notifications on" : "🔕 Notifications off", "", 1500); });
+  $("#set-shortnum").addEventListener("change", function (e) { S.settings.shortNum = e.target.checked; save(); renderAll(); if (S.lastRoll !== null && A.byId(S.lastRoll)) $("#roll-odds").textContent = oddsText(A.byId(S.lastRoll), !!S.lastShiny); toast(e.target.checked ? "🔢 Short numbers on (1 in 100T)" : "🔢 Full numbers on", "", 1800); });
   $("#set-skip").addEventListener("change", function (e) { S.settings.skipCutscenes = e.target.checked; save(); });
   $("#set-skipanims").addEventListener("change", function (e) { setSkipAnims(e.target.checked); });
   setInterval(updateRollSpeed, 100);

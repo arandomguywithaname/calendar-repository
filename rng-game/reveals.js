@@ -139,7 +139,7 @@
         fitFont(ctx, fmt(env.rarity), "900", "Cinzel, serif", Math.min(w * 0.11, 110), w * 0.9); ctx.textAlign = "center";
         glow(ctx, env.c1, q >= 1 ? 40 + 20 * Math.sin(t * 6) : 14);
         ctx.fillStyle = q >= 1 ? "#fff" : env.c1;
-        ctx.fillText(fmt(Math.min(v, env.rarity)), w / 2, h * 0.42);
+        ctx.fillText((env.fmtBig || fmt)(Math.min(v, env.rarity)), w / 2, h * 0.42);
         noglow(ctx);
         if (q >= 1) { var rr = ((p - 0.72) * 3) % 1; ctx.strokeStyle = withAlpha(env.c1, 1 - rr); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(w / 2, h * 0.38, 80 + rr * 420, 0, TAU); ctx.stroke(); }
         fadeIn(ctx, t, w, h, 0.4);
@@ -148,7 +148,7 @@
 
     /* Slot machine reels locking the digits of the odds one by one. */
     reels: { titleAt: 0.8, oddsAt: 0.92, textY: 0.72, make: function (env) {
-      var chars = fmt(env.rarity).split(""), digits = chars.filter(function (c) { return c !== ","; }).map(Number), n = digits.length, commas = chars.length - n;
+      var chars = (env.fmtBig || fmt)(env.rarity).split(""), digits = chars.filter(function (c) { return c >= "0" && c <= "9"; }).map(Number), n = digits.length, commas = chars.length - n;
       var offs = digits.map(function () { return env.rng() * 10; });
       return function (ctx, t, w, h) {
         var p = t / env.dur;
@@ -157,7 +157,9 @@
         var total = n * cell + (n - 1) * gap + commas * cw, x0 = (w - total) / 2, y0 = h * 0.36 - cell * 0.75, ch = cell * 1.5;
         var xs = [], cx0 = x0, di = 0;
         chars.forEach(function (c) {
-          if (c === ",") { label(ctx, ",", cx0 + cw / 2 - gap / 2, y0 + ch * 0.85, Math.round(cell * 0.7), "rgba(255,255,255,.7)", "center", "900"); cx0 += cw; return; }
+          /* Only the 0-9 digits get a spinning reel; a comma, a decimal point or a short-number unit (K/M/Qi…)
+             is drawn as a small fixed label between the reels. */
+          if (c < "0" || c > "9") { label(ctx, c, cx0 + cw / 2 - gap / 2, y0 + ch * 0.85, Math.round(cell * 0.7), "rgba(255,255,255,.7)", "center", "900"); cx0 += cw; return; }
           xs.push(cx0); cx0 += cell + gap; di++;
         });
         for (var i = 0; i < n; i++) {

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=87">
+  <link rel="stylesheet" href="style.css?v=88">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -82,6 +82,7 @@
         </div>
         <div id="roll-speed" class="roll-speed"></div>
         <div id="active-effects" class="effects"></div>
+        <div id="buyluck-card" class="buyluck-card"></div>
         <div id="daily-card" class="daily">
           <div class="daily-text">
             <div class="daily-title">🎁 Daily gift</div>
@@ -320,6 +321,7 @@
       <div class="settings">
         <label class="check"><input type="checkbox" id="set-sound"> Sound effects</label>
         <label class="check"><input type="checkbox" id="set-notifs"> Pop-up notifications</label>
+        <label class="check"><input type="checkbox" id="set-shortnum"> Short numbers (1 in 100T, not all the zeros)</label>
         <label class="check"><input type="checkbox" id="set-skip"> Skip cutscenes</label>
         <label class="check"><input type="checkbox" id="set-skipanims"> Skip all animations</label>
         <button id="btn-reset" class="btn danger">Reset save</button>
@@ -439,7 +441,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 87</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 88</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -561,9 +563,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=87"></script>
-  <script src="abilities.js?v=87"></script>
-  <script src="reveals.js?v=87"></script>
-  <script src="game.js?v=87"></script>
+  <script src="auras.js?v=88"></script>
+  <script src="abilities.js?v=88"></script>
+  <script src="reveals.js?v=88"></script>
+  <script src="game.js?v=88"></script>
 </body>
 </html>
