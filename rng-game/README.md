@@ -348,26 +348,17 @@ loadout, and fight bots or a friend.
   picks up progress made elsewhere. A badge next to the ID shows ☁️ Online, Saving…,
   ⚠️ Offline (keep playing; it syncs when the connection is back) or 💻 This device (the
   site has no account server, see Deploy).
-  - **Your ID is a public handle, not a password.** Each account also has a secret key,
-    made on your device and sent (never shown) with every save, so knowing someone's ID
-    is **not** enough to read, overwrite or impersonate their account. The server turns
-    away any `load`, `save`, `claim`, `chatSend` or gift-box read that doesn't carry the
-    right secret (Error 403). So you can safely share your ID for gifts. **Protection never
-    blocks play:** if a device's secret doesn't match (e.g. a second device), it just
-    plays on locally — rolling still works — and only online syncing waits until that
-    device imports the account's Save Code.
-  - **Moving to a new device uses your Save Code.** Because the ID alone no longer logs
-    you in on a brand-new device, export a **Save Code** (Account → Export save code) on
-    your current device and import it on the new one — the code carries your ID *and*
-    secret, so it logs you in and unlocks saving there. Pasting someone else's ID on a
-    device that doesn't have their code just shows "log in with your Save Code".
-  - **Existing accounts** (made before protection) still load by ID and quietly protect
-    themselves the first time their owner saves (trust-on-first-save), so nobody is locked
-    out. If a player ever is locked out (lost device), an admin can **🔓 Unlock account
-    protection** for their ID so their own device can protect it fresh.
-  - Export / Import save codes also still work as a plain backup; each code carries a
-    fingerprint, so a hand-edited code is refused (Error 98), and codes from before
-    fingerprints can only be imported with admin unlocked. A Save button sits in the header.
+  - **Log in with just your 7-digit ID, on any device.** Account **secret-key protection
+    is turned off** (`secretOk()` in `account.mjs` always returns true): it was locking
+    single-device players out with no second device to recover from, so a 7-digit ID is
+    all you need again to load, save and sync an account anywhere — nothing ever sends you
+    to "another device". Trade-off: as before protection, anyone who knows an ID can reach
+    that account, so treat your ID as semi-private. To re-enable protection, restore the
+    real check in `secretOk()` (the original is kept in a comment there) and redeploy.
+  - Export / Import **save codes** still work as a backup and to carry progress to another
+    device; each code carries a fingerprint, so a hand-edited code is refused (Error 98),
+    and codes from before fingerprints can only be imported with admin unlocked. A Save
+    button sits in the header.
 - **One device rolls at a time**: rolling takes a 20-second "turn" on the account from
   the server, renewed while you keep rolling, auto-rolling or watching a reveal. If
   another device (or browser tab) tries to roll meanwhile, both devices get a red

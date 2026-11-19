@@ -70,8 +70,8 @@ const ADMIN_DEVICE = "admin"; /* recorded as the last writer of admin edits; too
    node -e "const c=require('crypto'),s=c.randomBytes(16).toString('hex');console.log(s,c.scryptSync('NEW PASSWORD',s,32,{N:16384,r:8,p:1}).toString('hex'))"
    and paste the two values here; also update ADMIN_PW in game.js, which checks the same password in the browser.
    An ADMIN_KEY environment variable in Netlify, if set, is used instead of the built-in password. */
-const ADMIN_SALT = "bdc221214b42e7e3e3de23737b9c3a57";
-const ADMIN_HASH = "9746b9f763102389b6b66dd6966db0ddd399da13fa85b6e8f8e245fbb89dac0a";
+const ADMIN_SALT = "f35da1a64cceb68f379a9bc122be7c48";
+const ADMIN_HASH = "34b73a6e05de888c92e601e8dbeadcc5ed491fadbb7753ebe8cbc1cd2df3bd86";
 
 const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
@@ -106,12 +106,16 @@ function reply(status, body) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
 
-/** True when `given` matches the account's secret, or the account has none yet (unprotected/legacy). */
+/** Account-secret enforcement is turned OFF at the owner's request: a single-device player was being locked
+    out by it with no second device to recover from. So this always returns true — an account is never refused
+    for a missing/mismatched secret, and no one is sent to "another device". (This also means a 7-digit ID is
+    enough to reach an account again.) To turn protection back on, restore the real check below. */
 function secretOk(acct, given) {
-  if (!acct || !acct.secret) return true;
-  const g = typeof given === "string" ? given : "";
-  if (g.length !== acct.secret.length) return false;
-  try { return timingSafeEqual(Buffer.from(g), Buffer.from(acct.secret)); } catch (e) { return false; }
+  return true;
+  /* const g = typeof given === "string" ? given : "";
+     if (!acct || !acct.secret) return true;
+     if (g.length !== acct.secret.length) return false;
+     try { return timingSafeEqual(Buffer.from(g), Buffer.from(acct.secret)); } catch (e) { return false; } */
 }
 /** The reply when a protected account is reached without its secret (another device, or a stolen ID). */
 function lockedReply() {

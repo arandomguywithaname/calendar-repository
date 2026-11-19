@@ -6106,7 +6106,6 @@
       setLoginBusy(true);
       cloudCall("load", { id: typed }).then(function (r) {
         if (r.status !== 200) {
-          if (r.data && r.data.locked) { loginError(403, "That account is protected and lives on another device. To play it here, paste your Save Code in the box below (make one from the Account menu on your other device)."); return; }
           loginError(r.data.code || ERR.ACCOUNT, r.data.error || "Could not load that account."); return;
         }
         var list = readAccounts();
@@ -6290,12 +6289,9 @@
         updateMeta(id, { cloud: false });
         if (id === currentUser) goOnline();
       } else if (r.status === 403 || (r.data && r.data.locked)) {
-        /* This device's secret doesn't match the account's: it's locked to another device. Keep playing
-           locally, but stop trying to sync and explain how to take it over (import a Save Code here). */
-        if (id === currentUser) {
-          setCloudState("offline");
-          if (!Cloud.lockWarned) { Cloud.lockWarned = true; errorToast(ERR.ACCOUNT, "This account is protected and is attached to another device. Your progress is safe here but won't sync online. To play it here, import its Save Code (Account → paste Save code)."); }
-        }
+        /* Account protection is off, so this shouldn't happen; if an old server still sends it, just keep
+           playing locally without nagging the player to use another device. */
+        if (id === currentUser) setCloudState("offline");
       } else {
         errorToast(ERR.ACCOUNT, r.data.error || "Your save could not be stored online.");
       }
@@ -6370,11 +6366,10 @@
       }
       if (r.status === 404) { updateMeta(id, { cloud: false }); goOnline(); return true; }
       if (r.status === 403 || (r.data && r.data.locked)) {
-        /* This device's secret doesn't match the protected account (e.g. a second device). Never block rolling:
-           play on locally, like offline — progress just won't sync until its Save Code is imported here. */
+        /* Account protection is off, so this shouldn't happen; if an old server still sends it, keep rolling
+           locally without blocking or nagging the player to use another device. */
         Cloud.leaseUntil = 0;
         setCloudState("offline");
-        if (!Cloud.lockWarned) { Cloud.lockWarned = true; errorToast(ERR.ACCOUNT, "This account is protected and attached to another device, so progress won't sync here — but you can keep playing. To sync, import its Save Code (Account → paste Save code)."); }
         return true;
       }
       errorToast(ERR.ACCOUNT, r.data.error || "Your account could not be checked.");
@@ -7294,7 +7289,7 @@
      server keeps its own scrypt hash of the same password (netlify/functions/account.mjs). To change it,
      update both; for this one run
      node -e "const c=require('crypto'),s=c.randomBytes(16).toString('hex');console.log(s,c.pbkdf2Sync('NEW PASSWORD',Buffer.from(s,'hex'),150000,32,'sha256').toString('hex'))" */
-  var ADMIN_PW = { salt: "5dbb466384fd7561529dc0f640552297", iterations: 150000, hash: "f6db0a3506768f23d93631b1be667437e07e602dbbe80ef3da3edb444fb70a47" };
+  var ADMIN_PW = { salt: "03a4610085c2dd9a08741017ba3f6d1f", iterations: 150000, hash: "816d3ccc5c3b10adca950d68cbb9e34801e8254fb2c9af6d6dea2bf50b01ae7a" };
   var adminUnlocked = false;
   var aaKey = "";      /* the admin password, kept only while admin is unlocked */
   var ADMIN_IDLE_MS = 5 * 60 * 1000; /* admin locks itself after this long without being used */
