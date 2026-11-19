@@ -188,12 +188,18 @@ loadout, and fight bots or a friend.
   **💎 15 Gems**, **✨ 100 shiny shards**, **🪙 5,000 doubloons**, **🍀 x1,000 luck for 5
   rolls**, **🧪 2 Mega Mystery Potions**, or the rare **🎉 JACKPOT** (25,000,000 coins
   **and** 50 Gems). The prize is picked fairly (weighted) and the wheel always lands on it.
-- **58 potions** in four groups. Luck from x2 up to the Potion of Destiny
-  (x10,000,000 for one roll, 100,000,000 coins), with the Rainbow Potion (x10 for 100
-  rolls), Infinity Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the
-  way. Magnets and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
-  Magnet (Epic or better), Legend Lure (Legendary or better), the Shimmer Potion (x2
-  shiny chance) and the Prism Potion (every roll that can be shiny is). Coins and
+- **64 potions** in four groups. Luck from x2 up to the Potion of Destiny
+  (x10,000,000 for one roll, 100,000,000 coins) and then stronger still — the **Cosmic
+  Luck Potion** (x100,000,000), **Quantum Potion** (x10,000,000,000) and **Big Bang
+  Potion** (x1,000,000,000,000) — with the Rainbow Potion (x10 for 100 rolls), Infinity
+  Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the way. Magnets,
+  guarantees and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
+  Magnet (Epic or better), Legend Lure (Legendary or better), and three rank
+  guarantees beyond the Chosen — the **Beyond Potion** (Ascendant or better), the
+  **Omniscience Potion** (Omniscient or better) and the **🔱 Omnipotion**, the strongest
+  potion in the game: **1 trillion coins** for a roll **guaranteed to be Omnipotent**
+  (the top rank). Plus the Shimmer Potion (x2 shiny chance) and the Prism Potion (every
+  roll that can be shiny is). Coins and
   speed: x2 up to x100 coin potions (Treasure Tonic x25, Dragon's Hoard x100), Haste,
   Blitz and Time Warp (roll cooldown cut to 1/8), a Mystery Potion that turns into a
   random potion (up to the Infinity Serum) and a Mega Mystery Potion that only turns
@@ -466,7 +472,10 @@ No build step and no npm install.
 - **🍀 Buy Luck** (Roll screen). Pick how strong the luck is (×2 up to ×1000) and how many
   rolls it lasts (50–1000), and buy it with **coins or doubloons**. The price scales with
   luck × rolls — e.g. **×2 luck for 200 rolls = 5,000 coins or 1,000 doubloons** (12.5
-  coins or 2.5 doubloons per luck-roll). The boost drops straight into your active effects.
+  coins or 2.5 doubloons per luck-roll). The luck choices go all the way up to **×3
+  octillion** (×3Oc); huge prices and balances show in short form so a seven-figure…
+  seven-**undecillion**-coin pile reads as **7.82UDe** instead of a wall of zeros. The
+  boost drops straight into your active effects.
 - **⚡ Roll speed readout.** Under the ROLL button a live line shows **how fast your next
   roll is**: your current roll cooldown ("Roll speed: one every 1.0s") when you're ready,
   a ticking countdown ("Next roll in 0.4s") while it recharges, and the boosted speed

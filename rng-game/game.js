@@ -31,7 +31,7 @@
     return s + u[i];
   };
   /* Coin amounts too big to ever have (many training levels at once) read as words, not 100 digits. */
-  var fmtCost = function (n) { return n < 1e15 ? fmt(n) : "more than 1,000,000,000,000,000"; };
+  var fmtCost = function (n) { return n < 1e42 ? fmt(n) : "more than 1,000,000,000,000,000,000,000,000,000,000,000,000,000,000"; };
 
   /* ---------- Data ---------- */
 
@@ -49,7 +49,10 @@
     oblivion:  { name: "Oblivion Draught",  icon: "🌑", cost: 400000,  group: "luck",   kind: "luck", mult: 5000,  rolls: 2,  desc: "x5000 luck for 2 rolls" },
     infinity:  { name: "Infinity Serum",    icon: "♾️", cost: 2000000, group: "luck",   kind: "luck", mult: 25000, rolls: 1,  desc: "x25000 luck for a single roll" },
     celestial: { name: "Celestial Nectar",  icon: "🪐", cost: 10000000, group: "luck",  kind: "luck", mult: 100000, rolls: 2, desc: "x100,000 luck for 2 rolls" },
-    destiny:   { name: "Potion of Destiny", icon: "🌠", cost: 100000000, group: "luck", kind: "luck", mult: 10000000, rolls: 1, desc: "x10,000,000 luck for a single roll. The best potion money can buy." },
+    destiny:   { name: "Potion of Destiny", icon: "🌠", cost: 100000000, group: "luck", kind: "luck", mult: 10000000, rolls: 1, desc: "x10,000,000 luck for a single roll." },
+    cosmicluck:{ name: "Cosmic Luck Potion", icon: "🌀", cost: 1000000000,    group: "luck", kind: "luck", mult: 100000000,    rolls: 1, desc: "x100,000,000 luck for a single roll." },
+    quantum:   { name: "Quantum Potion",    icon: "⚛️", cost: 20000000000,   group: "luck", kind: "luck", mult: 10000000000,  rolls: 1, desc: "x10,000,000,000 luck for a single roll." },
+    bigbang:   { name: "Big Bang Potion",   icon: "💥", cost: 500000000000,  group: "luck", kind: "luck", mult: 1000000000000, rolls: 1, desc: "x1,000,000,000,000 luck for a single roll." },
     blessing:  { name: "Daily Blessing",    icon: "🎁", cost: 0,       group: "luck",   kind: "luck", mult: 50,    rolls: 1,  desc: "x50 luck for one roll. Only from the daily gift.", daily: true },
     secret:    { name: "Elixir of the Million", icon: "🗝️", cost: 1000000, group: "luck", kind: "luck", mult: 1000000, rolls: 1, desc: "x1,000,000 luck for a single roll. The shop never advertised this.", secret: true },
     everything:{ name: "Potion of Everything", icon: "⚗️", cost: 5000000, group: "luck", kind: "everything", mult: 50000, rolls: 3, collector: true,
@@ -58,6 +61,9 @@
     magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "special", kind: "floor", min: 1000,  rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
     epicmagnet:{ name: "Epic Magnet",       icon: "🧿", cost: 15000,   group: "special", kind: "floor", min: 10000, rolls: 3,  desc: "Your next 3 rolls are Epic or better" },
     lure:      { name: "Legend Lure",       icon: "🪝", cost: 150000,  group: "special", kind: "floor", min: 100000, rolls: 2, desc: "Your next 2 rolls are Legendary or better" },
+    beyond:    { name: "Beyond Potion",     icon: "🔭", cost: 100000000000,  group: "special", kind: "floor", min: 1.2e19, rolls: 1, desc: "Your next roll is Ascendant or better — beyond the Chosen." },
+    omniscience:{ name: "Omniscience Potion", icon: "👁️", cost: 250000000000, group: "special", kind: "floor", min: 1.2e33, rolls: 1, desc: "Your next roll is Omniscient or better." },
+    omnipotion:{ name: "Omnipotion",        icon: "🔱", cost: 1000000000000, group: "special", kind: "floor", min: 1.2e54, rolls: 1, desc: "Your next roll is guaranteed Omnipotent — the top rank. The strongest potion in the game (1 trillion coins)." },
     shimmer:   { name: "Shimmer Potion",    icon: "💫", cost: 2000,    group: "special", kind: "shiny", mult: 2,  rolls: 10, desc: "x2 shiny chance for 10 rolls" },
     prism:     { name: "Prism Potion",      icon: "💠", cost: 25000,   group: "special", kind: "shiny", mult: 10, rolls: 5,  desc: "Your next 5 rolls are shiny whenever the aura has a shiny form" },
     /* Coins and speed */
@@ -274,7 +280,8 @@
     /* The newer potions don't count toward the "buy every potion" collection, so it stays the same challenge
        and players who already unlocked the Potion of Everything keep it. */
     "fourleaf", "mythic", "supernova", "glimmer", "radiance", "cosmicmagnet", "divinemagnet",
-    "fortunecoins", "ransom", "flash", "berserk", "aegis"];
+    "fortunecoins", "ransom", "flash", "berserk", "aegis",
+    "cosmicluck", "quantum", "bigbang", "beyond", "omniscience", "omnipotion"];
   function collectionKeys() {
     return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && !POTIONS[k].arena && COLLECTION_SKIP.indexOf(k) < 0; });
   }
@@ -798,7 +805,7 @@
     S.luckEffects.forEach(function (e) {
       var el = document.createElement("span");
       el.className = "effect";
-      el.textContent = "🍀 x" + fmt(e.mult) + " luck · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
+      el.textContent = "🍀 x" + (e.mult >= 1e6 ? fmtShort(e.mult) : fmt(e.mult)) + " luck · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
       box.appendChild(el);
     });
     S.goldEffects.forEach(function (e) {
@@ -940,11 +947,14 @@
   /* Buy a luck boost straight from the Roll screen, priced by how strong it is and how many rolls it lasts.
      The worked example from the request: ×2 luck for 200 rolls = 5,000 coins or 1,000 doubloons. So a unit of
      "luck×rolls" costs 12.5 coins or 2.5 doubloons (coins are the softer currency, doubloons the premium one). */
-  var BUYLUCK_MULTS = [2, 5, 10, 25, 100, 1000];
+  /* Luck you can buy, from ×2 all the way up to ×3 octillion (3,000,000,000,000,000,000,000,000,000). */
+  var BUYLUCK_MULTS = [2, 10, 100, 1000, 1e6, 1e9, 1e12, 1e18, 1e24, 3e27];
   var BUYLUCK_ROLLS = [50, 100, 200, 500, 1000];
   var buyLuckPick = { mult: 2, rolls: 200 };
   function buyLuckCoinCost(mult, rolls) { return Math.round(mult * rolls * 12.5); }
   function buyLuckDoubCost(mult, rolls) { return Math.round(mult * rolls * 2.5); }
+  /* Keep the Buy Luck price buttons readable: small prices stay fully spelled out, huge ones abbreviate. */
+  function buyLuckMoney(n) { return (S.settings.shortNum || n >= 1e9) ? fmtShort(n) : fmt(n); }
 
   function renderBuyLuck() {
     var box = document.getElementById("buyluck-card");
@@ -959,8 +969,8 @@
       "<div class=\"bl-pick\"><span class=\"bl-label\">Rolls</span><div class=\"bl-chips\">" + rollChips + "</div></div>" +
       "<div class=\"bl-deal\">×" + fmtShort(mult) + " luck for <b>" + fmt(rolls) + "</b> rolls</div>" +
       "<div class=\"bl-buy\">" +
-        "<button type=\"button\" class=\"btn small primary\" id=\"bl-buy-coins\"" + (S.coins < cc ? " disabled" : "") + ">💰 " + fmt(cc) + " coins</button>" +
-        "<button type=\"button\" class=\"btn small\" id=\"bl-buy-doub\"" + ((S.doubloons || 0) < dc ? " disabled" : "") + ">🪙 " + fmt(dc) + " doubloons</button>" +
+        "<button type=\"button\" class=\"btn small primary\" id=\"bl-buy-coins\"" + (S.coins < cc ? " disabled" : "") + ">💰 " + buyLuckMoney(cc) + " coins</button>" +
+        "<button type=\"button\" class=\"btn small\" id=\"bl-buy-doub\"" + ((S.doubloons || 0) < dc ? " disabled" : "") + ">🪙 " + buyLuckMoney(dc) + " doubloons</button>" +
       "</div>";
     box.querySelectorAll(".bl-mult").forEach(function (b) { b.addEventListener("click", function () { buyLuckPick.mult = Number(b.getAttribute("data-m")); renderBuyLuck(); }); });
     box.querySelectorAll(".bl-rolls").forEach(function (b) { b.addEventListener("click", function () { buyLuckPick.rolls = Number(b.getAttribute("data-r")); renderBuyLuck(); }); });
