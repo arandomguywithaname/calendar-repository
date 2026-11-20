@@ -469,11 +469,12 @@ No build step and no npm install.
   cutscene and no confetti per roll, and the screen redraw, the coin pop-up and the save
   are batched to about four times a second instead of once per roll. You still collect
   every aura and all the coins — it just stops the game chugging when you roll really fast.
-- **🍀 Buy Luck** (Roll screen). Pick how strong the luck is (×2 up to ×1000) and how many
-  rolls it lasts (50–1000), and buy it with **coins or doubloons**. The price scales with
-  luck × rolls — e.g. **×2 luck for 200 rolls = 5,000 coins or 1,000 doubloons** (12.5
-  coins or 2.5 doubloons per luck-roll). The luck choices go all the way up to **×3
-  octillion** (×3Oc); huge prices and balances show in short form so a seven-figure…
+- **🍀 Buy Luck** (Roll screen). Pick how strong the luck is (×2 up to ×3 octillion) and
+  how many rolls it lasts (50–1000), and buy it with **coins or doubloons**. The price
+  scales with luck × rolls, now **100,000× cheaper** — only **0.000125 coins / 0.000025
+  doubloons per luck-roll** (with a 1 floor so nothing is free), so **×2 luck for 200
+  rolls is a token 1 coin / 1 doubloon** and even ×1,000,000 luck for 1,000 rolls is just
+  125,000 coins. Huge prices and balances still show in short form so a
   seven-**undecillion**-coin pile reads as **7.82UDe** instead of a wall of zeros. The
   boost drops straight into your active effects.
 - **⚡ Roll speed readout.** Under the ROLL button a live line shows **how fast your next

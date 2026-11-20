@@ -945,14 +945,14 @@
   /* ---------- Buy Luck ---------- */
 
   /* Buy a luck boost straight from the Roll screen, priced by how strong it is and how many rolls it lasts.
-     The worked example from the request: ×2 luck for 200 rolls = 5,000 coins or 1,000 doubloons. So a unit of
-     "luck×rolls" costs 12.5 coins or 2.5 doubloons (coins are the softer currency, doubloons the premium one). */
+     Prices were cut 100,000× to make luck cheap: a unit of "luck×rolls" now costs 0.000125 coins or 0.000025
+     doubloons (so ×2 luck for 200 rolls is a token 1 coin / 1 doubloon), with a 1 floor so nothing is free. */
   /* Luck you can buy, from ×2 all the way up to ×3 octillion (3,000,000,000,000,000,000,000,000,000). */
   var BUYLUCK_MULTS = [2, 10, 100, 1000, 1e6, 1e9, 1e12, 1e18, 1e24, 3e27];
   var BUYLUCK_ROLLS = [50, 100, 200, 500, 1000];
   var buyLuckPick = { mult: 2, rolls: 200 };
-  function buyLuckCoinCost(mult, rolls) { return Math.round(mult * rolls * 12.5); }
-  function buyLuckDoubCost(mult, rolls) { return Math.round(mult * rolls * 2.5); }
+  function buyLuckCoinCost(mult, rolls) { return Math.max(1, Math.round(mult * rolls * 0.000125)); }
+  function buyLuckDoubCost(mult, rolls) { return Math.max(1, Math.round(mult * rolls * 0.000025)); }
   /* Keep the Buy Luck price buttons readable: small prices stay fully spelled out, huge ones abbreviate. */
   function buyLuckMoney(n) { return (S.settings.shortNum || n >= 1e9) ? fmtShort(n) : fmt(n); }
 
