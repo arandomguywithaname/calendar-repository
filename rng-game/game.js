@@ -949,7 +949,7 @@
      doubloons (so ×2 luck for 200 rolls is a token 1 coin / 1 doubloon), with a 1 floor so nothing is free. */
   /* Luck you can buy, from ×1 and ×2 all the way up to ×3 octillion (3,000,000,000,000,000,000,000,000,000). */
   var BUYLUCK_MULTS = [1, 2, 10, 100, 1000, 1e6, 1e9, 1e12, 1e18, 1e24, 3e27];
-  var BUYLUCK_ROLLS = [50, 100, 200, 500, 1000];
+  var BUYLUCK_ROLLS = [1, 10, 50, 100, 200, 500, 1000];
   var buyLuckPick = { mult: 2, rolls: 200 };
   function buyLuckCoinCost(mult, rolls) { return Math.max(1, Math.round(mult * rolls * 0.000125)); }
   function buyLuckDoubCost(mult, rolls) { return Math.max(1, Math.round(mult * rolls * 0.000025)); }
