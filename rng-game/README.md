@@ -184,7 +184,16 @@ loadout, and fight bots or a friend.
 - **Daily gift**: claim once every 20 hours. A 7-day streak ladder gives coins plus
   potions, always including a Daily Blessing (x50 luck for one roll). Day 7 pays a
   Godly Potion, a Mystery Potion and two Blessings, and coins grow every completed
-  week. Miss two days and the streak restarts.
+  week. Miss two days and the streak restarts. There's also a **40% chance each claim
+  to win a 50 💎 Gems lucky bonus** on top of the normal gift.
+- **📋 Daily & Weekly Quests.** A **Quests** tab with **5 daily quests** (reset every 24
+  hours) and **10 weekly quests** (reset every 7 days). Each tracks your progress with a
+  bar and pays coins or 💎 Gems when you finish it, scaled to difficulty — the easy daily
+  ones give coins, and the weekly ones climb from 30–70 Gems up to the toughest, **Roll
+  10,000 times for 1,000 💎 Gems**. Quests cover rolling, winning bot fights, spinning the
+  wheel, buying potions, clearing Tower floors, opening gifts, earning coins, finding
+  shinies and rolling high rarities (Epic / Legendary / Cosmic or better). A badge on the
+  tab shows how many are finished and ready to claim.
 - **🎡 Daily Spin the Wheel.** On the Roll screen, a colourful 8-wedge prize wheel you
   can spin **once every 20 hours**. Press **Spin!** and it whirls round (five full turns)
   and lands under the pointer on a random free prize — **coins** (50,000 or 1,000,000),
@@ -309,6 +318,10 @@ loadout, and fight bots or a friend.
   is Forbidden or better). Like the Monstrous Potion they never appear in the regular
   shop, the Mystery pool or the collection.
 - **👑 VIP Shop.** The **VIP** tab is a premium shop stocked with exclusive **offers** —
+  the **⚡ Flash Zero** (1,000 Gems: instantly do **10,000 rolls at once**, all using your
+  current equipped luck, so if you have, say, 10 quintillion luck active every one of the
+  10,000 rolls gets it; it drops every aura and all the coins into your account at once
+  and shows the best one you found),
   a **🚀 Super Roll** (roll 100x faster for 50 seconds, 10 Gems),
   Coin Chest (+250,000), Coin Vault (+5,000,000), Dragon's Hoard (+200,000,000), a Potion
   Pack (3 Mega Mystery Potions), a VIP Luck Vial (×1,000,000 luck for 2 rolls), the

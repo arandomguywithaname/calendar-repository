@@ -380,6 +380,7 @@
       avatar: { face: "🙂", color: "#ffd24a" },
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       arena: { fights: 0, cycleStart: 0 },
+      quests: { day: { start: 0, c: {}, done: [] }, week: { start: 0, c: {}, done: [] } },
       aurasLockedUntil: 0,
       breakSkips: 0,
       history: [],
@@ -442,6 +443,14 @@
       if (!merged.arena || typeof merged.arena !== "object") merged.arena = { fights: 0, cycleStart: 0 };
       merged.arena.fights = Math.max(0, Math.floor(Number(merged.arena.fights) || 0));
       merged.arena.cycleStart = Math.floor(Number(merged.arena.cycleStart) || 0);
+      if (!merged.quests || typeof merged.quests !== "object") merged.quests = {};
+      ["day", "week"].forEach(function (k) {
+        var q = merged.quests[k];
+        if (!q || typeof q !== "object") q = merged.quests[k] = {};
+        q.start = Math.floor(Number(q.start) || 0);
+        if (!q.c || typeof q.c !== "object") q.c = {};
+        if (!Array.isArray(q.done)) q.done = [];
+      });
       merged.aurasLockedUntil = Math.max(0, Math.floor(Number(merged.aurasLockedUntil) || 0));
       merged.breakSkips = Math.max(0, Math.floor(Number(merged.breakSkips) || 0));
       /* Backfill the leaderboard's rarity stat for saves made before it existed. */
@@ -995,6 +1004,7 @@
     updateIndex();
     renderStats();
     renderBuyLuck();
+    renderQuests();
     $("#btn-auto").textContent = "Auto Roll: " + (autoOn ? "On" : "Off");
     $("#btn-auto").classList.toggle("on", autoOn);
   }
@@ -1421,6 +1431,7 @@
     S.history.unshift({ id: aura.id, shiny: shiny });
     if (S.history.length > 12) S.history.length = 12;
     recordBest(aura, shiny);
+    questBump("rolls", 1); questBump("coins", coins); questBump("bestR", aura.rarity); if (shiny) questBump("shinies", 1);
     if (equippedAura() === null) { S.equipped = aura.id; S.equippedShiny = shiny; }
     var cutscene = ti >= 3 && !S.settings.skipCutscenes && !S.settings.skipAnims && !turboRoll();
     if (cutscene) S.stats.cutscenes++;
@@ -1520,6 +1531,7 @@
     var r = dailyReward(S.daily.streak);
     addCoins(r.coins);
     var lines = ["+" + fmt(r.coins) + " coins"];
+    if (Math.random() < 0.4) { S.gems = (S.gems || 0) + 50; lines.push("💎 50 gems — lucky bonus!"); }
     Object.keys(r.potions).forEach(function (k) {
       var got = addPotion(k, r.potions[k]);
       if (got) lines.push(POTIONS[k].icon + " " + POTIONS[k].name + (got > 1 ? " x" + got : ""));
@@ -1533,6 +1545,114 @@
   }
 
   setInterval(function () { if (!dailyReady()) renderDaily(); if (typeof renderWheel === "function" && !wheelReady()) renderWheel(); }, 30000);
+
+  /* ---------- Daily & Weekly Quests ----------
+     Five daily quests (reset every 24h) and ten weekly quests (reset every 7 days). Each quest tracks a counter
+     that resets with its period; rewards scale with difficulty, the hardest weekly quest giving 1000 Gems.
+     "bestR" quests complete when the best rarity you've rolled this period reaches the target. */
+  var QUEST_DAY_MS = 24 * 60 * 60 * 1000;
+  var QUEST_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  var DAILY_QUESTS = [
+    { id: "d_roll",  icon: "🎲", desc: "Roll 50 times",                 metric: "rolls",  target: 50,   coins: 50000 },
+    { id: "d_win",   icon: "⚔️", desc: "Win 3 bot fights",              metric: "wins",   target: 3,    gems: 5 },
+    { id: "d_wheel", icon: "🎡", desc: "Spin the daily wheel",          metric: "wheel",  target: 1,    gems: 10 },
+    { id: "d_buy",   icon: "🧪", desc: "Buy a potion from the shop",    metric: "pots",   target: 1,    coins: 30000 },
+    { id: "d_epic",  icon: "💜", desc: "Roll an Epic or better aura",   metric: "bestR",  target: 1e4,  gems: 15 }
+  ];
+  var WEEKLY_QUESTS = [
+    { id: "w_roll",   icon: "🎲", desc: "Roll 1,000 times",                metric: "rolls",  target: 1000,  gems: 60 },
+    { id: "w_win",    icon: "⚔️", desc: "Win 50 bot fights",               metric: "wins",   target: 50,    gems: 50 },
+    { id: "w_floors", icon: "🗼", desc: "Clear 20 Tower floors",           metric: "floors", target: 20,    gems: 40 },
+    { id: "w_gifts",  icon: "🎁", desc: "Open 10 gifts",                   metric: "gifts",  target: 10,    gems: 30 },
+    { id: "w_coins",  icon: "🪙", desc: "Earn 10,000,000 coins",           metric: "coins",  target: 1e7,   gems: 50 },
+    { id: "w_legend", icon: "🧡", desc: "Roll a Legendary or better aura", metric: "bestR",  target: 1e5,   gems: 70 },
+    { id: "w_shiny",  icon: "✨", desc: "Find 5 shiny auras",              metric: "shinies",target: 5,     gems: 60 },
+    { id: "w_pots",   icon: "🧪", desc: "Buy 10 potions",                  metric: "pots",   target: 10,    gems: 50 },
+    { id: "w_cosmic", icon: "💖", desc: "Roll a Cosmic or better aura",    metric: "bestR",  target: 1e6,   gems: 150 },
+    { id: "w_grind",  icon: "🌌", desc: "Roll 10,000 times",               metric: "rolls",  target: 10000, gems: 1000 }
+  ];
+
+  function questState() {
+    if (!S.quests || typeof S.quests !== "object") S.quests = {};
+    ["day", "week"].forEach(function (k) { if (!S.quests[k]) S.quests[k] = { start: 0, c: {}, done: [] }; });
+    return S.quests;
+  }
+  function questCheckReset() {
+    var q = questState(), now = Date.now();
+    if (!q.day.start || now - q.day.start >= QUEST_DAY_MS) { q.day.start = now; q.day.c = {}; q.day.done = []; }
+    if (!q.week.start || now - q.week.start >= QUEST_WEEK_MS) { q.week.start = now; q.week.c = {}; q.week.done = []; }
+  }
+  function questResetIn(period) { questCheckReset(); var q = questState()[period]; return Math.max(0, q.start + (period === "day" ? QUEST_DAY_MS : QUEST_WEEK_MS) - Date.now()); }
+  /* Bump a quest counter on both the daily and weekly tracks. "bestR" keeps the maximum, everything else adds up. */
+  function questBump(metric, amount) {
+    questCheckReset();
+    var q = questState();
+    [q.day.c, q.week.c].forEach(function (c) {
+      if (metric === "bestR") c.bestR = Math.max(c.bestR || 0, amount);
+      else c[metric] = (c[metric] || 0) + amount;
+    });
+  }
+  function questProgress(quest, period) { var c = questState()[period].c; return quest.metric === "bestR" ? (c.bestR || 0) : (c[quest.metric] || 0); }
+  function questDone(quest, period) { return questProgress(quest, period) >= quest.target; }
+  function questClaimed(quest, period) { return questState()[period].done.indexOf(quest.id) >= 0; }
+  function questReward(q) { return (q.coins ? fmt(q.coins) + " coins" : "") + (q.coins && q.gems ? " + " : "") + (q.gems ? q.gems + " 💎 gems" : ""); }
+
+  function claimQuest(period, id) {
+    questCheckReset();
+    var list = period === "day" ? DAILY_QUESTS : WEEKLY_QUESTS, quest = null, i;
+    for (i = 0; i < list.length; i++) if (list[i].id === id) quest = list[i];
+    if (!quest) return;
+    if (!questDone(quest, period)) { toast("Finish the quest first!", "bad"); return; }
+    if (questClaimed(quest, period)) return;
+    questState()[period].done.push(id);
+    if (quest.coins) addCoins(quest.coins);
+    if (quest.gems) S.gems = (S.gems || 0) + quest.gems;
+    Sound.win();
+    toast("✅ Quest done: " + quest.desc + " → +" + questReward(quest), "gold", 5000);
+    FX.burst(["#fde68a", "#a78bfa", "#67e8f9", "#ffffff"], 70, 0.6);
+    save();
+    renderAll();
+  }
+
+  /* How many quests are finished but not yet claimed (for the tab badge). */
+  function questClaimableCount() {
+    questCheckReset();
+    var n = 0;
+    DAILY_QUESTS.forEach(function (q) { if (questDone(q, "day") && !questClaimed(q, "day")) n++; });
+    WEEKLY_QUESTS.forEach(function (q) { if (questDone(q, "week") && !questClaimed(q, "week")) n++; });
+    return n;
+  }
+  function renderQuests() {
+    var badge = document.getElementById("quest-badge");
+    if (badge) { var cn = questClaimableCount(); badge.textContent = cn; badge.classList.toggle("hidden", cn === 0); }
+    var box = document.getElementById("quests-body");
+    if (!box) return;
+    questCheckReset();
+    function section(title, list, period) {
+      var claimed = 0;
+      var rows = list.map(function (q) {
+        var prog = questProgress(q, period), complete = prog >= q.target, isClaimed = questClaimed(q, period);
+        if (isClaimed) claimed++;
+        var pct = Math.min(100, Math.floor((prog / q.target) * 100));
+        var progText = q.metric === "bestR"
+          ? (complete ? "reached!" : "best so far: " + (prog > 1 ? "1 in " + fmtShort(prog) : "—"))
+          : fmtShort(prog) + " / " + fmtShort(q.target);
+        var act = isClaimed
+          ? "<span class=\"q-claimed\">✓ Claimed</span>"
+          : (complete ? "<button type=\"button\" class=\"btn small primary q-claim\" data-p=\"" + period + "\" data-id=\"" + q.id + "\">Claim</button>" : "<span class=\"q-locked\">" + pct + "%</span>");
+        return "<div class=\"quest-row" + (complete ? " complete" : "") + (isClaimed ? " claimed" : "") + "\">" +
+          "<span class=\"q-ic\">" + q.icon + "</span>" +
+          "<div class=\"q-main\"><div class=\"q-desc\">" + q.desc + "</div>" +
+            "<div class=\"q-bar\"><span style=\"width:" + pct + "%\"></span></div>" +
+            "<div class=\"q-sub\">" + progText + " · 🎁 " + questReward(q) + "</div></div>" +
+          "<div class=\"q-act\">" + act + "</div></div>";
+      }).join("");
+      return "<div class=\"quest-section\"><div class=\"quest-head\"><h3 class=\"section-title\">" + title + "</h3>" +
+        "<span class=\"card-sub\">" + claimed + "/" + list.length + " claimed · resets in " + fmtDuration(questResetIn(period)) + "</span></div>" + rows + "</div>";
+    }
+    box.innerHTML = section("☀️ Daily quests (5)", DAILY_QUESTS, "day") + section("📅 Weekly quests (10)", WEEKLY_QUESTS, "week");
+    box.querySelectorAll(".q-claim").forEach(function (b) { b.addEventListener("click", function () { claimQuest(b.getAttribute("data-p"), b.getAttribute("data-id")); }); });
+  }
 
   /* ---------- Potions ---------- */
 
@@ -1654,6 +1774,7 @@
     S.coins -= total;
     addPotion(key, n);
     S.bought[key] = (S.bought[key] || 0) + n;
+    questBump("pots", n);
     Sound.buy();
     var capped = p.kind === "heal" && typeof S.settings.buyAmount === "number" && S.settings.buyAmount > n;
     toast("Bought " + (n > 1 ? fmt(n) + " x " + p.name + " for " + fmt(total) + " coins" : p.name) + (capped ? " (you can carry " + MAX_HEALS + " healing potions)" : ""));
@@ -3973,6 +4094,7 @@
     wheel.style.transition = "transform 4.2s cubic-bezier(.17,.72,.18,1)";
     wheel.style.transform = "rotate(" + wheelRotation + "deg)";
     S.wheelDaily = Date.now(); /* lock the daily spin at once */
+    questBump("wheel", 1);
     renderWheel();
     save();
     Sound.roll && Sound.roll();
@@ -4002,6 +4124,7 @@
   var VIP_BOSS_GEMS = 3;                    /* gems for beating a boss bot in the Arena */
   /* Each offer gives in-game rewards for Gems. give() applies the reward when bought. */
   var VIP_OFFERS = [
+    { key: "flashzero", icon: "⚡", name: "Flash Zero",        gems: 1000, desc: "Instantly do 10,000 rolls at once, all using your current equipped luck", give: function () { flashRoll(10000); } },
     { key: "superroll", icon: "🚀", name: "Super Roll",        gems: 10,  desc: "Roll 100x faster for 50 seconds", give: function () { S.hasteUntil = (hasteActive() && (S.hasteDiv || 2) >= 100 ? S.hasteUntil : Date.now()) + 50000; S.hasteDiv = Math.max(S.hasteDiv || 2, 100); } },
     { key: "coins1",    icon: "🪙", name: "Coin Chest",        gems: 10,  desc: "+250,000 coins",              give: function () { addCoins(250000); } },
     { key: "coins2",    icon: "💰", name: "Coin Vault",        gems: 40,  desc: "+5,000,000 coins",            give: function () { addCoins(5000000); } },
@@ -4070,6 +4193,43 @@
     Sound.buy();
     toast("👑 +" + VIP_DAILY_GEMS + " 💎 Gems claimed! Come back in a day for more.", "gold");
     save();
+    renderAll();
+  }
+
+  /* Flash Zero (VIP, 1000 gems): do `count` rolls instantly, all at your CURRENT equipped luck (luck is NOT
+     counted down between them — that is the whole point), awarding every aura and all the coins at once, then a
+     summary. Floor/shiny/coin boosts still count down per roll (so a 1-roll floor only touches one of them). */
+  function flashRoll(count) {
+    var luck = currentLuck();
+    var best = null, bestShiny = false, totalCoins = 0, shinies = 0, i;
+    for (i = 0; i < count; i++) {
+      var floor = currentFloor();
+      var aura = pickAura(luck, floor);
+      var shiny = rollShiny(aura);
+      var mult = currentGoldMult();
+      var coins = auraCoins(aura, shiny) * mult;
+      totalCoins += coins;
+      var bag = shiny ? S.shinyInventory : S.inventory;
+      bag[aura.id] = (bag[aura.id] || 0) + 1;
+      if (shiny) shinies++;
+      if (!best || aura.rarity > best.rarity || (aura.rarity === best.rarity && shiny && !bestShiny)) { best = aura; bestShiny = shiny; }
+      recordBest(aura, shiny);
+      questBump("rolls", 1); questBump("coins", coins); questBump("bestR", aura.rarity); if (shiny) questBump("shinies", 1);
+      S.floorEffects = countDown(S.floorEffects);
+      S.shinyEffects = countDown(S.shinyEffects);
+      S.goldEffects = countDown(S.goldEffects);
+    }
+    S.rolls += count;
+    addCoins(totalCoins);
+    S.stats.shinies = (S.stats.shinies || 0) + shinies;
+    if (best) { S.lastRoll = best.id; S.lastShiny = bestShiny; S.history.unshift({ id: best.id, shiny: bestShiny }); if (S.history.length > 12) S.history.length = 12; }
+    save();
+    if (best) {
+      switchTab("roll");
+      showAura(best, bestShiny);
+      if (!S.settings.skipAnims) { FX.burst(["#67e8f9", "#a78bfa", "#fde68a", "#ffffff"], 170, 1.0); FX.ring("#67e8f9", 0.9); }
+      toast("⚡ FLASH ZERO! " + fmt(count) + " rolls at ×" + fmtShort(luck) + " luck · best: " + best.name + (bestShiny ? " ✨" : "") + " · +" + fmt(totalCoins) + " coins · " + fmt(shinies) + " shiny", "gold", 9000);
+    }
     renderAll();
   }
 
@@ -4307,6 +4467,7 @@
     if (!confirm("Pay " + fmt(cost) + " coins to skip Floor " + floor + " (" + TOWER[floor - 1].name + ", Power " + fmt(towerPower(floor)) + ")? You move straight to the next floor, but a skipped floor earns no doubloons.")) return;
     S.coins -= cost;
     S.tower.cleared[floor] = true;
+    questBump("floors", 1);
     if (floor > (S.tower.best || 0)) S.tower.best = floor;
     Sound.buy();
     toast("⏭️ Skipped Floor " + floor + " for " + fmt(cost) + " coins. " + (floor < TOWER_FLOORS ? "Floor " + (floor + 1) + " is open!" : "You reached the top!"), "gold", 6000);
@@ -4342,6 +4503,7 @@
     if (!confirm("Pay " + fmt(plan.total) + " coins to skip " + plan.floors.length + " floors (Floor " + first + "–" + last + ") at once? Skipped floors earn no doubloons.")) return;
     S.coins -= plan.total;
     plan.floors.forEach(function (fl) { S.tower.cleared[fl] = true; if (fl > (S.tower.best || 0)) S.tower.best = fl; });
+    questBump("floors", plan.floors.length);
     Sound.buy();
     toast("⏭️ Skipped " + plan.floors.length + " floors for " + fmt(plan.total) + " coins. " + (last < TOWER_FLOORS ? "Floor " + (last + 1) + " is open!" : "You reached the top!"), "gold", 6000);
     save();
@@ -5067,6 +5229,7 @@
         S.tower.cleared[tfloor] = true;
         if (tfloor > (S.tower.best || 0)) S.tower.best = tfloor;
         S.stats.towerWins = (S.stats.towerWins || 0) + 1;
+        questBump("floors", 1);
         S.stats.streak = (S.stats.streak || 0) + 1;
         if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
         res.classList.add("win");
@@ -5127,6 +5290,7 @@
       var bgems = view.bot.boss ? VIP_BOSS_GEMS : 0;
       if (bgems) S.gems = (S.gems || 0) + bgems;
       S.botWins[view.bot.id] = (S.botWins[view.bot.id] || 0) + 1;
+      if (!view.tower) questBump("wins", 1); /* only Arena bot wins count for the "win bot fights" quest */
       S.stats.won++;
       S.stats.streak++;
       if (S.stats.streak > S.stats.bestStreak) S.stats.bestStreak = S.stats.streak;
@@ -6934,6 +7098,7 @@
       all.forEach(function (g) {
         if (!g || S.giftsOpened.indexOf(g.id) >= 0) return;
         S.giftsOpened.push(g.id);
+        questBump("gifts", 1);
         var from = g.fromName || "A player";
         if (g.coins != null) {
           var coins = Math.max(0, Math.floor(Number(g.coins) || 0));
@@ -7906,6 +8071,7 @@
     if (name === "battle") renderArenaSupplies();
     if (name === "vip") renderVip();
     if (name === "tower") renderTower();
+    if (name === "quests") renderQuests();
     if (name === "leaderboard") loadLeaderboard();
     if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }
   }
