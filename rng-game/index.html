@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=92">
+  <link rel="stylesheet" href="style.css?v=93">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -237,6 +237,7 @@
       </div>
 
       <h3 class="section-title">Fight bots</h3>
+      <div id="arena-fights" class="arena-fights"></div>
       <div id="bot-grid" class="card-grid"></div>
     </section>
 
@@ -360,6 +361,15 @@
               <div class="aa-row">
                 <input id="aa-coins" type="number" step="1" placeholder="How many coins (minus takes away)">
                 <button type="button" class="btn small" id="aa-add-coins">Add coins</button>
+                <button type="button" class="btn small" id="aa-max-coins" title="Give 809 septillion coins">Max 🪙</button>
+              </div>
+            </div>
+            <div class="aa-group">
+              <div class="aa-label">🪙 Doubloons</div>
+              <div class="aa-row">
+                <input id="aa-doubloons" type="number" step="1" placeholder="How many doubloons (minus takes away)">
+                <button type="button" class="btn small" id="aa-add-doubloons">Add doubloons</button>
+                <button type="button" class="btn small" id="aa-max-doubloons" title="Give 809 septillion doubloons">Max 🪙</button>
               </div>
             </div>
             <div class="aa-group">
@@ -368,6 +378,7 @@
                 <input id="aa-luck" type="number" min="1" placeholder="Luck × (like 1000)">
                 <input id="aa-luck-rolls" type="number" min="1" step="1" placeholder="For how many rolls">
                 <button type="button" class="btn small" id="aa-add-luck">Add luck</button>
+                <button type="button" class="btn small" id="aa-max-luck" title="900 vigintillion luck for 1,000,000 rolls">Max 🍀</button>
               </div>
               <div class="aa-row">
                 <button type="button" class="btn small danger" id="aa-reset-luck">Reset everyone's luck to x1</button>
@@ -441,7 +452,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 92</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 93</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -563,9 +574,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=92"></script>
-  <script src="abilities.js?v=92"></script>
-  <script src="reveals.js?v=92"></script>
-  <script src="game.js?v=92"></script>
+  <script src="auras.js?v=93"></script>
+  <script src="abilities.js?v=93"></script>
+  <script src="reveals.js?v=93"></script>
+  <script src="game.js?v=93"></script>
 </body>
 </html>

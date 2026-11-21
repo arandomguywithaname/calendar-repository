@@ -692,11 +692,15 @@ const ACTIONS = {
       change = (save) => eraseAuras(save, auraId);
     } else if (body.op === "coins") {
       const amount = Math.trunc(Number(body.amount));
-      if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 1e12) return reply(400, { ok: false, code: 98, error: "Coins must be a whole number, up to 1,000,000,000,000." });
+      if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 8.09e26) return reply(400, { ok: false, code: 98, error: "Coins must be a whole number, up to 809 septillion (809,000,000,000,000,000,000,000,000)." });
       change = (save) => { save.coins = Math.max(0, Math.floor(Number(save.coins) || 0) + amount); return save.coins; };
+    } else if (body.op === "doubloons") {
+      const amount = Math.trunc(Number(body.amount));
+      if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 8.09e26) return reply(400, { ok: false, code: 98, error: "Doubloons must be a whole number, up to 809 septillion." });
+      change = (save) => { save.doubloons = Math.max(0, Math.floor(Number(save.doubloons) || 0) + amount); return save.doubloons; };
     } else if (body.op === "luck") {
       const mult = Number(body.mult), rolls = Math.trunc(Number(body.rolls));
-      if (!(mult > 1 && mult <= 1e9) || !(rolls >= 1 && rolls <= 1e6)) return reply(400, { ok: false, code: 98, error: "Luck needs a multiplier above 1 (up to 1,000,000,000) and 1 to 1,000,000 rolls." });
+      if (!(mult > 1 && mult <= 9e65) || !(rolls >= 1 && rolls <= 1e6)) return reply(400, { ok: false, code: 98, error: "Luck needs a multiplier above 1 (up to 900 vigintillion) and 1 to 1,000,000 rolls." });
       change = (save) => { if (!Array.isArray(save.luckEffects)) save.luckEffects = []; save.luckEffects.push({ mult, rolls }); return mult; };
     } else {
       return reply(400, { ok: false, code: 98, error: "Unknown admin command." });

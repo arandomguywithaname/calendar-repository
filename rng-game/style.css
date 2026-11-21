@@ -270,6 +270,12 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .buyluck-card .bl-deal { text-align: center; font-size: .9rem; color: #bbf7d0; }
 .buyluck-card .bl-buy { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .buyluck-card .bl-buy .btn { font-variant-numeric: tabular-nums; }
+.arena-fights { text-align: center; margin: 2px 0 10px; font-size: .9rem; font-weight: 600; color: var(--muted); }
+.arena-fights.admin { color: #ffd700; }
+.arena-fights.empty { color: #f87171; }
+.tower-skipsel { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.tower-skipsel .chip { padding: 3px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.tower-skipsel .chip.on { background: rgba(251,191,36,.85); color: #241a06; border-color: rgba(251,191,36,.9); font-weight: 700; }
 .effects { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 28px; }
 .effect { font-size: .85rem; padding: 3px 12px; border-radius: 999px; background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.35); color: #bbf7d0; }
 .effect.gold { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.4); color: #fde68a; }

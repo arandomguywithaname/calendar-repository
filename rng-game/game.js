@@ -178,6 +178,36 @@
     { id: "omniarch",  name: "Omniarch",       icon: "👑", power: 1200000, reward: 300000000, boss: true }
   ];
 
+  /* 70 more bots beyond the Omniarch, scaling from ~1.5M up to 600,000,000 power — the strongest in the game.
+     Names/icons/power are generated deterministically; each reuses one of the strongest existing ability kits
+     (via kitId) so these end-game bots fight with a full move set instead of the fallback. */
+  (function () {
+    var PRE = ["Hyper", "Mega", "Ultra", "Giga", "Tera", "Astral", "Cosmic", "Eternal", "Infinite", "Void", "Chaos", "Doom", "Nova", "Solar", "Lunar", "Plasma", "Nebula", "Dread", "Abyssal", "Radiant", "Vortex", "Oblivion", "Seraph", "Demonic", "Celestial", "Primordial", "Apex", "Zenith", "Molten", "Frost", "Storm", "Shadow", "Crimson", "Obsidian", "Galactic", "Stellar", "Phantom", "Ruinous", "Savage", "Titanic"];
+    var CORE = ["Bot", "Prime", "Engine", "Overlord", "Reactor", "Colossus", "Sentinel", "Warden", "Leviathan", "Destroyer", "Annihilator", "Devourer", "Behemoth", "Juggernaut", "Harbinger", "Executioner", "Monarch", "Goliath", "Dreadnought", "Titan"];
+    var ICONS = ["🤖", "👾", "🛸", "🦾", "⚙️", "🔩", "🛰️", "💠", "🔆", "☄️", "🌋", "⚡", "🌩️", "🧨", "💣", "🦿", "🪬", "🜲", "🔮", "🗿"];
+    var KITS = ["omniarch", "creator", "apocalypse", "architect", "leviathan", "nullbot", "singularity", "destroyer", "overlord", "eternity", "chrono", "galaxy"];
+    var used = {};
+    BOTS.forEach(function (b) { used[b.name] = 1; });
+    var N = 70, lo = 1.5e6, hi = 6e8, made = 0, pp = 0;
+    while (made < N) {
+      var nm = PRE[pp % PRE.length] + " " + CORE[Math.floor(pp / PRE.length) % CORE.length];
+      pp++;
+      if (used[nm]) continue;
+      used[nm] = 1;
+      var power = made === N - 1 ? hi : Math.round(lo * Math.pow(hi / lo, made / (N - 1)));
+      BOTS.push({
+        id: "superbot" + (made + 1),
+        name: nm,
+        icon: ICONS[made % ICONS.length],
+        power: power,
+        reward: Math.round(power * 250),
+        kitId: KITS[made % KITS.length],
+        boss: made % 5 === 4
+      });
+      made++;
+    }
+  })();
+
   /* Avatars: the stickman fighter that represents you in battle — a face emoji and a body colour. */
   var AVATARS = [
     { id: "hero",   emoji: "🙂", color: "#ffd24a" },
@@ -223,7 +253,7 @@
   function towerRepeat(floor) { return 11 * towerBand(floor) + 1; }
   function towerFirst(floor) { return 100 * towerRepeat(floor); }
   /* Floor power ramps hard: floor 1 is 1,000, and every floor up is x1.15 (1,000 → 1,150 → 1,322 → …). */
-  function towerPower(floor) { return Math.round(1000 * Math.pow(1.15, floor - 1)); }
+  function towerPower(floor) { return Math.max(1, Math.round(10 * Math.pow(1.15, floor - 1))); }
   /* Coins to skip a floor's bot instead of fighting it — scaled to how much power that bot has. */
   function towerSkipCost(floor) { return Math.max(500, Math.round(towerPower(floor) * 4)); }
   var TOWER = (function () {
@@ -247,6 +277,26 @@
     return false;
   }
   function towerResetIn() { return Math.max(0, (S.tower.cycleStart || Date.now()) + TOWER_CYCLE_MS - Date.now()); }
+
+  /* The Arena lets you fight up to 10 bots before it resets (every 24 hours). Admins are exempt (unlimited). */
+  var ARENA_CYCLE_MS = 24 * 60 * 60 * 1000;
+  var ARENA_FIGHT_LIMIT = 10;
+  function arenaCheckReset() {
+    if (!S.arena || typeof S.arena !== "object") S.arena = { fights: 0, cycleStart: 0 };
+    var now = Date.now();
+    if (!S.arena.cycleStart) { S.arena.cycleStart = now; return; }
+    if (now - S.arena.cycleStart >= ARENA_CYCLE_MS) {
+      S.arena.cycleStart += Math.floor((now - S.arena.cycleStart) / ARENA_CYCLE_MS) * ARENA_CYCLE_MS;
+      S.arena.fights = 0;
+    }
+  }
+  function arenaUnlimited() { return adminUnlocked; }
+  function arenaFightsLeft() { arenaCheckReset(); return Math.max(0, ARENA_FIGHT_LIMIT - (S.arena.fights || 0)); }
+  function arenaResetIn() { arenaCheckReset(); return Math.max(0, (S.arena.cycleStart || Date.now()) + ARENA_CYCLE_MS - Date.now()); }
+
+  /* How many floors the Tower's batch-skip button clears in one tap — the player picks the amount. */
+  var TOWER_SKIP_AMOUNTS = [5, 10, 25, 50, 100];
+  var towerSkipPick = 10;
   /* The ONE floor you may fight right now: the next one up from your unbroken run of clears this cycle
      (floor 1 right after a reset). You climb strictly in order — first, then second, then third — one at a
      time; a floor you've already cleared this cycle is locked until the 3-day reset re-opens the whole Tower. */
@@ -326,6 +376,7 @@
       wheelDaily: 0,
       avatar: { face: "🙂", color: "#ffd24a" },
       tower: { best: 0, cleared: {}, cycleStart: 0 },
+      arena: { fights: 0, cycleStart: 0 },
       aurasLockedUntil: 0,
       breakSkips: 0,
       history: [],
@@ -385,6 +436,9 @@
       if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
       merged.tower.cycleStart = Math.floor(Number(merged.tower.cycleStart) || 0);
+      if (!merged.arena || typeof merged.arena !== "object") merged.arena = { fights: 0, cycleStart: 0 };
+      merged.arena.fights = Math.max(0, Math.floor(Number(merged.arena.fights) || 0));
+      merged.arena.cycleStart = Math.floor(Number(merged.arena.cycleStart) || 0);
       merged.aurasLockedUntil = Math.max(0, Math.floor(Number(merged.aurasLockedUntil) || 0));
       merged.breakSkips = Math.max(0, Math.floor(Number(merged.breakSkips) || 0));
       /* Backfill the leaderboard's rarity stat for saves made before it existed. */
@@ -4118,8 +4172,12 @@
       "<div class=\"tower-top2\">" +
         "<span class=\"card-sub\">Fighting with: " + (eq ? auraLabel(eq, equippedShiny()) + " · Power " + fmt(pp) : "<b>no aura equipped — equip one in your Inventory</b>") + "</span>" +
         "<button type=\"button\" class=\"btn small primary\" id=\"tower-shop-open\">🪙 Doubloon shop</button>" +
+      "</div>" +
+      "<div class=\"tower-skipsel\"><span class=\"card-sub\">⏭️ Skip amount:</span>" +
+        TOWER_SKIP_AMOUNTS.map(function (a) { return "<button type=\"button\" class=\"btn small chip tsk" + (a === towerSkipPick ? " on" : "") + "\" data-sk=\"" + a + "\">×" + a + "</button>"; }).join("") +
       "</div>";
     $("#tower-shop-open").addEventListener("click", openDoubloonShop);
+    st.querySelectorAll(".tsk").forEach(function (b) { b.addEventListener("click", function () { towerSkipPick = Number(b.getAttribute("data-sk")); renderTower(); }); });
 
     var box = $("#tower-floors");
     box.innerHTML = "";
@@ -4154,16 +4212,17 @@
         skipBtn.disabled = !canAct || S.coins < cost;
         skipBtn.addEventListener("click", function () { skipTowerFloor(floor); });
         actions.appendChild(skipBtn);
-        /* Skip ×10: pay to clear the next batch of floors in one tap (as many of the next ten as you can afford). */
+        /* Batch skip: clear the next N floors in one tap, where N is the amount the player chose above
+           (as many of the next N as they can afford). */
         var batch = 0, batchCost = 0, bf = floor;
-        while (batch < 10 && bf <= TOWER_FLOORS && !S.tower.cleared[bf]) { batchCost += towerSkipCost(bf); bf++; batch++; }
+        while (batch < towerSkipPick && bf <= TOWER_FLOORS && !S.tower.cleared[bf]) { batchCost += towerSkipCost(bf); bf++; batch++; }
         if (batch > 1) {
           var skip10 = document.createElement("button");
           skip10.className = "btn small tower-skip";
           skip10.textContent = "⏭️⏭️ Skip ×" + batch + " 🪙" + fmtShort(batchCost);
           skip10.title = "Pay " + fmt(batchCost) + " coins to skip the next " + batch + " bots at once (no doubloons). Skips as many as you can afford.";
           skip10.disabled = !canAct || S.coins < cost;
-          skip10.addEventListener("click", function () { skipTowerFloors(floor, 10); });
+          skip10.addEventListener("click", function () { skipTowerFloors(floor, towerSkipPick); });
           actions.appendChild(skip10);
         }
         row.appendChild(actions);
@@ -4372,9 +4431,21 @@
 
   function renderBots() {
     renderArenaSupplies();
+    var fightsEl = document.getElementById("arena-fights");
+    if (fightsEl) {
+      if (arenaUnlimited()) {
+        fightsEl.className = "arena-fights admin";
+        fightsEl.textContent = "👑 Admin: unlimited arena fights";
+      } else {
+        var left = arenaFightsLeft();
+        fightsEl.className = "arena-fights" + (left === 0 ? " empty" : "");
+        fightsEl.textContent = "🏟️ Arena fights left: " + left + " / " + ARENA_FIGHT_LIMIT + (left < ARENA_FIGHT_LIMIT ? " · resets in " + fmtDuration(arenaResetIn()) : "");
+      }
+    }
     var grid = $("#bot-grid");
     grid.innerHTML = "";
     var pp = playerPower();
+    var outOfFights = !arenaUnlimited() && arenaFightsLeft() <= 0;
     BOTS.forEach(function (bot) {
       var card = document.createElement("div");
       card.className = "card" + (bot.boss ? " boss" : "");
@@ -4382,7 +4453,7 @@
       var ratio = pp / bot.power;
       var verdict = ratio >= 1.3 ? "Easy" : ratio >= 1 ? "Fair" : ratio >= 0.75 ? "Hard" : "Deadly";
       var vcls = ratio >= 1 ? "t-uncommon" : ratio >= 0.75 ? "t-legendary" : "t-forbidden";
-      var abil = K.botKit(bot.id).map(function (ab) { return ab.icon + " " + ab.name; }).join(" · ");
+      var abil = K.botKit(bot.kitId || bot.id).map(function (ab) { return ab.icon + " " + ab.name; }).join(" · ");
       card.innerHTML =
         "<div class=\"row\"><div class=\"big-icon\">" + bot.icon + "</div><div><div class=\"card-title\">" + bot.name + "</div><div class=\"card-sub\">Power " + fmt(bot.power) + " · <span class=\"" + vcls + "\">" + verdict + "</span></div><div class=\"card-sub\">Abilities: " + abil + "</div></div></div>" +
         "<div class=\"row\"><span class=\"price\">+" + fmt(bot.reward) + " coins</span><span class=\"card-sub\">wins: " + wins + "</span></div>";
@@ -4391,7 +4462,7 @@
       var btn = document.createElement("button");
       btn.className = "btn small primary";
       btn.textContent = "Fight";
-      btn.disabled = (!!battle && !battle.over) || PvP.status === "connected";
+      btn.disabled = (!!battle && !battle.over) || PvP.status === "connected" || outOfFights;
       btn.addEventListener("click", function () { startBotFight(bot); });
       actions.appendChild(btn);
       card.appendChild(actions);
@@ -4418,8 +4489,10 @@
     if (battle && !battle.over) return;
     if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
     if (PvP.status === "connected") { toast("Leave the PvP room to fight bots", "bad"); return; }
+    if (!arenaUnlimited() && arenaFightsLeft() <= 0) { toast("🏟️ You've used all " + ARENA_FIGHT_LIMIT + " arena fights — more in " + fmtDuration(arenaResetIn()), "bad", 5000); return; }
     var aura = equippedAura();
     if (!aura) { toast("Equip an aura first", "bad"); return; }
+    if (!arenaUnlimited()) { arenaCheckReset(); S.arena.fights = (S.arena.fights || 0) + 1; }
     var spec = myFighterSpec();
     spec.dmgMult = S.strengthMult > 1 ? S.strengthMult : 1;
     var me = fighterFromSpec(spec);
@@ -4429,7 +4502,7 @@
       me.revive = S.reviveReady;
       if (rp) { me.reviveName = rp.name; me.reviveIcon = rp.icon; }
     }
-    var bkit = K.botKit(bot.id);
+    var bkit = K.botKit(bot.kitId || bot.id);
     var them = Engine.makeFighter({ name: bot.name, power: bot.power, kit: bkit, abilities: bkit.map(function (ab) { return ab.id; }), icon: bot.icon, isBot: true });
     battle = Engine.create(me, them, "a");
     view = { me: "a", pvp: false, animating: false, bot: bot };
@@ -7635,10 +7708,31 @@
     if (!(rolls >= 1)) { aaPrint("⚠️ Error 98: Enter how many rolls the luck lasts."); return; }
     accountAdmin("luck", { id: id, mult: mult, rolls: rolls }).then(function (d) {
       if (!d) return;
-      aaPrint("🍀 Gave " + d.account.name + " (" + id + ") x" + mult.toLocaleString("en-US") + " luck for " + fmt(rolls) + " roll" + (rolls === 1 ? "" : "s") + ".");
+      aaPrint("🍀 Gave " + d.account.name + " (" + id + ") x" + fmtShort(mult) + " luck for " + fmt(rolls) + " roll" + (rolls === 1 ? "" : "s") + ".");
       aaChanged(id === currentUser);
     });
   }
+
+  /* Give a player tower doubloons (same server op shape as coins). */
+  function aaAddDoubloons() {
+    var id = aaTargetId();
+    if (!id) return;
+    var n = Math.trunc(Number($("#aa-doubloons").value));
+    if (!n) { aaPrint("⚠️ Error 98: Enter how many doubloons to add."); return; }
+    accountAdmin("doubloons", { id: id, amount: n }).then(function (d) {
+      if (!d) return;
+      aaPrint("🪙 " + (n > 0 ? "Added " + fmt(n) + " doubloons to " : "Took " + fmt(-n) + " doubloons from ") + d.account.name + " (" + id + "). They have " + fmt(d.result) + " now.");
+      aaChanged(id === currentUser);
+    });
+  }
+
+  /* The server's upper limits — buttons that fill the boxes with the max so you don't type 60-odd digits. */
+  var AA_MAX_COINS = 8.09e26;   /* 809 septillion */
+  var AA_MAX_LUCK = 9e65;       /* 900 vigintillion */
+  var AA_MAX_LUCK_ROLLS = 1000000;
+  function aaMaxCoins() { $("#aa-coins").value = AA_MAX_COINS; aaAddCoins(); }
+  function aaMaxDoubloons() { $("#aa-doubloons").value = AA_MAX_COINS; aaAddDoubloons(); }
+  function aaMaxLuck() { $("#aa-luck").value = AA_MAX_LUCK; $("#aa-luck-rolls").value = AA_MAX_LUCK_ROLLS; aaAddLuck(); }
 
   function aaMute(unmute) {
     var id = aaTargetId();
@@ -7961,7 +8055,11 @@
   });
   $("#aa-erase").addEventListener("click", aaErase);
   $("#aa-add-coins").addEventListener("click", aaAddCoins);
+  $("#aa-add-doubloons").addEventListener("click", aaAddDoubloons);
   $("#aa-add-luck").addEventListener("click", aaAddLuck);
+  $("#aa-max-coins").addEventListener("click", aaMaxCoins);
+  $("#aa-max-doubloons").addEventListener("click", aaMaxDoubloons);
+  $("#aa-max-luck").addEventListener("click", aaMaxLuck);
   $("#aa-erase-all").addEventListener("click", aaEraseAll);
   $("#aa-mute").addEventListener("click", function () { aaMute(false); });
   $("#aa-unmute").addEventListener("click", function () { aaMute(true); });

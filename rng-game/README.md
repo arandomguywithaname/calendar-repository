@@ -131,13 +131,16 @@ loadout, and fight bots or a friend.
   aura in the Abilities tab. 15 mechanics: strike, heavy blow, guard, heal,
   precision crit, drain, focus, poison, weaken, stun, mirror, burst, 3-hit barrage,
   execute, and absorbing shield. Rarer auras roll the nastier mechanics. Bots have
-  their own named kits (Titan Bot has no healing move). 37 bots run from the Training
+  their own named kits (Titan Bot has no healing move). **107 bots** run from the Training
   Dummy (power 15) up: after Eternity Bot
   come Nova, Kraken, Sentinel Prime, Cyber Hydra, Grim, Colossus, Storm Titan, Abyss
   Lord, Solar, Lunar, Galaxy, Chrono, Quantum, Overlord and Creator (power 120,000,
-  +10,000,000 coins), then seven even stronger ones — Destroyer Bot, Singularity Bot,
-  Leviathan Prime, Oblivion Bot, Apocalypse Engine, The Architect and finally **Omniarch**
-  (power 1,200,000, +300,000,000 coins) — a real test even for a top-rank aura. Every mechanic has its own battle animation (slashes, a
+  +10,000,000 coins), then seven stronger ones — Destroyer Bot, Singularity Bot,
+  Leviathan Prime, Oblivion Bot, Apocalypse Engine, The Architect and **Omniarch**
+  (power 1,200,000), then **70 more end-game bots** scaling from ~1,500,000 power up to a
+  final boss of **600,000,000 power** (the strongest in the game) — each fighting with one
+  of the toughest ability kits. **Arena fights are limited to 10 before a daily reset**
+  (admins fight unlimited). Every mechanic has its own battle animation (slashes, a
   falling hammer, lightning, a nova, a hex shield, a life-drain stream, and so on),
   with the attacker lunging or casting, a floating ability name, and a matching
   sound. When the attacker's aura is Legendary or rarer, the ability takes over the
@@ -265,8 +268,9 @@ loadout, and fight bots or a friend.
   or Deadly). Each floor is one bot fight using the same battle engine as the Arena,
   and when it's over a **🗼 Back to the Tower** button takes you straight back to the
   Tower (so a tower fight never dumps you on the Battle screen). The bots ramp up
-  fast: floor 1 is **1,000 power** and every floor up is **×1.15** (1,000 → 1,150 →
-  1,322 → …), reaching the billions near floor 120. You climb **strictly in order, one
+  fast: floor 1 is **10 power** and every floor up is **×1.15** (10 → 11 → 13 → …),
+  reaching the tens of millions near floor 120 (the bots were made **100× weaker** so the
+  climb is far more forgiving). You climb **strictly in order, one
   floor at a time** — only the next floor is fightable; a floor you've already cleared
   shows a ✓ and is locked, and floors above the next are locked too. Beating a floor
   pays **doubloons** (🪙, a separate currency from coins): floors 1–10 pay 1,200,
@@ -278,8 +282,9 @@ loadout, and fight bots or a friend.
   is too tough, the next floor also has a **⏭️ Skip** button: pay coins (the price
   scales with that bot's power — floor power × 4) to skip it and move straight on. A
   skipped floor counts as cleared so the next unlocks, but earns **no doubloons**. Next
-  to it is a **⏭️⏭️ Skip ×10** button that buys the next ten floors in one tap (it skips
-  as many of the next ten as you can afford and shows the total before you confirm).
+  to it is a **⏭️⏭️ batch-skip** button that buys several floors in one tap — pick **how
+  many to skip** (×5, ×10, ×25, ×50 or ×100) from the selector at the top of the Tower,
+  and it skips as many of the next N as you can afford and shows the total before you confirm.
 - **🪙 Doubloon shop.** The **Doubloon shop** button on the Tower spends doubloons on
   potions — luck, speed, coins, magnet, strength, revive, shield and the big heals —
   at their own doubloon prices. The 3-healing-potion cap still applies, and a
@@ -405,8 +410,10 @@ loadout, and fight bots or a friend.
   It only changes the account on the device you're using.
 - **Player panel** (Stats tab, under the console, after unlocking): lists every online
   player account (auras, coins, luck, rolls). Click a player,
-  then **Add coins** (a minus number takes coins away), **Add luck** (a multiplier for a
-  number of rolls) or **Delete auras** (type an aura name to delete just that one, both
+  then **Add coins** (a minus number takes coins away — now up to **809 septillion**),
+  **Add doubloons** (new — up to 809 septillion), **Add luck** (a multiplier for a
+  number of rolls — now up to **900 vigintillion**) or **Delete auras** (type an aura name
+  to delete just that one, both
   forms, or leave it empty to delete all). **Delete auras on every account except this
   player** wipes everyone else's auras. **Reset everyone's luck to x1** ends every
   player's active luck boosts (and magnet and shiny potions) at once; anyone rolling right now
