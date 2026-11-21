@@ -5790,6 +5790,7 @@
     "coins <amount>            add coins (negative to remove)",
     "shards <amount>           add shiny shards (negative to remove)",
     "doubloons <amount>        add tower doubloons (negative to remove)",
+    "gems <amount>             add VIP gems (negative to remove)",
     "makeshiny <aura name|id>  make an owned aura shiny with shards (free for admins)",
     "give <aura name|id> [shiny]  add an aura (or its shiny form) to your inventory",
     "giveall [shiny]           give yourself one of every aura (the whole collection)",
@@ -5881,6 +5882,13 @@
         if (!isFinite(dn)) { adminPrint("Usage: doubloons <amount>"); break; }
         S.doubloons = Math.max(0, (S.doubloons || 0) + Math.floor(dn));
         adminPrint("Doubloons: " + fmt(S.doubloons));
+        break;
+      }
+      case "gems": {
+        var gn = Number(parts[0]);
+        if (!isFinite(gn)) { adminPrint("Usage: gems <amount>"); break; }
+        S.gems = Math.max(0, (S.gems || 0) + Math.floor(gn));
+        adminPrint("Gems: " + fmt(S.gems));
         break;
       }
       case "makeshiny": {
@@ -7923,12 +7931,27 @@
     });
   }
 
+  /* Give a player VIP gems (same server op shape as coins). */
+  function aaAddGems() {
+    var id = aaTargetId();
+    if (!id) return;
+    var n = Math.trunc(Number($("#aa-gems").value));
+    if (!n) { aaPrint("⚠️ Error 98: Enter how many gems to add."); return; }
+    accountAdmin("gems", { id: id, amount: n }).then(function (d) {
+      if (!d) return;
+      aaPrint("💎 " + (n > 0 ? "Added " + fmt(n) + " gems to " : "Took " + fmt(-n) + " gems from ") + d.account.name + " (" + id + "). They have " + fmt(d.result) + " now.");
+      aaChanged(id === currentUser);
+    });
+  }
+
   /* The server's upper limits — buttons that fill the boxes with the max so you don't type 60-odd digits. */
   var AA_MAX_COINS = 8.09e26;   /* 809 septillion */
   var AA_MAX_LUCK = 9e65;       /* 900 vigintillion */
   var AA_MAX_LUCK_ROLLS = 1000000;
+  var AA_MAX_GEMS = 1000000;    /* a million gems */
   function aaMaxCoins() { $("#aa-coins").value = AA_MAX_COINS; aaAddCoins(); }
   function aaMaxDoubloons() { $("#aa-doubloons").value = AA_MAX_COINS; aaAddDoubloons(); }
+  function aaMaxGems() { $("#aa-gems").value = AA_MAX_GEMS; aaAddGems(); }
   function aaMaxLuck() { $("#aa-luck").value = AA_MAX_LUCK; $("#aa-luck-rolls").value = AA_MAX_LUCK_ROLLS; aaAddLuck(); }
 
   function aaMute(unmute) {
@@ -8254,9 +8277,11 @@
   $("#aa-erase").addEventListener("click", aaErase);
   $("#aa-add-coins").addEventListener("click", aaAddCoins);
   $("#aa-add-doubloons").addEventListener("click", aaAddDoubloons);
+  $("#aa-add-gems").addEventListener("click", aaAddGems);
   $("#aa-add-luck").addEventListener("click", aaAddLuck);
   $("#aa-max-coins").addEventListener("click", aaMaxCoins);
   $("#aa-max-doubloons").addEventListener("click", aaMaxDoubloons);
+  $("#aa-max-gems").addEventListener("click", aaMaxGems);
   $("#aa-max-luck").addEventListener("click", aaMaxLuck);
   $("#aa-erase-all").addEventListener("click", aaEraseAll);
   $("#aa-mute").addEventListener("click", function () { aaMute(false); });

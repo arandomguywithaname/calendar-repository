@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=95">
+  <link rel="stylesheet" href="style.css?v=96">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -383,6 +383,14 @@
               </div>
             </div>
             <div class="aa-group">
+              <div class="aa-label">💎 Gems</div>
+              <div class="aa-row">
+                <input id="aa-gems" type="number" step="1" placeholder="How many gems (minus takes away)">
+                <button type="button" class="btn small" id="aa-add-gems">Add gems</button>
+                <button type="button" class="btn small" id="aa-max-gems" title="Give 1,000,000 gems">Max 💎</button>
+              </div>
+            </div>
+            <div class="aa-group">
               <div class="aa-label">🍀 Luck</div>
               <div class="aa-row">
                 <input id="aa-luck" type="number" min="1" placeholder="Luck × (like 1000)">
@@ -462,7 +470,7 @@
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 95</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 96</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -598,9 +606,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=95"></script>
-  <script src="abilities.js?v=95"></script>
-  <script src="reveals.js?v=95"></script>
-  <script src="game.js?v=95"></script>
+  <script src="auras.js?v=96"></script>
+  <script src="abilities.js?v=96"></script>
+  <script src="reveals.js?v=96"></script>
+  <script src="game.js?v=96"></script>
 </body>
 </html>

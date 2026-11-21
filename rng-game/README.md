@@ -427,14 +427,15 @@ loadout, and fight bots or a friend.
 - **Admin console** (your own account, after unlocking). Commands: `luck 1000 10`, `coins 5000`,
   `give Cosmic Veil`, `giveall` (one of every aura at once), `roll Fury of Darkness`,
   `give Cosmic Veil shiny`, `roll Beyond Axiom shiny`, `potion zenith 3`,
-  `shards 500`, `doubloons 20000`, `makeshiny The Unknown`,
+  `shards 500`, `doubloons 20000`, `gems 1000`, `makeshiny The Unknown`,
   `training 20`, `unlockauto`, `daily reset`, `clearluck`, `reset`, `help`.
   It only changes the account on the device you're using.
 - **Player panel** (Stats tab, under the console, after unlocking): lists every online
   player account (auras, coins, luck, rolls). Click a player,
-  then **Add coins** (a minus number takes coins away — now up to **809 septillion**),
-  **Add doubloons** (new — up to 809 septillion), **Add luck** (a multiplier for a
-  number of rolls — now up to **900 vigintillion**) or **Delete auras** (type an aura name
+  then **Add coins** (a minus number takes coins away — up to **809 septillion**),
+  **Add doubloons** (up to 809 septillion), **Add gems** (new — up to 1,000,000,000),
+  **Add luck** (a multiplier for a
+  number of rolls — up to **900 vigintillion**) or **Delete auras** (type an aura name
   to delete just that one, both
   forms, or leave it empty to delete all). **Delete auras on every account except this
   player** wipes everyone else's auras. **Reset everyone's luck to x1** ends every
