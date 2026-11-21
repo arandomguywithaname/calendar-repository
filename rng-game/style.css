@@ -276,6 +276,30 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .tower-skipsel { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .tower-skipsel .chip { padding: 3px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .tower-skipsel .chip.on { background: rgba(251,191,36,.85); color: #241a06; border-color: rgba(251,191,36,.9); font-weight: 700; }
+.price-was { opacity: .55; text-decoration: line-through; font-weight: 400; margin-right: 2px; }
+
+/* "You got it!" celebration for the grandest potions. */
+.potion-celebrate { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; }
+.potion-celebrate.hidden { display: none; }
+.potion-celebrate .pc-backdrop { position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, rgba(30,20,60,.78), rgba(5,4,12,.94)); animation: pcFade .4s ease-out; }
+.potion-celebrate .pc-stage { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 20px; }
+.potion-celebrate .pc-rays { position: absolute; top: 18%; left: 50%; width: 150vmax; height: 150vmax; transform: translate(-50%, -50%); background: repeating-conic-gradient(from 0deg, rgba(255,215,0,.16) 0deg 7deg, transparent 7deg 20deg, rgba(120,200,255,.12) 20deg 21deg, transparent 21deg 34deg); animation: pcSpin 14s linear infinite; opacity: .9; }
+.potion-celebrate .pc-glow { position: absolute; top: 18%; left: 50%; width: 46vmin; height: 46vmin; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(255,230,140,.75), rgba(255,180,80,.25) 45%, transparent 70%); filter: blur(6px); animation: pcGlow 1.8s ease-in-out infinite; }
+.potion-celebrate .pc-icon { position: relative; font-size: clamp(90px, 26vmin, 190px); line-height: 1; filter: drop-shadow(0 8px 24px rgba(0,0,0,.6)) drop-shadow(0 0 28px rgba(255,215,0,.65)); animation: pcPop .9s cubic-bezier(.2,1.5,.35,1) both, pcBob 2.6s ease-in-out .9s infinite; }
+.potion-celebrate .pc-title { margin-top: 18px; font-family: var(--font-head, inherit); font-weight: 800; letter-spacing: .25em; font-size: 1rem; color: #ffe9a8; opacity: 0; animation: pcUp .5s ease-out .3s both; }
+.potion-celebrate .pc-name { margin-top: 6px; font-family: var(--font-head, inherit); font-weight: 800; font-size: clamp(1.6rem, 6vw, 2.8rem); background: linear-gradient(100deg, #ffd700, #fff6c0, #7fd8ff, #ffd700); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 10px rgba(0,0,0,.7)); opacity: 0; animation: pcUp .5s ease-out .45s both, pcShimmer 3s linear .5s infinite; }
+.potion-celebrate .pc-sub { margin-top: 16px; font-size: .85rem; color: rgba(255,255,255,.65); opacity: 0; animation: pcUp .5s ease-out 1s both; }
+.potion-celebrate .pc-sparkles { position: absolute; top: 18%; left: 50%; width: 0; height: 0; }
+.potion-celebrate .pc-sparkles span { position: absolute; left: 0; top: 0; font-size: clamp(14px, 3vmin, 26px); opacity: 0; animation: pcSpark 1.5s ease-out var(--d, 0s) infinite; }
+@keyframes pcFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pcSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes pcGlow { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .7; } 50% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; } }
+@keyframes pcPop { 0% { transform: scale(0) rotate(-200deg); opacity: 0; } 60% { transform: scale(1.22) rotate(8deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+@keyframes pcBob { 0%,100% { translate: 0 0; } 50% { translate: 0 -12px; } }
+@keyframes pcUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pcShimmer { to { background-position: 220% 0; } }
+@keyframes pcSpark { 0% { opacity: 0; transform: translate(0,0) scale(.3); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(1.1); } }
+@media (prefers-reduced-motion: reduce) { .potion-celebrate * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 .effects { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 28px; }
 .effect { font-size: .85rem; padding: 3px 12px; border-radius: 999px; background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.35); color: #bbf7d0; }
 .effect.gold { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.4); color: #fde68a; }

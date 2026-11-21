@@ -53,6 +53,8 @@
     cosmicluck:{ name: "Cosmic Luck Potion", icon: "🌀", cost: 1000000000,    group: "luck", kind: "luck", mult: 100000000,    rolls: 1, desc: "x100,000,000 luck for a single roll." },
     quantum:   { name: "Quantum Potion",    icon: "⚛️", cost: 20000000000,   group: "luck", kind: "luck", mult: 10000000000,  rolls: 1, desc: "x10,000,000,000 luck for a single roll." },
     bigbang:   { name: "Big Bang Potion",   icon: "💥", cost: 500000000000,  group: "luck", kind: "luck", mult: 1000000000000, rolls: 1, desc: "x1,000,000,000,000 luck for a single roll." },
+    octillionpot:{ name: "Octillion Elixir", icon: "🎆", cost: 100000000000000, group: "luck", kind: "luck", mult: 3e28, rolls: 1, desc: "x30 octillion (30,000,000,000,000,000,000,000,000,000) luck for a single roll.", epic: true },
+    masterluck:{ name: "Potion of Masters of Luck", icon: "🏆", cost: 10000000000000000, group: "luck", kind: "luck", mult: 1e33, rolls: 1, desc: "x1 decillion (1,000,000,000,000,000,000,000,000,000,000,000) luck for a single roll — only for true masters of luck!", epic: true },
     blessing:  { name: "Daily Blessing",    icon: "🎁", cost: 0,       group: "luck",   kind: "luck", mult: 50,    rolls: 1,  desc: "x50 luck for one roll. Only from the daily gift.", daily: true },
     secret:    { name: "Elixir of the Million", icon: "🗝️", cost: 1000000, group: "luck", kind: "luck", mult: 1000000, rolls: 1, desc: "x1,000,000 luck for a single roll. The shop never advertised this.", secret: true },
     everything:{ name: "Potion of Everything", icon: "⚗️", cost: 5000000, group: "luck", kind: "everything", mult: 50000, rolls: 3, collector: true,
@@ -331,7 +333,8 @@
        and players who already unlocked the Potion of Everything keep it. */
     "fourleaf", "mythic", "supernova", "glimmer", "radiance", "cosmicmagnet", "divinemagnet",
     "fortunecoins", "ransom", "flash", "berserk", "aegis",
-    "cosmicluck", "quantum", "bigbang", "beyond", "omniscience", "omnipotion"];
+    "cosmicluck", "quantum", "bigbang", "beyond", "omniscience", "omnipotion",
+    "octillionpot", "masterluck"];
   function collectionKeys() {
     return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && !POTIONS[k].arena && COLLECTION_SKIP.indexOf(k) < 0; });
   }
@@ -1628,9 +1631,14 @@
   }
 
   /* How many of a potion one Buy click gets: the chosen Buy amount, or for Max as many as the coins cover. */
+  /* Everything in the potion shop is sold at 1.9x off its list price (mystery-potion pools and the collection
+     still use the full list price, so this only changes what you pay and see in the shop). */
+  var SHOP_DISCOUNT = 1.9;
+  function shopCost(p) { return p.cost > 0 ? Math.max(1, Math.round(p.cost / SHOP_DISCOUNT)) : 0; }
+
   function buyCount(p, key) {
     var amt = S.settings.buyAmount, n;
-    if (amt === "max") n = p.cost > 0 ? Math.floor(S.coins / p.cost) : 1;
+    if (amt === "max") n = p.cost > 0 ? Math.floor(S.coins / shopCost(p)) : 1;
     else n = BUY_AMOUNTS.indexOf(amt) >= 0 ? amt : 1;
     return Math.min(n, potionRoom(key));
   }
@@ -1640,8 +1648,8 @@
     if (!p) return;
     if (p.collector && !collectionDone()) return;
     if (potionRoom(key) < 1) { errorToast(ERR.POTION_BUY, "You can only carry " + MAX_HEALS + " healing potions. Use one in a bot fight first."); return; }
-    var n = buyCount(p, key), total = n * p.cost;
-    if (n < 1 || S.coins < total) { errorToast(ERR.POTION_BUY, "Not enough coins for " + (n > 1 ? fmt(n) + " x " : "") + p.name + " (" + fmt(n > 1 ? total : p.cost) + " needed)."); return; }
+    var n = buyCount(p, key), total = n * shopCost(p);
+    if (n < 1 || S.coins < total) { errorToast(ERR.POTION_BUY, "Not enough coins for " + (n > 1 ? fmt(n) + " x " : "") + p.name + " (" + fmt(n > 1 ? total : shopCost(p)) + " needed)."); return; }
     var wasDone = collectionDone();
     S.coins -= total;
     addPotion(key, n);
@@ -1649,6 +1657,7 @@
     Sound.buy();
     var capped = p.kind === "heal" && typeof S.settings.buyAmount === "number" && S.settings.buyAmount > n;
     toast("Bought " + (n > 1 ? fmt(n) + " x " + p.name + " for " + fmt(total) + " coins" : p.name) + (capped ? " (you can carry " + MAX_HEALS + " healing potions)" : ""));
+    if (p.epic) celebratePotion(p); /* the grandest potions get a cool "you got it" animation */
     if (!wasDone && collectionDone()) {
       var ev = POTIONS.everything;
       toast(ev.icon + " You bought every potion! A new one appeared in the shop: " + ev.name, "gold", 7000);
@@ -1656,6 +1665,29 @@
     }
     save();
     renderAll();
+  }
+
+  /* A cool full-screen "YOU GOT IT!" animation for the grandest potions: the potion zooms in with spinning
+     light rays, a glowing halo, a shower of sparkles and a shimmering name. Tap (or wait ~3s) to dismiss. */
+  var pcTimer = null;
+  function celebratePotion(p) {
+    var el = document.getElementById("potion-celebrate");
+    if (!el) return;
+    if (S.settings.skipAnims) { toast("🏆 You got the " + p.name + "!", "gold", 4000); return; }
+    document.getElementById("pc-icon").textContent = p.icon;
+    document.getElementById("pc-name").textContent = p.name;
+    var glyphs = ["✨", "⭐", "🌟", "💫", "🍀"], html = "";
+    for (var i = 0; i < 18; i++) {
+      var a = (i / 18) * 6.2832 + Math.random() * 0.4, d = 120 + Math.random() * 170;
+      html += "<span style=\"--tx:" + (Math.cos(a) * d).toFixed(0) + "px;--ty:" + (Math.sin(a) * d).toFixed(0) + "px;--d:" + (Math.random() * 0.8).toFixed(2) + "s\">" + glyphs[i % glyphs.length] + "</span>";
+    }
+    document.getElementById("pc-sparkles").innerHTML = html;
+    el.classList.remove("hidden");
+    if (typeof Sound !== "undefined") { if (Sound.shiny) Sound.shiny(); if (Sound.rare) Sound.rare(3); }
+    var done = function () { el.classList.add("hidden"); };
+    el.onclick = done;
+    if (pcTimer) clearTimeout(pcTimer);
+    pcTimer = setTimeout(done, 3200);
   }
 
   function renderShop() {
@@ -1695,7 +1727,7 @@
       }
       card.innerHTML =
         "<div class=\"row\"><div class=\"big-icon\">" + p.icon + "</div><div><div class=\"card-title\">" + p.name + "</div><div class=\"card-sub\">" + p.desc + "</div></div></div>" +
-        "<div class=\"row\"><span class=\"price\">" + fmt(p.cost) + " coins</span><span class=\"card-sub\">owned: " + fmt(S.potions[key] || 0) + "</span></div>";
+        "<div class=\"row\"><span class=\"price\">" + (p.cost > shopCost(p) ? "<s class=\"price-was\">" + fmt(p.cost) + "</s> " : "") + fmt(shopCost(p)) + " coins</span><span class=\"card-sub\">owned: " + fmt(S.potions[key] || 0) + "</span></div>";
       var n = buyCount(p, key), full = p.kind === "heal" && potionRoom(key) < 1;
       if (p.kind === "heal") {
         var carry = document.createElement("div");
@@ -1706,13 +1738,13 @@
       if (S.settings.buyAmount !== 1 && !full) {
         var total = document.createElement("div");
         total.className = "card-sub buy-total";
-        total.textContent = n > 0 ? "x" + fmt(n) + " = " + fmt(n * p.cost) + " coins" : "Not enough coins for one yet";
+        total.textContent = n > 0 ? "x" + fmt(n) + " = " + fmt(n * shopCost(p)) + " coins" : "Not enough coins for one yet";
         card.appendChild(total);
       }
       var actions = document.createElement("div");
       actions.className = "actions";
       var buy = document.createElement("button");
-      buy.className = "btn small primary" + (full || n < 1 || S.coins < n * p.cost ? " cant-afford" : "");
+      buy.className = "btn small primary" + (full || n < 1 || S.coins < n * shopCost(p) ? " cant-afford" : "");
       buy.textContent = full ? "Full" : S.settings.buyAmount === 1 ? "Buy" : S.settings.buyAmount === "max" && n < 1 ? "Buy max" : "Buy x" + fmt(n);
       buy.addEventListener("click", function () { buyPotion(key); });
       actions.appendChild(buy);

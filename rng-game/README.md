@@ -191,10 +191,15 @@ loadout, and fight bots or a friend.
   **💎 15 Gems**, **✨ 100 shiny shards**, **🪙 5,000 doubloons**, **🍀 x1,000 luck for 5
   rolls**, **🧪 2 Mega Mystery Potions**, or the rare **🎉 JACKPOT** (25,000,000 coins
   **and** 50 Gems). The prize is picked fairly (weighted) and the wheel always lands on it.
-- **64 potions** in four groups. Luck from x2 up to the Potion of Destiny
-  (x10,000,000 for one roll, 100,000,000 coins) and then stronger still — the **Cosmic
-  Luck Potion** (x100,000,000), **Quantum Potion** (x10,000,000,000) and **Big Bang
-  Potion** (x1,000,000,000,000) — with the Rainbow Potion (x10 for 100 rolls), Infinity
+- **Everything in the potion shop is 1.9× cheaper.** Each potion's list price is shown
+  struck through next to its new, lower price, and you're charged the discounted amount.
+  (Mystery-potion pools and the "buy every potion" collection still use the list price.)
+- **66 potions** in four groups. Luck from x2 up to the Potion of Destiny
+  (x10,000,000 for one roll) and then stronger still — the **Cosmic Luck Potion**
+  (x100,000,000), **Quantum Potion** (x10,000,000,000), **Big Bang Potion**
+  (x1,000,000,000,000), the **🎆 Octillion Elixir** (x30 octillion) and the grandest of
+  all, the **🏆 Potion of Masters of Luck** (x1 **decillion** luck for one roll) — with
+  the Rainbow Potion (x10 for 100 rolls), Infinity
   Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the way. Magnets,
   guarantees and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
   Magnet (Epic or better), Legend Lure (Legendary or better), and three rank
@@ -218,7 +223,11 @@ loadout, and fight bots or a friend.
   and Radiance (x25) shiny potions; the Cosmic Magnet (Cosmic or better) and Divine Magnet
   (Divine or better); Fortune Coins (x50) and King's Ransom (x500) coin potions; the Flash
   Potion (cooldown cut to 1/16); and two battle potions — Berserk Brew (+700% damage)
-  and the Aegis Potion (a 100%-HP shield).
+  and the Aegis Potion (a 100%-HP shield). Buying one of the grandest potions (the
+  Octillion Elixir or the Potion of Masters of Luck) plays a **cool full-screen "YOU GOT
+  IT!" animation** — the potion zooms in over spinning gold light-rays, a glowing halo
+  and a shower of sparkles, with its name shimmering below; tap (or wait ~3s) to continue
+  (skipped when "Skip all animations" is on).
 - **🏟️ Arena supplies (arena-only potions).** Two potions are sold **only** at the
   Arena's own supply stand, for **doubloons**, and never show up in the Potion Shop or
   the Doubloon shop: the **🍶 Elixir Potion** (×30,000,000 luck for 2 rolls — the
