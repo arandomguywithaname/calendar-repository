@@ -533,11 +533,13 @@ No build step and no npm install.
   progress) when the player returns to the tab while nothing is going on. The page
   itself is served with `Cache-Control: no-cache` (see `netlify.toml`). Players on a
   version from before this one need to reload once to get it.
-- **Check which version is live.** The bottom of every page shows "Version N". Each
-  update raises N, together with the `?v=N` on the script and style links in
-  `index.html`, so browsers fetch the new files instead of reusing old ones. If the
-  live site shows an older number than the newest zip, the site is still running an
-  old copy: deploy the newest zip again and reload the page.
+- **Check which version is live.** The bottom of every page shows "Version N". The
+  version number **is the game's size in kilobytes ÷ 10** — so a game that's about 890 KB
+  shows **Version 89.0**, and roughly every 10 KB of new code bumps it by 0.1. It's set on
+  the footer and on the `?v=N` cache-busters on the script and style links in `index.html`
+  (so browsers fetch new files instead of reusing old ones), and the auto-update check now
+  reads the decimal. If the live site shows an older number than the newest zip, the site
+  is still running an old copy: deploy the newest zip again and reload the page.
 
 ## Files
 

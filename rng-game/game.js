@@ -8129,14 +8129,14 @@
   /* ---------- Updates: a tab left open for days keeps running the old game (no chat, old moves...). Every few
      minutes, and whenever the player comes back to the tab, the game asks the site for its newest page; if
      that has a higher Version number it offers to update, and updates by itself when the player returns. ---------- */
-  var RUNNING_VERSION = (function () { var m = /Version (\d+)/.exec($("#game-version").textContent); return m ? Number(m[1]) : 0; })();
+  var RUNNING_VERSION = (function () { var m = /Version (\d+(?:\.\d+)?)/.exec($("#game-version").textContent); return m ? parseFloat(m[1]) : 0; })();
   var newerVersion = 0;
   function checkForUpdate() {
     if (!RUNNING_VERSION || !window.fetch || location.protocol === "file:") return Promise.resolve(0);
     return fetch(location.pathname + "?version-check=" + Date.now(), { cache: "no-store" })
       .then(function (r) { return r.ok ? r.text() : ""; })
       .then(function (html) {
-        var m = /id="game-version">Version (\d+)</.exec(html), v = m ? Number(m[1]) : 0;
+        var m = /id="game-version">Version (\d+(?:\.\d+)?)</.exec(html), v = m ? parseFloat(m[1]) : 0;
         if (v > RUNNING_VERSION) {
           newerVersion = v;
           $("#update-text").textContent = "🔄 Version " + v + " of the game is out! You have Version " + RUNNING_VERSION + ".";
