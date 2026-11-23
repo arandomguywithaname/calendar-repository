@@ -17,15 +17,19 @@
   function saveKey() { return currentUser ? SAVE_BASE + ":" + currentUser : SAVE_BASE; }
   var ROLL_COOLDOWN = 1000;
   var PEER_PREFIX = "aura-realms-v1-";
-  var fmt = function (n) { return Math.floor(n).toLocaleString("en-US"); };
+  /* Full number with grouping. Never prints "NaN"/"Infinity": a bad value reads 0, a truly infinite one ∞. */
+  var fmt = function (n) { n = Number(n); if (!isFinite(n)) return n > 0 ? "∞" : "0"; return Math.floor(n).toLocaleString("en-US"); };
   /* Short number for the cramped HUD tiles so big values never overflow a phone: 9,999 stays full, then
-     10K, 12.3K, 1.5M, 2.1B, 3T… (exact value goes in the tile's title for a hover/long-press). */
+     10K, 12.3K, 1.5M, 2.1B, 3T… up to Vg (vigintillion); anything bigger reads cleanly as 9e65-style scientific
+     (never NaN, Infinity or a wall of digits). Exact value goes in the tile's title for a hover/long-press. */
   var fmtShort = function (n) {
     n = Math.floor(Number(n) || 0);
+    if (!isFinite(n)) return "∞";
     if (n < 10000) return n.toLocaleString("en-US");
     var u = ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "De", "UDe", "DDe", "TDe", "QaDe", "QiDe", "SxDe", "SpDe", "OcDe", "NoDe", "Vg"], i = -1, x = n;
     while (x >= 1000 && i < u.length - 1) { x /= 1000; i++; }
     if (x >= 999.5 && i < u.length - 1) { x /= 1000; i++; } /* 999,999 reads 1M, not 1000K */
+    if (x >= 1000) return n.toExponential(2).replace(/\.?0+e/, "e").replace("e+", "e"); /* beyond our named scale: 9e65 */
     var s = x >= 100 ? String(Math.round(x)) : x.toFixed(x >= 10 ? 1 : 2);
     if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
     return s + u[i];
