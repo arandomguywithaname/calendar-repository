@@ -7198,6 +7198,14 @@
         renderLeaderboard(); return;
       }
       LB.data = r.data; LB.at = Date.now(); LB.error = null;
+      /* Re-rank on the client so the order is always rarest-aura-first (then coins, then rolls), even if the
+         server that answered is an older build that sorted them differently. Big values are compared by sign so
+         astronomically rare auras and huge coin piles never lose precision. */
+      if (LB.data && Array.isArray(LB.data.top)) {
+        var cmp = function (x, y) { x = Number(x) || 0; y = Number(y) || 0; return x < y ? -1 : x > y ? 1 : 0; };
+        LB.data.top.sort(function (a, b) { return cmp(b.bestRarity, a.bestRarity) || cmp(b.coins, a.coins) || cmp(b.rolls, a.rolls); });
+        LB.data.top.forEach(function (row, i) { row.rank = i + 1; });
+      }
       renderLeaderboard();
     }).catch(function (e) {
       LB.loading = false;
