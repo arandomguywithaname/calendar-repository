@@ -203,14 +203,18 @@ loadout, and fight bots or a friend.
 - **Everything in the potion shop is 1.9× cheaper.** Each potion's list price is shown
   struck through next to its new, lower price, and you're charged the discounted amount.
   (Mystery-potion pools and the "buy every potion" collection still use the list price.)
-- **66 potions** in four groups. Luck from x2 up to the Potion of Destiny
+- **67 potions** in four groups. Luck from x2 up to the Potion of Destiny
   (x10,000,000 for one roll) and then stronger still — the **Cosmic Luck Potion**
   (x100,000,000), **Quantum Potion** (x10,000,000,000), **Big Bang Potion**
   (x1,000,000,000,000), the **🎆 Octillion Elixir** (x30 octillion) and the grandest of
   all, the **🏆 Potion of Masters of Luck** (x1 **decillion** luck for one roll) — with
   the Rainbow Potion (x10 for 100 rolls), Infinity
-  Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the way. Magnets,
-  guarantees and shiny potions: the Rarity Magnet (no Common or Uncommon), Epic
+  Serum (x25,000) and Celestial Nectar (x100,000 for 2 rolls) on the way. The
+  **5️⃣ Quintuple Potion** (500,000,000,000 coins) makes your **next 20 rolls each roll
+  5 times** (100 auras in all) and **keeps your luck** the whole time — the luck boost
+  you have active isn't used up across those rolls. Magnets,
+  guarantees and shiny potions (the **magnets now cost 100× more**): the Rarity Magnet
+  (no Common or Uncommon, 250,000 coins), Epic
   Magnet (Epic or better), Legend Lure (Legendary or better), and three rank
   guarantees beyond the Chosen — the **Beyond Potion** (Ascendant or better), the
   **Omniscience Potion** (Omniscient or better) and the **🔱 Omnipotion**, the strongest
@@ -331,9 +335,11 @@ loadout, and fight bots or a friend.
   with **💎 Gems**. **Gems are a premium currency you earn free by playing, never with
   real money:** claim **25 free Gems every 20 hours**, and win **3 Gems every time you
   beat a boss bot** in the Arena.
-  - **⚒️ Craft Gems.** You can also melt spare auras into Gems: **1 Cosmic aura + 100
-    Common auras + 500,000 coins → 20 💎 Gems**. The weakest auras are used first and
-    shinies are never melted, so your best collection is safe.
+  - **⚒️ Craft Gems.** You can also melt spare auras into Gems, with **six recipes** to
+    pick from: **20 💎** (1 Cosmic + 100 Common + 500K coins), **50 💎** (2 + 250 +
+    1.25M), **100 💎** (5 + 500 + 2.5M), **200 💎** (10 + 1,000 + 5M), **500 💎** (25 +
+    2,500 + 12.5M) and **1,000 💎** (50 + 5,000 + 25M). The weakest auras are used first
+    and shinies are never melted, so your best collection is safe.
   - There is a **💳 "Buy Gems with real money"** button, but real-money payments are
     **turned off on purpose** — Aura Realms is a free game for kids, so tapping it only
     shows an honest **Error 747** (payments disabled, no processor connected) and points

@@ -60,14 +60,15 @@
     everything:{ name: "Potion of Everything", icon: "⚗️", cost: 5000000, group: "luck", kind: "everything", mult: 50000, rolls: 3, collector: true,
                  desc: "Every kind of potion in one bottle: x50,000 luck, always shiny, Epic or better and x100 coins for 3 rolls, Time Warp speed, and a Godslayer Tonic, Steel Wall and Phoenix Feather for your next bot fight." },
     /* Magnets and shiny */
-    magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 2500,    group: "special", kind: "floor", min: 1000,  rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
-    epicmagnet:{ name: "Epic Magnet",       icon: "🧿", cost: 15000,   group: "special", kind: "floor", min: 10000, rolls: 3,  desc: "Your next 3 rolls are Epic or better" },
-    lure:      { name: "Legend Lure",       icon: "🪝", cost: 150000,  group: "special", kind: "floor", min: 100000, rolls: 2, desc: "Your next 2 rolls are Legendary or better" },
+    magnet:    { name: "Rarity Magnet",     icon: "🧲", cost: 250000,    group: "special", kind: "floor", min: 1000,  rolls: 5,  desc: "Your next 5 rolls can't be Common or Uncommon" },
+    epicmagnet:{ name: "Epic Magnet",       icon: "🧿", cost: 1500000,   group: "special", kind: "floor", min: 10000, rolls: 3,  desc: "Your next 3 rolls are Epic or better" },
+    lure:      { name: "Legend Lure",       icon: "🪝", cost: 15000000,  group: "special", kind: "floor", min: 100000, rolls: 2, desc: "Your next 2 rolls are Legendary or better" },
     beyond:    { name: "Beyond Potion",     icon: "🔭", cost: 100000000000,  group: "special", kind: "floor", min: 1.2e19, rolls: 1, desc: "Your next roll is Ascendant or better — beyond the Chosen." },
     omniscience:{ name: "Omniscience Potion", icon: "👁️", cost: 250000000000, group: "special", kind: "floor", min: 1.2e33, rolls: 1, desc: "Your next roll is Omniscient or better." },
     omnipotion:{ name: "Omnipotion",        icon: "🔱", cost: 1000000000000, group: "special", kind: "floor", min: 1.2e54, rolls: 1, desc: "Your next roll is guaranteed Omnipotent — the top rank. The strongest potion in the game (1 trillion coins)." },
     shimmer:   { name: "Shimmer Potion",    icon: "💫", cost: 2000,    group: "special", kind: "shiny", mult: 2,  rolls: 10, desc: "x2 shiny chance for 10 rolls" },
     prism:     { name: "Prism Potion",      icon: "💠", cost: 25000,   group: "special", kind: "shiny", mult: 10, rolls: 5,  desc: "Your next 5 rolls are shiny whenever the aura has a shiny form" },
+    quintuple: { name: "Quintuple Potion",  icon: "5️⃣", cost: 500000000000, group: "special", kind: "multiroll", times: 5, rolls: 20, desc: "Your next 20 rolls each roll 5 times (100 auras!) — and your luck stays the whole time, it won't be used up." },
     /* Coins and speed */
     gold:      { name: "Gold Potion",       icon: "💰", cost: 250,     group: "coins",  kind: "gold", mult: 2,  rolls: 30, desc: "x2 coins from rolls for 30 rolls" },
     midas:     { name: "Midas Tonic",       icon: "🏆", cost: 1200,    group: "coins",  kind: "gold", mult: 5,  rolls: 20, desc: "x5 coins from rolls for 20 rolls" },
@@ -98,8 +99,8 @@
     supernova: { name: "Supernova Elixir",  icon: "🌋", cost: 250000,  group: "luck",   kind: "luck", mult: 2500,  rolls: 3,  desc: "x2500 luck for 3 rolls" },
     glimmer:   { name: "Glimmer Potion",    icon: "⭐", cost: 6000,    group: "special", kind: "shiny", mult: 4,  rolls: 8,  desc: "x4 shiny chance for 8 rolls" },
     radiance:  { name: "Radiance Potion",   icon: "🪩", cost: 60000,   group: "special", kind: "shiny", mult: 25, rolls: 4,  desc: "x25 shiny chance for 4 rolls" },
-    cosmicmagnet:{ name: "Cosmic Magnet",   icon: "🎯", cost: 500000,  group: "special", kind: "floor", min: 1000000,  rolls: 2, desc: "Your next 2 rolls are Cosmic or better" },
-    divinemagnet:{ name: "Divine Magnet",   icon: "🔱", cost: 3000000, group: "special", kind: "floor", min: 10000000, rolls: 1, desc: "Your next roll is Divine or better" },
+    cosmicmagnet:{ name: "Cosmic Magnet",   icon: "🎯", cost: 50000000,  group: "special", kind: "floor", min: 1000000,  rolls: 2, desc: "Your next 2 rolls are Cosmic or better" },
+    divinemagnet:{ name: "Divine Magnet",   icon: "🔱", cost: 300000000, group: "special", kind: "floor", min: 10000000, rolls: 1, desc: "Your next roll is Divine or better" },
     fortunecoins:{ name: "Fortune Coins",   icon: "🤑", cost: 20000,   group: "coins",  kind: "gold", mult: 50,  rolls: 8,  desc: "x50 coins from rolls for 8 rolls" },
     ransom:    { name: "King's Ransom",     icon: "💷", cost: 150000,  group: "coins",  kind: "gold", mult: 500, rolls: 3,  desc: "x500 coins from rolls for 3 rolls" },
     flash:     { name: "Flash Potion",      icon: "🏃", cost: 15000,   group: "coins",  kind: "haste", div: 16, seconds: 75, desc: "Roll cooldown cut to 1/16 for 75 seconds" },
@@ -334,7 +335,7 @@
     "fourleaf", "mythic", "supernova", "glimmer", "radiance", "cosmicmagnet", "divinemagnet",
     "fortunecoins", "ransom", "flash", "berserk", "aegis",
     "cosmicluck", "quantum", "bigbang", "beyond", "omniscience", "omnipotion",
-    "octillionpot", "masterluck"];
+    "octillionpot", "masterluck", "quintuple"];
   function collectionKeys() {
     return POTION_ORDER.filter(function (k) { return !POTIONS[k].daily && !POTIONS[k].collector && !POTIONS[k].doubloon && !POTIONS[k].arena && COLLECTION_SKIP.indexOf(k) < 0; });
   }
@@ -360,6 +361,7 @@
       goldEffects: [],
       floorEffects: [],
       shinyEffects: [],
+      multiEffects: [],
       hasteUntil: 0,
       hasteDiv: 2,
       strengthMult: 1,
@@ -422,6 +424,7 @@
       if (saved.goldRolls > 0) merged.goldEffects.push({ mult: 2, rolls: saved.goldRolls });
       if (!Array.isArray(merged.floorEffects)) merged.floorEffects = [];
       if (!Array.isArray(merged.shinyEffects)) merged.shinyEffects = [];
+      if (!Array.isArray(merged.multiEffects)) merged.multiEffects = [];
       /* Rarity Magnet rolls used to be a bare count, always with a Rare floor. */
       if (saved.floorRolls > 0) merged.floorEffects.push({ min: 1000, rolls: saved.floorRolls });
       if (saved.strengthReady) merged.strengthMult = Math.max(merged.strengthMult || 1, 1.5);
@@ -526,6 +529,12 @@
     var luck = 1;
     S.luckEffects.forEach(function (e) { if (e.mult > luck) luck = e.mult; });
     return luck;
+  }
+  /* How many times each roll multiplies while a Quintuple Potion is active (the strongest one wins), else 1. */
+  function currentMulti() {
+    var m = 1;
+    if (Array.isArray(S.multiEffects)) S.multiEffects.forEach(function (e) { if (e.rolls > 0 && e.times > m) m = e.times; });
+    return m;
   }
 
   function hasteActive() { return Date.now() < S.hasteUntil; }
@@ -893,6 +902,13 @@
       fl.className = "effect";
       fl.textContent = (fp ? fp.icon : "🧲") + " " + tierName({ rarity: e.min }) + " or better · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s");
       box.appendChild(fl);
+    });
+    if (Array.isArray(S.multiEffects)) S.multiEffects.forEach(function (e) {
+      if (!(e.rolls > 0)) return;
+      var ml = document.createElement("span");
+      ml.className = "effect multi";
+      ml.textContent = "5️⃣ ×" + e.times + " rolls each time · " + e.rolls + " roll" + (e.rolls === 1 ? "" : "s") + " left";
+      box.appendChild(ml);
     });
     if (hasteActive()) {
       var hp = potionMatching("haste", "div", S.hasteDiv);
@@ -1414,10 +1430,12 @@
     var shiny = forcedShiny === undefined ? rollShiny(aura) : isShiny(aura, forcedShiny);
 
     S.rolls++;
+    var multi = !forced ? currentMulti() : 1; /* Quintuple Potion: this press rolls `multi` times */
     if (!forced) {
-      S.luckEffects = countDown(S.luckEffects);
+      if (multi <= 1) S.luckEffects = countDown(S.luckEffects); /* a Quintuple keeps your luck — don't use it up */
       S.floorEffects = countDown(S.floorEffects);
       S.shinyEffects = countDown(S.shinyEffects);
+      if (multi > 1) S.multiEffects = countDown(S.multiEffects); /* spend one of the 20 multi-rolls */
     }
     var mult = currentGoldMult();
     S.goldEffects = countDown(S.goldEffects);
@@ -1432,6 +1450,22 @@
     if (S.history.length > 12) S.history.length = 12;
     recordBest(aura, shiny);
     questBump("rolls", 1); questBump("coins", coins); questBump("bestR", aura.rarity); if (shiny) questBump("shinies", 1);
+    if (multi > 1) {
+      /* The extra rolls of a Quintuple: instant, same luck/floor, each aura and its coins added to your account. */
+      var snapLuck = currentLuck(), snapFloor = currentFloor(), snapGold = currentGoldMult(), extraCoins = 0, extraBest = null, extraBestShiny = false, k;
+      for (k = 1; k < multi; k++) {
+        var ea = pickAura(snapLuck, snapFloor), es = rollShiny(ea), ec = auraCoins(ea, es) * snapGold, ebag = es ? S.shinyInventory : S.inventory;
+        extraCoins += ec;
+        ebag[ea.id] = (ebag[ea.id] || 0) + 1;
+        if (es) S.stats.shinies = (S.stats.shinies || 0) + 1;
+        S.rolls++;
+        recordBest(ea, es);
+        questBump("rolls", 1); questBump("coins", ec); questBump("bestR", ea.rarity); if (es) questBump("shinies", 1);
+        if (!extraBest || ea.rarity > extraBest.rarity) { extraBest = ea; extraBestShiny = es; }
+      }
+      addCoins(extraCoins);
+      toast("5️⃣ Quintuple! +" + (multi - 1) + " bonus aura" + (multi - 1 === 1 ? "" : "s") + (extraBest ? " (best: " + extraBest.name + (extraBestShiny ? " ✨" : "") + ")" : "") + " · +" + fmt(extraCoins) + " coins", "gold", 5000);
+    }
     if (equippedAura() === null) { S.equipped = aura.id; S.equippedShiny = shiny; }
     var cutscene = ti >= 3 && !S.settings.skipCutscenes && !S.settings.skipAnims && !turboRoll();
     if (cutscene) S.stats.cutscenes++;
@@ -1683,6 +1717,9 @@
       S.floorEffects.push({ min: p.min, rolls: p.rolls * n });
     } else if (p.kind === "shiny") {
       S.shinyEffects.push({ mult: p.mult, rolls: p.rolls * n });
+    } else if (p.kind === "multiroll") {
+      if (!Array.isArray(S.multiEffects)) S.multiEffects = [];
+      S.multiEffects.push({ times: p.times, rolls: p.rolls * n });
     } else if (p.kind === "gold") {
       S.goldEffects.push({ mult: p.mult, rolls: p.rolls * n });
     } else if (p.kind === "haste") {
@@ -4139,7 +4176,15 @@
   ];
   /* Craft Gems by melting down spare auras: 1 Cosmic + 100 Commons + coins -> Gems. Consumes normal copies only
      (shiny auras are never melted), weakest first, so your best auras and all shinies are safe. */
-  var CRAFT = { cosmic: 1, commons: 100, coins: 500000, gems: 20 };
+  /* Gem-craft recipes: melt Cosmic + Common auras + coins into Gems. Bigger recipes scale linearly. */
+  var CRAFT_TIERS = [
+    { gems: 20,   cosmic: 1,  commons: 100,  coins: 500000 },
+    { gems: 50,   cosmic: 2,  commons: 250,  coins: 1250000 },
+    { gems: 100,  cosmic: 5,  commons: 500,  coins: 2500000 },
+    { gems: 200,  cosmic: 10, commons: 1000, coins: 5000000 },
+    { gems: 500,  cosmic: 25, commons: 2500, coins: 12500000 },
+    { gems: 1000, cosmic: 50, commons: 5000, coins: 25000000 }
+  ];
   /* How many copies of auras of a given tier you own in your NORMAL inventory. */
   function tierCopiesNormal(tierKey) {
     var n = 0;
@@ -4162,23 +4207,23 @@
     });
     return remaining <= 0;
   }
-  function canCraftGems() {
-    return tierCopiesNormal("cosmic") >= CRAFT.cosmic && tierCopiesNormal("common") >= CRAFT.commons && (S.coins || 0) >= CRAFT.coins;
+  function canCraftGems(t) {
+    return tierCopiesNormal("cosmic") >= t.cosmic && tierCopiesNormal("common") >= t.commons && (S.coins || 0) >= t.coins;
   }
-  function craftGems() {
+  function craftGems(t) {
     if (aurasLocked()) { toast("Your auras are locked for " + aurasLockText(), "bad"); return; }
-    if (tierCopiesNormal("cosmic") < CRAFT.cosmic) { toast("Crafting needs a Cosmic aura to melt down.", "bad"); return; }
-    if (tierCopiesNormal("common") < CRAFT.commons) { toast("Crafting needs " + CRAFT.commons + " Common auras to melt down.", "bad"); return; }
-    if ((S.coins || 0) < CRAFT.coins) { toast("Crafting needs " + fmt(CRAFT.coins) + " coins.", "bad"); return; }
-    if (!confirm("Melt down 1 Cosmic aura + " + CRAFT.commons + " Common auras + " + fmt(CRAFT.coins) + " coins to craft " + CRAFT.gems + " 💎 Gems?\n\nThe weakest ones are used first (shinies are never melted), and this can't be undone.")) return;
-    consumeNormalTier("cosmic", CRAFT.cosmic);
-    consumeNormalTier("common", CRAFT.commons);
-    S.coins -= CRAFT.coins;
-    S.gems = (S.gems || 0) + CRAFT.gems;
+    if (tierCopiesNormal("cosmic") < t.cosmic) { toast("Crafting " + t.gems + " gems needs " + t.cosmic + " Cosmic aura" + (t.cosmic > 1 ? "s" : "") + " to melt down.", "bad"); return; }
+    if (tierCopiesNormal("common") < t.commons) { toast("Crafting " + t.gems + " gems needs " + fmt(t.commons) + " Common auras to melt down.", "bad"); return; }
+    if ((S.coins || 0) < t.coins) { toast("Crafting " + t.gems + " gems needs " + fmt(t.coins) + " coins.", "bad"); return; }
+    if (!confirm("Melt down " + t.cosmic + " Cosmic aura" + (t.cosmic > 1 ? "s" : "") + " + " + fmt(t.commons) + " Common auras + " + fmt(t.coins) + " coins to craft " + t.gems + " 💎 Gems?\n\nThe weakest ones are used first (shinies are never melted), and this can't be undone.")) return;
+    consumeNormalTier("cosmic", t.cosmic);
+    consumeNormalTier("common", t.commons);
+    S.coins -= t.coins;
+    S.gems = (S.gems || 0) + t.gems;
     if (S.equipped != null && !S.equippedShiny && !owns(S.equipped, false)) S.equipped = null;
-    S.stats.sold = (S.stats.sold || 0) + CRAFT.cosmic + CRAFT.commons;
+    S.stats.sold = (S.stats.sold || 0) + t.cosmic + t.commons;
     Sound.buy();
-    toast("⚒️ Crafted " + CRAFT.gems + " 💎 Gems from spare auras!", "gold");
+    toast("⚒️ Crafted " + t.gems + " 💎 Gems from spare auras!", "gold");
     save();
     renderAll();
   }
@@ -4305,18 +4350,30 @@
     var craft = document.createElement("div");
     craft.className = "vip-craft";
     craft.innerHTML = "<h3 class=\"section-title\">⚒️ Craft Gems</h3>" +
-      "<p class=\"muted small-text\">Melt spare auras into Gems. Each craft needs <b>1 Cosmic aura</b> + <b>" + CRAFT.commons + " Common auras</b> + <b>" + fmt(CRAFT.coins) + " coins</b> → <b>" + CRAFT.gems + " 💎 Gems</b>. The weakest ones go first; shinies are never melted.</p>";
+      "<p class=\"muted small-text\">Melt spare auras into Gems — pick a recipe. Bigger ones need more Cosmic + Common auras and coins. The weakest ones go first; shinies are never melted.</p>";
     var have = document.createElement("div");
     have.className = "card-sub craft-have";
     have.textContent = "You have " + fmt(tierCopiesNormal("cosmic")) + " Cosmic and " + fmt(tierCopiesNormal("common")) + " Common auras to melt, and " + fmt(S.coins || 0) + " coins.";
     craft.appendChild(have);
-    var cbtn = document.createElement("button");
-    var can = canCraftGems();
-    cbtn.className = "btn small primary" + (can ? "" : " cant-afford");
-    cbtn.textContent = "⚒️ Craft " + CRAFT.gems + " 💎 Gems";
-    cbtn.disabled = !can;
-    cbtn.addEventListener("click", craftGems);
-    craft.appendChild(cbtn);
+    var cgrid = document.createElement("div");
+    cgrid.className = "craft-grid";
+    CRAFT_TIERS.forEach(function (t) {
+      var row = document.createElement("div");
+      row.className = "craft-row";
+      var info = document.createElement("div");
+      info.className = "card-sub craft-info";
+      info.innerHTML = "<b>" + t.gems + " 💎</b> · " + t.cosmic + " Cosmic + " + fmt(t.commons) + " Common + " + fmtShort(t.coins) + " coins";
+      var cb = document.createElement("button");
+      var can = canCraftGems(t);
+      cb.className = "btn small primary" + (can ? "" : " cant-afford");
+      cb.textContent = "Craft " + t.gems + " 💎";
+      cb.disabled = !can;
+      cb.addEventListener("click", function () { craftGems(t); });
+      row.appendChild(info);
+      row.appendChild(cb);
+      cgrid.appendChild(row);
+    });
+    craft.appendChild(cgrid);
     body.appendChild(craft);
 
     var rm = document.createElement("div");

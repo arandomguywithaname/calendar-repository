@@ -321,11 +321,18 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .quest-row .q-locked { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 .quest-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; margin-left: 2px; border-radius: 999px; background: #ffd700; color: #241a06; font-size: .68rem; font-weight: 800; }
 .quest-badge.hidden { display: none; }
+
+/* Craft Gems recipe list */
+.craft-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.craft-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
+.craft-row .craft-info { flex: 1; min-width: 0; }
+.craft-row .btn { flex: none; white-space: nowrap; }
 .effects { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 28px; }
 .effect { font-size: .85rem; padding: 3px 12px; border-radius: 999px; background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.35); color: #bbf7d0; }
 .effect.gold { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.4); color: #fde68a; }
 .effect.haste { background: rgba(96,165,250,.12); border-color: rgba(96,165,250,.4); color: #bfdbfe; }
 .effect.strength { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.4); color: #fecaca; }
+.effect.multi { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.45); color: #ddd6fe; }
 
 .daily { width: 100%; max-width: 760px; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); text-align: left; margin-top: 8px; }
 .daily.ready { border-color: rgba(251,191,36,.6); box-shadow: 0 0 24px rgba(251,191,36,.25); animation: dailyglow 1.8s ease-in-out infinite; }
