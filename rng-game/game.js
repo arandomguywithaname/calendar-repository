@@ -864,12 +864,18 @@
 
   function renderHUD() {
     /* Short values keep the 5 HUD tiles from overflowing a phone; the exact number is in each tile's title. */
-    function setHud(id, n, prefix) { var el = $(id); el.textContent = (prefix || "") + fmtShort(n); el.parentNode.title = (prefix || "") + fmt(n); }
-    setHud("#hud-coins", S.coins);
+    /* Coins & doubloons (cd = true) show the FULL number, and only switch to the short form once they go over
+       10 octillion (1e28) — past that the full number is too long for the tile. Everything else stays short. */
+    function setHud(id, n, prefix, cd) {
+      var el = $(id);
+      el.textContent = (prefix || "") + (cd && (Number(n) || 0) <= 1e28 ? fmt(n) : fmtShort(n));
+      el.parentNode.title = (prefix || "") + fmt(n);
+    }
+    setHud("#hud-coins", S.coins, "", true);
     setHud("#hud-luck", currentLuck(), "x");
     setHud("#hud-rolls", S.rolls);
     setHud("#hud-power", playerPower());
-    setHud("#hud-doubloons", S.doubloons || 0, "");
+    setHud("#hud-doubloons", S.doubloons || 0, "", true);
   }
 
   function renderEffects() {
