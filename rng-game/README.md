@@ -3,7 +3,7 @@
 A static browser game: roll for auras, earn coins, buy potions, build an ability
 loadout, and fight bots or a friend.
 
-- **1258 auras in 18 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
+- **1259 auras in 18 ranks**, from Common (1 in 2) up to Fury of Darkness (1 in
   1,000,000,000), then twenty more Forbidden auras beyond it (Abyssal Crown, Void Sovereign,
   Shattered Infinity, Crimson Apocalypse, Nightmare Engine, Bleeding Cosmos, Forsaken Genesis,
   Wrath of the Unmade, Eternal Damnation, Final Silence, Obsidian Requiem, Hellfire Monarch,
@@ -35,6 +35,8 @@ loadout, and fight bots or a friend.
   deterministically, so every player sees the same collection, and they are appended last so
   no older aura's ID changes. Each new rank gets a bright core, twin spinning halos tinted to
   the aura's own colour and a coloured aura-glow, so the rarest auras look the grandest.
+  One final aura sits above them all: **🎲 The RNG** — **1 in a vigintillion** (1 in 10⁶³),
+  the rarest aura in the game, a chaotic rainbow with exactly **1,000,000 power**.
   Every aura has a multi-colour palette. Orbs get fancier with rarity: gloss, rims,
   swirling paint, orbiting rings, sparkles, light rays, colour shifting, a red storm for
   Fury of Darkness and the Forbidden rank, a cyan system glow for Administrative and

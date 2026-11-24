@@ -1,4 +1,4 @@
-/* auras.js — generates the 1258 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
+/* auras.js — generates the 1259 auras of Aura Realms deterministically: 784 generated ones (Common at 1 in 2
    up to Fury of Darkness at 1 in 1,000,000,000), 20 hand-made Forbidden auras beyond it (up to Null Dominion at
    1 in 80,000,000,000), 42 Administrative auras, the Chosen rank from The Chosen One (1 in 1,000,000,000,000,000)
    up to The Unknown (1 in 1,000,000,000,000,000,000), and 400 newer auras in seven ranks beyond that — Ascendant,
@@ -330,6 +330,9 @@
       }
     });
   })();
+
+  /* The RNG — the one final aura, rarer than everything else (1 in 1 vigintillion), a chaotic rainbow, 1,000,000 power. */
+  EXTRA_AURAS.push(["The RNG", 1e63, ["#ff4d4d", "#07070f", "#4dd2ff", "#b84dff", "#4dff88"], 0, 1000000]);
 
   EXTRA_AURAS.forEach(function (e) {
     var a = { name: e[0], rarity: e[1], colors: e[2], special: null, fixed: true };
