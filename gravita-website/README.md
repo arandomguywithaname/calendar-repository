@@ -17,3 +17,7 @@ Plain HTML/CSS. No build step, no scripts, no cookies, nothing loaded from other
 
 ## Publish
 Upload all files together to any static host (Cloudflare Pages, GitHub Pages, Namecheap). `index.html` must be at the top level.
+
+## Preview on your computer
+From the repository root: `npm run site:gravita`, then open http://localhost:8080 (Ctrl+C stops it).
+The family site works the same way: `npm run site:family`. Needs only Node, no `npm install`.
