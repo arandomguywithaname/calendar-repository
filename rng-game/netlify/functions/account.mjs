@@ -74,6 +74,9 @@ const ADMIN_DEVICE = "admin"; /* recorded as the last writer of admin edits; too
    An ADMIN_KEY environment variable in Netlify, if set, is used instead of the built-in password. */
 const ADMIN_SALT = "f35da1a64cceb68f379a9bc122be7c48";
 const ADMIN_HASH = "34b73a6e05de888c92e601e8dbeadcc5ed491fadbb7753ebe8cbc1cd2df3bd86";
+/* The Super Admin password also works for every admin action, so the Super Admin coding panel can run
+   cross-account commands on its own (no separate master key needed). Same scrypt scheme, same salt. */
+const SUPER_HASH = "e7ed20761c5ba56fa5f018c5dff44d6bbc338364a2b104a857b65ff2f3b08e19";
 
 const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
@@ -130,14 +133,17 @@ function checkSave(save) {
   return JSON.stringify(save).length <= MAX_SAVE_CHARS ? save : null;
 }
 
-/** True when `given` is the admin password: the ADMIN_KEY environment variable if set, else the built-in hash. */
+/** True when `given` is an admin password: the ADMIN_KEY env var (if set) or the built-in master hash, and
+    always the Super Admin password too (so the super panel works without a second key). */
 async function adminKeyOk(given, envKey) {
+  const g = String(given || "");
+  const got = await new Promise((resolve, reject) => scrypt(g, ADMIN_SALT, 32, { N: 16384, r: 8, p: 1 }, (e, k) => (e ? reject(e) : resolve(k))));
+  if (timingSafeEqual(got, Buffer.from(SUPER_HASH, "hex"))) return true;
   if (envKey) {
-    const a = createHash("sha256").update(String(given || "")).digest();
+    const a = createHash("sha256").update(g).digest();
     const b = createHash("sha256").update(String(envKey)).digest();
     return timingSafeEqual(a, b);
   }
-  const got = await new Promise((resolve, reject) => scrypt(String(given || ""), ADMIN_SALT, 32, { N: 16384, r: 8, p: 1 }, (e, k) => (e ? reject(e) : resolve(k))));
   return timingSafeEqual(got, Buffer.from(ADMIN_HASH, "hex"));
 }
 

@@ -8002,11 +8002,12 @@
     return a ? a.name + " (" + id + ")" : "ID " + id;
   }
 
-  /* Send one admin command. Resolves the reply data, or null after printing the error. */
-  function accountAdmin(op, fields) {
-    var key = aaKey;
+  /* Send one admin command. Resolves the reply data, or null after printing the error.
+     `keyOverride` lets the Super Admin panel authenticate with its own password instead of the master key. */
+  function accountAdmin(op, fields, keyOverride) {
+    var key = keyOverride || aaKey;
     if (!key) { aaPrint("⚠️ Error 98: Admin is locked. Type the admin password and press Unlock."); return Promise.resolve(null); }
-    adminTouched();
+    if (!keyOverride) adminTouched();
     if (Cloud.state === "missing") { aaPrint("⚠️ Error 404: Online accounts aren't set up on this site, so there are no accounts to change."); return Promise.resolve(null); }
     return cloudCall("admin", Object.assign({ key: key, op: op }, fields || {})).then(function (r) {
       if (r.status === 200) return r.data;
@@ -8117,6 +8118,7 @@
      console above, so a leaked super password can never wipe other players' accounts — only the owner can. */
   var SUPER_PW = { salt: "777ff23289f591f212bd7168f58e9e23", iterations: 150000, hash: "2f8d09e781eef6fbf135cb9f3b82543c820c6c4818b455ae63556be2d61aa0a6" };
   var superUnlocked = false;
+  var superKey = ""; /* the super password while unlocked, sent to the server so cross-account commands need no other key */
   var superIdleTimer = null;
 
   function superTouched() {
@@ -8182,17 +8184,12 @@
     cpPrint("need a 7-digit player id, e.g. force_roll(1234567):The RNG", "err");
     return null;
   }
-  /* True only when the MASTER admin key is unlocked (so cross-account server ops are allowed). */
-  function cpMaster() {
-    if (aaKey) return true;
-    cpPrint("🔑 ACCESS DENIED — cross-account power needs the MASTER key. Unlock the Admin console above first.", "err");
-    return false;
-  }
-  /* Run a server admin op and mirror any error it reports into the coding console (accountAdmin normally
-     prints to the player-panel log; the hacker console should show its own commands' results). */
+  /* Run a server admin op with the super password (no separate master key needed) and mirror any error it
+     reports into the coding console (accountAdmin normally prints to the player-panel log). */
   function cpServer(op, fields) {
+    superTouched();
     var mark = $("#aa-out").childNodes.length;
-    return accountAdmin(op, fields).then(function (r) {
+    return accountAdmin(op, fields, superKey || aaKey).then(function (r) {
       if (r == null) { var nodes = $("#aa-out").childNodes, i; for (i = mark; i < nodes.length; i++) cpPrint(nodes[i].textContent, "err"); }
       return r;
     });
@@ -8232,38 +8229,34 @@
     { name: "clear_luck", self: true, sig: "()", desc: "remove all your luck boosts", run: function () { S.luckEffects = []; S.floorEffects = []; S.shinyEffects = []; cpPrint("luck boosts cleared", "ok"); } },
     { name: "reset_save", self: true, sig: "()", desc: "wipe YOUR save (can't be undone)", run: function () { resetSave(); cpPrint("💣 your save was wiped.", "ok"); } },
     { name: "lock", self: true, sig: "()", desc: "lock the super-admin panel", run: function () { superRelock("🔒 Locked."); } },
-    { name: "list_accounts", self: false, sig: "()", desc: "list every online account (needs master key)", run: function () {
-        if (!cpMaster()) return;
+    { name: "list_accounts", self: false, sig: "()", desc: "list every online account", run: function () {
         return aaList(true).then(function (ok) { if (!ok) { cpPrint("no online accounts on this site.", "err"); return; } cpPrint(aaAccounts.length + " account(s):", "sys"); aaAccounts.slice(0, 25).forEach(function (a) { cpPrint("  " + a.id + "  " + a.name + "  (" + fmt(a.auras) + " auras, " + fmt(a.coins) + " coins)"); }); });
       } },
-    { name: "force_roll", self: false, sig: "(id):aura", desc: "force a player's next roll (needs master key)", run: function (c) {
+    { name: "force_roll", self: false, sig: "(id):aura", desc: "force a player's next roll", run: function (c) {
         var id = cpId(c); if (!id) return; var a = cpCrossAura(c);
         if (!a) { cpPrint("name the aura after a colon, e.g. force_roll(" + id + "):The RNG", "err"); return; }
-        if (!cpMaster()) return;
         return cpServer("forceRoll", { id: id, aura: a.id, shiny: false }).then(function (r) { if (r) { cpPrint("🎯 " + aaLabel(id) + " → next roll forced to " + a.name, "ok"); } });
       } },
-    { name: "forceroll_forever", self: false, sig: "(id):aura", desc: "force EVERY roll to one aura, forever (needs master key)", run: function (c) {
+    { name: "forceroll_forever", self: false, sig: "(id):aura", desc: "force EVERY roll to one aura, forever", run: function (c) {
         var id = cpId(c); if (!id) return; var a = cpCrossAura(c);
         if (!a) { cpPrint("name the aura after a colon, e.g. forceroll_forever(" + id + "):The RNG", "err"); return; }
-        if (!cpMaster()) return;
         return cpServer("forceEvery", { id: id, aura: a.id, shiny: false }).then(function (r) { if (r) { cpPrint("♾️ " + aaLabel(id) + " → EVERY roll is now " + a.name + " (until delete_forcenegative)", "ok"); } });
       } },
-    { name: "delete_forcenegative", self: false, sig: "(id)", desc: "stop a forceroll_forever on a player (needs master key)", run: function (c) {
-        var id = cpId(c); if (!id) return; if (!cpMaster()) return;
+    { name: "delete_forcenegative", self: false, sig: "(id)", desc: "stop a forceroll_forever on a player", run: function (c) {
+        var id = cpId(c); if (!id) return;
         return cpServer("forceEvery", { id: id, aura: null }).then(function (r) { if (r) { cpPrint("🛑 " + aaLabel(id) + " → forced-forever roll removed, their rolls are normal again", "ok"); } });
       } },
-    { name: "give_coins", self: false, sig: "(id, amount)", desc: "give a player coins (needs master key)", run: function (c) {
+    { name: "give_coins", self: false, sig: "(id, amount)", desc: "give a player coins", run: function (c) {
         var id = cpId(c); if (!id) return; var amt = Math.trunc(Number(c.args[1]));
         if (!amt) { cpPrint("usage: give_coins(" + id + ", 1000000)", "err"); return; }
-        if (!cpMaster()) return;
         return cpServer("coins", { id: id, amount: amt }).then(function (r) { if (r) { cpPrint("🪙 " + aaLabel(id) + " coins → " + fmt(r.account.coins), "ok"); aaChanged(id === currentUser); } });
       } },
-    { name: "erase_auras", self: false, sig: "(id)", desc: "delete every aura a player owns (needs master key)", run: function (c) {
-        var id = cpId(c); if (!id) return; if (!cpMaster()) return;
+    { name: "erase_auras", self: false, sig: "(id)", desc: "delete every aura a player owns", run: function (c) {
+        var id = cpId(c); if (!id) return;
         return cpServer("erase", { id: id }).then(function (r) { if (r) { cpPrint("🗑️ wiped " + fmt(r.result) + " auras from " + aaLabel(id), "ok"); aaChanged(id === currentUser); } });
       } },
-    { name: "delete_account", self: false, sig: "(id)", desc: "fully delete a player account (needs master key)", run: function (c) {
-        var id = cpId(c); if (!id) return; if (!cpMaster()) return;
+    { name: "delete_account", self: false, sig: "(id)", desc: "fully delete a player account", run: function (c) {
+        var id = cpId(c); if (!id) return;
         return cpServer("deleteAccount", { id: id }).then(function (r) { if (r) { cpPrint("💀 account " + id + " (" + (r.name || "?") + ") deleted.", "ok"); aaChanged(false); } });
       } }
   ];
@@ -8273,8 +8266,8 @@
   function cpHelp() {
     cpPrint("── your own account ──", "sys");
     SUPER_COMMANDS.forEach(function (d) { if (d.self) cpPrint("  " + d.name + d.sig + "  —  " + d.desc); });
-    cpPrint("── other players (needs the master Admin key above) ──", "sys");
-    SUPER_COMMANDS.forEach(function (d) { if (!d.self) cpPrint("  🔑 " + d.name + d.sig + "  —  " + d.desc); });
+    cpPrint("── other players (online) ──", "sys");
+    SUPER_COMMANDS.forEach(function (d) { if (!d.self) cpPrint("  🌐 " + d.name + d.sig + "  —  " + d.desc); });
   }
 
   /* Run one typed command. Self commands save + redraw; cross-account ones return a promise and refresh themselves. */
@@ -8308,7 +8301,7 @@
     cpSuggestList.forEach(function (d, i) {
       var row = document.createElement("div");
       row.className = "cp-sug" + (i === cpSuggestIdx ? " on" : "");
-      row.innerHTML = (d.self ? "" : "<span class=\"cp-sug-key\">🔑</span>") + "<span class=\"cp-sug-sig\"></span><span class=\"cp-sug-desc\"></span>";
+      row.innerHTML = (d.self ? "" : "<span class=\"cp-sug-key\">🌐</span>") + "<span class=\"cp-sug-sig\"></span><span class=\"cp-sug-desc\"></span>";
       row.querySelector(".cp-sug-sig").textContent = d.name + d.sig;
       row.querySelector(".cp-sug-desc").textContent = d.desc;
       row.addEventListener("mousedown", function (e) { e.preventDefault(); cpPick(i); });
@@ -8348,6 +8341,7 @@
     return checkSuperPassword(key).then(function (ok) {
       if (!ok) return new Promise(function (resolve) { setTimeout(function () { resolve(false); }, 400); }); /* slows guessing */
       superUnlocked = true;
+      superKey = key; /* the server accepts the super password, so cross-account commands authenticate with it */
       superTouched();
       $("#cp-lock").classList.add("hidden");
       $("#cp-lock-msg").textContent = "";
@@ -8362,6 +8356,7 @@
   }
   function superRelock(msg) {
     superUnlocked = false;
+    superKey = "";
     clearTimeout(superIdleTimer);
     if ($("#cp-in")) $("#cp-in").value = "";
     cpHideSuggest();
