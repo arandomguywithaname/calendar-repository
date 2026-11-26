@@ -986,3 +986,62 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
 .lb-you-label { font-size: .8rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .1em; }
 .lb-you-login { text-align: center; color: var(--muted); padding: 10px; }
 @media (max-width: 560px) { .lb-row { grid-template-columns: 38px 1fr auto; padding: 8px 10px; } }
+
+/* ===================== Super Admin · hacker coding console ===================== */
+.cp-area { margin-top: 10px; }
+.cp-term { border: 1px solid #1f6f3f; border-radius: 12px; overflow: hidden; background: #020805; box-shadow: 0 0 0 1px rgba(0,255,120,.06), 0 18px 50px rgba(0,0,0,.6), inset 0 0 70px rgba(0,255,90,.05); }
+.cp-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: linear-gradient(#071a10, #03100a); border-bottom: 1px solid #124a2a; }
+.cp-dots { display: inline-flex; gap: 6px; }
+.cp-dots i { width: 11px; height: 11px; border-radius: 50%; background: #1b5e37; display: inline-block; }
+.cp-dots i:nth-child(1) { background: #ff5f56; } .cp-dots i:nth-child(2) { background: #ffbd2e; } .cp-dots i:nth-child(3) { background: #27c93f; }
+.cp-title { flex: 1; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82rem; letter-spacing: .05em; color: #4dffa0; text-shadow: 0 0 8px rgba(0,255,120,.5); }
+.cp-out { height: 260px; overflow-y: auto; padding: 12px 14px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .84rem; line-height: 1.5; color: #35e07a; background: repeating-linear-gradient(180deg, rgba(0,255,120,.03) 0, rgba(0,255,120,.03) 1px, transparent 1px, transparent 3px), #020a06; text-shadow: 0 0 6px rgba(0,255,110,.35); white-space: pre-wrap; word-break: break-word; }
+.cp-line { padding: 1px 0; }
+.cp-cmd { color: #baffd6; font-weight: 700; }
+.cp-ok { color: #6bff9e; }
+.cp-err { color: #ff6b6b; text-shadow: 0 0 6px rgba(255,80,80,.4); }
+.cp-sys { color: #38d0ff; text-shadow: 0 0 6px rgba(50,190,255,.4); }
+.cp-form { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid #124a2a; background: #03100a; }
+.cp-prompt { font-family: ui-monospace, Menlo, Consolas, monospace; color: #4dffa0; font-weight: 700; white-space: nowrap; text-shadow: 0 0 8px rgba(0,255,120,.5); font-size: .82rem; }
+.cp-inwrap { position: relative; flex: 1; }
+.cp-inwrap input { width: 100%; background: #041209; color: #7dffb0; border: 1px solid #1f6f3f; border-radius: 8px; padding: 9px 12px; font: 600 .95rem ui-monospace, Menlo, Consolas, monospace; caret-color: #4dffa0; }
+.cp-inwrap input:focus { outline: none; border-color: #35e07a; box-shadow: 0 0 0 2px rgba(0,255,120,.18), 0 0 18px rgba(0,255,120,.25); }
+.cp-inwrap input::placeholder { color: #2c7d4f; }
+.cp-suggest { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); max-height: 230px; overflow-y: auto; background: #04140c; border: 1px solid #1f6f3f; border-radius: 10px; box-shadow: 0 -10px 30px rgba(0,0,0,.6), 0 0 0 1px rgba(0,255,120,.06); z-index: 40; }
+.cp-suggest.hidden { display: none; }
+.cp-sug { display: flex; align-items: baseline; gap: 8px; padding: 7px 11px; cursor: pointer; border-bottom: 1px solid rgba(31,111,63,.35); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.cp-sug:last-child { border-bottom: 0; }
+.cp-sug:hover, .cp-sug.on { background: rgba(0,255,120,.12); }
+.cp-sug-key { font-size: .8rem; }
+.cp-sug-sig { color: #7dffb0; font-weight: 700; font-size: .84rem; white-space: nowrap; }
+.cp-sug-desc { color: #4f9e72; font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-hint { padding: 8px 12px 12px; }
+.cp-hint code { background: rgba(0,255,120,.1); color: #6bff9e; border-radius: 5px; padding: 1px 6px; font-size: .8rem; }
+@media (max-width: 560px) { .cp-out { height: 200px; } .cp-title { font-size: .72rem; } .cp-sug-desc { display: none; } }
+
+/* ===================== AFK World + Milestones ===================== */
+.afk-wrap { display: grid; gap: 16px; }
+.afk-card { border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; background: linear-gradient(160deg, rgba(167,139,250,.1), rgba(15,13,31,.5)); }
+.afk-card h3 { margin: 0 0 4px; color: var(--accent); }
+.afk-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.afk-stat { background: rgba(0,0,0,.3); border: 1px solid var(--card-border); border-radius: 12px; padding: 12px; text-align: center; }
+.afk-stat .n { display: block; font-family: var(--font-head); font-weight: 800; font-size: 1.3rem; color: var(--gold); }
+.afk-stat .l { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; }
+.afk-moon { font-size: 2.2rem; text-align: center; filter: drop-shadow(0 0 14px rgba(167,139,250,.6)); }
+.afk-moon.spin { animation: afkfloat 3s ease-in-out infinite; }
+@keyframes afkfloat { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-8px) rotate(6deg); } }
+.afk-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+.afk-last { margin-top: 12px; }
+.afk-feed { max-height: 150px; overflow-y: auto; margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.afk-feed div { font-size: .82rem; color: var(--muted); }
+.afk-feed b { color: var(--text); }
+.mile-list { display: grid; gap: 10px; }
+.mile { display: flex; align-items: center; gap: 12px; border: 1px solid var(--card-border); border-radius: 12px; padding: 12px 14px; background: rgba(0,0,0,.25); }
+.mile.done { opacity: .55; }
+.mile.ready { border-color: var(--gold); box-shadow: 0 0 18px rgba(255,215,0,.2); }
+.mile-ico { font-size: 1.5rem; }
+.mile-body { flex: 1; min-width: 0; }
+.mile-body .t { font-weight: 700; }
+.mile-body .d { font-size: .8rem; color: var(--muted); }
+.mile-bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 6px; }
+.mile-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); }

@@ -34,6 +34,7 @@
                detonate { except: [ids] }       reset every account except the ones listed to a brand new save
                                                 with an empty gift box (backs each up first)
                banAuras { id }                  delete every aura the one account `id` owns (backs it up first)
+               deleteAccount { id }             fully remove one account (save, lease, gifts, chat record); backs the save up first
                forceRoll { id, aura, shiny }    force that account's NEXT roll to be a chosen aura (its client honors it once)
                unprotect { id }                 clear one account's secret so its owner can protect it again (lockout recovery)
                restore                          put back the saves from just before the last Detonate or ban
@@ -612,6 +613,22 @@ const ACTIONS = {
       const done = await adminEdit(store, target, now, (save) => { save.forceRoll = aura; save.forceShiny = shiny; return 1; }, "force");
       if (!done) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
       return reply(200, { ok: true, id: target, aura, name: (await store.get(accountKey(target), { type: "json" }) || {}).name });
+    }
+    if (body.op === "deleteAccount") {
+      /* Fully remove an account: its save, lease, gift box and chat record are all deleted (unlike Detonate,
+         which resets a save in place). The save is backed up first, but a deleted account will come back the
+         next time that device uploads its save, so this is "delete" rather than a permanent ban. */
+      const target = String(body.id);
+      if (!ID_RE.test(target)) return reply(400, { ok: false, code: 98, error: "Enter the player's 7-digit ID." });
+      const acct = await store.get(accountKey(target), { type: "json" });
+      if (!acct) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      try { await store.setJSON(backupKey(target), { at: now, save: acct.save || {} }); } catch (e) { /* best-effort */ }
+      await store.delete(accountKey(target));
+      try { await store.delete(leaseKey(target)); } catch (e) { /* best-effort */ }
+      try { await store.delete(giftKey(target)); } catch (e) { /* best-effort */ }
+      try { await store.delete(chatUserKey(target)); } catch (e) { /* best-effort */ }
+      try { await store.setJSON(LAST_OP_KEY, { at: now, op: "delete", ids: [target] }); } catch (e) { /* best-effort */ }
+      return reply(200, { ok: true, id: target, name: acct.name });
     }
     if (body.op === "unprotect") {
       /* Recovery valve: clear an account's secret so its owner's device can protect it again. For when a

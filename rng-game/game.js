@@ -386,6 +386,8 @@
       avatar: { face: "🙂", color: "#ffd24a" },
       tower: { best: 0, cleared: {}, cycleStart: 0 },
       arena: { fights: 0, cycleStart: 0 },
+      afk: { active: false, since: 0, last: 0, rolls: 0, coins: 0, shinies: 0, best: null, bestShiny: false },
+      milestones: [],
       quests: { day: { start: 0, c: {}, done: [] }, week: { start: 0, c: {}, done: [] } },
       aurasLockedUntil: 0,
       breakSkips: 0,
@@ -450,6 +452,12 @@
       if (!merged.arena || typeof merged.arena !== "object") merged.arena = { fights: 0, cycleStart: 0 };
       merged.arena.fights = Math.max(0, Math.floor(Number(merged.arena.fights) || 0));
       merged.arena.cycleStart = Math.floor(Number(merged.arena.cycleStart) || 0);
+      if (!merged.afk || typeof merged.afk !== "object") merged.afk = defaultState().afk;
+      merged.afk.active = !!merged.afk.active;
+      ["since", "last", "rolls", "coins", "shinies"].forEach(function (k) { merged.afk[k] = Math.max(0, Math.floor(Number(merged.afk[k]) || 0)); });
+      if (merged.afk.best != null && !A.byId(merged.afk.best)) { merged.afk.best = null; merged.afk.bestShiny = false; }
+      if (!Array.isArray(merged.milestones)) merged.milestones = [];
+      merged.milestones = merged.milestones.map(Number).filter(function (n) { return n > 0; });
       if (!merged.quests || typeof merged.quests !== "object") merged.quests = {};
       ["day", "week"].forEach(function (k) {
         var q = merged.quests[k];
@@ -1031,6 +1039,9 @@
     renderStats();
     renderBuyLuck();
     renderQuests();
+    renderAfk();
+    renderMilestones();
+    updateAfkBadge();
     $("#btn-auto").textContent = "Auto Roll: " + (autoOn ? "On" : "Off");
     $("#btn-auto").classList.toggle("on", autoOn);
   }
@@ -4286,6 +4297,152 @@
       toast("⚡ FLASH ZERO! " + fmt(count) + " rolls at ×" + fmtShort(luck) + " luck · best: " + best.name + (bestShiny ? " ✨" : "") + " · +" + fmt(totalCoins) + " coins · " + fmt(shinies) + " shiny", "gold", 9000);
     }
     renderAll();
+  }
+
+  /* ===================== AFK World: idle away to auto-roll auras and bank coins =====================
+     Press Start and the game rolls for you on its own — one roll every couple of seconds, at whatever luck you
+     have equipped (your luck is NOT used up). Rolls and coins land straight in your account; the live counters
+     show the haul. Time while the tab is closed is credited when you come back, capped so nobody banks a year
+     overnight. "Collect & stop" ends the session. */
+  var AFK_ROLL_MS = 2000;        /* one AFK roll every 2 seconds */
+  var AFK_CATCHUP_MAX = 2000;    /* at most this many rolls credited at once (so a long time away stays sane) */
+
+  function afkState() { if (!S.afk || typeof S.afk !== "object") S.afk = defaultState().afk; return S.afk; }
+
+  function afkStart() {
+    var a = afkState();
+    if (a.active) return;
+    a.active = true; a.since = Date.now(); a.last = Date.now();
+    a.rolls = 0; a.coins = 0; a.shinies = 0; a.best = null; a.bestShiny = false;
+    toast("🌙 AFK started — the game is rolling for you now. Come back any time to collect.", "", 3500);
+    save(); renderAfk();
+  }
+
+  /* Credit the rolls earned since `last`. Returns how many were added (0 if none / not active). */
+  function afkCredit() {
+    var a = afkState();
+    if (!a.active) return 0;
+    var now = Date.now();
+    var n = Math.floor((now - (a.last || now)) / AFK_ROLL_MS);
+    if (n <= 0) return 0;
+    if (n > AFK_CATCHUP_MAX) n = AFK_CATCHUP_MAX;
+    a.last = (a.last || now) + n * AFK_ROLL_MS;
+    var luck = currentLuck(), totalCoins = 0, i;
+    for (i = 0; i < n; i++) {
+      var aura = pickAura(luck, 0);
+      var shiny = rollShiny(aura);
+      var coins = auraCoins(aura, shiny);
+      totalCoins += coins;
+      (shiny ? S.shinyInventory : S.inventory)[aura.id] = ((shiny ? S.shinyInventory : S.inventory)[aura.id] || 0) + 1;
+      if (shiny) { a.shinies++; S.stats.shinies = (S.stats.shinies || 0) + 1; }
+      recordBest(aura, shiny);
+      questBump("rolls", 1); questBump("coins", coins); questBump("bestR", aura.rarity); if (shiny) questBump("shinies", 1);
+      if (a.best == null || aura.rarity > A.byId(a.best).rarity || (aura.rarity === A.byId(a.best).rarity && shiny && !a.bestShiny)) { a.best = aura.id; a.bestShiny = shiny; }
+    }
+    S.rolls += n;
+    a.rolls += n;
+    a.coins += totalCoins;
+    addCoins(totalCoins);
+    if (S.lastRoll == null && a.best != null) { S.lastRoll = a.best; S.lastShiny = a.bestShiny; }
+    save();
+    return n;
+  }
+
+  function afkCollect() {
+    var a = afkState();
+    if (!a.active) return;
+    afkCredit();
+    var mins = Math.max(0, Math.round((Date.now() - (a.since || Date.now())) / 60000));
+    toast("🌙 AFK done — " + fmt(a.rolls) + " rolls, +" + fmt(a.coins) + " coins" + (a.shinies ? ", " + fmt(a.shinies) + " shiny" : "") + (a.best != null ? " · best: " + auraLabel(A.byId(a.best), a.bestShiny) : "") + " (" + mins + " min).", "gold", 9000);
+    a.active = false;
+    save(); renderAll();
+  }
+
+  /* The live AFK interval: credits rolls in the background and refreshes the panel when it's open. */
+  setInterval(function () {
+    if (S.afk && S.afk.active) {
+      var got = afkCredit();
+      if ($("#tab-afk") && $("#tab-afk").classList.contains("active")) renderAfk();
+      else if (got) { renderHUD(); }
+    }
+  }, AFK_ROLL_MS);
+
+  function renderAfk() {
+    var body = $("#afk-body");
+    if (!body) return;
+    afkCredit();
+    var a = afkState();
+    var mins = a.active ? Math.max(0, Math.round((Date.now() - (a.since || Date.now())) / 60000)) : 0;
+    var bestTxt = a.best != null ? auraLabel(A.byId(a.best), a.bestShiny) : "—";
+    body.innerHTML =
+      '<div class="afk-moon ' + (a.active ? "spin" : "") + '">' + (a.active ? "🌙" : "💤") + '</div>' +
+      '<h3 style="text-align:center">' + (a.active ? "You're AFK — rolling for you…" : "Ready to go AFK") + '</h3>' +
+      '<p class="muted small-text" style="text-align:center">Rolls at your equipped luck (×' + fmtShort(currentLuck()) + '), one every ' + (AFK_ROLL_MS / 1000) + 's. Your luck is never used up. Everything lands straight in your account.</p>' +
+      '<div class="afk-stats">' +
+        '<div class="afk-stat"><span class="n">' + fmt(a.rolls) + '</span><span class="l">Rolls</span></div>' +
+        '<div class="afk-stat"><span class="n">' + fmt(a.coins) + '</span><span class="l">Coins</span></div>' +
+        '<div class="afk-stat"><span class="n">' + fmt(a.shinies) + '</span><span class="l">Shinies</span></div>' +
+      '</div>' +
+      '<div class="afk-last muted small-text" style="text-align:center">Best this session: <b>' + bestTxt + '</b>' + (a.active ? " · " + mins + " min" : "") + '</div>' +
+      '<div class="afk-row">' +
+        (a.active
+          ? '<button class="btn primary" id="afk-collect">💰 Collect &amp; stop</button>'
+          : '<button class="btn primary" id="afk-start">🌙 Start AFK</button>') +
+      '</div>';
+    if (a.active) $("#afk-collect").addEventListener("click", afkCollect);
+    else $("#afk-start").addEventListener("click", afkStart);
+  }
+
+  /* ===================== Milestones: claimable rewards for hitting lifetime roll counts ===================== */
+  var MILESTONES = [
+    { rolls: 100,       ico: "🥉", coins: 2000,       gems: 5 },
+    { rolls: 500,       ico: "🥈", coins: 10000,      gems: 15 },
+    { rolls: 1000,      ico: "🥇", coins: 50000,      gems: 30 },
+    { rolls: 5000,      ico: "⭐", coins: 250000,     gems: 60 },
+    { rolls: 10000,     ico: "🌟", coins: 1000000,    gems: 120 },
+    { rolls: 50000,     ico: "💫", coins: 10000000,   gems: 250 },
+    { rolls: 100000,    ico: "🔥", coins: 100000000,  gems: 500 },
+    { rolls: 1000000,   ico: "👑", coins: 5000000000, gems: 1000 }
+  ];
+  function milestoneClaimed(target) { return (S.milestones || []).indexOf(target) >= 0; }
+  function claimMilestone(target) {
+    var m = null, i;
+    for (i = 0; i < MILESTONES.length; i++) if (MILESTONES[i].rolls === target) m = MILESTONES[i];
+    if (!m) return;
+    if (S.rolls < m.rolls) { toast("Keep rolling! You need " + fmt(m.rolls) + " rolls.", "bad"); return; }
+    if (milestoneClaimed(target)) return;
+    S.milestones.push(target);
+    addCoins(m.coins);
+    S.gems = (S.gems || 0) + m.gems;
+    Sound.buy();
+    toast("🏅 Milestone " + fmt(m.rolls) + " rolls! +" + fmt(m.coins) + " coins, +" + m.gems + " 💎 Gems.", "gold", 6000);
+    save(); renderAll();
+  }
+  function milestonesReady() { return MILESTONES.some(function (m) { return S.rolls >= m.rolls && !milestoneClaimed(m.rolls); }); }
+  function renderMilestones() {
+    var body = $("#mile-body");
+    if (!body) return;
+    var html = '<div class="mile-list">';
+    MILESTONES.forEach(function (m) {
+      var have = S.rolls, done = milestoneClaimed(m.rolls), ready = have >= m.rolls && !done;
+      var pct = Math.max(0, Math.min(100, have / m.rolls * 100));
+      html += '<div class="mile ' + (done ? "done" : ready ? "ready" : "") + '">' +
+        '<div class="mile-ico">' + m.ico + '</div>' +
+        '<div class="mile-body">' +
+          '<div class="t">' + fmt(m.rolls) + ' rolls</div>' +
+          '<div class="d">+' + fmt(m.coins) + ' coins · +' + m.gems + ' 💎</div>' +
+          (done ? '' : '<div class="mile-bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>') +
+        '</div>' +
+        (done
+          ? '<span class="muted small-text">Claimed ✓</span>'
+          : ready
+            ? '<button class="btn small primary" data-mile="' + m.rolls + '">Claim</button>'
+            : '<span class="muted small-text">' + fmt(Math.max(0, m.rolls - have)) + ' to go</span>') +
+      '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    body.querySelectorAll("[data-mile]").forEach(function (b) { b.addEventListener("click", function () { claimMilestone(Number(b.dataset.mile)); }); });
   }
 
   /* Buy a VIP offer with gems. */
@@ -7924,6 +8081,269 @@
     renderChat();
   }
 
+  /* ===================== Super Admin · hacker coding panel =====================
+     A second, cooler unlock on the Stats page (password: "password"). It opens a green-on-black coding console
+     that takes function-call commands — give("The RNG"), force_roll_x10("Rare"), max_coins(),
+     force_roll(1234567):The Unknown, delete_account(1234567) … — with a live autocomplete of every matching
+     command as you type. "Self" commands change YOUR OWN account and run instantly in the browser. Cross-account
+     commands (delete_account, force_roll / give_coins on someone else) still need the MASTER admin key from the
+     console above, so a leaked super password can never wipe other players' accounts — only the owner can. */
+  var SUPER_PW = { salt: "777ff23289f591f212bd7168f58e9e23", iterations: 150000, hash: "2f8d09e781eef6fbf135cb9f3b82543c820c6c4818b455ae63556be2d61aa0a6" };
+  var superUnlocked = false;
+  var superIdleTimer = null;
+
+  function superTouched() {
+    clearTimeout(superIdleTimer);
+    if (superUnlocked) superIdleTimer = setTimeout(function () { superRelock("// session timed out — locked after 5 minutes idle."); }, ADMIN_IDLE_MS);
+  }
+
+  /* Print one line in the coding console. `cls` tints it (cmd/ok/err/sys). */
+  function cpPrint(text, cls) {
+    var out = $("#cp-out");
+    if (!out) return;
+    var line = document.createElement("div");
+    line.className = "cp-line" + (cls ? " cp-" + cls : "");
+    line.textContent = text;
+    out.appendChild(line);
+    while (out.childNodes.length > 80) out.removeChild(out.firstChild);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  /* Parse a line like  name(a, b):tail  into { name, args:[...], tail }. Bare `help` also works. */
+  function cpParse(line) {
+    line = line.trim().replace(/;+\s*$/, "");
+    var m = /^([a-zA-Z_][\w]*)\s*\(([^)]*)\)\s*(?::\s*(.*))?$/.exec(line);
+    if (m) return { name: m[1].toLowerCase(), args: cpSplitArgs(m[2]), tail: (m[3] || "").trim() };
+    var m2 = /^([a-zA-Z_][\w]*)\s*(?::\s*(.*))?$/.exec(line);
+    if (m2) return { name: m2[1].toLowerCase(), args: [], tail: (m2[2] || "").trim() };
+    return null;
+  }
+  function cpSplitArgs(s) {
+    s = s.trim();
+    if (!s) return [];
+    return s.split(",").map(function (a) { return a.trim().replace(/^["']|["']$/g, "").trim(); }).filter(function (a) { return a.length; });
+  }
+
+  /* Aura from a SELF command: the bit after ":" if present, else everything inside the ( ). */
+  function cpSelfAura(c) { var q = (c.tail || c.args.join(" ")).trim(); return q ? findAura(q) : null; }
+  /* Aura from a CROSS-account command: after ":" if present, else args after the id. */
+  function cpCrossAura(c) { var q = (c.tail || c.args.slice(1).join(" ")).trim(); return q ? findAura(q) : null; }
+  function cpSelfAuraText(c) { return (c.tail || c.args.join(" ")).trim(); }
+
+  function cpGive(c, shiny) {
+    var a = cpSelfAura(c);
+    if (!a) { cpPrint("no aura matches \"" + cpSelfAuraText(c) + "\"", "err"); return; }
+    if (shiny && !a.shiny) { cpPrint(a.name + " has no shiny form.", "err"); return; }
+    var bag = shiny ? S.shinyInventory : S.inventory;
+    bag[a.id] = (bag[a.id] || 0) + 1;
+    recordBest(a, shiny);
+    if (!equippedAura()) { S.equipped = a.id; S.equippedShiny = shiny; }
+    cpPrint("＋ " + auraLabel(a, shiny) + "  [" + oddsText(a, shiny) + "]", "ok");
+  }
+  function cpBulkGive(c, n) {
+    var a = cpSelfAura(c);
+    if (!a) { cpPrint("no aura matches \"" + cpSelfAuraText(c) + "\"", "err"); return; }
+    for (var i = 0; i < n; i++) S.inventory[a.id] = (S.inventory[a.id] || 0) + 1;
+    recordBest(a, false);
+    if (!equippedAura()) { S.equipped = a.id; S.equippedShiny = false; }
+    cpPrint("＋ " + fmt(n) + " × " + a.name + "  (instant force-roll)", "ok");
+  }
+  /* The 7-digit id from args[0], or null after an error. */
+  function cpId(c) {
+    var id = (c.args[0] || "").trim();
+    if (/^\d{7}$/.test(id)) return id;
+    cpPrint("need a 7-digit player id, e.g. force_roll(1234567):The RNG", "err");
+    return null;
+  }
+  /* True only when the MASTER admin key is unlocked (so cross-account server ops are allowed). */
+  function cpMaster() {
+    if (aaKey) return true;
+    cpPrint("🔑 ACCESS DENIED — cross-account power needs the MASTER key. Unlock the Admin console above first.", "err");
+    return false;
+  }
+  /* Run a server admin op and mirror any error it reports into the coding console (accountAdmin normally
+     prints to the player-panel log; the hacker console should show its own commands' results). */
+  function cpServer(op, fields) {
+    var mark = $("#aa-out").childNodes.length;
+    return accountAdmin(op, fields).then(function (r) {
+      if (r == null) { var nodes = $("#aa-out").childNodes, i; for (i = mark; i < nodes.length; i++) cpPrint(nodes[i].textContent, "err"); }
+      return r;
+    });
+  }
+
+  var SUPER_COMMANDS = [
+    { name: "help", self: true, sig: "()", desc: "list every command", run: function () { cpHelp(); } },
+    { name: "give", self: true, sig: "(aura)", desc: "add an aura to your inventory", run: function (c) { cpGive(c, false); } },
+    { name: "give_shiny", self: true, sig: "(aura)", desc: "add the shiny form of an aura", run: function (c) { cpGive(c, true); } },
+    { name: "give_all", self: true, sig: "()", desc: "give yourself one of every aura", run: function () {
+        var added = 0, best = null;
+        A.list.forEach(function (au) { if (!(S.inventory[au.id] > 0)) { S.inventory[au.id] = 1; added++; recordBest(au, false); if (!best || au.rarity > best.rarity) best = au; } });
+        if (!equippedAura() && best) { S.equipped = best.id; S.equippedShiny = false; }
+        cpPrint("＋ " + fmt(added) + " new auras — you now own all " + fmt(A.TOTAL) + ".", "ok");
+      } },
+    { name: "force_roll_x10", self: true, sig: "(aura)", desc: "instantly add 10 of the same aura", run: function (c) { cpBulkGive(c, 10); } },
+    { name: "god_roll", self: true, sig: "(aura, count)", desc: "instantly add any number of one aura", run: function (c) { var n = Math.floor(Number(c.args[c.args.length - 1])); if (!(n > 0)) n = 100; cpBulkGive(c, n); } },
+    { name: "roll", self: true, sig: "(aura)", desc: "force your NEXT real roll + play its reveal", run: function (c) {
+        var a = cpSelfAura(c);
+        if (!a) { cpPrint("no aura matches \"" + cpSelfAuraText(c) + "\"", "err"); return; }
+        if (!canRoll()) { cpPrint("can't roll right now (busy, cooling down or in a fight).", "err"); return; }
+        cpPrint("▶ rolling " + a.name + " …", "ok");
+        switchTab("roll"); requestRoll(a, false);
+      } },
+    { name: "max_coins", self: true, sig: "()", desc: "set coins to 809 septillion", run: function () { S.coins = 8.09e26; cpPrint("🪙 coins = " + fmt(S.coins), "ok"); } },
+    { name: "max_doubloons", self: true, sig: "()", desc: "set doubloons to 809 septillion", run: function () { S.doubloons = 8.09e26; cpPrint("🪙 doubloons = " + fmt(S.doubloons), "ok"); } },
+    { name: "max_gems", self: true, sig: "()", desc: "set gems to 1,000,000,000", run: function () { S.gems = 1e9; cpPrint("💎 gems = " + fmt(S.gems), "ok"); } },
+    { name: "max_luck", self: true, sig: "()", desc: "900 vigintillion luck for 1,000,000 rolls", run: function () { S.luckEffects.push({ mult: 9e65, rolls: 1e6 }); cpPrint("🍀 luck ×" + fmtShort(9e65) + " for 1,000,000 rolls", "ok"); } },
+    { name: "set_coins", self: true, sig: "(amount)", desc: "set your coins to an exact number", run: function (c) { var n = Number(c.args[0]); if (!isFinite(n)) { cpPrint("usage: set_coins(1000000)", "err"); return; } S.coins = Math.max(0, Math.floor(n)); cpPrint("🪙 coins = " + fmt(S.coins), "ok"); } },
+    { name: "set_gems", self: true, sig: "(amount)", desc: "set your gems to an exact number", run: function (c) { var n = Number(c.args[0]); if (!isFinite(n)) { cpPrint("usage: set_gems(100000)", "err"); return; } S.gems = Math.max(0, Math.floor(n)); cpPrint("💎 gems = " + fmt(S.gems), "ok"); } },
+    { name: "set_doubloons", self: true, sig: "(amount)", desc: "set your doubloons to an exact number", run: function (c) { var n = Number(c.args[0]); if (!isFinite(n)) { cpPrint("usage: set_doubloons(100000)", "err"); return; } S.doubloons = Math.max(0, Math.floor(n)); cpPrint("🪙 doubloons = " + fmt(S.doubloons), "ok"); } },
+    { name: "luck", self: true, sig: "(mult, rolls)", desc: "add a luck boost", run: function (c) { var mult = Number(c.args[0]), rolls = c.args[1] !== undefined ? Number(c.args[1]) : 10; if (!(mult > 0) || !(rolls > 0)) { cpPrint("usage: luck(1000, 10)", "err"); return; } S.luckEffects.push({ mult: Math.floor(mult), rolls: Math.floor(rolls) }); cpPrint("🍀 luck ×" + fmt(mult) + " for " + fmt(rolls) + " rolls", "ok"); } },
+    { name: "potion", self: true, sig: "(key, count)", desc: "add potions: " + POTION_ORDER.join(", "), run: function (c) { var key = (c.args[0] || "").toLowerCase(); var cnt = c.args[1] !== undefined ? Math.floor(Number(c.args[1])) : 1; if (!POTIONS[key] || !(cnt > 0)) { cpPrint("usage: potion(" + POTION_ORDER[0] + ", 1)", "err"); return; } var added = addPotion(key, cnt); cpPrint("🧪 +" + added + " × " + POTIONS[key].name, "ok"); } },
+    { name: "make_shiny", self: true, sig: "(aura)", desc: "turn an owned aura shiny (free)", run: function (c) { var a = cpSelfAura(c); if (!a) { cpPrint("no aura matches \"" + cpSelfAuraText(c) + "\"", "err"); return; } if (!owns(a.id, false)) S.inventory[a.id] = (S.inventory[a.id] || 0) + 1; S.shards = (S.shards || 0) + shardCost(a); makeAuraShiny(a.id); cpPrint("✨ " + a.name + " is now shiny", "ok"); } },
+    { name: "training", self: true, sig: "(level)", desc: "set your training level", run: function (c) { var lv = Math.floor(Number(c.args[0])); if (!(lv >= 0)) { cpPrint("usage: training(50)", "err"); return; } S.training = lv; cpPrint("🥊 training level " + lv + " (+" + fmt(lv * 10) + " power)", "ok"); } },
+    { name: "unlock_auto", self: true, sig: "()", desc: "unlock Auto Roll", run: function () { S.autoUnlocked = true; cpPrint("🔁 Auto Roll unlocked", "ok"); } },
+    { name: "clear_luck", self: true, sig: "()", desc: "remove all your luck boosts", run: function () { S.luckEffects = []; S.floorEffects = []; S.shinyEffects = []; cpPrint("luck boosts cleared", "ok"); } },
+    { name: "reset_save", self: true, sig: "()", desc: "wipe YOUR save (can't be undone)", run: function () { resetSave(); cpPrint("💣 your save was wiped.", "ok"); } },
+    { name: "lock", self: true, sig: "()", desc: "lock the super-admin panel", run: function () { superRelock("🔒 Locked."); } },
+    { name: "list_accounts", self: false, sig: "()", desc: "list every online account (needs master key)", run: function () {
+        if (!cpMaster()) return;
+        return aaList(true).then(function (ok) { if (!ok) { cpPrint("no online accounts on this site.", "err"); return; } cpPrint(aaAccounts.length + " account(s):", "sys"); aaAccounts.slice(0, 25).forEach(function (a) { cpPrint("  " + a.id + "  " + a.name + "  (" + fmt(a.auras) + " auras, " + fmt(a.coins) + " coins)"); }); });
+      } },
+    { name: "force_roll", self: false, sig: "(id):aura", desc: "force a player's next roll (needs master key)", run: function (c) {
+        var id = cpId(c); if (!id) return; var a = cpCrossAura(c);
+        if (!a) { cpPrint("name the aura after a colon, e.g. force_roll(" + id + "):The RNG", "err"); return; }
+        if (!cpMaster()) return;
+        return cpServer("forceRoll", { id: id, aura: a.id, shiny: false }).then(function (r) { if (r) { cpPrint("🎯 " + aaLabel(id) + " → next roll forced to " + a.name, "ok"); } });
+      } },
+    { name: "give_coins", self: false, sig: "(id, amount)", desc: "give a player coins (needs master key)", run: function (c) {
+        var id = cpId(c); if (!id) return; var amt = Math.trunc(Number(c.args[1]));
+        if (!amt) { cpPrint("usage: give_coins(" + id + ", 1000000)", "err"); return; }
+        if (!cpMaster()) return;
+        return cpServer("coins", { id: id, amount: amt }).then(function (r) { if (r) { cpPrint("🪙 " + aaLabel(id) + " coins → " + fmt(r.account.coins), "ok"); aaChanged(id === currentUser); } });
+      } },
+    { name: "erase_auras", self: false, sig: "(id)", desc: "delete every aura a player owns (needs master key)", run: function (c) {
+        var id = cpId(c); if (!id) return; if (!cpMaster()) return;
+        return cpServer("erase", { id: id }).then(function (r) { if (r) { cpPrint("🗑️ wiped " + fmt(r.result) + " auras from " + aaLabel(id), "ok"); aaChanged(id === currentUser); } });
+      } },
+    { name: "delete_account", self: false, sig: "(id)", desc: "fully delete a player account (needs master key)", run: function (c) {
+        var id = cpId(c); if (!id) return; if (!cpMaster()) return;
+        return cpServer("deleteAccount", { id: id }).then(function (r) { if (r) { cpPrint("💀 account " + id + " (" + (r.name || "?") + ") deleted.", "ok"); aaChanged(false); } });
+      } }
+  ];
+  var SUPER_CMD_MAP = {};
+  SUPER_COMMANDS.forEach(function (d) { SUPER_CMD_MAP[d.name] = d; d.fill = d.sig === "()" ? "()" : "("; d.needsArg = d.sig !== "()"; });
+
+  function cpHelp() {
+    cpPrint("── your own account ──", "sys");
+    SUPER_COMMANDS.forEach(function (d) { if (d.self) cpPrint("  " + d.name + d.sig + "  —  " + d.desc); });
+    cpPrint("── other players (needs the master Admin key above) ──", "sys");
+    SUPER_COMMANDS.forEach(function (d) { if (!d.self) cpPrint("  🔑 " + d.name + d.sig + "  —  " + d.desc); });
+  }
+
+  /* Run one typed command. Self commands save + redraw; cross-account ones return a promise and refresh themselves. */
+  function cpExec(line) {
+    if (!superUnlocked) return;
+    superTouched();
+    var raw = line.trim();
+    if (!raw) return;
+    cpPrint("root@aura:~# " + raw, "cmd");
+    var c = cpParse(raw);
+    if (!c) { cpPrint("syntax error — use name(args), e.g. give(\"The RNG\")", "err"); return; }
+    var def = SUPER_CMD_MAP[c.name];
+    if (!def) { cpPrint("command not found: " + c.name + "  — type help()", "err"); return; }
+    var r;
+    try { r = def.run(c); } catch (e) { cpPrint("error: " + (e && e.message ? e.message : e), "err"); return; }
+    if (r && typeof r.then === "function") return; /* async cross-account: it prints + refreshes on its own */
+    if (def.self !== false) { save(); renderAll(); }
+  }
+
+  /* ----- live autocomplete: as you type, show every command whose name contains what you've typed ----- */
+  var cpSuggestList = [], cpSuggestIdx = -1;
+  function cpAutocomplete() {
+    var inp = $("#cp-in"), box = $("#cp-suggest");
+    if (!inp || !box) return;
+    var typed = inp.value.trim().toLowerCase().replace(/[(:].*/, "").trim();
+    if (!typed) { cpHideSuggest(); return; }
+    cpSuggestList = SUPER_COMMANDS.filter(function (d) { return d.name.indexOf(typed) >= 0; }).slice(0, 10);
+    if (!cpSuggestList.length) { cpHideSuggest(); return; }
+    if (cpSuggestIdx >= cpSuggestList.length) cpSuggestIdx = -1;
+    box.innerHTML = "";
+    cpSuggestList.forEach(function (d, i) {
+      var row = document.createElement("div");
+      row.className = "cp-sug" + (i === cpSuggestIdx ? " on" : "");
+      row.innerHTML = (d.self ? "" : "<span class=\"cp-sug-key\">🔑</span>") + "<span class=\"cp-sug-sig\"></span><span class=\"cp-sug-desc\"></span>";
+      row.querySelector(".cp-sug-sig").textContent = d.name + d.sig;
+      row.querySelector(".cp-sug-desc").textContent = d.desc;
+      row.addEventListener("mousedown", function (e) { e.preventDefault(); cpPick(i); });
+      box.appendChild(row);
+    });
+    box.classList.remove("hidden");
+  }
+  function cpHideSuggest() { var box = $("#cp-suggest"); if (box) { box.classList.add("hidden"); box.innerHTML = ""; } cpSuggestList = []; cpSuggestIdx = -1; }
+  function cpPick(i) {
+    var d = cpSuggestList[i]; if (!d) return;
+    var inp = $("#cp-in");
+    inp.value = d.name + d.fill;
+    inp.focus();
+    try { var pos = d.needsArg ? d.name.length + 1 : inp.value.length; inp.setSelectionRange(pos, pos); } catch (e) { /* ok */ }
+    cpHideSuggest();
+  }
+  function cpKey(e) {
+    var open = cpSuggestList.length && !$("#cp-suggest").classList.contains("hidden");
+    if (e.key === "ArrowDown") { if (open) { e.preventDefault(); cpSuggestIdx = Math.min(cpSuggestIdx + 1, cpSuggestList.length - 1); cpAutocomplete(); } }
+    else if (e.key === "ArrowUp") { if (open) { e.preventDefault(); cpSuggestIdx = Math.max(cpSuggestIdx - 1, 0); cpAutocomplete(); } }
+    else if (e.key === "Tab") { if (open) { e.preventDefault(); cpPick(cpSuggestIdx >= 0 ? cpSuggestIdx : 0); } }
+    else if (e.key === "Escape") { if (open) { e.preventDefault(); cpHideSuggest(); } }
+    else if (e.key === "Enter") { if (open && cpSuggestIdx >= 0) { e.preventDefault(); cpPick(cpSuggestIdx); } }
+  }
+
+  function checkSuperPassword(pw) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!subtle || !window.TextEncoder) return Promise.resolve(false);
+    var salt = new Uint8Array(SUPER_PW.salt.match(/../g).map(function (b) { return parseInt(b, 16); }));
+    return subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]).then(function (k) {
+      return subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: salt, iterations: SUPER_PW.iterations }, k, 256);
+    }).then(function (bits) {
+      return Array.prototype.map.call(new Uint8Array(bits), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("") === SUPER_PW.hash;
+    }, function () { return false; });
+  }
+  function unlockSuper(key) {
+    return checkSuperPassword(key).then(function (ok) {
+      if (!ok) return new Promise(function (resolve) { setTimeout(function () { resolve(false); }, 400); }); /* slows guessing */
+      superUnlocked = true;
+      superTouched();
+      $("#cp-lock").classList.add("hidden");
+      $("#cp-lock-msg").textContent = "";
+      $("#cp-area").classList.remove("hidden");
+      if (!$("#cp-out").childNodes.length) {
+        cpPrint("AURA://SUPER-ADMIN  ·  " + ($("#game-version") ? $("#game-version").textContent : ""), "sys");
+        cpPrint("access granted. type help() for commands, or just start typing to autocomplete.", "sys");
+      }
+      $("#cp-in").focus();
+      return true;
+    });
+  }
+  function superRelock(msg) {
+    superUnlocked = false;
+    clearTimeout(superIdleTimer);
+    if ($("#cp-in")) $("#cp-in").value = "";
+    cpHideSuggest();
+    $("#cp-area").classList.add("hidden");
+    $("#cp-lock").classList.remove("hidden");
+    $("#cp-lock-msg").textContent = msg || "🔒 Locked.";
+  }
+  function cpUnlock(e) {
+    e.preventDefault();
+    var key = $("#cp-key").value;
+    if (!key) { $("#cp-lock-msg").textContent = "⚠️ Type the super password first."; return; }
+    $("#cp-unlock").disabled = true;
+    unlockSuper(key).then(function (ok) {
+      $("#cp-unlock").disabled = false;
+      $("#cp-key").value = "";
+      if (!ok) $("#cp-lock-msg").textContent = "⚠️ ACCESS DENIED — wrong super password.";
+    });
+  }
+
   function aaList(quiet) {
     return accountAdmin("list").then(function (d) {
       if (!d) return false;
@@ -8170,8 +8590,18 @@
     if (name === "vip") renderVip();
     if (name === "tower") renderTower();
     if (name === "quests") renderQuests();
+    if (name === "afk") { renderAfk(); renderMilestones(); }
     if (name === "leaderboard") loadLeaderboard();
     if (name === "chat") { Chat.unread = 0; renderChat(); $("#chat-log").scrollTop = $("#chat-log").scrollHeight; chatSchedule(50); }
+  }
+
+  /* Little badge on the AFK tab: a 🌙 while you're AFK, or a ! when a milestone is ready to claim. */
+  function updateAfkBadge() {
+    var b = $("#afk-badge");
+    if (!b) return;
+    if (S.afk && S.afk.active) { b.textContent = "🌙"; b.classList.remove("hidden"); }
+    else if (milestonesReady()) { b.textContent = "!"; b.classList.remove("hidden"); }
+    else b.classList.add("hidden");
   }
 
   $("#tabs").addEventListener("click", function (e) {
@@ -8346,8 +8776,15 @@
   $("#dual-ok").addEventListener("click", hideDualWarning);
   $("#aa-lock").addEventListener("submit", aaUnlock);
   $("#aa-relock").addEventListener("click", function () { aaRelock(); });
+  $("#cp-lock").addEventListener("submit", cpUnlock);
+  $("#cp-relock").addEventListener("click", function () { superRelock("🔒 Locked."); });
+  $("#cp-form").addEventListener("submit", function (e) { e.preventDefault(); var inp = $("#cp-in"); cpHideSuggest(); cpExec(inp.value); inp.value = ""; });
+  $("#cp-in").addEventListener("input", cpAutocomplete);
+  $("#cp-in").addEventListener("keydown", cpKey);
+  $("#cp-in").addEventListener("blur", function () { setTimeout(cpHideSuggest, 150); });
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden" && adminUnlocked) aaRelock("🔒 Locked because you left the page.");
+    if (document.visibilityState === "hidden" && superUnlocked) superRelock("🔒 Locked because you left the page.");
   });
   $("#aa-erase").addEventListener("click", aaErase);
   $("#aa-add-coins").addEventListener("click", aaAddCoins);

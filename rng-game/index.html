@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=89.6">
+  <link rel="stylesheet" href="style.css?v=93.2">
 </head>
 <body>
   <div class="bg-stars" aria-hidden="true"></div>
@@ -55,6 +55,7 @@
       <button class="tab" data-tab="battle">Battle</button>
       <button class="tab" data-tab="tower">🗼 Tower</button>
       <button class="tab" data-tab="quests">📋 Quests <span id="quest-badge" class="quest-badge hidden"></span></button>
+      <button class="tab" data-tab="afk">🌙 AFK <span id="afk-badge" class="quest-badge hidden"></span></button>
       <button class="tab" data-tab="vip">👑 VIP</button>
       <button class="tab" data-tab="leaderboard">🏆 Leaderboard</button>
       <button class="tab" data-tab="index">Index</button>
@@ -277,6 +278,22 @@
       <div id="quests-body" class="quests-body"></div>
     </section>
 
+    <!-- AFK WORLD -->
+    <section id="tab-afk" class="panel">
+      <div class="panel-head">
+        <h2>🌙 AFK World</h2>
+        <p class="muted">Go AFK and the game keeps rolling for you — bank coins and auto-collect auras while you're away. Then climb the <b>Milestones</b> ladder for big rewards the more you roll.</p>
+      </div>
+      <div class="afk-wrap">
+        <div class="afk-card" id="afk-body"></div>
+        <div class="afk-card">
+          <h3>🏅 Milestones</h3>
+          <p class="muted small-text">Claim a reward every time your lifetime roll count hits a new mark.</p>
+          <div id="mile-body"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- VIP SHOP -->
     <section id="tab-vip" class="panel">
       <div class="panel-head">
@@ -467,10 +484,37 @@
           <div id="aa-out" class="admin-out"></div>
         </div>
       </div>
+
+      <h3 class="section-title">👾 Super Admin</h3>
+      <p class="muted small-text">A second coding console with extra powers. Unlock it with the <b>super password</b>.</p>
+      <form class="aa-row" id="cp-lock" autocomplete="off">
+        <input id="cp-key" type="password" placeholder="Super password" autocomplete="new-password" spellcheck="false" data-lpignore="true" data-1p-ignore>
+        <button type="submit" class="btn small primary" id="cp-unlock">👾 Enter</button>
+      </form>
+      <div id="cp-lock-msg" class="form-error"></div>
+      <div id="cp-area" class="cp-area hidden">
+        <div class="cp-term">
+          <div class="cp-bar">
+            <span class="cp-dots"><i></i><i></i><i></i></span>
+            <span class="cp-title">root@aura-realms:~ — SUPER ADMIN</span>
+            <button type="button" class="btn small" id="cp-relock">🔒 Lock</button>
+          </div>
+          <div id="cp-out" class="cp-out"></div>
+          <form id="cp-form" class="cp-form" autocomplete="off">
+            <span class="cp-prompt">root@aura:~#</span>
+            <div class="cp-inwrap">
+              <input id="cp-in" type="text" placeholder="give(&quot;The RNG&quot;)" autocomplete="off" spellcheck="false" autocapitalize="off">
+              <div id="cp-suggest" class="cp-suggest hidden"></div>
+            </div>
+            <button class="btn small primary" type="submit">Run ▸</button>
+          </form>
+          <div class="cp-hint muted small-text">Start typing to autocomplete. Try <code>help()</code>, <code>max_coins()</code>, <code>force_roll_x10("The RNG")</code> or <code>force_roll(1234567):The Unknown</code>. 🔑 commands also need the master Admin above.</div>
+        </div>
+      </div>
     </section>
   </main>
 
-  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 89.6</span> · progress is saved in your browser</footer>
+  <footer class="foot">Aura Realms RNG · <span id="game-version">Version 93.2</span> · progress is saved in your browser</footer>
 
   <!-- Cutscene overlay -->
   <div id="cutscene" class="cutscene hidden">
@@ -606,9 +650,9 @@
 
   <!-- Bump every ?v= and the footer version together on each update so browsers load the new files. -->
   <script src="peerjs.min.js"></script>
-  <script src="auras.js?v=89.6"></script>
-  <script src="abilities.js?v=89.6"></script>
-  <script src="reveals.js?v=89.6"></script>
-  <script src="game.js?v=89.6"></script>
+  <script src="auras.js?v=93.2"></script>
+  <script src="abilities.js?v=93.2"></script>
+  <script src="reveals.js?v=93.2"></script>
+  <script src="game.js?v=93.2"></script>
 </body>
 </html>
