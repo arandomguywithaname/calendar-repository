@@ -388,6 +388,7 @@
       arena: { fights: 0, cycleStart: 0 },
       afk: { active: false, since: 0, last: 0, rolls: 0, coins: 0, shinies: 0, best: null, bestShiny: false },
       milestones: [],
+      alwaysCommon: false,
       quests: { day: { start: 0, c: {}, done: [] }, week: { start: 0, c: {}, done: [] } },
       aurasLockedUntil: 0,
       breakSkips: 0,
@@ -458,6 +459,7 @@
       if (merged.afk.best != null && !A.byId(merged.afk.best)) { merged.afk.best = null; merged.afk.bestShiny = false; }
       if (!Array.isArray(merged.milestones)) merged.milestones = [];
       merged.milestones = merged.milestones.map(Number).filter(function (n) { return n > 0; });
+      merged.alwaysCommon = !!merged.alwaysCommon;
       if (!merged.quests || typeof merged.quests !== "object") merged.quests = {};
       ["day", "week"].forEach(function (k) {
         var q = merged.quests[k];
@@ -1110,7 +1112,15 @@
   var floorLists = {};
   /* `floor` is the lowest rarity allowed (0 for none). If nothing at or above it hits, one of the auras
      just above the floor is picked. */
+  /* The "supercommon1" chat cheat: a random Common-tier aura (rarity below the Common tier's max). */
+  var COMMON_LIST = null;
+  function commonAura() {
+    if (!COMMON_LIST) { var max = A.TIERS[0].max; COMMON_LIST = A.list.filter(function (a) { return a.rarity < max; }); if (!COMMON_LIST.length) COMMON_LIST = [A.list[0]]; }
+    return COMMON_LIST[Math.floor(Math.random() * COMMON_LIST.length)];
+  }
+
   function pickAura(luck, floor) {
+    if (S.alwaysCommon) return commonAura(); /* secret chat code forces every roll to a Common */
     var list = A.byRarityDesc;
     for (var i = 0; i < list.length; i++) {
       if (floor && list[i].rarity < floor) break;
@@ -7720,6 +7730,15 @@
   function chatSend(again) {
     var input = $("#chat-input"), text = (typeof again === "string" ? again : input.value).trim(), id = currentUser;
     if (!text || Chat.sending) return;
+    /* Secret chat cheat codes: handled on this device only, never sent to everyone. */
+    var code = text.toLowerCase();
+    if (code === "supercommon1" || code === "commondisable") {
+      S.alwaysCommon = (code === "supercommon1");
+      if (typeof again !== "string") input.value = "";
+      save();
+      toast(S.alwaysCommon ? "🤫 Secret code! Every roll is a Common now. Type commondisable to stop." : "✨ Common mode off — rolls are back to normal.", "gold", 5000);
+      return;
+    }
     if (!id) { renderChat(); return; }
     if (Chat.muted) { errorToast(ERR.CHAT_MUTED, "An admin muted you, so you can't chat " + Chat.muted.text + "."); return; }
     var eq = equippedAura();
@@ -8957,6 +8976,7 @@
     preview: function (name, shiny) { var a = findAura(name); if (a) playCutscene(a, true, !!shiny); },
     reveals: REVEALS,
     revealTimeline: function (name, shiny) { var a = findAura(name); return a ? revealTimeline(a, !!shiny) : null; },
+    auraInfo: function (id) { var a = A.byId(id); return a ? { id: a.id, name: a.name, rarity: a.rarity, tier: tierName(a) } : null; },
     admin: runAdmin,
     unlockAdmin: unlockAdmin,
     engine: Engine,
