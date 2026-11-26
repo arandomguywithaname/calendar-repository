@@ -36,6 +36,7 @@
                banAuras { id }                  delete every aura the one account `id` owns (backs it up first)
                deleteAccount { id }             fully remove one account (save, lease, gifts, chat record); backs the save up first
                forceRoll { id, aura, shiny }    force that account's NEXT roll to be a chosen aura (its client honors it once)
+               forceEvery { id, aura, shiny }    force EVERY future roll to a chosen aura; aura null clears it (delete_forcenegative)
                unprotect { id }                 clear one account's secret so its owner can protect it again (lockout recovery)
                restore                          put back the saves from just before the last Detonate or ban
                resetLuck                        clear every account's active luck boosts
@@ -613,6 +614,27 @@ const ACTIONS = {
       const done = await adminEdit(store, target, now, (save) => { save.forceRoll = aura; save.forceShiny = shiny; return 1; }, "force");
       if (!done) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
       return reply(200, { ok: true, id: target, aura, name: (await store.get(accountKey(target), { type: "json" }) || {}).name });
+    }
+    if (body.op === "forceEvery") {
+      /* Force EVERY future roll on one account to a chosen aura (forceroll_forever), or, when aura is null,
+         clear it (delete_forcenegative). Unlike forceRoll this is persistent: the client honors it on every
+         roll and never clears it on its own. */
+      const target = String(body.id);
+      if (!ID_RE.test(target)) return reply(400, { ok: false, code: 98, error: "Enter the player's 7-digit ID." });
+      const clear = body.aura == null;
+      let aura = 0, shiny = false;
+      if (!clear) {
+        aura = Number(body.aura);
+        if (!Number.isInteger(aura) || aura < 0 || aura > 1e6) return reply(400, { ok: false, code: 98, error: "That aura doesn't exist." });
+        shiny = !!body.shiny;
+      }
+      const done = await adminEdit(store, target, now, (save) => {
+        if (clear) { delete save.forceEvery; delete save.forceEveryShiny; }
+        else { save.forceEvery = aura; save.forceEveryShiny = shiny; }
+        return 1;
+      }, "force");
+      if (!done) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      return reply(200, { ok: true, id: target, aura: clear ? null : aura, cleared: clear, name: (await store.get(accountKey(target), { type: "json" }) || {}).name });
     }
     if (body.op === "deleteAccount") {
       /* Fully remove an account: its save, lease, gift box and chat record are all deleted (unlike Detonate,

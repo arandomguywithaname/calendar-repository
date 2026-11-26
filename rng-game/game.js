@@ -446,6 +446,8 @@
       merged.avatar = avatarLook(merged.avatar); /* migrate a legacy preset id, or validate the {face,color} */
       /* A forced roll (set by an admin) survives in the save until it's used; drop it if the aura is unknown. */
       if (merged.forceRoll == null || !A.byId(merged.forceRoll)) { delete merged.forceRoll; merged.forceShiny = false; }
+      /* A "forever" forced roll (set by a super-admin) stays in the save until it is cleared; drop it if unknown. */
+      if (merged.forceEvery == null || !A.byId(merged.forceEvery)) { delete merged.forceEvery; merged.forceEveryShiny = false; }
       if (!merged.tower || typeof merged.tower !== "object") merged.tower = { best: 0, cleared: {}, cycleStart: 0 };
       if (!merged.tower.cleared || typeof merged.tower.cleared !== "object") merged.tower.cleared = {};
       merged.tower.best = Math.max(0, Math.min(TOWER_FLOORS, Math.floor(Number(merged.tower.best) || 0)));
@@ -1451,6 +1453,12 @@
       forced = A.byId(S.forceRoll);
       if (forcedShiny === undefined && S.forceShiny) forcedShiny = true;
       S.forceRoll = null; S.forceShiny = false;
+    }
+    /* A super-admin forced this account to ALWAYS roll a chosen aura (forceroll_forever): use it on every roll
+       and DON'T clear it — only delete_forcenegative removes it. */
+    if (!forced && S.forceEvery != null && A.byId(S.forceEvery)) {
+      forced = A.byId(S.forceEvery);
+      if (forcedShiny === undefined && S.forceEveryShiny) forcedShiny = true;
     }
     busy = true;
     $("#btn-roll").disabled = true;
@@ -8233,6 +8241,16 @@
         if (!a) { cpPrint("name the aura after a colon, e.g. force_roll(" + id + "):The RNG", "err"); return; }
         if (!cpMaster()) return;
         return cpServer("forceRoll", { id: id, aura: a.id, shiny: false }).then(function (r) { if (r) { cpPrint("🎯 " + aaLabel(id) + " → next roll forced to " + a.name, "ok"); } });
+      } },
+    { name: "forceroll_forever", self: false, sig: "(id):aura", desc: "force EVERY roll to one aura, forever (needs master key)", run: function (c) {
+        var id = cpId(c); if (!id) return; var a = cpCrossAura(c);
+        if (!a) { cpPrint("name the aura after a colon, e.g. forceroll_forever(" + id + "):The RNG", "err"); return; }
+        if (!cpMaster()) return;
+        return cpServer("forceEvery", { id: id, aura: a.id, shiny: false }).then(function (r) { if (r) { cpPrint("♾️ " + aaLabel(id) + " → EVERY roll is now " + a.name + " (until delete_forcenegative)", "ok"); } });
+      } },
+    { name: "delete_forcenegative", self: false, sig: "(id)", desc: "stop a forceroll_forever on a player (needs master key)", run: function (c) {
+        var id = cpId(c); if (!id) return; if (!cpMaster()) return;
+        return cpServer("forceEvery", { id: id, aura: null }).then(function (r) { if (r) { cpPrint("🛑 " + aaLabel(id) + " → forced-forever roll removed, their rolls are normal again", "ok"); } });
       } },
     { name: "give_coins", self: false, sig: "(id, amount)", desc: "give a player coins (needs master key)", run: function (c) {
         var id = cpId(c); if (!id) return; var amt = Math.trunc(Number(c.args[1]));
