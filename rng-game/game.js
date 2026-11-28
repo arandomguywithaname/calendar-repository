@@ -8255,9 +8255,13 @@
         var id = cpId(c); if (!id) return;
         return cpServer("erase", { id: id }).then(function (r) { if (r) { cpPrint("🗑️ wiped " + fmt(r.result) + " auras from " + aaLabel(id), "ok"); aaChanged(id === currentUser); } });
       } },
-    { name: "delete_account", self: false, sig: "(id)", desc: "fully delete a player account", run: function (c) {
+    { name: "delete_account", self: false, sig: "(id)", desc: "delete a player account (it can come back if they re-login)", run: function (c) {
         var id = cpId(c); if (!id) return;
         return cpServer("deleteAccount", { id: id }).then(function (r) { if (r) { cpPrint("💀 account " + id + " (" + (r.name || "?") + ") deleted.", "ok"); aaChanged(false); } });
+      } },
+    { name: "delete", self: false, sig: "(id)", desc: "PERMANENTLY delete a player account — it can never come back", run: function (c) {
+        var id = cpId(c); if (!id) return;
+        return cpServer("purge", { id: id }).then(function (r) { if (r) { cpPrint("☠️ account " + id + " (" + (r.name || "?") + ") PERMANENTLY deleted. That ID can never be used again.", "ok"); aaChanged(false); } });
       } }
   ];
   var SUPER_CMD_MAP = {};

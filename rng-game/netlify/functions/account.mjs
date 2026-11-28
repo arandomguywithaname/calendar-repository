@@ -35,6 +35,7 @@
                                                 with an empty gift box (backs each up first)
                banAuras { id }                  delete every aura the one account `id` owns (backs it up first)
                deleteAccount { id }             fully remove one account (save, lease, gifts, chat record); backs the save up first
+               purge { id }                     PERMANENTLY delete one account and tombstone its ID so it can never be re-created
                forceRoll { id, aura, shiny }    force that account's NEXT roll to be a chosen aura (its client honors it once)
                forceEvery { id, aura, shiny }    force EVERY future roll to a chosen aura; aura null clears it (delete_forcenegative)
                unprotect { id }                 clear one account's secret so its owner can protect it again (lockout recovery)
@@ -81,6 +82,7 @@ const SUPER_HASH = "e7ed20761c5ba56fa5f018c5dff44d6bbc338364a2b104a857b65ff2f3b0
 const accountKey = (id) => "account/" + id;
 const leaseKey = (id) => "lease/" + id;
 const giftKey = (id) => "gifts/" + id;
+const deletedKey = (id) => "deleted/" + id;   /* a tombstone: an ID permanently deleted by an admin, never reusable */
 const CHAT_KEY = "chat/log";
 const CHAT_HERE_KEY = "chat/here";
 const LEADERBOARD_KEY = "leaderboard/cache";
@@ -378,6 +380,12 @@ const ACTIONS = {
     const secret = SECRET_RE.test(String(body.secret)) ? String(body.secret) : null;
     for (let i = 0; i < 25; i++) {
       const id = i === 0 && prefer ? prefer : String(randomInt(1000000, 10000000));
+      /* A permanently-deleted ID is retired for good: never re-create it (the owner's device can't bring it
+         back) and never hand it to a new player. */
+      if (await store.get(deletedKey(id), { type: "json" })) {
+        if (i === 0 && prefer) return reply(410, { ok: false, code: 98, error: "This account was permanently deleted and can't be used again." });
+        continue;
+      }
       const record = { id, name, created: now, updatedAt: now, rev: 1, device: body.device, save, secret };
       const res = await store.setJSON(accountKey(id), record, { onlyIfNew: true });
       if (res.modified) return reply(200, { ok: true, id, name, rev: 1 });
@@ -657,6 +665,23 @@ const ACTIONS = {
       try { await store.delete(chatUserKey(target)); } catch (e) { /* best-effort */ }
       try { await store.setJSON(LAST_OP_KEY, { at: now, op: "delete", ids: [target] }); } catch (e) { /* best-effort */ }
       return reply(200, { ok: true, id: target, name: acct.name });
+    }
+    if (body.op === "purge") {
+      /* PERMANENT delete: like deleteAccount, but also writes a tombstone so the ID can never be re-created
+         (the owner's device can't bring it back) and is never handed to a new player. No backup, so Restore
+         can't undo it either. */
+      const target = String(body.id);
+      if (!ID_RE.test(target)) return reply(400, { ok: false, code: 98, error: "Enter the player's 7-digit ID." });
+      const acct = await store.get(accountKey(target), { type: "json" });
+      const already = await store.get(deletedKey(target), { type: "json" });
+      if (!acct && !already) return reply(404, { ok: false, code: 98, error: "No player with ID " + target + "." });
+      await store.setJSON(deletedKey(target), { at: now, name: acct ? acct.name : null });
+      await store.delete(accountKey(target));
+      try { await store.delete(leaseKey(target)); } catch (e) { /* best-effort */ }
+      try { await store.delete(giftKey(target)); } catch (e) { /* best-effort */ }
+      try { await store.delete(chatUserKey(target)); } catch (e) { /* best-effort */ }
+      try { await store.delete(backupKey(target)); } catch (e) { /* best-effort */ }
+      return reply(200, { ok: true, id: target, name: acct ? acct.name : null, permanent: true });
     }
     if (body.op === "unprotect") {
       /* Recovery valve: clear an account's secret so its owner's device can protect it again. For when a
